@@ -1,33 +1,84 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
-  --color-muted: #27272a;
-  --color-muted-foreground: #a1a1aa;
-  --color-card: #0f0f12;
-  --color-card-foreground: #fafafa;
-  --color-border: #27272a;
-  --color-input: #27272a;
-  --color-primary: #6366f1;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #27272a;
-  --color-secondary-foreground: #fafafa;
-  --color-accent: #18181b;
-  --color-accent-foreground: #fafafa;
-  --color-destructive: #ef4444;
-  --color-success: #10b981;
-  --color-warning: #f59e0b;
-  --color-ring: #6366f1;
-  --radius: 0.75rem;
+  /* ── Colors: Neo-brutalist palette ── */
+  --color-background: #FFFFFF;
+  --color-foreground: #000000;
+  --color-primary: #FACC15;
+  --color-primary-foreground: #000000;
+  --color-secondary: #F5F5F4;
+  --color-secondary-foreground: #1C1917;
+  --color-muted: #E7E5E4;
+  --color-muted-foreground: #78716C;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #000000;
+  --color-border: #000000;
+  --color-input: #000000;
+  --color-ring: #FACC15;
+  --color-accent: #FACC15;
+  --color-accent-foreground: #000000;
+  --color-destructive: #EF4444;
+  --color-destructive-foreground: #FFFFFF;
+  --color-success: #22C55E;
+  --color-success-foreground: #000000;
+  --color-warning: #F59E0B;
+  --color-warning-foreground: #000000;
+
+  /* ── Typography ── */
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── Animations ── */
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.5s ease-out both;
+  --animate-fade-in-down: fade-in-down 0.5s ease-out both;
+  --animate-slide-in-left: slide-in-left 0.5s ease-out both;
+  --animate-slide-in-right: slide-in-right 0.5s ease-out both;
+  --animate-scale-in: scale-in 0.4s ease-out both;
 }
 
-* {
+/* ── Keyframes ── */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Base ── */
+
+*,
+*::before,
+*::after {
   border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -36,3 +87,36 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* ── Neo-brutalist interactive utilities ── */
+
+.neo-press {
+  transition: translate 100ms ease, box-shadow 100ms ease;
+}
+.neo-press:hover {
+  translate: -2px -2px;
+}
+.neo-press:active {
+  translate: 2px 2px;
+}
+
+.neo-lift {
+  transition: translate 150ms ease, box-shadow 150ms ease;
+}
+.neo-lift:hover {
+  translate: -3px -3px;
+}
+.neo-lift:active {
+  translate: 2px 2px;
+}
+
+/* ── Stagger animation delays ── */
+
+.stagger-1 { animation-delay: 100ms; }
+.stagger-2 { animation-delay: 200ms; }
+.stagger-3 { animation-delay: 300ms; }
+.stagger-4 { animation-delay: 400ms; }
+.stagger-5 { animation-delay: 500ms; }
+.stagger-6 { animation-delay: 600ms; }
+.stagger-7 { animation-delay: 700ms; }
+.stagger-8 { animation-delay: 800ms; }

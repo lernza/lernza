@@ -1,4 +1,4 @@
-import { Zap, Wallet, LogOut } from "lucide-react"
+import { Wallet, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { cn } from "@/lib/utils"
@@ -14,21 +14,38 @@ interface NavbarProps {
   onNavigate: (page: string) => void
 }
 
+function LogoMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 512 512" className={className} aria-hidden="true">
+      <path
+        d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+        fill="#000000"
+        transform="translate(14, 14)"
+      />
+      <path
+        d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+        fill="#FACC15"
+        stroke="#000000"
+        strokeWidth="8"
+        strokeLinejoin="miter"
+      />
+    </svg>
+  )
+}
+
 export function Navbar({ activePage, onNavigate }: NavbarProps) {
   const { connected, shortAddress, connect, disconnect, loading } = useWallet()
 
   return (
-    <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b-[3px] border-black bg-white">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button
           onClick={() => onNavigate("landing")}
-          className="flex items-center gap-2.5 cursor-pointer"
+          className="flex items-center gap-2 cursor-pointer"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Zap className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-lg font-bold tracking-tight">Lernza</span>
+          <LogoMark className="h-8 w-8" />
+          <span className="text-xl font-black tracking-tight">Lernza</span>
         </button>
 
         {/* Nav links */}
@@ -40,10 +57,10 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
               key={item.key}
               onClick={() => onNavigate(item.key)}
               className={cn(
-                "px-3 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer",
+                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px]",
                 activePage === item.key
-                  ? "text-foreground bg-muted"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  ? "bg-primary border-black shadow-[2px_2px_0_#000]"
+                  : "border-transparent hover:border-black hover:bg-secondary"
               )}
             >
               {item.label}
@@ -52,12 +69,12 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
         </nav>
 
         {/* Wallet */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {connected ? (
             <>
-              <div className="hidden sm:flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-1.5">
-                <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                <span className="text-sm font-mono text-muted-foreground">
+              <div className="hidden sm:flex items-center gap-2 border-[2px] border-black bg-secondary px-3 py-1.5 shadow-[2px_2px_0_#000]">
+                <div className="h-2.5 w-2.5 bg-success border border-black" />
+                <span className="text-sm font-mono font-bold">
                   {shortAddress}
                 </span>
               </div>

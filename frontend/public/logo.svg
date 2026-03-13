@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Lernza Logo Mark — Standalone
+    Neo-brutalist "L" · No container · Transparent background
+    Yellow (#FACC15) + Black (#000000)
+  -->
+
+  <!-- Offset shadow — solid black, 14px down-right -->
+  <path
+    d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+    fill="#000000"
+    transform="translate(14, 14)"
+  />
+
+  <!-- Primary mark — bold yellow, thick black border -->
+  <path
+    d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+    fill="#FACC15"
+    stroke="#000000"
+    stroke-width="8"
+    stroke-linejoin="miter"
+  />
+</svg>

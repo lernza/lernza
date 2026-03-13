@@ -12,11 +12,13 @@ function App() {
   const handleNavigate = (p: string) => {
     setPage(p)
     setSelectedWorkspace(null)
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const handleSelectWorkspace = (id: number) => {
     setSelectedWorkspace(id)
     setPage("workspace")
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   const renderPage = () => {

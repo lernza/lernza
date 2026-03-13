@@ -30,14 +30,13 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
   if (!connected) {
     return (
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-20">
-        <div className="flex flex-col items-center justify-center text-center py-16">
-          <div className="rounded-full bg-muted p-4 mb-6">
-            <Wallet className="h-8 w-8 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center text-center py-16 animate-fade-in-up">
+          <div className="w-20 h-20 bg-secondary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-8">
+            <Wallet className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold mb-2">Connect your wallet</h2>
-          <p className="text-muted-foreground mb-6 max-w-sm">
-            Connect your Freighter wallet to view your workspaces and track your
-            progress.
+          <h2 className="text-2xl font-black mb-3">Connect your wallet</h2>
+          <p className="text-muted-foreground mb-8 max-w-sm">
+            Connect your Freighter wallet to view your quests and track your progress.
           </p>
           <Button onClick={connect}>
             <Wallet className="h-4 w-4" />
@@ -51,58 +50,56 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
   return (
     <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-8 animate-fade-in">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Your workspaces and progress
+          <h1 className="text-3xl font-black">Dashboard</h1>
+          <p className="text-muted-foreground text-sm font-bold mt-1">
+            Your quests and progress
           </p>
         </div>
         <Button>
           <Plus className="h-4 w-4" />
-          New Workspace
+          New Quest
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
         {[
           {
             icon: Coins,
             label: "Total Earned",
             value: `${formatTokens(stats.totalEarned)} LEARN`,
-            color: "text-primary",
+            bg: "bg-primary",
           },
           {
             icon: Users,
-            label: "Workspaces Owned",
+            label: "Quests Owned",
             value: stats.workspacesOwned.toString(),
-            color: "text-foreground",
+            bg: "bg-blue-200",
           },
           {
             icon: Target,
             label: "Enrolled In",
             value: stats.workspacesEnrolled.toString(),
-            color: "text-foreground",
+            bg: "bg-pink-200",
           },
           {
             icon: Target,
             label: "Milestones Done",
             value: stats.milestonesCompleted.toString(),
-            color: "text-success",
+            bg: "bg-success",
           },
-        ].map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-4">
+        ].map((stat, i) => (
+          <Card key={stat.label} className={`animate-fade-in-up stagger-${i + 1}`}>
+            <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-muted p-2">
-                  <stat.icon className="h-4 w-4 text-muted-foreground" />
+                <div className={`w-10 h-10 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
+                  <stat.icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">{stat.label}</p>
-                  <p className={`text-lg font-bold ${stat.color}`}>
-                    {stat.value}
-                  </p>
+                  <p className="text-xs font-bold text-muted-foreground">{stat.label}</p>
+                  <p className="text-xl font-black">{stat.value}</p>
                 </div>
               </div>
             </CardContent>
@@ -111,9 +108,9 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
       </div>
 
       {/* Workspaces */}
-      <h2 className="text-lg font-semibold mb-4">Your Workspaces</h2>
-      <div className="grid gap-4">
-        {MOCK_WORKSPACES.map((ws) => {
+      <h2 className="text-xl font-black mb-5">Your Quests</h2>
+      <div className="grid gap-5">
+        {MOCK_WORKSPACES.map((ws, i) => {
           const milestones = MOCK_MILESTONES[ws.id] || []
           const completions = MOCK_COMPLETIONS[ws.id] || []
           const totalMilestones = milestones.length
@@ -124,7 +121,7 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
           return (
             <Card
               key={ws.id}
-              className="hover:border-primary/50 transition-colors cursor-pointer"
+              className={`neo-lift hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000] cursor-pointer animate-fade-in-up stagger-${i + 1}`}
               onClick={() => onSelectWorkspace(ws.id)}
             >
               <CardHeader className="pb-3">
@@ -135,11 +132,13 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
                       {ws.description}
                     </p>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <div className="w-8 h-8 bg-secondary border-[2px] border-black flex items-center justify-center flex-shrink-0 ml-3">
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-4 text-sm mb-3">
+                <div className="flex flex-wrap items-center gap-3 text-sm mb-4">
                   <Badge variant="secondary" className="gap-1">
                     <Users className="h-3 w-3" />
                     {ws.enrolleeCount} enrolled
@@ -148,7 +147,7 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
                     <Target className="h-3 w-3" />
                     {ws.milestoneCount} milestones
                   </Badge>
-                  <Badge variant="outline" className="gap-1 text-primary">
+                  <Badge variant="default" className="gap-1">
                     <Coins className="h-3 w-3" />
                     {formatTokens(ws.poolBalance)} LEARN
                   </Badge>
@@ -160,7 +159,7 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
                       max={totalMilestones}
                       className="flex-1"
                     />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">
                       {completedCount}/{totalMilestones}
                     </span>
                   </div>
@@ -172,18 +171,18 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
       </div>
 
       {MOCK_WORKSPACES.length === 0 && (
-        <Card>
+        <Card className="animate-fade-in-up">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
-              <Target className="h-6 w-6 text-muted-foreground" />
+            <div className="w-16 h-16 bg-secondary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-6">
+              <Target className="h-6 w-6" />
             </div>
-            <h3 className="font-semibold mb-1">No workspaces yet</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Create a workspace to start incentivizing learning.
+            <h3 className="font-black mb-2">No quests yet</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Create a quest to start incentivizing learning.
             </p>
             <Button size="sm">
               <Plus className="h-4 w-4" />
-              Create Workspace
+              Create Quest
             </Button>
           </CardContent>
         </Card>

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
+  <!--
+    Lernza Social Card · GitHub OG Image
+    1280x640 · 40px safe zone · Light neo-brutalist
+    Palette: #FACC15 (yellow) · #000000 (black) · #FFFFFF (white)
+  -->
+
+  <!-- ── Background ── -->
+  <rect width="1280" height="640" fill="#FFFFFF"/>
+
+  <!-- ── Top accent bar ── -->
+  <rect x="0" y="0" width="1280" height="12" fill="#FACC15"/>
+  <rect x="0" y="12" width="1280" height="4" fill="#000000"/>
+
+  <!-- ── Bottom accent bar ── -->
+  <rect x="0" y="624" width="1280" height="4" fill="#000000"/>
+  <rect x="0" y="628" width="1280" height="12" fill="#FACC15"/>
+
+  <!-- ── Logo mark (centered, top area) ── -->
+  <g transform="translate(534, 23) scale(0.415)">
+    <!-- Shadow -->
+    <path
+      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+      fill="#000000"
+      transform="translate(14, 14)"
+    />
+    <!-- L mark -->
+    <path
+      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+      fill="#FACC15"
+      stroke="#000000"
+      stroke-width="10"
+      stroke-linejoin="miter"
+    />
+  </g>
+
+  <!-- ── Title ── -->
+  <text
+    x="640" y="296"
+    text-anchor="middle"
+    fill="#000000"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="96"
+    font-weight="900"
+    letter-spacing="-3"
+  >Lernza</text>
+
+  <!-- ── Tagline highlight bar (neo-brutalist offset) ── -->
+  <rect x="403" y="331" width="480" height="44" fill="#000000"/>
+  <rect x="400" y="328" width="480" height="44" fill="#FACC15"/>
+  <text
+    x="640" y="356"
+    text-anchor="middle"
+    fill="#000000"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="24"
+    font-weight="700"
+    letter-spacing="3"
+  >Learn. Earn. On-chain.</text>
+
+  <!-- ── Decorative neo-brutalist blocks ── -->
+  <g>
+    <rect x="588" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
+    <rect x="588" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+
+    <rect x="628" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
+    <rect x="628" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+
+    <rect x="668" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
+    <rect x="668" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+  </g>
+
+  <!-- ── Description ── -->
+  <text
+    x="640" y="498"
+    text-anchor="middle"
+    fill="#525252"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="18"
+    font-weight="400"
+  >learn-to-earn platform on Stellar</text>
+
+  <!-- ── Website ── -->
+  <text
+    x="1240" y="596"
+    text-anchor="end"
+    fill="#737373"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="14"
+    font-weight="500"
+  >lernza.com</text>
+
+</svg>

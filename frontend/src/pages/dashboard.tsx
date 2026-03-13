@@ -48,9 +48,13 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+    <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-8">
+      {/* Subtle geometric accents */}
+      <div className="absolute top-12 right-8 w-16 h-16 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] rotate-12 opacity-[0.06] pointer-events-none hidden xl:block" />
+      <div className="absolute top-40 right-4 w-8 h-8 bg-primary border-[2px] border-black opacity-[0.08] -rotate-6 pointer-events-none hidden xl:block" />
+
       {/* Header */}
-      <div className="flex items-center justify-between mb-8 animate-fade-in">
+      <div className="flex items-center justify-between mb-10 animate-fade-in">
         <div>
           <h1 className="text-3xl font-black">Dashboard</h1>
           <p className="text-muted-foreground text-sm font-bold mt-1">
@@ -94,7 +98,7 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
           <Card key={stat.label} className={`animate-fade-in-up stagger-${i + 1}`}>
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
+                <div className={`w-11 h-11 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
                   <stat.icon className="h-4 w-4" />
                 </div>
                 <div>

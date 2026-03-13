@@ -38,11 +38,17 @@ export function Profile() {
   ]
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+    <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-8">
+      {/* Subtle geometric accents */}
+      <div className="absolute top-10 right-6 w-14 h-14 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] rotate-12 opacity-[0.06] pointer-events-none hidden xl:block" />
+      <div className="absolute top-36 right-3 w-7 h-7 bg-primary border-[2px] border-black opacity-[0.08] -rotate-6 pointer-events-none hidden xl:block" />
+
       <h1 className="text-3xl font-black mb-8 animate-fade-in">Profile</h1>
 
       {/* Profile header */}
-      <Card className="mb-8 animate-fade-in-up">
+      <Card className="mb-8 animate-fade-in-up overflow-hidden">
+        {/* Yellow accent strip at top */}
+        <div className="h-2 bg-primary" />
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
             <div className="w-16 h-16 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center text-xl font-black flex-shrink-0">
@@ -77,7 +83,7 @@ export function Profile() {
           <Card key={stat.label} className={`animate-fade-in-up stagger-${i + 1}`}>
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
+                <div className={`w-11 h-11 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
                   <stat.icon className="h-4 w-4" />
                 </div>
                 <div>

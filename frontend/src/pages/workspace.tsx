@@ -53,7 +53,10 @@ export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
   ).size
 
   return (
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
+    <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-8">
+      {/* Subtle geometric accents */}
+      <div className="absolute top-8 right-6 w-12 h-12 bg-primary border-[3px] border-black shadow-[3px_3px_0_#000] rotate-12 opacity-[0.06] pointer-events-none hidden xl:block" />
+
       {/* Back */}
       <button
         onClick={onBack}
@@ -95,7 +98,7 @@ export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
         ].map((stat, i) => (
           <Card key={stat.label} className={`animate-fade-in-up stagger-${i + 1}`}>
             <CardContent className="p-4 flex items-center gap-3">
-              <div className={`w-9 h-9 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
+              <div className={`w-10 h-10 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}>
                 <stat.icon className="h-4 w-4" />
               </div>
               <div>

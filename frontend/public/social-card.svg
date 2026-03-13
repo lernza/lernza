@@ -1,93 +1,141 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640">
-  <!--
-    Lernza Social Card · GitHub OG Image
-    1280x640 · 40px safe zone · Light neo-brutalist
-    Palette: #FACC15 (yellow) · #000000 (black) · #FFFFFF (white)
-  -->
+  <defs>
+    <style>
+      text { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    </style>
+  </defs>
 
-  <!-- ── Background ── -->
+  <!-- Background -->
   <rect width="1280" height="640" fill="#FFFFFF"/>
 
-  <!-- ── Top accent bar ── -->
-  <rect x="0" y="0" width="1280" height="12" fill="#FACC15"/>
-  <rect x="0" y="12" width="1280" height="4" fill="#000000"/>
+  <!-- Top accent bar -->
+  <rect width="1280" height="8" fill="#FACC15"/>
+  <rect y="8" width="1280" height="3" fill="#000"/>
 
-  <!-- ── Bottom accent bar ── -->
-  <rect x="0" y="624" width="1280" height="4" fill="#000000"/>
-  <rect x="0" y="628" width="1280" height="12" fill="#FACC15"/>
+  <!-- Bottom accent bar -->
+  <rect y="629" width="1280" height="3" fill="#000"/>
+  <rect y="632" width="1280" height="8" fill="#FACC15"/>
 
-  <!-- ── Logo mark (centered, top area) ── -->
-  <g transform="translate(534, 23) scale(0.415)">
-    <!-- Shadow -->
-    <path
-      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
-      fill="#000000"
-      transform="translate(14, 14)"
-    />
-    <!-- L mark -->
-    <path
-      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
-      fill="#FACC15"
-      stroke="#000000"
-      stroke-width="10"
-      stroke-linejoin="miter"
-    />
+  <!-- ═══════════════════════════════════════ -->
+  <!-- LEFT SIDE: Brand + Copy                -->
+  <!-- ═══════════════════════════════════════ -->
+
+  <!-- "Built on Stellar" badge -->
+  <rect x="64" y="94" width="150" height="32" fill="#000" transform="translate(3,3)"/>
+  <rect x="60" y="90" width="150" height="32" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  <text x="135" y="111" text-anchor="middle" fill="#000" font-size="12" font-weight="700" letter-spacing="0.5">Built on Stellar</text>
+
+  <!-- Title -->
+  <text x="60" y="258" fill="#000" font-size="104" font-weight="900" letter-spacing="-4">Lernza</text>
+
+  <!-- Tagline bar -->
+  <rect x="64" y="288" width="430" height="50" fill="#000"/>
+  <rect x="60" y="284" width="430" height="50" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  <text x="275" y="316" text-anchor="middle" fill="#000" font-size="22" font-weight="700" letter-spacing="2.5">Learn. Earn. On-chain.</text>
+
+  <!-- Description -->
+  <text x="60" y="392" fill="#555" font-size="17" font-weight="500">The first learn-to-earn platform on Stellar.</text>
+  <text x="60" y="418" fill="#555" font-size="17" font-weight="500">Create quests, set milestones, reward learners.</text>
+
+  <!-- Feature badges -->
+  <rect x="63" y="463" width="90" height="26" fill="#000" transform="translate(2,2)"/>
+  <rect x="60" y="460" width="90" height="26" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+  <text x="105" y="477" text-anchor="middle" fill="#000" font-size="11" font-weight="800" letter-spacing="0.5">SOROBAN</text>
+
+  <rect x="165" y="463" width="108" height="26" fill="#000" transform="translate(2,2)"/>
+  <rect x="162" y="460" width="108" height="26" fill="#FFF" stroke="#000" stroke-width="1.5"/>
+  <text x="216" y="477" text-anchor="middle" fill="#000" font-size="11" font-weight="800" letter-spacing="0.5">OPEN SOURCE</text>
+
+  <rect x="285" y="463" width="92" height="26" fill="#000" transform="translate(2,2)"/>
+  <rect x="282" y="460" width="92" height="26" fill="#FFF" stroke="#000" stroke-width="1.5"/>
+  <text x="328" y="477" text-anchor="middle" fill="#000" font-size="11" font-weight="800" letter-spacing="0.5">MIT LICENSE</text>
+
+  <!-- Left-side geometric accents -->
+  <g transform="rotate(10, 537, 118)">
+    <rect x="523" y="104" width="28" height="28" fill="#000" transform="translate(3,3)"/>
+    <rect x="520" y="101" width="28" height="28" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  </g>
+  <g transform="rotate(-6, 78, 540)">
+    <rect x="63" y="526" width="26" height="26" fill="#000" transform="translate(3,3)"/>
+    <rect x="60" y="523" width="26" height="26" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  </g>
+  <rect x="147" y="557" width="16" height="16" fill="#000" transform="translate(2,2)"/>
+  <rect x="144" y="554" width="16" height="16" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+  <g transform="rotate(-8, 610, 440)">
+    <rect x="600" y="430" width="18" height="18" fill="#000" transform="translate(2,2)"/>
+    <rect x="597" y="427" width="18" height="18" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
   </g>
 
-  <!-- ── Title ── -->
-  <text
-    x="640" y="296"
-    text-anchor="middle"
-    fill="#000000"
-    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-    font-size="96"
-    font-weight="900"
-    letter-spacing="-3"
-  >Lernza</text>
+  <!-- ═══════════════════════════════════════ -->
+  <!-- RIGHT SIDE: Quest Card Stack           -->
+  <!-- ═══════════════════════════════════════ -->
 
-  <!-- ── Tagline highlight bar (neo-brutalist offset) ── -->
-  <rect x="403" y="331" width="480" height="44" fill="#000000"/>
-  <rect x="400" y="328" width="480" height="44" fill="#FACC15"/>
-  <text
-    x="640" y="356"
-    text-anchor="middle"
-    fill="#000000"
-    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-    font-size="24"
-    font-weight="700"
-    letter-spacing="3"
-  >Learn. Earn. On-chain.</text>
+  <!-- Back card peek (yellow layer) -->
+  <rect x="650" y="72" width="480" height="400" fill="#FACC15" stroke="#000" stroke-width="3"/>
 
-  <!-- ── Decorative neo-brutalist blocks ── -->
-  <g>
-    <rect x="588" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
-    <rect x="588" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+  <!-- Front card shadow -->
+  <rect x="686" y="108" width="480" height="400" fill="#000"/>
 
-    <rect x="628" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
-    <rect x="628" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+  <!-- Front card -->
+  <rect x="680" y="102" width="480" height="400" fill="#FFF" stroke="#000" stroke-width="3"/>
 
-    <rect x="668" y="415" width="24" height="24" fill="#000000" transform="translate(3,3)"/>
-    <rect x="668" y="415" width="24" height="24" fill="#FACC15" stroke="#000000" stroke-width="2"/>
+  <!-- Card header stripe -->
+  <rect x="680" y="102" width="480" height="44" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  <text x="702" y="130" fill="#000" font-size="13" font-weight="900" letter-spacing="1.5">ACTIVE QUEST</text>
+  <!-- Live indicator -->
+  <rect x="1112" y="118" width="8" height="8" fill="#22c55e" stroke="#000" stroke-width="1.5"/>
+  <text x="1100" y="128" text-anchor="end" fill="#000" font-size="11" font-weight="700">Live</text>
+
+  <!-- Quest title -->
+  <text x="702" y="192" fill="#000" font-size="24" font-weight="900">Stellar Dev Bootcamp</text>
+  <text x="702" y="216" fill="#888" font-size="14" font-weight="500">8 enrolled · 1,000 LEARN pool</text>
+
+  <!-- Milestone 1 (completed) -->
+  <rect x="702" y="248" width="22" height="22" fill="#86efac" stroke="#000" stroke-width="2"/>
+  <path d="M 708 259 L 712 263 L 720 255" stroke="#000" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="736" y="264" fill="#999" font-size="15" font-weight="600" text-decoration="line-through">Set up Stellar CLI</text>
+  <rect x="1068" y="250" width="80" height="22" fill="#f5f5f5" stroke="#000" stroke-width="1.5"/>
+  <text x="1108" y="265" text-anchor="middle" fill="#000" font-size="11" font-weight="700">100 LEARN</text>
+
+  <!-- Milestone 2 (completed) -->
+  <rect x="702" y="288" width="22" height="22" fill="#86efac" stroke="#000" stroke-width="2"/>
+  <path d="M 708 299 L 712 303 L 720 295" stroke="#000" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="736" y="304" fill="#999" font-size="15" font-weight="600" text-decoration="line-through">First Soroban Contract</text>
+  <rect x="1068" y="290" width="80" height="22" fill="#f5f5f5" stroke="#000" stroke-width="1.5"/>
+  <text x="1108" y="305" text-anchor="middle" fill="#000" font-size="11" font-weight="700">200 LEARN</text>
+
+  <!-- Milestone 3 (pending) -->
+  <rect x="702" y="328" width="22" height="22" fill="#FFF" stroke="#000" stroke-width="2"/>
+  <text x="736" y="344" fill="#000" font-size="15" font-weight="600">Deploy to Testnet</text>
+  <rect x="1068" y="330" width="80" height="22" fill="#f5f5f5" stroke="#000" stroke-width="1.5"/>
+  <text x="1108" y="345" text-anchor="middle" fill="#000" font-size="11" font-weight="700">300 LEARN</text>
+
+  <!-- Progress bar -->
+  <rect x="702" y="380" width="436" height="18" fill="#f5f5f5" stroke="#000" stroke-width="2"/>
+  <rect x="704" y="382" width="287" height="14" fill="#FACC15"/>
+  <text x="702" y="420" fill="#888" font-size="12" font-weight="700">2 of 3 milestones completed</text>
+
+  <!-- Earned summary bar -->
+  <rect x="702" y="445" width="436" height="38" fill="#f0fdf4" stroke="#000" stroke-width="2"/>
+  <text x="920" y="470" text-anchor="middle" fill="#166534" font-size="14" font-weight="900" letter-spacing="0.5">TOTAL EARNED: 300 LEARN</text>
+
+  <!-- Floating earned badge -->
+  <rect x="1064" y="512" width="110" height="34" fill="#000" transform="translate(3,3)"/>
+  <rect x="1060" y="508" width="110" height="34" fill="#86efac" stroke="#000" stroke-width="2"/>
+  <text x="1115" y="530" text-anchor="middle" fill="#000" font-size="13" font-weight="900">+300 LEARN</text>
+
+  <!-- Right-side geometric accents -->
+  <g transform="rotate(12, 1208, 55)">
+    <rect x="1195" y="42" width="26" height="26" fill="#000" transform="translate(3,3)"/>
+    <rect x="1192" y="39" width="26" height="26" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  </g>
+  <rect x="1180" y="574" width="16" height="16" fill="#000" transform="translate(2,2)"/>
+  <rect x="1177" y="571" width="16" height="16" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+  <g transform="rotate(-5, 645, 550)">
+    <rect x="635" y="540" width="20" height="20" fill="#000" transform="translate(2,2)"/>
+    <rect x="632" y="537" width="20" height="20" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
   </g>
 
-  <!-- ── Description ── -->
-  <text
-    x="640" y="498"
-    text-anchor="middle"
-    fill="#525252"
-    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-    font-size="18"
-    font-weight="400"
-  >learn-to-earn platform on Stellar</text>
-
-  <!-- ── Website ── -->
-  <text
-    x="1240" y="596"
-    text-anchor="end"
-    fill="#737373"
-    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-    font-size="14"
-    font-weight="500"
-  >lernza.com</text>
-
+  <!-- URL -->
+  <text x="1220" y="602" text-anchor="end" fill="#aaa" font-size="14" font-weight="500">lernza.com</text>
 </svg>

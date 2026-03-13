@@ -120,3 +120,14 @@ body {
 .stagger-6 { animation-delay: 600ms; }
 .stagger-7 { animation-delay: 700ms; }
 .stagger-8 { animation-delay: 800ms; }
+
+/* ── Floating animation for background elements ── */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite both;
+}

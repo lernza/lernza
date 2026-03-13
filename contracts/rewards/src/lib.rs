@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, token, Address, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, token, Address, Env};
 
 // Rewards contract: holds token pools per workspace and distributes rewards.
 //
@@ -50,8 +50,12 @@ impl RewardsContract {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
         }
-        env.storage().instance().set(&DataKey::TokenAddr, &token_addr);
-        env.storage().instance().set(&DataKey::TotalDistributed, &0_i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::TokenAddr, &token_addr);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &0_i128);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         Ok(())
     }
@@ -80,18 +84,24 @@ impl RewardsContract {
             }
         } else {
             env.storage().persistent().set(&auth_key, &funder);
-            env.storage().persistent().extend_ttl(&auth_key, THRESHOLD, BUMP);
+            env.storage()
+                .persistent()
+                .extend_ttl(&auth_key, THRESHOLD, BUMP);
         }
 
         // Transfer tokens from funder to this contract
         let client = token::Client::new(&env, &token_addr);
-        client.transfer(&funder, &env.current_contract_address(), &amount);
+        client.transfer(&funder, env.current_contract_address(), &amount);
 
         // Credit the workspace pool
         let pool_key = DataKey::WorkspacePool(workspace_id);
         let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
-        env.storage().persistent().set(&pool_key, &(current + amount));
-        env.storage().persistent().extend_ttl(&pool_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .set(&pool_key, &(current + amount));
+        env.storage()
+            .persistent()
+            .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         Ok(())
     }
@@ -136,13 +146,19 @@ impl RewardsContract {
 
         // Update pool balance
         env.storage().persistent().set(&pool_key, &(pool - amount));
-        env.storage().persistent().extend_ttl(&pool_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee);
         let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
-        env.storage().persistent().set(&earn_key, &(earned + amount));
-        env.storage().persistent().extend_ttl(&earn_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .set(&earn_key, &(earned + amount));
+        env.storage()
+            .persistent()
+            .extend_ttl(&earn_key, THRESHOLD, BUMP);
 
         // Update global total
         let total: i128 = env
@@ -150,7 +166,9 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalDistributed)
             .unwrap_or(0);
-        env.storage().instance().set(&DataKey::TotalDistributed, &(total + amount));
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &(total + amount));
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 
         Ok(())

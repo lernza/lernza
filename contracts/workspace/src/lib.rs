@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
 
 // Workspace contract: the entry point for Lernza.
 // An owner creates a workspace, enrolls learners, configures a reward token.
@@ -53,11 +53,7 @@ impl WorkspaceContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
-        let id: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::NextId)
-            .unwrap_or(0);
+        let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
 
         let ws = WorkspaceInfo {
             id,
@@ -79,11 +75,7 @@ impl WorkspaceContract {
     }
 
     /// Add an enrollee to a workspace. Owner only.
-    pub fn add_enrollee(
-        env: Env,
-        workspace_id: u32,
-        enrollee: Address,
-    ) -> Result<(), Error> {
+    pub fn add_enrollee(env: Env, workspace_id: u32, enrollee: Address) -> Result<(), Error> {
         let ws = Self::load_workspace(&env, workspace_id)?;
         ws.owner.require_auth();
 
@@ -105,11 +97,7 @@ impl WorkspaceContract {
     }
 
     /// Remove an enrollee from a workspace. Owner only.
-    pub fn remove_enrollee(
-        env: Env,
-        workspace_id: u32,
-        enrollee: Address,
-    ) -> Result<(), Error> {
+    pub fn remove_enrollee(env: Env, workspace_id: u32, enrollee: Address) -> Result<(), Error> {
         let ws = Self::load_workspace(&env, workspace_id)?;
         ws.owner.require_auth();
 
@@ -166,10 +154,7 @@ impl WorkspaceContract {
 
     /// Get total workspace count.
     pub fn get_workspace_count(env: Env) -> u32 {
-        env.storage()
-            .instance()
-            .get(&DataKey::NextId)
-            .unwrap_or(0)
+        env.storage().instance().get(&DataKey::NextId).unwrap_or(0)
     }
 
     // --- internals ---
@@ -189,9 +174,7 @@ impl WorkspaceContract {
     }
 
     fn bump(env: &Env, workspace_id: u32) {
-        env.storage()
-            .instance()
-            .extend_ttl(THRESHOLD, BUMP);
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         env.storage()
             .persistent()
             .extend_ttl(&DataKey::Workspace(workspace_id), THRESHOLD, BUMP);

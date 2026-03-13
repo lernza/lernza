@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
 
 // Milestone contract: define milestones per workspace, track completions.
 // Owner-approved verification for MVP. When owner verifies a completion,
@@ -186,23 +186,14 @@ impl MilestoneContract {
     }
 
     /// Check if an enrollee has completed a milestone.
-    pub fn is_completed(
-        env: Env,
-        workspace_id: u32,
-        milestone_id: u32,
-        enrollee: Address,
-    ) -> bool {
+    pub fn is_completed(env: Env, workspace_id: u32, milestone_id: u32, enrollee: Address) -> bool {
         env.storage()
             .persistent()
             .has(&DataKey::Completed(workspace_id, milestone_id, enrollee))
     }
 
     /// Get total completions for an enrollee in a workspace.
-    pub fn get_enrollee_completions(
-        env: Env,
-        workspace_id: u32,
-        enrollee: Address,
-    ) -> u32 {
+    pub fn get_enrollee_completions(env: Env, workspace_id: u32, enrollee: Address) -> u32 {
         env.storage()
             .persistent()
             .get(&DataKey::EnrolleeCompletions(workspace_id, enrollee))
@@ -224,9 +215,7 @@ impl MilestoneContract {
     }
 
     fn bump_ms(env: &Env, key: &DataKey) {
-        env.storage()
-            .persistent()
-            .extend_ttl(key, THRESHOLD, BUMP);
+        env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
     }
 }
 

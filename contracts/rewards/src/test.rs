@@ -10,9 +10,9 @@ use soroban_sdk::{
 fn setup() -> (
     Env,
     RewardsContractClient<'static>,
-    Address,  // rewards contract address
-    Address,  // token address
-    Address,  // token admin (can mint)
+    Address, // rewards contract address
+    Address, // token address
+    Address, // token admin (can mint)
 ) {
     let env = Env::default();
     env.mock_all_auths();

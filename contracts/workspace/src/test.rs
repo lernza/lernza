@@ -13,12 +13,7 @@ fn setup() -> (Env, WorkspaceContractClient<'static>, Address, Address) {
     (env, client, owner, token)
 }
 
-fn create_ws(
-    env: &Env,
-    client: &WorkspaceContractClient,
-    owner: &Address,
-    token: &Address,
-) -> u32 {
+fn create_ws(env: &Env, client: &WorkspaceContractClient, owner: &Address, token: &Address) -> u32 {
     client.create_workspace(
         owner,
         &String::from_str(env, "My Workspace"),
@@ -61,7 +56,7 @@ fn test_add_enrollee() {
     let enrollees = client.get_enrollees(&0);
     assert_eq!(enrollees.len(), 1);
     assert_eq!(enrollees.get(0).unwrap(), enrollee);
-    assert_eq!(client.is_enrollee(&0, &enrollee), true);
+    assert!(client.is_enrollee(&0, &enrollee));
 }
 
 #[test]
@@ -105,7 +100,7 @@ fn test_remove_enrollee() {
     let enrollees = client.get_enrollees(&0);
     assert_eq!(enrollees.len(), 1);
     assert_eq!(enrollees.get(0).unwrap(), e2);
-    assert_eq!(client.is_enrollee(&0, &e1), false);
+    assert!(!client.is_enrollee(&0, &e1));
 }
 
 #[test]
@@ -138,5 +133,5 @@ fn test_is_enrollee_false() {
     let (env, client, owner, token) = setup();
     create_ws(&env, &client, &owner, &token);
     let random = Address::generate(&env);
-    assert_eq!(client.is_enrollee(&0, &random), false);
+    assert!(!client.is_enrollee(&0, &random));
 }

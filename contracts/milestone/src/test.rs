@@ -75,8 +75,14 @@ fn test_get_milestones() {
 
     let milestones = client.get_milestones(&0);
     assert_eq!(milestones.len(), 2);
-    assert_eq!(milestones.get(0).unwrap().title, String::from_str(&env, "A"));
-    assert_eq!(milestones.get(1).unwrap().title, String::from_str(&env, "B"));
+    assert_eq!(
+        milestones.get(0).unwrap().title,
+        String::from_str(&env, "A")
+    );
+    assert_eq!(
+        milestones.get(1).unwrap().title,
+        String::from_str(&env, "B")
+    );
 }
 
 #[test]
@@ -87,7 +93,7 @@ fn test_verify_completion() {
     let enrollee = Address::generate(&env);
     let reward = client.verify_completion(&owner, &0, &0, &enrollee);
     assert_eq!(reward, 100);
-    assert_eq!(client.is_completed(&0, &0, &enrollee), true);
+    assert!(client.is_completed(&0, &0, &enrollee));
     assert_eq!(client.get_enrollee_completions(&0, &enrollee), 1);
 }
 
@@ -102,8 +108,8 @@ fn test_verify_multiple_completions() {
     client.verify_completion(&owner, &0, &1, &enrollee);
 
     assert_eq!(client.get_enrollee_completions(&0, &enrollee), 2);
-    assert_eq!(client.is_completed(&0, &0, &enrollee), true);
-    assert_eq!(client.is_completed(&0, &1, &enrollee), true);
+    assert!(client.is_completed(&0, &0, &enrollee));
+    assert!(client.is_completed(&0, &1, &enrollee));
 }
 
 #[test]
@@ -159,7 +165,7 @@ fn test_not_completed_by_default() {
     let (env, client, owner) = setup();
     create_ms(&env, &client, &owner, 0, "Task", 50);
     let enrollee = Address::generate(&env);
-    assert_eq!(client.is_completed(&0, &0, &enrollee), false);
+    assert!(!client.is_completed(&0, &0, &enrollee));
     assert_eq!(client.get_enrollee_completions(&0, &enrollee), 0);
 }
 

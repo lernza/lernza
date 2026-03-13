@@ -11,7 +11,7 @@ export function Landing({ onNavigate }: LandingProps) {
       {/* ══════════════════════════════════════════════ */}
       {/* HERO — Full viewport height                   */}
       {/* ══════════════════════════════════════════════ */}
-      <section className="relative min-h-screen flex items-center overflow-hidden">
+      <section className="relative min-h-[calc(100vh-67px)] flex items-center overflow-hidden">
         {/* Floating geometric background */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           <div

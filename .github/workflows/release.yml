@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: stellar/binaries@v0.1
+      - uses: stellar/binaries@v54
         with:
           name: stellar-cli
           version: 25.2.0

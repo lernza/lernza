@@ -387,7 +387,7 @@ export function Landing({ onNavigate }: LandingProps) {
 
             {/* Links */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Resources</h4>
+              <h3 className="font-black text-sm uppercase tracking-wider mb-4">Resources</h3>
               <div className="flex flex-col gap-3">
                 <a href="https://github.com/lernza/lernza" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">Documentation</a>
                 <a href="https://github.com/lernza/lernza/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">Contributing</a>
@@ -397,7 +397,7 @@ export function Landing({ onNavigate }: LandingProps) {
 
             {/* Socials */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Community</h4>
+              <h3 className="font-black text-sm uppercase tracking-wider mb-4">Community</h3>
               <div className="flex gap-3">
                 <a
                   href="https://github.com/lernza"

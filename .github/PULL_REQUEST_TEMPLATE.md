@@ -22,7 +22,7 @@ closes #
 - [ ] I have read the [contributing guidelines](CONTRIBUTING.md)
 - [ ] My code follows the existing code style
 - [ ] I have added tests for my changes (if applicable)
-- [ ] All existing tests pass (`cargo test --workspace` / `npm run build`)
+- [ ] All existing tests pass (`cargo test --workspace` / `pnpm build`)
 - [ ] I have updated documentation if needed
 
 ## Screenshots

@@ -1,4 +1,5 @@
-import { Wallet, LogOut } from "lucide-react"
+import { useState } from "react"
+import { Wallet, LogOut, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { cn } from "@/lib/utils"
@@ -35,31 +36,37 @@ function LogoMark({ className }: { className?: string }) {
 
 export function Navbar({ activePage, onNavigate }: NavbarProps) {
   const { connected, shortAddress, connect, disconnect, loading } = useWallet()
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  const handleNavigate = (page: string) => {
+    onNavigate(page)
+    setMobileOpen(false)
+  }
+
+  const visibleItems = NAV_ITEMS
 
   return (
     <header className="sticky top-0 z-50 border-b-[3px] border-black bg-white">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button
-          onClick={() => onNavigate("landing")}
-          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => handleNavigate("landing")}
+          className="flex items-center gap-2 cursor-pointer group"
         >
-          <LogoMark className="h-8 w-8" />
+          <LogoMark className="h-8 w-8 transition-transform group-hover:scale-110" />
           <span className="text-xl font-black tracking-tight">Lernza</span>
         </button>
 
-        {/* Nav links */}
+        {/* Desktop nav links */}
         <nav className="hidden sm:flex items-center gap-1">
-          {NAV_ITEMS.filter((item) =>
-            item.key === "landing" ? true : connected
-          ).map((item) => (
+          {visibleItems.map((item) => (
             <button
               key={item.key}
-              onClick={() => onNavigate(item.key)}
+              onClick={() => handleNavigate(item.key)}
               className={cn(
-                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px]",
+                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px] animated-underline",
                 activePage === item.key
-                  ? "bg-primary border-black shadow-[2px_2px_0_#000]"
+                  ? "bg-primary border-black shadow-[2px_2px_0_#000] active"
                   : "border-transparent hover:border-black hover:bg-secondary"
               )}
             >
@@ -68,7 +75,7 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           ))}
         </nav>
 
-        {/* Wallet */}
+        {/* Right side: wallet + mobile menu */}
         <div className="flex items-center gap-3">
           {connected ? (
             <>
@@ -83,13 +90,52 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
               </Button>
             </>
           ) : (
-            <Button onClick={connect} disabled={loading} size="sm">
+            <Button
+              onClick={connect}
+              disabled={loading}
+              size="sm"
+              className="shimmer-on-hover"
+            >
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>
           )}
+
+          {/* Mobile hamburger */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="sm:hidden w-9 h-9 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press cursor-pointer"
+          >
+            {mobileOpen ? (
+              <X className="h-4 w-4" />
+            ) : (
+              <Menu className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </div>
+
+      {/* Mobile menu dropdown */}
+      {mobileOpen && (
+        <div className="sm:hidden border-t-[3px] border-black bg-white animate-fade-in-down">
+          <div className="px-4 py-3 space-y-1">
+            {visibleItems.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => handleNavigate(item.key)}
+                className={cn(
+                  "w-full text-left px-4 py-3 text-sm font-bold transition-all cursor-pointer border-[2px]",
+                  activePage === item.key
+                    ? "bg-primary border-black shadow-[2px_2px_0_#000]"
+                    : "border-transparent hover:border-black hover:bg-secondary"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   )
 }

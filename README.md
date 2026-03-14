@@ -209,8 +209,8 @@ stellar contract build          # Optimized WASM
 
 # Frontend
 cd frontend
-npm install --legacy-peer-deps
-npm run dev                     # → http://localhost:5173
+pnpm install
+pnpm dev                        # → http://localhost:5173
 ```
 
 Install [Freighter](https://freighter.app), switch to **Testnet**, and connect.

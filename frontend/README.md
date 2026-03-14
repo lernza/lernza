@@ -5,8 +5,8 @@ React 19 + TypeScript 5.9 + Vite 8 + Tailwind CSS v4 + shadcn/ui
 ## Setup
 
 ```bash
-npm install --legacy-peer-deps
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173)
@@ -15,10 +15,10 @@ Open [http://localhost:5173](http://localhost:5173)
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Start dev server with HMR |
-| `npm run build` | Type-check + production build |
-| `npm run lint` | Run ESLint |
-| `npm run preview` | Preview production build locally |
+| `pnpm dev` | Start dev server with HMR |
+| `pnpm build` | Type-check + production build |
+| `pnpm lint` | Run ESLint |
+| `pnpm preview` | Preview production build locally |
 
 ## Design System
 
@@ -46,7 +46,7 @@ src/
 ├── lib/
 │   ├── utils.ts         # cn(), formatTokens()
 │   └── mock-data.ts     # Mock data for UI development
-├── App.tsx              # Router (useState-based)
+├── App.tsx              # Router (URL-based via pushState/popstate)
 ├── main.tsx             # Entry point
 └── index.css            # Design tokens, animations, utilities
 ```

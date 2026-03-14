@@ -41,11 +41,12 @@ export function useWallet() {
   }, [])
 
   useEffect(() => {
-    // Don't auto-connect if user explicitly disconnected this session
+    // Don't auto-reconnect if user explicitly disconnected this session
     if (sessionStorage.getItem(DISCONNECTED_KEY)) return
 
+    // Only check if already authorized — never prompt on page load
     freighter
-      .requestAccess()
+      .getAddress()
       .then(({ address }) => {
         if (address) {
           setState({ address, connected: true, loading: false, error: null })

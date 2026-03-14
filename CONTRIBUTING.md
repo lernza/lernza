@@ -35,10 +35,10 @@ cargo build --target wasm32-unknown-unknown --release
 
 ```bash
 cd frontend
-npm install
-npm run dev        # Start dev server
-npm run build      # Production build
-npm run lint       # Run linter
+pnpm install
+pnpm dev        # Start dev server
+pnpm build      # Production build
+pnpm lint       # Run linter
 ```
 
 ## Branch Naming

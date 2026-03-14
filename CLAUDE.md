@@ -17,11 +17,10 @@ stellar contract build              # Build optimized WASM binaries
 ### Frontend (React/TypeScript)
 ```bash
 cd frontend
-pnpm install --frozen-lockfile      # Install deps (CI uses pnpm)
-npm install --legacy-peer-deps      # Local install alternative (React 19 compat)
-npm run dev                         # Dev server at localhost:5173
-npm run build                       # Type-check (tsc -b) + production build
-npm run lint                        # ESLint
+pnpm install --frozen-lockfile      # Install deps
+pnpm dev                             # Dev server at localhost:5173
+pnpm build                           # Type-check (tsc -b) + production build
+pnpm lint                            # ESLint
 ```
 
 ## Architecture
@@ -44,7 +43,7 @@ Each contract is `#![no_std]`, compiled to WASM, and has its own `lib.rs` + `tes
 
 ### Frontend (`frontend/src/`)
 
-- **No router** — state-based page switching in `App.tsx` via `useState("landing")`
+- **No router library** — URL-based routing in `App.tsx` via `pushState`/`popstate`
 - Path alias: `@/` maps to `src/` (configured in `vite.config.ts`)
 - `hooks/use-wallet.ts` — Freighter wallet integration (`@stellar/freighter-api`)
 - `components/ui/` — shadcn/ui components (button, card, badge, progress)
@@ -57,7 +56,7 @@ Each contract is `#![no_std]`, compiled to WASM, and has its own `lib.rs` + `tes
 - PRs require at least one label from the project's label set
 - Frontend: TypeScript strict mode, no `any` types, kebab-case filenames, Tailwind only (no CSS modules), prefer shadcn/ui components
 - Contracts: `cargo fmt`, address clippy warnings, public functions return `Result<T, Error>`
-- Deployment handled by Netlify (no deploy workflows in CI)
+- Deployment handled by Vercel (no deploy workflows in CI)
 
 ## Key Naming Context
 

@@ -191,17 +191,34 @@ function MarqueeBanner() {
     "ON-CHAIN REWARDS, NO MIDDLEMEN",
   ]
 
+  // Repeat items enough times so one half is always wider than the viewport
+  const repeated = Array.from({ length: 8 }, () => items).flat()
+
   return (
     <div className="border-y-[3px] border-black bg-primary overflow-hidden select-none">
-      <div className="animate-marquee flex whitespace-nowrap py-3.5">
-        {[...items, ...items].map((item, i) => (
-          <span key={i} className="flex items-center gap-4 mx-4">
-            <span className="text-sm font-black uppercase tracking-wider">
-              {item}
+      <div className="flex whitespace-nowrap py-3.5 animate-marquee">
+        {/* First half */}
+        <div className="flex shrink-0">
+          {repeated.map((item, i) => (
+            <span key={`a-${i}`} className="flex items-center gap-4 mx-5">
+              <span className="text-sm font-black uppercase tracking-wider">
+                {item}
+              </span>
+              <Star className="h-3.5 w-3.5 fill-current" />
             </span>
-            <Star className="h-3.5 w-3.5 fill-current" />
-          </span>
-        ))}
+          ))}
+        </div>
+        {/* Duplicate half — seamless loop */}
+        <div className="flex shrink-0">
+          {repeated.map((item, i) => (
+            <span key={`b-${i}`} className="flex items-center gap-4 mx-5">
+              <span className="text-sm font-black uppercase tracking-wider">
+                {item}
+              </span>
+              <Star className="h-3.5 w-3.5 fill-current" />
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   )

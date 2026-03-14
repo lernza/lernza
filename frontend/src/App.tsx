@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Navbar } from "@/components/navbar"
 import { Landing } from "@/pages/landing"
 import { Dashboard } from "@/pages/dashboard"
@@ -50,6 +52,8 @@ function App() {
     <div className="min-h-screen bg-background text-foreground">
       <Navbar activePage={page} onNavigate={handleNavigate} />
       <main>{renderPage()}</main>
+      <Analytics />
+      <SpeedInsights />
     </div>
   )
 }

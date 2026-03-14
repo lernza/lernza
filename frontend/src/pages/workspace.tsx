@@ -46,17 +46,6 @@ export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  if (!ws) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-20 text-center">
-        <h2 className="text-2xl font-black mb-4">Quest not found</h2>
-        <Button variant="outline" onClick={onBack}>
-          Go back
-        </Button>
-      </div>
-    )
-  }
-
   const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
   const completedMilestones = new Set(
     completions.filter((c) => c.completed).map((c) => c.milestoneId)
@@ -71,8 +60,19 @@ export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
 
   const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalance = useCountUp(ws.poolBalance, 800, statsInView)
+  const poolBalance = useCountUp(ws?.poolBalance ?? 0, 800, statsInView)
   const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+
+  if (!ws) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-20 text-center">
+        <h2 className="text-2xl font-black mb-4">Quest not found</h2>
+        <Button variant="outline" onClick={onBack}>
+          Go back
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-8">

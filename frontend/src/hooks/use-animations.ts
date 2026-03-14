@@ -6,19 +6,22 @@ export function useInView<T extends HTMLElement = HTMLDivElement>(
   const ref = useRef<T>(null)
   const [inView, setInView] = useState(false)
 
+  // Stabilize options to avoid re-running the effect
+  const threshold = options?.threshold ?? 0.15
+  const rootMargin = options?.rootMargin
+
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Toggle so animations replay every time the element re-enters
         setInView(entry.isIntersecting)
       },
-      { threshold: 0.15, ...options }
+      { threshold, rootMargin }
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [threshold, rootMargin])
 
   return [ref, inView] as const
 }
@@ -27,10 +30,7 @@ export function useCountUp(target: number, duration = 1200, active = true) {
   const [value, setValue] = useState(0)
 
   useEffect(() => {
-    if (!active) {
-      setValue(0)
-      return
-    }
+    if (!active) return
     let raf: number
     const start = performance.now()
     const tick = (now: number) => {
@@ -43,17 +43,14 @@ export function useCountUp(target: number, duration = 1200, active = true) {
     return () => cancelAnimationFrame(raf)
   }, [target, duration, active])
 
-  return value
+  return active ? value : 0
 }
 
 export function useTypewriter(text: string, speed = 35, active = true) {
   const [displayed, setDisplayed] = useState("")
 
   useEffect(() => {
-    if (!active) {
-      setDisplayed("")
-      return
-    }
+    if (!active) return
     setDisplayed("")
     let i = 0
     const interval = setInterval(() => {
@@ -67,5 +64,5 @@ export function useTypewriter(text: string, speed = 35, active = true) {
     return () => clearInterval(interval)
   }, [text, speed, active])
 
-  return displayed
+  return active ? displayed : ""
 }

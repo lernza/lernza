@@ -27,7 +27,7 @@ function WalletAvatar({ address }: { address: string }) {
 }
 
 export function Profile() {
-  const { connected, connect, shortAddress, address } = useWallet()
+  const { connected, connect, address } = useWallet()
   const stats = MOCK_USER_STATS
   const [copied, setCopied] = useState(false)
 

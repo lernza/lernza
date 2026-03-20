@@ -38,10 +38,10 @@ jobs:
       - name: Generate release notes
         id: notes
         run: |
-          set -euo pipefail
+          set -eu
 
           TAG="${GITHUB_REF#refs/tags/}"
-          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 || echo "")
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 2>/dev/null || echo "")
 
           echo "Tag: $TAG"
           echo "Previous: ${PREV_TAG:-none (first release)}"
@@ -75,27 +75,30 @@ jobs:
           fi
 
           # ── Changelog from conventional commits ───────────
-          # Parse each commit ONCE and categorize by prefix
+          # Parse each commit ONCE and categorize by prefix.
+          # Uses temp file to avoid SIGPIPE with process substitution.
           FEAT="" FIX="" REFACTOR="" PERF="" DOCS="" TEST="" CI="" BUILD="" CHORE="" OTHER=""
+
+          git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges > /tmp/commits.txt 2>/dev/null || true
 
           while IFS= read -r line; do
             [ -z "$line" ] && continue
             case "$line" in
-              "feat("*|"feat:"*)     FEAT="${FEAT}${line}\n" ;;
-              "fix("*|"fix:"*)       FIX="${FIX}${line}\n" ;;
-              "refactor("*|"refactor:"*) REFACTOR="${REFACTOR}${line}\n" ;;
-              "perf("*|"perf:"*)     PERF="${PERF}${line}\n" ;;
-              "docs("*|"docs:"*)     DOCS="${DOCS}${line}\n" ;;
-              "test("*|"test:"*)     TEST="${TEST}${line}\n" ;;
-              "ci("*|"ci:"*)         CI="${CI}${line}\n" ;;
-              "build("*|"build:"*)   BUILD="${BUILD}${line}\n" ;;
-              "chore("*|"chore:"*)   CHORE="${CHORE}${line}\n" ;;
-              "style("*|"style:"*)   CHORE="${CHORE}${line}\n" ;;
-              "security("*|"security:"*) FIX="${FIX}${line}\n" ;;
-              "revert("*|"revert:"*) FIX="${FIX}${line}\n" ;;
-              *)                     OTHER="${OTHER}${line}\n" ;;
+              "- feat("*|"- feat:"*)     FEAT="${FEAT}${line}\n" ;;
+              "- fix("*|"- fix:"*)       FIX="${FIX}${line}\n" ;;
+              "- refactor("*|"- refactor:"*) REFACTOR="${REFACTOR}${line}\n" ;;
+              "- perf("*|"- perf:"*)     PERF="${PERF}${line}\n" ;;
+              "- docs("*|"- docs:"*)     DOCS="${DOCS}${line}\n" ;;
+              "- test("*|"- test:"*)     TEST="${TEST}${line}\n" ;;
+              "- ci("*|"- ci:"*)         CI="${CI}${line}\n" ;;
+              "- build("*|"- build:"*)   BUILD="${BUILD}${line}\n" ;;
+              "- chore("*|"- chore:"*)   CHORE="${CHORE}${line}\n" ;;
+              "- style("*|"- style:"*)   CHORE="${CHORE}${line}\n" ;;
+              "- security("*|"- security:"*) FIX="${FIX}${line}\n" ;;
+              "- revert("*|"- revert:"*) FIX="${FIX}${line}\n" ;;
+              *)                         OTHER="${OTHER}${line}\n" ;;
             esac
-          done < <(git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges 2>/dev/null)
+          done < /tmp/commits.txt
 
           CHANGELOG=""
           [ -n "$FEAT" ]     && CHANGELOG="${CHANGELOG}### New Features\n\n${FEAT}\n"
@@ -115,17 +118,19 @@ jobs:
 
           # ── Contributors ──────────────────────────────────
           CONTRIBUTORS=""
+          git log "$RANGE" --pretty=format:"%aN" --no-merges 2>/dev/null | sort -u > /tmp/authors.txt || true
+
           while IFS= read -r author; do
             [ -z "$author" ] && continue
-            EMAIL=$(git log "$RANGE" --author="$author" --pretty=format:"%aE" --no-merges | head -1)
+            [ "$author" = "dependabot[bot]" ] && continue
+            EMAIL=$(git log "$RANGE" --author="$author" --pretty=format:"%aE" --no-merges 2>/dev/null | head -1 || echo "")
             GH_USER=$(echo "$EMAIL" | grep -oP '\d+\+\K[^@]+(?=@users.noreply.github.com)' 2>/dev/null || echo "")
             if [ -n "$GH_USER" ]; then
               CONTRIBUTORS="${CONTRIBUTORS}- @${GH_USER}\n"
             else
-              [ "$author" = "dependabot[bot]" ] && continue
               CONTRIBUTORS="${CONTRIBUTORS}- ${author}\n"
             fi
-          done < <(git log "$RANGE" --pretty=format:"%aN" --no-merges | sort -u)
+          done < /tmp/authors.txt
 
           # ── Build the full body ───────────────────────────
           {

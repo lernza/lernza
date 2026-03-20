@@ -14,3 +14,4 @@ export function formatTokens(amount: number): string {
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(1)}K`
   return amount.toLocaleString()
 }
+// automation test

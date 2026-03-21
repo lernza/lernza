@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/lernza/lernza/compare/v0.1.0...v0.2.0) (2026-03-21)
+
+
+### Features
+
+* **ci:** switch to Release Please for automated releases ([cae2926](https://github.com/lernza/lernza/commit/cae29261ee3e84fc8f12b78692261f164959ea5f))
+
+
+### Bug Fixes
+
+* **ci:** skip CI checks for Release Please PRs, simplify release notes ([#90](https://github.com/lernza/lernza/issues/90)) ([73c63fd](https://github.com/lernza/lernza/commit/73c63fd7632c218821c2e9e39636f736e418181f))
+
 ## [0.1.0](https://github.com/lernza/lernza/releases/tag/v0.1.0) (2026-03-21)
 
 ### New Features

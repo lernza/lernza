@@ -104,12 +104,6 @@ jobs:
           # Build the extra section
           {
             echo "$CURRENT_BODY"
-            echo ""
-            echo "## Deploy"
-            echo ""
-            echo '```bash'
-            echo 'stellar contract deploy --wasm <contract>.wasm --network testnet --source <identity>'
-            echo '```'
             if [ -n "$CONTRIBUTORS" ]; then
               echo ""
               echo "## Contributors"

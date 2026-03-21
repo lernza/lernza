@@ -26,9 +26,10 @@ jobs:
   # Runs on edit (title change may change type label).
   auto-label:
     if: >-
-      github.event.action == 'opened' ||
-      github.event.action == 'synchronize' ||
-      github.event.action == 'edited'
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'release-please[bot]' &&
+      github.event.action != 'labeled' &&
+      github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     steps:
       - name: Label by file paths
@@ -75,8 +76,9 @@ jobs:
   #   2. Links to an issue (Closes #N or sidebar)
   #   3. Has at least one label (waits for auto-label first)
   pr-checks:
-    needs: auto-label
-    if: always()
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'release-please[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR title

@@ -14,12 +14,6 @@ name: Release
 #   fix:               → patch (0.1.0 → 0.1.1)
 #   feat!: or fix!:    → major (0.1.0 → 1.0.0)
 #   BREAKING CHANGE:   → major (in commit body)
-#
-# Pre-releases:
-#   Merge to a release branch (e.g., release/1.0) for pre-release versions
-#
-# Manual notes:
-#   Edit the Release PR body before merging to add custom highlights
 
 on:
   push:
@@ -36,7 +30,6 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -51,6 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Install stellar-cli
         run: |
@@ -65,40 +60,6 @@ jobs:
       - name: Build optimized WASM contracts
         run: stellar contract build
 
-      - name: Generate contract size table
-        id: sizes
-        run: |
-          TABLE="| Contract | Size |"
-          TABLE="${TABLE}\n|----------|------|"
-          for wasm in target/wasm32v1-none/release/*.wasm; do
-            [ -f "$wasm" ] || continue
-            NAME=$(basename "$wasm" .wasm)
-            BYTES=$(wc -c < "$wasm" | xargs)
-            SIZE=$(awk "BEGIN {printf \"%.2f KB\", $BYTES / 1024}")
-            TABLE="${TABLE}\n| ${NAME} | ${SIZE} |"
-          done
-
-          echo "table<<EOF" >> "$GITHUB_OUTPUT"
-          echo -e "$TABLE" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-
-      - name: Append contract info to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: |
-          CURRENT_BODY=$(gh release view "$TAG" --json body -q '.body')
-
-          EXTRA="\n\n## Contract Binaries\n\n"
-          EXTRA="${EXTRA}${{ steps.sizes.outputs.table }}\n\n"
-          EXTRA="${EXTRA}Deploy to Stellar testnet:\n"
-          EXTRA="${EXTRA}\`\`\`bash\n"
-          EXTRA="${EXTRA}stellar contract deploy --wasm <contract>.wasm --network testnet --source <identity>\n"
-          EXTRA="${EXTRA}\`\`\`"
-
-          echo -e "${CURRENT_BODY}${EXTRA}" > /tmp/release_body.md
-          gh release edit "$TAG" --notes-file /tmp/release_body.md
-
       - name: Upload WASM binaries to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,4 +68,56 @@ jobs:
           for wasm in target/wasm32v1-none/release/*.wasm; do
             [ -f "$wasm" ] || continue
             gh release upload "$TAG" "$wasm" --clobber
+            echo "Uploaded: $(basename $wasm)"
           done
+
+      - name: Append deploy instructions and contributors to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          CURRENT_BODY=$(gh release view "$TAG" --json body -q '.body')
+          HEAD_SHA=$(git rev-parse HEAD)
+
+          # Resolve contributors via commits API
+          # Write jq filter to file to avoid bash escaping \()
+          cat > /tmp/contributors.jq << 'JQ_FILTER'
+          [
+            .[] |
+            select(.author != null) |
+            select(.author.login != "dependabot[bot]") |
+            select(.author.login != "web-flow") |
+            select(.author.login != "github-actions[bot]") |
+            { login: .author.login, name: .commit.author.name }
+          ] |
+          unique_by(.login) |
+          .[] |
+          "- **\(.name)** ([@\(.login)](https://github.com/\(.login)))"
+          JQ_FILTER
+
+          gh api "repos/${GITHUB_REPOSITORY}/commits" \
+            -X GET -f per_page=100 -f sha="${HEAD_SHA}" \
+            > /tmp/commits_api.json 2>/dev/null || echo "[]" > /tmp/commits_api.json
+
+          CONTRIBUTORS=$(jq -r -f /tmp/contributors.jq /tmp/commits_api.json 2>/dev/null || echo "")
+
+          # Build the extra section
+          {
+            echo "$CURRENT_BODY"
+            echo ""
+            echo "## Deploy"
+            echo ""
+            echo '```bash'
+            echo 'stellar contract deploy --wasm <contract>.wasm --network testnet --source <identity>'
+            echo '```'
+            if [ -n "$CONTRIBUTORS" ]; then
+              echo ""
+              echo "## Contributors"
+              echo ""
+              echo "Thank you to everyone who contributed to this release:"
+              echo ""
+              echo "$CONTRIBUTORS"
+            fi
+          } > /tmp/release_body.md
+
+          gh release edit "$TAG" --notes-file /tmp/release_body.md

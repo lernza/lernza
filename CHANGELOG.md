@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/lernza/lernza/compare/v0.2.2...v0.2.3) (2026-03-21)
+
+
+### Bug Fixes
+
+* **ci:** rebuild release notes from git log to include all commit types ([#101](https://github.com/lernza/lernza/issues/101)) ([7b85206](https://github.com/lernza/lernza/commit/7b85206f9d269e322d11e8e70bf681e4f7c99814))
+
 ## [0.2.2](https://github.com/lernza/lernza/compare/v0.2.1...v0.2.2) (2026-03-21)
 
 

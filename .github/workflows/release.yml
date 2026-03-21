@@ -3,17 +3,11 @@ name: Release
 # Automated release pipeline using Release Please.
 #
 # How it works:
-#   1. You merge PRs to main with conventional commits (feat:, fix:, etc.)
-#   2. Release Please automatically creates/updates a "Release PR"
-#   3. The Release PR shows the changelog, version bump, and what's included
-#   4. You review it, optionally add custom notes, then merge
-#   5. On merge: tag created → GitHub Release published → WASM built + attached
-#
-# Version bumps (automatic):
-#   feat:              → minor (0.1.0 → 0.2.0)
-#   fix:               → patch (0.1.0 → 0.1.1)
-#   feat!: or fix!:    → major (0.1.0 → 1.0.0)
-#   BREAKING CHANGE:   → major (in commit body)
+#   1. You merge PRs to main with conventional commits
+#   2. Release Please creates/updates a "Release PR" with version bump
+#   3. You review and merge the Release PR
+#   4. Tag created, release published, WASM built, notes rebuilt with
+#      ALL commit types + contributors + full changelog link
 
 on:
   push:
@@ -24,7 +18,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  # ── Step 1: Release Please creates/updates the Release PR ──────
   release-please:
     runs-on: ubuntu-latest
     outputs:
@@ -37,11 +30,12 @@ jobs:
           release-type: simple
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Step 2: Build WASM + attach to release (only on new release) ──
   build-artifacts:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,7 +57,6 @@ jobs:
       - name: Upload WASM binaries to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           for wasm in target/wasm32v1-none/release/*.wasm; do
             [ -f "$wasm" ] || continue
@@ -71,16 +64,26 @@ jobs:
             echo "Uploaded: $(basename $wasm)"
           done
 
-      - name: Append deploy instructions and contributors to release
+      - name: Rebuild release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          CURRENT_BODY=$(gh release view "$TAG" --json body -q '.body')
           HEAD_SHA=$(git rev-parse HEAD)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 2>/dev/null || echo "")
 
-          # Resolve contributors via commits API
-          # Write jq filter to file to avoid bash escaping \()
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${TAG}"
+          else
+            RANGE="${TAG}"
+          fi
+
+          # Build changelog using external script (avoids YAML escaping)
+          git log "$RANGE" --pretty=format:"%s (%h)" --no-merges 2>/dev/null | \
+            grep -v "^chore(main): release" > /tmp/commits.txt || true
+
+          CHANGELOG=$(bash .github/scripts/categorize-commits.sh)
+
+          # Resolve contributors
           cat > /tmp/contributors.jq << 'JQ_FILTER'
           [
             .[] |
@@ -101,14 +104,12 @@ jobs:
 
           CONTRIBUTORS=$(jq -r -f /tmp/contributors.jq /tmp/commits_api.json 2>/dev/null || echo "")
 
-          # Get previous tag for the full changelog link
-          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 2>/dev/null || echo "")
-
-          # Build the extra section
+          # Build release body
           {
-            echo "$CURRENT_BODY"
+            echo "## ${TAG}"
+            echo ""
+            echo "$CHANGELOG"
             if [ -n "$CONTRIBUTORS" ]; then
-              echo ""
               echo "## Contributors"
               echo ""
               echo "Thank you to everyone who contributed to this release:"
@@ -124,5 +125,9 @@ jobs:
               echo "**[View all commits](https://github.com/${GITHUB_REPOSITORY}/commits/${TAG})**"
             fi
           } > /tmp/release_body.md
+
+          echo "=== Release notes ==="
+          cat /tmp/release_body.md
+          echo "=== End ==="
 
           gh release edit "$TAG" --notes-file /tmp/release_body.md

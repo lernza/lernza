@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2](https://github.com/lernza/lernza/compare/v0.2.1...v0.2.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* **ci:** add explicit permissions to project-automation and stale workflows ([#98](https://github.com/lernza/lernza/issues/98)) ([e05981e](https://github.com/lernza/lernza/commit/e05981e2c68ccd312694f5a747e6572fe8c4e337))
+* **ci:** show all commit types in release changelog ([#96](https://github.com/lernza/lernza/issues/96)) ([cb3c21f](https://github.com/lernza/lernza/commit/cb3c21f976ccc0ed733ae080cf48b4376d8998fd))
+
 ## [0.2.1](https://github.com/lernza/lernza/compare/v0.2.0...v0.2.1) (2026-03-21)
 
 

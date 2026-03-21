@@ -101,15 +101,12 @@ jobs:
 
           CONTRIBUTORS=$(jq -r -f /tmp/contributors.jq /tmp/commits_api.json 2>/dev/null || echo "")
 
+          # Get previous tag for the full changelog link
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v "^${TAG}$" | head -1 2>/dev/null || echo "")
+
           # Build the extra section
           {
             echo "$CURRENT_BODY"
-            echo ""
-            echo "## Deploy"
-            echo ""
-            echo '```bash'
-            echo 'stellar contract deploy --wasm <contract>.wasm --network testnet --source <identity>'
-            echo '```'
             if [ -n "$CONTRIBUTORS" ]; then
               echo ""
               echo "## Contributors"
@@ -117,6 +114,14 @@ jobs:
               echo "Thank you to everyone who contributed to this release:"
               echo ""
               echo "$CONTRIBUTORS"
+            fi
+            echo ""
+            echo "---"
+            echo ""
+            if [ -n "$PREV_TAG" ]; then
+              echo "**[View all code changes since ${PREV_TAG}](https://github.com/${GITHUB_REPOSITORY}/compare/${PREV_TAG}...${TAG})**"
+            else
+              echo "**[View all commits](https://github.com/${GITHUB_REPOSITORY}/commits/${TAG})**"
             fi
           } > /tmp/release_body.md
 

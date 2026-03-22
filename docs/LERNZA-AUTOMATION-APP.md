@@ -49,7 +49,7 @@ Single serverless function on Vercel. No database, no state, no background jobs.
 | Webhook secret | Generate a strong random string: `openssl rand -hex 32` |
 | Permissions | See table below |
 | Subscribe to events | See table below |
-| Where can be installed | Only on this account |
+| Where it can be installed | Only on this account |
 
 ### Permissions needed
 
@@ -769,7 +769,7 @@ Once the app is working:
 
 ## Step 9: What the App Handles (Complete)
 
-### Things Actions workflow currently does
+### Things the Actions workflow currently does
 
 | Event | Action | App handles? |
 |-------|--------|-------------|

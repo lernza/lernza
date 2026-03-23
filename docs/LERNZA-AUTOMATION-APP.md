@@ -49,7 +49,7 @@ Single serverless function on Vercel. No database, no state, no background jobs.
 | Webhook secret | Generate a strong random string: `openssl rand -hex 32` |
 | Permissions | See table below |
 | Subscribe to events | See table below |
-| Where can be installed | Only on this account |
+| Where it can be installed | Only on this account |
 
 ### Permissions needed
 

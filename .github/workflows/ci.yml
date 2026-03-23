@@ -171,7 +171,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       contracts: ${{ steps.filter.outputs.contracts }}
     steps:
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |

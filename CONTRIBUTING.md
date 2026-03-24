@@ -41,6 +41,23 @@ pnpm build      # Production build
 pnpm lint       # Run linter
 ```
 
+### Pre-commit Hooks
+
+This project uses [husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to run automated checks before commits. The pre-commit hook runs:
+
+- **ESLint** on staged `.ts`/`.tsx` files in the frontend
+- **cargo fmt --check** on staged `.rs` files in the contracts
+
+These checks help prevent formatting issues from reaching CI. The hooks are automatically installed after running `pnpm install` in the frontend directory.
+
+To bypass the pre-commit hook temporarily:
+
+```bash
+git commit --no-verify -m "Your commit message"
+```
+
+To troubleshoot hook issues, check `.husky/pre-commit` and `.lintstagedrc`.
+
 ## Branch Naming
 
 Use conventional prefixes:

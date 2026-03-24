@@ -66,7 +66,7 @@ impl QuestContract {
 
         let quest = QuestInfo {
             id,
-            owner: owner.clone(),
+            owner,
             name,
             description,
             token_addr,
@@ -92,8 +92,8 @@ impl QuestContract {
         let mut enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check not already enrolled
-        for i in 0..enrollees.len() {
-            if enrollees.get(i).unwrap() == enrollee {
+        for existing in enrollees.iter() {
+            if existing == &enrollee {
                 return Err(Error::AlreadyEnrolled);
             }
         }
@@ -113,11 +113,12 @@ impl QuestContract {
 
         let enrollees = Self::load_enrollees(&env, quest_id);
         let mut found = false;
+        let enrollees = Self::load_enrollees(&env, workspace_id);
         let mut new_list = Vec::new(&env);
+        let mut found = false;
 
-        for i in 0..enrollees.len() {
-            let addr = enrollees.get(i).unwrap();
-            if addr == enrollee {
+        for addr in enrollees.iter() {
+            if addr == &enrollee {
                 found = true;
             } else {
                 new_list.push_back(addr);
@@ -156,6 +157,12 @@ impl QuestContract {
         let enrollees = Self::load_enrollees(&env, quest_id);
         for i in 0..enrollees.len() {
             if enrollees.get(i).unwrap() == user {
+    /// Check if a user is enrolled in a workspace.
+    pub fn is_enrollee(env: Env, workspace_id: u32, user: Address) -> Result<bool, Error> {
+        Self::load_workspace(&env, workspace_id)?;
+        let enrollees = Self::load_enrollees(&env, workspace_id);
+        for enrollee in enrollees.iter() {
+            if enrollee == &user {
                 return Ok(true);
             }
         }

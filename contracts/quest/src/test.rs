@@ -209,10 +209,7 @@ fn test_list_public_quests_excludes_private() {
 
     // Verify all are public
     for i in 0..public_quests.len() {
-        assert_eq!(
-            public_quests.get(i).unwrap().visibility,
-            Visibility::Public
-        );
+        assert_eq!(public_quests.get(i).unwrap().visibility, Visibility::Public);
     }
 }
 
@@ -269,10 +266,8 @@ fn test_set_visibility_owner_only() {
 #[test]
 fn test_list_public_quests_after_visibility_change() {
     let (env, client, owner, token) = setup();
-    let id1 =
-        create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-    let id2 =
-        create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    let id1 = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    let id2 = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     // Verify workspaces were created
     let ws1 = client.get_workspace(&id1);

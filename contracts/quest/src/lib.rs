@@ -177,7 +177,9 @@ impl QuestContract {
         ws.owner.require_auth();
 
         ws.visibility = visibility;
-        env.storage().persistent().set(&DataKey::Workspace(workspace_id), &ws);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Workspace(workspace_id), &ws);
         Self::bump(&env, workspace_id);
         Ok(())
     }

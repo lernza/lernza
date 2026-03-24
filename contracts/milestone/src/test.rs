@@ -192,7 +192,14 @@ fn test_milestone_ownership_race_condition() {
     let attacker = Address::generate(&env);
 
     // Attacker calls create_milestone first for workspace 0
-    create_ms(&env, &client, &attacker, 0, "Attacker backdoor milestone", 9999);
+    create_ms(
+        &env,
+        &client,
+        &attacker,
+        0,
+        "Attacker backdoor milestone",
+        9999,
+    );
 
     // Legitimate owner now cannot create milestones for their own workspace
     let result = client.try_create_milestone(

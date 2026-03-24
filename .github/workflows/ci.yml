@@ -34,6 +34,7 @@ jobs:
       github.event.action != 'unlabeled'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
       - name: Label by file paths
         uses: actions/labeler@v6
         with:

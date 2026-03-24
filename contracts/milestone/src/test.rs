@@ -179,3 +179,51 @@ fn test_zero_reward_milestone() {
     let reward = client.verify_completion(&owner, &0, &0, &enrollee);
     assert_eq!(reward, 0);
 }
+
+// ---- Security tests ----
+
+/// CRIT-01: Any address that calls create_milestone first for a workspace_id
+/// becomes the permanent milestone authority for that workspace. The legitimate
+/// quest owner is locked out because the first caller sets the cached owner with
+/// no cross-contract validation against the workspace contract.
+#[test]
+fn test_milestone_ownership_race_condition() {
+    let (env, client, legitimate_owner) = setup();
+    let attacker = Address::generate(&env);
+
+    // Attacker calls create_milestone first for workspace 0
+    create_ms(&env, &client, &attacker, 0, "Attacker backdoor milestone", 9999);
+
+    // Legitimate owner now cannot create milestones for their own workspace
+    let result = client.try_create_milestone(
+        &legitimate_owner,
+        &0,
+        &String::from_str(&env, "Real milestone"),
+        &String::from_str(&env, "Description"),
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::OwnerMismatch)));
+
+    // Attacker is now the milestone owner and can verify completions
+    let victim = Address::generate(&env);
+    let reward = client.verify_completion(&attacker, &0, &0, &victim);
+    assert_eq!(reward, 9999);
+}
+
+/// HIGH-01: verify_completion accepts any enrollee address without checking
+/// whether that address is actually enrolled in the workspace. Any arbitrary
+/// address can have milestone completion recorded and trigger reward distribution.
+#[test]
+fn test_verify_completion_no_enrollment_check() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task", 100);
+
+    // This address has never been enrolled in any workspace contract
+    let unenrolled = Address::generate(&env);
+
+    // Succeeds despite unenrolled address — no cross-contract enrollment check
+    let reward = client.verify_completion(&owner, &0, &0, &unenrolled);
+    assert_eq!(reward, 100);
+    assert!(client.is_completed(&0, &0, &unenrolled));
+    assert_eq!(client.get_enrollee_completions(&0, &unenrolled), 1);
+}

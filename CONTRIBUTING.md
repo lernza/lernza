@@ -50,12 +50,6 @@ This project uses [husky](https://typicode.github.io/husky/) and [lint-staged](h
 
 These checks help prevent formatting issues from reaching CI. The hooks are automatically installed after running `pnpm install` in the frontend directory.
 
-To bypass the pre-commit hook temporarily:
-
-```bash
-git commit --no-verify -m "Your commit message"
-```
-
 To troubleshoot hook issues, check `.husky/pre-commit` and `.lintstagedrc`.
 
 ## Branch Naming

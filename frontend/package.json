@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "prepare": "cd .. && husky install"
+    "prepare": "cd .. && husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": ["pnpm exec eslint --fix"]
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",

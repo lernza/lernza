@@ -121,6 +121,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "reward_amount"
                     },
                     "val": {
@@ -133,14 +141,6 @@
                     },
                     "val": {
                       "string": "A"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 0
                     }
                   }
                 ]
@@ -192,6 +192,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "reward_amount"
                     },
                     "val": {
@@ -204,14 +212,6 @@
                     },
                     "val": {
                       "string": "B"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 0
                     }
                   }
                 ]

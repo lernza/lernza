@@ -16,13 +16,13 @@ fn create_ms(
     env: &Env,
     client: &MilestoneContractClient,
     owner: &Address,
-    ws_id: u32,
+    quest_id: u32,
     title: &str,
     reward: i128,
 ) -> u32 {
     client.create_milestone(
         owner,
-        &ws_id,
+        &quest_id,
         &String::from_str(env, title),
         &String::from_str(env, "Description"),
         &reward,
@@ -39,7 +39,7 @@ fn test_create_milestone() {
     let ms = client.get_milestone(&0, &0);
     assert_eq!(ms.title, String::from_str(&env, "Build your first API"));
     assert_eq!(ms.reward_amount, 100);
-    assert_eq!(ms.workspace_id, 0);
+    assert_eq!(ms.quest_id, 0);
 }
 
 #[test]
@@ -55,13 +55,13 @@ fn test_create_multiple_milestones() {
 }
 
 #[test]
-fn test_milestones_per_workspace_are_independent() {
+fn test_milestones_per_quest_are_independent() {
     let (env, client, owner) = setup();
-    create_ms(&env, &client, &owner, 0, "WS0 Task", 50);
-    create_ms(&env, &client, &owner, 0, "WS0 Task 2", 75);
+    create_ms(&env, &client, &owner, 0, "Quest0 Task", 50);
+    create_ms(&env, &client, &owner, 0, "Quest0 Task 2", 75);
 
     let owner2 = Address::generate(&env);
-    create_ms(&env, &client, &owner2, 1, "WS1 Task", 100);
+    create_ms(&env, &client, &owner2, 1, "Quest1 Task", 100);
 
     assert_eq!(client.get_milestone_count(&0), 2);
     assert_eq!(client.get_milestone_count(&1), 1);
@@ -138,10 +138,10 @@ fn test_wrong_owner_cannot_verify() {
 #[test]
 fn test_wrong_owner_cannot_create() {
     let (env, client, owner) = setup();
-    // First owner sets the workspace
+    // First owner sets the quest
     create_ms(&env, &client, &owner, 0, "Task", 50);
 
-    // Different owner tries to add to same workspace
+    // Different owner tries to add to same quest
     let imposter = Address::generate(&env);
     let result = client.try_create_milestone(
         &imposter,
@@ -182,16 +182,16 @@ fn test_zero_reward_milestone() {
 
 // ---- Security tests ----
 
-/// CRIT-01: Any address that calls create_milestone first for a workspace_id
-/// becomes the permanent milestone authority for that workspace. The legitimate
+/// CRIT-01: Any address that calls create_milestone first for a quest_id
+/// becomes the permanent milestone authority for that quest. The legitimate
 /// quest owner is locked out because the first caller sets the cached owner with
-/// no cross-contract validation against the workspace contract.
+/// no cross-contract validation against the quest contract.
 #[test]
 fn test_milestone_ownership_race_condition() {
     let (env, client, legitimate_owner) = setup();
     let attacker = Address::generate(&env);
 
-    // Attacker calls create_milestone first for workspace 0
+    // Attacker calls create_milestone first for quest 0
     create_ms(
         &env,
         &client,
@@ -201,7 +201,7 @@ fn test_milestone_ownership_race_condition() {
         9999,
     );
 
-    // Legitimate owner now cannot create milestones for their own workspace
+    // Legitimate owner now cannot create milestones for their own quest
     let result = client.try_create_milestone(
         &legitimate_owner,
         &0,
@@ -218,14 +218,14 @@ fn test_milestone_ownership_race_condition() {
 }
 
 /// HIGH-01: verify_completion accepts any enrollee address without checking
-/// whether that address is actually enrolled in the workspace. Any arbitrary
+/// whether that address is actually enrolled in the quest. Any arbitrary
 /// address can have milestone completion recorded and trigger reward distribution.
 #[test]
 fn test_verify_completion_no_enrollment_check() {
     let (env, client, owner) = setup();
     create_ms(&env, &client, &owner, 0, "Task", 100);
 
-    // This address has never been enrolled in any workspace contract
+    // This address has never been enrolled in any quest contract
     let unenrolled = Address::generate(&env);
 
     // Succeeds despite unenrolled address — no cross-contract enrollment check

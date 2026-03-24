@@ -55,7 +55,7 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "function_name": "fund_workspace",
+              "function_name": "fund_quest",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
@@ -177,7 +177,7 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "WorkspaceAuthority"
+                    "symbol": "QuestAuthority"
                   },
                   {
                     "u32": 0
@@ -204,7 +204,7 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "WorkspacePool"
+                    "symbol": "QuestPool"
                   },
                   {
                     "u32": 0

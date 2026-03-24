@@ -181,6 +181,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "reward_amount"
                     },
                     "val": {
@@ -193,14 +201,6 @@
                     },
                     "val": {
                       "string": "Attacker backdoor milestone"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 0
                     }
                   }
                 ]

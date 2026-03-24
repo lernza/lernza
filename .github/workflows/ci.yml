@@ -81,7 +81,7 @@ jobs:
         with:
           toolchain: stable
           target: wasm32-unknown-unknown,wasm32v1-none
-          components: rustfmt, clippy
+          components: rustfmt, clippy, rust-src
 
       - name: Cache cargo
         uses: actions/cache@v5

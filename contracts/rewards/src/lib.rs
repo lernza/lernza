@@ -1,24 +1,24 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, token, Address, Env};
 
-// Rewards contract: holds token pools per workspace and distributes rewards.
+// Rewards contract: holds token pools per quest and distributes rewards.
 //
 // Flow:
-// 1. Workspace owner calls fund_workspace() to deposit tokens into the pool
+// 1. Quest owner calls fund_quest() to deposit tokens into the pool
 // 2. When owner verifies a milestone completion, frontend calls distribute_reward()
 // 3. Tokens transfer from the contract's pool to the enrollee
 //
-// Auth model: whoever funds a workspace becomes its authority.
-// Only the authority can distribute from that workspace's pool.
+// Auth model: whoever funds a quest becomes its authority.
+// Only the authority can distribute from that quest's pool.
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     TokenAddr,
-    // Who funded / controls a workspace's pool
-    WorkspaceAuthority(u32),
-    // Token balance allocated to a workspace
-    WorkspacePool(u32),
+    // Who funded / controls a quest's pool
+    QuestAuthority(u32),
+    // Token balance allocated to a quest
+    QuestPool(u32),
     // Per-user total earnings
     UserEarnings(Address),
     // Global stats
@@ -34,7 +34,7 @@ pub enum Error {
     Unauthorized = 3,
     InsufficientPool = 4,
     InvalidAmount = 5,
-    WorkspaceNotFunded = 6,
+    QuestNotFunded = 6,
 }
 
 const BUMP: u32 = 518_400;
@@ -60,14 +60,9 @@ impl RewardsContract {
         Ok(())
     }
 
-    /// Fund a workspace's reward pool. The funder becomes the workspace authority.
-    /// Transfers tokens from the funder to this contract and credits the workspace pool.
-    pub fn fund_workspace(
-        env: Env,
-        funder: Address,
-        workspace_id: u32,
-        amount: i128,
-    ) -> Result<(), Error> {
+    /// Fund a quest's reward pool. The funder becomes the quest authority.
+    /// Transfers tokens from the funder to this contract and credits the quest pool.
+    pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
         if amount <= 0 {
@@ -76,8 +71,8 @@ impl RewardsContract {
 
         let token_addr = Self::get_token(&env)?;
 
-        // If workspace already has an authority, only they can add more funds
-        let auth_key = DataKey::WorkspaceAuthority(workspace_id);
+        // If quest already has an authority, only they can add more funds
+        let auth_key = DataKey::QuestAuthority(quest_id);
         if let Some(existing) = env.storage().persistent().get::<_, Address>(&auth_key) {
             if existing != funder {
                 return Err(Error::Unauthorized);
@@ -93,8 +88,8 @@ impl RewardsContract {
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&funder, env.current_contract_address(), &amount);
 
-        // Credit the workspace pool
-        let pool_key = DataKey::WorkspacePool(workspace_id);
+        // Credit the quest pool
+        let pool_key = DataKey::QuestPool(quest_id);
         let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
         env.storage()
             .persistent()
@@ -111,7 +106,7 @@ impl RewardsContract {
     pub fn distribute_reward(
         env: Env,
         authority: Address,
-        workspace_id: u32,
+        quest_id: u32,
         enrollee: Address,
         amount: i128,
     ) -> Result<(), Error> {
@@ -122,18 +117,18 @@ impl RewardsContract {
         }
 
         // Verify authority
-        let auth_key = DataKey::WorkspaceAuthority(workspace_id);
+        let auth_key = DataKey::QuestAuthority(quest_id);
         let stored: Address = env
             .storage()
             .persistent()
             .get(&auth_key)
-            .ok_or(Error::WorkspaceNotFunded)?;
+            .ok_or(Error::QuestNotFunded)?;
         if stored != authority {
             return Err(Error::Unauthorized);
         }
 
         // Check pool balance
-        let pool_key = DataKey::WorkspacePool(workspace_id);
+        let pool_key = DataKey::QuestPool(quest_id);
         let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
         if pool < amount {
             return Err(Error::InsufficientPool);
@@ -174,15 +169,15 @@ impl RewardsContract {
         Ok(())
     }
 
-    /// Get the token pool balance for a workspace.
-    pub fn get_pool_balance(env: Env, workspace_id: u32) -> i128 {
+    /// Get the token pool balance for a quest.
+    pub fn get_pool_balance(env: Env, quest_id: u32) -> i128 {
         env.storage()
             .persistent()
-            .get(&DataKey::WorkspacePool(workspace_id))
+            .get(&DataKey::QuestPool(quest_id))
             .unwrap_or(0)
     }
 
-    /// Get total earnings for a user across all workspaces.
+    /// Get total earnings for a user across all quests.
     pub fn get_user_earnings(env: Env, user: Address) -> i128 {
         env.storage()
             .persistent()

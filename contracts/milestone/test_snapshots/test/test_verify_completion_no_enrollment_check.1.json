@@ -13,19 +13,22 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "create_workspace",
+              "function_name": "create_milestone",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "string": "My Workspace"
+                  "u32": 0
                 },
                 {
-                  "string": "Teaching my brother to code"
+                  "string": "Task"
                 },
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  "string": "Description"
+                },
+                {
+                  "i128": "100"
                 }
               ]
             }
@@ -41,16 +44,16 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "create_workspace",
+              "function_name": "verify_completion",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "string": "My Workspace"
+                  "u32": 0
                 },
                 {
-                  "string": "Teaching my brother to code"
+                  "u32": 0
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
@@ -62,6 +65,7 @@
         }
       ]
     ],
+    [],
     []
   ],
   "ledger": {
@@ -84,43 +88,22 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "Enrollees"
+                    "symbol": "Completed"
                   },
                   {
                     "u32": 0
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "vec": []
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 518400
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "vec": [
-                  {
-                    "symbol": "Enrollees"
                   },
                   {
-                    "u32": 1
+                    "u32": 0
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "vec": []
+                "bool": true
               }
             }
           },
@@ -138,7 +121,40 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "Workspace"
+                    "symbol": "EnrolleeCompletions"
+                  },
+                  {
+                    "u32": 0
+                  },
+                  {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Milestone"
+                  },
+                  {
+                    "u32": 0
                   },
                   {
                     "u32": 0
@@ -150,18 +166,10 @@
                 "map": [
                   {
                     "key": {
-                      "symbol": "created_at"
-                    },
-                    "val": {
-                      "u64": "0"
-                    }
-                  },
-                  {
-                    "key": {
                       "symbol": "description"
                     },
                     "val": {
-                      "string": "Teaching my brother to code"
+                      "string": "Description"
                     }
                   },
                   {
@@ -174,26 +182,26 @@
                   },
                   {
                     "key": {
-                      "symbol": "name"
+                      "symbol": "quest_id"
                     },
                     "val": {
-                      "string": "My Workspace"
+                      "u32": 0
                     }
                   },
                   {
                     "key": {
-                      "symbol": "owner"
+                      "symbol": "reward_amount"
                     },
                     "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                      "i128": "100"
                     }
                   },
                   {
                     "key": {
-                      "symbol": "token_addr"
+                      "symbol": "title"
                     },
                     "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                      "string": "Task"
                     }
                   }
                 ]
@@ -214,65 +222,43 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "Workspace"
+                    "symbol": "NextMilestoneId"
                   },
                   {
-                    "u32": 1
+                    "u32": 0
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "map": [
+                "u32": 1
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
                   {
-                    "key": {
-                      "symbol": "created_at"
-                    },
-                    "val": {
-                      "u64": "0"
-                    }
+                    "symbol": "Owner"
                   },
                   {
-                    "key": {
-                      "symbol": "description"
-                    },
-                    "val": {
-                      "string": "Teaching my brother to code"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "id"
-                    },
-                    "val": {
-                      "u32": 1
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "name"
-                    },
-                    "val": {
-                      "string": "My Workspace"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "owner"
-                    },
-                    "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "token_addr"
-                    },
-                    "val": {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
-                    }
+                    "u32": 0
                   }
                 ]
+              },
+              "durability": "persistent",
+              "val": {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
               }
             }
           },
@@ -294,20 +280,7 @@
                   "executable": {
                     "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                   },
-                  "storage": [
-                    {
-                      "key": {
-                        "vec": [
-                          {
-                            "symbol": "NextId"
-                          }
-                        ]
-                      },
-                      "val": {
-                        "u32": 2
-                      }
-                    }
-                  ]
+                  "storage": null
                 }
               }
             }

@@ -1,21 +1,21 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
 
-// Workspace contract: the entry point for Lernza.
-// An owner creates a workspace, enrolls learners, configures a reward token.
-// Other contracts (milestone, rewards) reference workspace IDs and owners.
+// Quest contract: the entry point for Lernza.
+// An owner creates a quest, enrolls learners, configures a reward token.
+// Other contracts (milestone, rewards) reference quest IDs and owners.
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     NextId,
-    Workspace(u32),
+    Quest(u32),
     Enrollees(u32),
 }
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
-pub struct WorkspaceInfo {
+pub struct QuestInfo {
     pub id: u32,
     pub owner: Address,
     pub name: String,
@@ -39,12 +39,12 @@ const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
 
 #[contract]
-pub struct WorkspaceContract;
+pub struct QuestContract;
 
 #[contractimpl]
-impl WorkspaceContract {
-    /// Create a new workspace. Returns the workspace ID.
-    pub fn create_workspace(
+impl QuestContract {
+    /// Create a new quest. Returns the quest ID.
+    pub fn create_quest(
         env: Env,
         owner: Address,
         name: String,
@@ -55,7 +55,7 @@ impl WorkspaceContract {
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
 
-        let ws = WorkspaceInfo {
+        let quest = QuestInfo {
             id,
             owner: owner.clone(),
             name,
@@ -64,7 +64,7 @@ impl WorkspaceContract {
             created_at: env.ledger().timestamp(),
         };
 
-        env.storage().persistent().set(&DataKey::Workspace(id), &ws);
+        env.storage().persistent().set(&DataKey::Quest(id), &quest);
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
@@ -74,12 +74,12 @@ impl WorkspaceContract {
         Ok(id)
     }
 
-    /// Add an enrollee to a workspace. Owner only.
-    pub fn add_enrollee(env: Env, workspace_id: u32, enrollee: Address) -> Result<(), Error> {
-        let ws = Self::load_workspace(&env, workspace_id)?;
-        ws.owner.require_auth();
+    /// Add an enrollee to a quest. Owner only.
+    pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
 
-        let mut enrollees = Self::load_enrollees(&env, workspace_id);
+        let mut enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check not already enrolled
         for i in 0..enrollees.len() {
@@ -91,17 +91,17 @@ impl WorkspaceContract {
         enrollees.push_back(enrollee);
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(workspace_id), &enrollees);
-        Self::bump(&env, workspace_id);
+            .set(&DataKey::Enrollees(quest_id), &enrollees);
+        Self::bump(&env, quest_id);
         Ok(())
     }
 
-    /// Remove an enrollee from a workspace. Owner only.
-    pub fn remove_enrollee(env: Env, workspace_id: u32, enrollee: Address) -> Result<(), Error> {
-        let ws = Self::load_workspace(&env, workspace_id)?;
-        ws.owner.require_auth();
+    /// Remove an enrollee from a quest. Owner only.
+    pub fn remove_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
 
-        let enrollees = Self::load_enrollees(&env, workspace_id);
+        let enrollees = Self::load_enrollees(&env, quest_id);
         let mut found = false;
         let mut new_list = Vec::new(&env);
 
@@ -120,30 +120,30 @@ impl WorkspaceContract {
 
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(workspace_id), &new_list);
-        Self::bump(&env, workspace_id);
+            .set(&DataKey::Enrollees(quest_id), &new_list);
+        Self::bump(&env, quest_id);
         Ok(())
     }
 
-    /// Get workspace info by ID.
-    pub fn get_workspace(env: Env, workspace_id: u32) -> Result<WorkspaceInfo, Error> {
-        let ws = Self::load_workspace(&env, workspace_id)?;
-        Self::bump(&env, workspace_id);
-        Ok(ws)
+    /// Get quest info by ID.
+    pub fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        Self::bump(&env, quest_id);
+        Ok(quest)
     }
 
-    /// Get all enrollees for a workspace.
-    pub fn get_enrollees(env: Env, workspace_id: u32) -> Result<Vec<Address>, Error> {
-        Self::load_workspace(&env, workspace_id)?; // verify exists
-        let enrollees = Self::load_enrollees(&env, workspace_id);
-        Self::bump(&env, workspace_id);
+    /// Get all enrollees for a quest.
+    pub fn get_enrollees(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?; // verify exists
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        Self::bump(&env, quest_id);
         Ok(enrollees)
     }
 
-    /// Check if a user is enrolled in a workspace.
-    pub fn is_enrollee(env: Env, workspace_id: u32, user: Address) -> Result<bool, Error> {
-        Self::load_workspace(&env, workspace_id)?;
-        let enrollees = Self::load_enrollees(&env, workspace_id);
+    /// Check if a user is enrolled in a quest.
+    pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
         for i in 0..enrollees.len() {
             if enrollees.get(i).unwrap() == user {
                 return Ok(true);
@@ -152,17 +152,17 @@ impl WorkspaceContract {
         Ok(false)
     }
 
-    /// Get total workspace count.
-    pub fn get_workspace_count(env: Env) -> u32 {
+    /// Get total quest count.
+    pub fn get_quest_count(env: Env) -> u32 {
         env.storage().instance().get(&DataKey::NextId).unwrap_or(0)
     }
 
     // --- internals ---
 
-    fn load_workspace(env: &Env, id: u32) -> Result<WorkspaceInfo, Error> {
+    fn load_quest(env: &Env, id: u32) -> Result<QuestInfo, Error> {
         env.storage()
             .persistent()
-            .get(&DataKey::Workspace(id))
+            .get(&DataKey::Quest(id))
             .ok_or(Error::NotFound)
     }
 
@@ -173,14 +173,14 @@ impl WorkspaceContract {
             .unwrap_or(Vec::new(env))
     }
 
-    fn bump(env: &Env, workspace_id: u32) {
+    fn bump(env: &Env, quest_id: u32) {
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         env.storage()
             .persistent()
-            .extend_ttl(&DataKey::Workspace(workspace_id), THRESHOLD, BUMP);
+            .extend_ttl(&DataKey::Quest(quest_id), THRESHOLD, BUMP);
         env.storage()
             .persistent()
-            .extend_ttl(&DataKey::Enrollees(workspace_id), THRESHOLD, BUMP);
+            .extend_ttl(&DataKey::Enrollees(quest_id), THRESHOLD, BUMP);
     }
 }
 

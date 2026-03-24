@@ -47,7 +47,7 @@ fn test_initialize_twice_fails() {
 }
 
 #[test]
-fn test_fund_workspace() {
+fn test_fund_quest() {
     let (env, client, _cid, token_addr, token_admin) = setup();
     let owner = Address::generate(&env);
 
@@ -55,7 +55,7 @@ fn test_fund_workspace() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
 
     assert_eq!(client.get_pool_balance(&0), 5_000);
 
@@ -66,15 +66,15 @@ fn test_fund_workspace() {
 }
 
 #[test]
-fn test_fund_workspace_adds_to_existing() {
+fn test_fund_quest_adds_to_existing() {
     let (env, client, _cid, token_addr, _ta) = setup();
     let owner = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &3_000);
-    client.fund_workspace(&owner, &0, &2_000);
+    client.fund_quest(&owner, &0, &3_000);
+    client.fund_quest(&owner, &0, &2_000);
 
     assert_eq!(client.get_pool_balance(&0), 5_000);
 }
@@ -83,7 +83,7 @@ fn test_fund_workspace_adds_to_existing() {
 fn test_fund_invalid_amount() {
     let (env, client, _cid, _token_addr, _ta) = setup();
     let owner = Address::generate(&env);
-    let result = client.try_fund_workspace(&owner, &0, &0);
+    let result = client.try_fund_quest(&owner, &0, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
@@ -98,10 +98,10 @@ fn test_different_funder_unauthorized() {
     sac.mint(&other, &10_000);
 
     // Owner funds first
-    client.fund_workspace(&owner, &0, &1_000);
+    client.fund_quest(&owner, &0, &1_000);
 
-    // Other person tries to add funds to same workspace
-    let result = client.try_fund_workspace(&other, &0, &1_000);
+    // Other person tries to add funds to same quest
+    let result = client.try_fund_quest(&other, &0, &1_000);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }
 
@@ -114,7 +114,7 @@ fn test_distribute_reward() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
     client.distribute_reward(&owner, &0, &enrollee, &100);
 
     // Enrollee got tokens
@@ -139,7 +139,7 @@ fn test_distribute_multiple_rewards() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
     client.distribute_reward(&owner, &0, &e1, &100);
     client.distribute_reward(&owner, &0, &e2, &200);
     client.distribute_reward(&owner, &0, &e1, &50); // e1 gets more
@@ -161,7 +161,7 @@ fn test_insufficient_pool() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &100);
 
-    client.fund_workspace(&owner, &0, &100);
+    client.fund_quest(&owner, &0, &100);
     let result = client.try_distribute_reward(&owner, &0, &enrollee, &500);
     assert_eq!(result, Err(Ok(Error::InsufficientPool)));
 }
@@ -176,19 +176,19 @@ fn test_distribute_unauthorized() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
 
     let result = client.try_distribute_reward(&imposter, &0, &enrollee, &100);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }
 
 #[test]
-fn test_distribute_workspace_not_funded() {
+fn test_distribute_quest_not_funded() {
     let (env, client, _cid, _token_addr, _ta) = setup();
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
     let result = client.try_distribute_reward(&owner, &999, &enrollee, &100);
-    assert_eq!(result, Err(Ok(Error::WorkspaceNotFunded)));
+    assert_eq!(result, Err(Ok(Error::QuestNotFunded)));
 }
 
 // ---- Security tests ----
@@ -216,11 +216,11 @@ fn test_initialize_no_auth_guard() {
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
-/// CRIT-02: Any caller who funds a workspace first becomes its permanent
+/// CRIT-02: Any caller who funds a quest first becomes its permanent
 /// rewards authority. A malicious actor can front-run the legitimate quest owner
 /// and lock them out of their own reward pool.
 #[test]
-fn test_fund_workspace_frontrun_attack() {
+fn test_fund_quest_frontrun_attack() {
     let (env, client, _cid, token_addr, _ta) = setup();
     let legitimate_owner = Address::generate(&env);
     let attacker = Address::generate(&env);
@@ -229,16 +229,16 @@ fn test_fund_workspace_frontrun_attack() {
     sac.mint(&attacker, &10);
     sac.mint(&legitimate_owner, &10_000);
 
-    // Attacker front-runs and funds workspace 0 with a minimal amount
-    client.fund_workspace(&attacker, &0, &1);
+    // Attacker front-runs and funds quest 0 with a minimal amount
+    client.fund_quest(&attacker, &0, &1);
     assert_eq!(client.get_pool_balance(&0), 1);
 
-    // Legitimate owner is now permanently locked out of their own workspace pool
-    let result = client.try_fund_workspace(&legitimate_owner, &0, &5_000);
+    // Legitimate owner is now permanently locked out of their own quest pool
+    let result = client.try_fund_quest(&legitimate_owner, &0, &5_000);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }
 
-/// MED-02: The workspace authority can call distribute_reward with enrollee set
+/// MED-02: The quest authority can call distribute_reward with enrollee set
 /// to their own address, paying themselves from the pool intended for learners.
 #[test]
 fn test_authority_self_distribution() {
@@ -248,7 +248,7 @@ fn test_authority_self_distribution() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
     // Owner has 5_000 remaining after funding
 
     // Authority distributes reward pool tokens back to themselves
@@ -262,7 +262,7 @@ fn test_authority_self_distribution() {
 }
 
 /// MED-01: distribute_reward has no linkage to the milestone contract. The
-/// workspace authority can distribute tokens to any address at any time without
+/// quest authority can distribute tokens to any address at any time without
 /// any milestone completion having been verified. The frontend ordering assumption
 /// is not enforced on-chain.
 #[test]
@@ -274,7 +274,7 @@ fn test_distribute_reward_no_milestone_check() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    client.fund_workspace(&owner, &0, &5_000);
+    client.fund_quest(&owner, &0, &5_000);
 
     // No milestone created, no completion verified — distribute succeeds anyway
     client.distribute_reward(&owner, &0, &arbitrary_recipient, &500);

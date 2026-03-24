@@ -28,6 +28,13 @@ pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FundingModel {
+    HostOnly,
+    Anyone,
+}
+
 // Rewards contract: holds token pools per quest and distributes rewards.
 //
 // Flow:
@@ -44,6 +51,8 @@ pub enum DataKey {
     QuestAuthority(u32),
     // Token balance allocated to a quest
     QuestPool(u32),
+    // Funding model for a quest (HostOnly or Anyone)
+    QuestFundingModel(u32),
     // Per-user total earnings
     UserEarnings(Address),
     // Global stats
@@ -60,6 +69,7 @@ pub enum Error {
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
+    FundingModelMismatch = 7,
 }
 
 const BUMP: u32 = 518_400;
@@ -93,47 +103,96 @@ impl RewardsContract {
         Ok(())
     }
 
-    /// Fund a quest's reward pool. The funder becomes the quest authority.
+    /// Fund a quest's reward pool.
+    ///
+    /// On first funding:
+    /// - Must be the quest owner (verified via quest contract)
+    /// - The funder becomes the quest authority (controls distribution)
+    /// - The funding model is set and cannot be changed
+    ///
+    /// On subsequent funding:
+    /// - HostOnly: Only the quest owner can add more funds (verified via quest contract)
+    /// - Anyone: Any address can contribute, but only the original funder controls distribution
+    ///
+    /// IMPORTANT: With FundingModel::Anyone, contributors deposit tokens into a pool
+    /// controlled solely by the quest owner. Contributors have no withdrawal mechanism
+    /// and no control over how their funds are distributed.
+    ///
     /// Transfers tokens from the funder to this contract and credits the quest pool.
-    pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
+    pub fn fund_quest(
+        env: Env,
+        funder: Address,
+        quest_id: u32,
+        amount: i128,
+        funding_model: FundingModel,
+    ) -> Result<(), Error> {
         funder.require_auth();
 
         if amount <= 0 {
             return Err(Error::InvalidAmount);
         }
 
-        // Security Fix: Verify that the funder is the quest owner
-        let quest_contract_addr = env
-            .storage()
-            .instance()
-            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
-            .ok_or(Error::NotInitialized)?;
-
-        // Using QuestClient trait-based client to avoid WASM requirement in CI
-        let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id);
-
-        if quest_info.owner != funder {
-            return Err(Error::Unauthorized);
-        }
-
         let token_addr = Self::get_token(&env)?;
 
-        // If quest already has an authority, only they can add more funds
         let auth_key = DataKey::QuestAuthority(quest_id);
-        if let Some(existing) = env
-            .storage()
-            .persistent()
-            .get::<DataKey, Address>(&auth_key)
-        {
-            if existing != funder {
-                return Err(Error::Unauthorized);
+        let model_key = DataKey::QuestFundingModel(quest_id);
+        let pool_key = DataKey::QuestPool(quest_id);
+        let pool_exists = env.storage().persistent().has(&pool_key);
+
+        if pool_exists {
+            // Subsequent funding — check stored funding model
+            let stored_model: FundingModel = env
+                .storage()
+                .persistent()
+                .get(&model_key)
+                .unwrap_or(FundingModel::HostOnly);
+
+            // Validate that the passed funding model matches the stored one
+            if funding_model != stored_model {
+                return Err(Error::FundingModelMismatch);
+            }
+
+            match stored_model {
+                FundingModel::HostOnly => {
+                    // Verify owner via quest contract
+                    let quest_contract_addr = env
+                        .storage()
+                        .instance()
+                        .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+                        .ok_or(Error::NotInitialized)?;
+                    let quest_client = QuestClient::new(&env, &quest_contract_addr);
+                    let quest_info = quest_client.get_quest(&quest_id);
+                    if quest_info.owner != funder {
+                        return Err(Error::Unauthorized);
+                    }
+                }
+                FundingModel::Anyone => {
+                    // Anyone can contribute to an existing Anyone pool
+                }
             }
         } else {
+            // First funding — must be quest owner
+            let quest_contract_addr = env
+                .storage()
+                .instance()
+                .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+                .ok_or(Error::NotInitialized)?;
+            let quest_client = QuestClient::new(&env, &quest_contract_addr);
+            let quest_info = quest_client.get_quest(&quest_id);
+            if quest_info.owner != funder {
+                return Err(Error::Unauthorized);
+            }
+
+            // Set authority and funding model
             env.storage().persistent().set(&auth_key, &funder);
             env.storage()
                 .persistent()
                 .extend_ttl(&auth_key, THRESHOLD, BUMP);
+
+            env.storage().persistent().set(&model_key, &funding_model);
+            env.storage()
+                .persistent()
+                .extend_ttl(&model_key, THRESHOLD, BUMP);
         }
 
         // Transfer tokens from funder to this contract
@@ -141,7 +200,6 @@ impl RewardsContract {
         client.transfer(&funder, env.current_contract_address(), &amount);
 
         // Credit the quest pool
-        let pool_key = DataKey::QuestPool(quest_id);
         let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
         env.storage()
             .persistent()
@@ -251,6 +309,13 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
+    }
+
+    /// Get the funding model for a quest.
+    pub fn get_funding_model(env: Env, quest_id: u32) -> Option<FundingModel> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::QuestFundingModel(quest_id))
     }
 }
 

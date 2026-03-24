@@ -36,6 +36,22 @@ fn setup() -> (
     (env, client, contract_id, token_addr, quest_client, quest_id)
 }
 
+/// Helper: create a quest owned by `owner` and return its ID.
+fn create_test_quest(
+    env: &Env,
+    quest_client: &QuestContractClient<'static>,
+    owner: &Address,
+    token_addr: &Address,
+) -> u32 {
+    quest_client.create_quest(
+        owner,
+        &String::from_str(env, "Test"),
+        &String::from_str(env, "Desc"),
+        token_addr,
+        &Visibility::Public,
+    )
+}
+
 #[test]
 fn test_initialize() {
     let (_env, client, _cid, token_addr, _ws, _ws_id) = setup();
@@ -61,15 +77,9 @@ fn test_fund_quest() {
     sac.mint(&owner, &10_000);
 
     // Create a quest first (so owner check passes)
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
 
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
 
@@ -86,16 +96,10 @@ fn test_fund_quest_adds_to_existing() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &3_000);
-    client.fund_quest(&owner, &q_id, &2_000);
+    client.fund_quest(&owner, &q_id, &3_000, &FundingModel::HostOnly);
+    client.fund_quest(&owner, &q_id, &2_000, &FundingModel::HostOnly);
 
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
 }
@@ -105,15 +109,9 @@ fn test_fund_invalid_amount() {
     let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
     let owner = Address::generate(&env);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    let result = client.try_fund_quest(&owner, &q_id, &0);
+    let result = client.try_fund_quest(&owner, &q_id, &0, &FundingModel::HostOnly);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
@@ -127,19 +125,13 @@ fn test_different_funder_unauthorized() {
     sac.mint(&owner, &10_000);
     sac.mint(&other, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
     // Owner funds first
-    client.fund_quest(&owner, &q_id, &1_000);
+    client.fund_quest(&owner, &q_id, &1_000, &FundingModel::HostOnly);
 
-    // Other person tries to add funds to same quest (fails because not owner)
-    let result = client.try_fund_quest(&other, &q_id, &1_000);
+    // Other person tries to add funds to same quest (fails because not owner + HostOnly)
+    let result = client.try_fund_quest(&other, &q_id, &1_000, &FundingModel::HostOnly);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }
 
@@ -152,15 +144,9 @@ fn test_distribute_reward() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
     client.distribute_reward(&owner, &q_id, &enrollee, &100);
 
     // Enrollee got tokens
@@ -185,15 +171,9 @@ fn test_distribute_multiple_rewards() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
     client.distribute_reward(&owner, &q_id, &e1, &100);
     client.distribute_reward(&owner, &q_id, &e2, &200);
     client.distribute_reward(&owner, &q_id, &e1, &50); // e1 gets more
@@ -215,15 +195,9 @@ fn test_insufficient_pool() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &100);
+    client.fund_quest(&owner, &q_id, &100, &FundingModel::HostOnly);
     let result = client.try_distribute_reward(&owner, &q_id, &enrollee, &500);
     assert_eq!(result, Err(Ok(Error::InsufficientPool)));
 }
@@ -238,15 +212,9 @@ fn test_distribute_unauthorized() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
 
     let result = client.try_distribute_reward(&imposter, &q_id, &enrollee, &100);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
@@ -254,13 +222,12 @@ fn test_distribute_unauthorized() {
 
 #[test]
 fn test_distribute_quest_not_funded() {
-    let (env, client, _cid, _token_addr, _quest_client, quest_id) = setup();
-    let owner = Address::generate(&env);
-    let enrollee = Address::generate(&env);
+    let (_env, client, _cid, _token_addr, _quest_client, _quest_id) = setup();
+    let owner = Address::generate(&_env);
+    let enrollee = Address::generate(&_env);
     // Even if quest exists, if not funded it has no authority
     let result = client.try_distribute_reward(&owner, &999, &enrollee, &100);
     assert_eq!(result, Err(Ok(Error::QuestNotFunded)));
-    let _ = quest_id;
 }
 
 // ---- Security tests (Audit Restored) ----
@@ -277,7 +244,7 @@ fn test_initialize_no_auth_guard() {
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
 
-    // Any random address can initialize ΓÇö no deployer auth required
+    // Any random address can initialize -- no deployer auth required
     let attacker_token = Address::generate(&env);
     client.initialize(&attacker_token, &quest_id);
 
@@ -298,15 +265,9 @@ fn test_authority_self_distribution() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
 
     // Authority distributes reward pool tokens back to themselves
     client.distribute_reward(&owner, &q_id, &owner, &1_000);
@@ -327,17 +288,11 @@ fn test_distribute_reward_no_milestone_check() {
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
 
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
 
-    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
 
-    // No milestone created, no completion verified ΓÇö distribute succeeds anyway
+    // No milestone created, no completion verified -- distribute succeeds anyway
     client.distribute_reward(&owner, &q_id, &arbitrary_recipient, &500);
 
     let token_client = TokenClient::new(&env, &token_addr);
@@ -356,23 +311,231 @@ fn test_fund_quest_not_owner_fails() {
     sac.mint(&attacker, &1_000);
     sac.mint(&legitimate_owner, &10_000);
 
-    // Create a quest owned by Alice
-    let q_id = quest_client.create_quest(
-        &legitimate_owner,
-        &String::from_str(&env, "Secret"),
-        &String::from_str(&env, "Hidden"),
-        &token_addr,
-        &Visibility::Public,
-    );
+    // Create a quest owned by legitimate_owner
+    let q_id = create_test_quest(&env, &quest_client, &legitimate_owner, &token_addr);
 
-    // Attacker tries to fund and become authority ΓÇö should FAIL with Unauthorized
-    let result = client.try_fund_quest(&attacker, &q_id, &1);
+    // Attacker tries to fund and become authority -- should FAIL with Unauthorized
+    let result = client.try_fund_quest(&attacker, &q_id, &1, &FundingModel::HostOnly);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
 
     // Pool remains empty
     assert_eq!(client.get_pool_balance(&q_id), 0);
 
     // Legitimate owner can still fund their own quest
-    client.fund_quest(&legitimate_owner, &q_id, &5_000);
+    client.fund_quest(&legitimate_owner, &q_id, &5_000, &FundingModel::HostOnly);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+// ---- Funding Model Tests ----
+
+/// Test that HostOnly funding model only allows the original funder to add more funds
+#[test]
+fn test_funding_model_host_only() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+    let other = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+    sac.mint(&other, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Owner funds quest with HostOnly model
+    client.fund_quest(&owner, &q_id, &1_000, &FundingModel::HostOnly);
+    assert_eq!(client.get_pool_balance(&q_id), 1_000);
+    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+
+    // Owner can add more funds
+    client.fund_quest(&owner, &q_id, &500, &FundingModel::HostOnly);
+    assert_eq!(client.get_pool_balance(&q_id), 1_500);
+
+    // Other person cannot fund HostOnly quest
+    let result = client.try_fund_quest(&other, &q_id, &1_000, &FundingModel::HostOnly);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Pool balance unchanged
+    assert_eq!(client.get_pool_balance(&q_id), 1_500);
+}
+
+/// Test that Anyone funding model allows anyone to contribute after owner initializes
+#[test]
+fn test_funding_model_anyone() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+    let contributor1 = Address::generate(&env);
+    let contributor2 = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+    sac.mint(&contributor1, &10_000);
+    sac.mint(&contributor2, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Owner funds quest with Anyone model (must be owner for first funding)
+    client.fund_quest(&owner, &q_id, &1_000, &FundingModel::Anyone);
+    assert_eq!(client.get_pool_balance(&q_id), 1_000);
+    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::Anyone));
+
+    // Contributor1 can add funds
+    client.fund_quest(&contributor1, &q_id, &500, &FundingModel::Anyone);
+    assert_eq!(client.get_pool_balance(&q_id), 1_500);
+
+    // Contributor2 can also add funds
+    client.fund_quest(&contributor2, &q_id, &750, &FundingModel::Anyone);
+    assert_eq!(client.get_pool_balance(&q_id), 2_250);
+
+    // Owner can still add more funds
+    client.fund_quest(&owner, &q_id, &250, &FundingModel::Anyone);
+    assert_eq!(client.get_pool_balance(&q_id), 2_500);
+
+    // Verify token balances
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&owner), 8_750);
+    assert_eq!(token_client.balance(&contributor1), 9_500);
+    assert_eq!(token_client.balance(&contributor2), 9_250);
+}
+
+/// Test that non-owner funding fails for HostOnly quests
+#[test]
+fn test_host_only_rejects_non_owner() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+    let non_owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+    sac.mint(&non_owner, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Owner creates HostOnly quest
+    client.fund_quest(&owner, &q_id, &5_000, &FundingModel::HostOnly);
+
+    // Non-owner attempts to fund
+    let result = client.try_fund_quest(&non_owner, &q_id, &1_000, &FundingModel::HostOnly);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Pool should only have owner's contribution
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+/// Test that anyone can fund Anyone quests (after owner initializes)
+#[test]
+fn test_anyone_allows_all_funders() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+    let funder1 = Address::generate(&env);
+    let funder2 = Address::generate(&env);
+    let funder3 = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+    sac.mint(&funder1, &10_000);
+    sac.mint(&funder2, &10_000);
+    sac.mint(&funder3, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Owner creates Anyone quest (first funding must be owner)
+    client.fund_quest(&owner, &q_id, &1_000, &FundingModel::Anyone);
+
+    // Multiple funders can contribute
+    client.fund_quest(&funder1, &q_id, &2_000, &FundingModel::Anyone);
+    client.fund_quest(&funder2, &q_id, &1_500, &FundingModel::Anyone);
+    client.fund_quest(&funder3, &q_id, &500, &FundingModel::Anyone);
+
+    // Total pool should be sum of all contributions
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+
+    // Verify all funders' balances decreased
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&owner), 9_000);
+    assert_eq!(token_client.balance(&funder1), 8_000);
+    assert_eq!(token_client.balance(&funder2), 8_500);
+    assert_eq!(token_client.balance(&funder3), 9_500);
+}
+
+/// Test that funding model is set on first funding and persists
+#[test]
+fn test_funding_model_set_on_first_funding() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Before funding, no funding model exists
+    assert_eq!(client.get_funding_model(&q_id), None);
+
+    // Fund with HostOnly model
+    client.fund_quest(&owner, &q_id, &1_000, &FundingModel::HostOnly);
+
+    // Funding model should now be set
+    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+
+    // Add more funds with same model - should succeed
+    client.fund_quest(&owner, &q_id, &500, &FundingModel::HostOnly);
+    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+
+    // Try to fund with different model - should fail
+    let result = client.try_fund_quest(&owner, &q_id, &500, &FundingModel::Anyone);
+    assert_eq!(result, Err(Ok(Error::FundingModelMismatch)));
+}
+
+/// Test different quests can have different funding models
+#[test]
+fn test_different_quests_different_models() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner1 = Address::generate(&env);
+    let owner2 = Address::generate(&env);
+    let contributor = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner1, &10_000);
+    sac.mint(&owner2, &10_000);
+    sac.mint(&contributor, &10_000);
+
+    // Quest 0: HostOnly (owned by owner1)
+    let q0 = create_test_quest(&env, &quest_client, &owner1, &token_addr);
+    client.fund_quest(&owner1, &q0, &1_000, &FundingModel::HostOnly);
+    assert_eq!(client.get_funding_model(&q0), Some(FundingModel::HostOnly));
+
+    // Quest 1: Anyone (owned by owner2)
+    let q1 = create_test_quest(&env, &quest_client, &owner2, &token_addr);
+    client.fund_quest(&owner2, &q1, &1_000, &FundingModel::Anyone);
+    assert_eq!(client.get_funding_model(&q1), Some(FundingModel::Anyone));
+
+    // Contributor cannot fund quest 0 (HostOnly)
+    let result = client.try_fund_quest(&contributor, &q0, &500, &FundingModel::HostOnly);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // But can fund quest 1 (Anyone)
+    client.fund_quest(&contributor, &q1, &500, &FundingModel::Anyone);
+
+    assert_eq!(client.get_pool_balance(&q0), 1_000);
+    assert_eq!(client.get_pool_balance(&q1), 1_500);
+}
+
+/// Test that non-owner cannot do initial funding even with Anyone model
+#[test]
+fn test_initial_funding_requires_owner() {
+    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let owner = Address::generate(&env);
+    let non_owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&non_owner, &10_000);
+
+    let q_id = create_test_quest(&env, &quest_client, &owner, &token_addr);
+
+    // Non-owner tries to be the first funder with Anyone model -- should fail
+    let result = client.try_fund_quest(&non_owner, &q_id, &1_000, &FundingModel::Anyone);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Pool remains empty
+    assert_eq!(client.get_pool_balance(&q_id), 0);
 }

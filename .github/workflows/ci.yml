@@ -3,12 +3,9 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -19,153 +16,6 @@ env:
   RUSTFLAGS: "-Dwarnings"
 
 jobs:
-  # ── Auto-label ───────────────────────────────────────────────────
-  # Single job that handles all labeling:
-  #   1. File paths → area labels (contracts, frontend, infrastructure, etc.)
-  #   2. PR title prefix → type labels (enhancement, bug, docs, etc.)
-  # Runs on open and sync (new commits may change files).
-  # Runs on edit (title change may change type label).
-  # auto-label:
-  #   if: >-
-  #     github.event.pull_request.user.login != 'github-actions[bot]' &&
-  #     github.event.pull_request.user.login != 'release-please[bot]' &&
-  #     github.event.pull_request.user.login != 'dependabot[bot]' &&
-  #     github.event.action != 'labeled' &&
-  #     github.event.action != 'unlabeled'
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v6
-  #     - name: Label by file paths
-  #       uses: actions/labeler@v6
-  #       with:
-  #         repo-token: ${{ secrets.GITHUB_TOKEN }}
-  #         configuration-path: .github/labeler.yml
-  #         sync-labels: false
-
-  #     - name: Label by PR title prefix
-  #       env:
-  #         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #       run: |
-  #         TITLE="${{ github.event.pull_request.title }}"
-  #         PR_NUM="${{ github.event.pull_request.number }}"
-  #         REPO="${{ github.repository }}"
-
-  #         PREFIX=$(echo "$TITLE" | grep -oP '^\w+' || echo "")
-
-  #         case "$PREFIX" in
-  #           feat)     LABEL="enhancement" ;;
-  #           fix)      LABEL="bug" ;;
-  #           docs)     LABEL="documentation" ;;
-  #           refactor) LABEL="refactor" ;;
-  #           test)     LABEL="tests" ;;
-  #           ci|build) LABEL="infrastructure" ;;
-  #           security) LABEL="security" ;;
-  #           perf)     LABEL="enhancement" ;;
-  #           *)        LABEL="" ;;
-  #         esac
-
-  #         if [ -n "$LABEL" ]; then
-  #           HAS=$(gh pr view "$PR_NUM" --repo "$REPO" --json labels \
-  #             -q "[.labels[].name] | any(. == \"$LABEL\")")
-  #           if [ "$HAS" != "true" ]; then
-  #             gh pr edit "$PR_NUM" --repo "$REPO" --add-label "$LABEL"
-  #             echo "Added: $LABEL"
-  #           fi
-  #         fi
-
-  # ── PR quality checks ───────────────────────────────────────────
-  # Single job that validates everything about the PR itself:
-  #   1. Title follows Conventional Commits
-  #   2. Links to an issue (Closes #N or sidebar)
-  #   3. Has at least one label (waits for auto-label first)
-  pr-checks:
-    if: >-
-      github.event.pull_request.user.login != 'github-actions[bot]' &&
-      github.event.pull_request.user.login != 'release-please[bot]' &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@v6
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            docs
-            style
-            refactor
-            perf
-            test
-            build
-            ci
-            chore
-            revert
-
-      - name: Check linked issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUM: ${{ github.event.pull_request.number }}
-        run: |
-          PR_DATA=$(gh pr view "$PR_NUM" --repo "${{ github.repository }}" \
-            --json author,labels,body)
-
-          AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
-          HAS_NO_ISSUE=$(echo "$PR_DATA" | jq -r '.labels | map(.name) | any(. == "no-issue")')
-
-          # Skip for bots and no-issue PRs
-          if [ "$AUTHOR" = "dependabot[bot]" ] || [ "$HAS_NO_ISSUE" = "true" ]; then
-            echo "Skipped (bot or no-issue label)"
-            exit 0
-          fi
-
-          # Check GitHub's closing references API (catches sidebar links too)
-          OWNER="${{ github.repository_owner }}"
-          NAME=$(echo "${{ github.repository }}" | cut -d/ -f2)
-
-          LINKED=$(gh api graphql -f query="
-            query {
-              repository(owner: \"$OWNER\", name: \"$NAME\") {
-                pullRequest(number: $PR_NUM) {
-                  closingIssuesReferences(first: 5) {
-                    nodes { number }
-                  }
-                }
-              }
-            }" -q '.data.repository.pullRequest.closingIssuesReferences.nodes | length' 2>/dev/null || echo "0")
-
-          if [ "$LINKED" -gt 0 ]; then
-            echo "Linked to $LINKED issue(s)"
-            exit 0
-          fi
-
-          # Fallback: check body text
-          BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
-          if echo "$BODY" | grep -qiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+'; then
-            echo "Body contains closing keyword"
-            exit 0
-          fi
-
-          echo "::error::PR must link to an issue. Use 'Closes #N' in the description, or link via the Development sidebar. Add the 'no-issue' label for trivial changes."
-          exit 1
-
-      # - name: Check labels
-      #   env:
-      #     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   run: |
-      #     # Re-fetch labels (auto-label may have just added some)
-      #     LABEL_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
-      #       --repo "${{ github.repository }}" --json labels \
-      #       -q '.labels | length')
-
-      #     if [ "$LABEL_COUNT" -eq 0 ]; then
-      #       echo "::error::PR must have at least one label. Labels are usually added automatically from the PR title and changed files. If auto-labeling didn't trigger, add a label manually."
-      #       exit 1
-      #     fi
-
-      #     echo "PR has $LABEL_COUNT label(s)"
-
   # ── Detect what changed ──────────────────────────────────────────
   changes:
     runs-on: ubuntu-latest

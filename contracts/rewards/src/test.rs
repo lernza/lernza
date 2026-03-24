@@ -190,3 +190,96 @@ fn test_distribute_workspace_not_funded() {
     let result = client.try_distribute_reward(&owner, &999, &enrollee, &100);
     assert_eq!(result, Err(Ok(Error::WorkspaceNotFunded)));
 }
+
+// ---- Security tests ----
+
+/// HIGH-02: The initialize function has no require_auth() guard. Any address
+/// can call initialize before the legitimate deployer, setting an arbitrary
+/// (potentially malicious) token address. Once set it cannot be changed.
+#[test]
+fn test_initialize_no_auth_guard() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &contract_id);
+
+    // Any random address can initialize — no deployer auth required
+    let attacker_token = Address::generate(&env);
+    client.initialize(&attacker_token);
+
+    assert_eq!(client.get_token(), attacker_token);
+
+    // Legitimate deployer cannot override it
+    let real_token = Address::generate(&env);
+    let result = client.try_initialize(&real_token);
+    assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
+}
+
+/// CRIT-02: Any caller who funds a workspace first becomes its permanent
+/// rewards authority. A malicious actor can front-run the legitimate quest owner
+/// and lock them out of their own reward pool.
+#[test]
+fn test_fund_workspace_frontrun_attack() {
+    let (env, client, _cid, token_addr, _ta) = setup();
+    let legitimate_owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&attacker, &10);
+    sac.mint(&legitimate_owner, &10_000);
+
+    // Attacker front-runs and funds workspace 0 with a minimal amount
+    client.fund_workspace(&attacker, &0, &1);
+    assert_eq!(client.get_pool_balance(&0), 1);
+
+    // Legitimate owner is now permanently locked out of their own workspace pool
+    let result = client.try_fund_workspace(&legitimate_owner, &0, &5_000);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+/// MED-02: The workspace authority can call distribute_reward with enrollee set
+/// to their own address, paying themselves from the pool intended for learners.
+#[test]
+fn test_authority_self_distribution() {
+    let (env, client, _cid, token_addr, _ta) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    client.fund_workspace(&owner, &0, &5_000);
+    // Owner has 5_000 remaining after funding
+
+    // Authority distributes reward pool tokens back to themselves
+    client.distribute_reward(&owner, &0, &owner, &1_000);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    // Owner started with 10_000, funded 5_000, received 1_000 back = 6_000
+    assert_eq!(token_client.balance(&owner), 6_000);
+    assert_eq!(client.get_pool_balance(&0), 4_000);
+    assert_eq!(client.get_user_earnings(&owner), 1_000);
+}
+
+/// MED-01: distribute_reward has no linkage to the milestone contract. The
+/// workspace authority can distribute tokens to any address at any time without
+/// any milestone completion having been verified. The frontend ordering assumption
+/// is not enforced on-chain.
+#[test]
+fn test_distribute_reward_no_milestone_check() {
+    let (env, client, _cid, token_addr, _ta) = setup();
+    let owner = Address::generate(&env);
+    let arbitrary_recipient = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    client.fund_workspace(&owner, &0, &5_000);
+
+    // No milestone created, no completion verified — distribute succeeds anyway
+    client.distribute_reward(&owner, &0, &arbitrary_recipient, &500);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&arbitrary_recipient), 500);
+    assert_eq!(client.get_pool_balance(&0), 4_500);
+}

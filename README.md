@@ -72,6 +72,8 @@ pnpm dev                    # → localhost:5173
 
 Install [Freighter](https://freighter.app), switch to **Testnet**, and connect.
 
+For contract deployment to Stellar testnet, see [contracts/Deployment.README.md](contracts/Deployment.README.md).
+
 <br />
 
 ## Roadmap

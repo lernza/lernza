@@ -6,6 +6,13 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, 
 // Other contracts (milestone, rewards) reference quest IDs and owners.
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Visibility {
+    Public = 0,
+    Private = 1,
+}
+
+#[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     NextId,
@@ -22,6 +29,7 @@ pub struct QuestInfo {
     pub description: String,
     pub token_addr: Address,
     pub created_at: u64,
+    pub visibility: Visibility,
 }
 
 #[contracterror]
@@ -50,6 +58,7 @@ impl QuestContract {
         name: String,
         description: String,
         token_addr: Address,
+        visibility: Visibility,
     ) -> Result<u32, Error> {
         owner.require_auth();
 
@@ -62,6 +71,7 @@ impl QuestContract {
             description,
             token_addr,
             created_at: env.ledger().timestamp(),
+            visibility,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -155,6 +165,38 @@ impl QuestContract {
     /// Get total quest count.
     pub fn get_quest_count(env: Env) -> u32 {
         env.storage().instance().get(&DataKey::NextId).unwrap_or(0)
+    }
+
+    /// Set visibility of a workspace. Owner only.
+    pub fn set_visibility(
+        env: Env,
+        workspace_id: u32,
+        visibility: Visibility,
+    ) -> Result<(), Error> {
+        let mut ws = Self::load_workspace(&env, workspace_id)?;
+        ws.owner.require_auth();
+
+        ws.visibility = visibility;
+        env.storage().persistent().set(&DataKey::Workspace(workspace_id), &ws);
+        Self::bump(&env, workspace_id);
+        Ok(())
+    }
+
+    /// Get all public workspaces.
+    pub fn list_public_quests(env: Env) -> Vec<WorkspaceInfo> {
+        let total_count: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
+        let mut public_quests = Vec::new(&env);
+
+        for i in 0..total_count {
+            if let Ok(ws) = Self::load_workspace(&env, i) {
+                if ws.visibility == Visibility::Public {
+                    public_quests.push_back(ws);
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        public_quests
     }
 
     // --- internals ---

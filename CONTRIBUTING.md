@@ -35,11 +35,14 @@ cargo build --target wasm32-unknown-unknown --release
 
 ```bash
 cd frontend
+cp .env.example .env  # Copy environment variables
 pnpm install
 pnpm dev        # Start dev server
 pnpm build      # Production build
 pnpm lint       # Run linter
 ```
+
+The `.env.example` file contains optional configuration for connecting to Stellar testnet. These variables will be required once contract integration is complete.
 
 ## Branch Naming
 

@@ -102,6 +102,7 @@ jobs:
             ci
             chore
             revert
+            security
 
       - name: Check linked issue
         env:

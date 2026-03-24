@@ -274,6 +274,12 @@ fn test_list_public_quests_after_visibility_change() {
     let id2 =
         create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
+    // Verify workspaces were created
+    let ws1 = client.get_workspace(&id1);
+    assert_eq!(ws1.visibility, Visibility::Public);
+    let ws2 = client.get_workspace(&id2);
+    assert_eq!(ws2.visibility, Visibility::Private);
+
     let initial_public = client.list_public_quests();
     assert_eq!(initial_public.len(), 1);
 

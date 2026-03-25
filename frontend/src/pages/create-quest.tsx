@@ -509,8 +509,10 @@ function Step3Review({
       enrolleeCount: 0,
       milestoneCount: step2Data.milestones.length,
       poolBalance: totalReward,
+      // eslint-disable-next-line react-hooks/purity
       createdAt: Math.floor(Date.now() / 1000),
     })
+    // eslint-disable-next-line react-hooks/immutability
     MOCK_MILESTONES[newId] = step2Data.milestones.map((m, i) => ({
       id: i,
       workspaceId: newId,

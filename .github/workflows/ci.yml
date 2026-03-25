@@ -168,6 +168,32 @@ jobs:
       - name: Build WASM contracts
         run: stellar contract build
 
+      - name: Check contract WASM sizes
+        run: |
+          MAX_SIZE=$((256 * 1024))
+          FAILED=0
+
+          echo "=== Contract WASM Size Report ==="
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            SIZE=$(stat -c%s "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            NAME=$(basename "$wasm")
+
+             if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+              echo "❌ $NAME: ${SIZE_KB}KB (EXCEEDS 256KB limit)"
+              FAILED=1
+            else
+              echo "✅ $NAME: ${SIZE_KB}KB"
+            fi
+          done
+
+          echo "================================="
+          if [ "$FAILED" -eq 1 ]; then
+            echo "One or more contracts exceed the 256KB Soroban size limit."
+            exit 1
+          fi
+
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v7
         with:

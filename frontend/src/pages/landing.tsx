@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   ArrowRight,
   Users,
@@ -46,7 +47,7 @@ function AnimatedQuestCard() {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setStep((s) => (s + 1) % 6)
+      setStep(s => (s + 1) % 6)
     }, 2200)
     return () => clearInterval(timer)
   }, [])
@@ -65,48 +66,46 @@ function AnimatedQuestCard() {
   return (
     <div className="relative">
       {/* Stacked back cards */}
-      <div className="absolute -top-3 -left-3 w-full h-full bg-primary/20 border-[3px] border-border" />
-      <div className="absolute -top-1.5 -left-1.5 w-full h-full bg-primary/40 border-[3px] border-border" />
+      <div className="bg-primary/20 border-border absolute -top-3 -left-3 h-full w-full border-[3px]" />
+      <div className="bg-primary/40 border-border absolute -top-1.5 -left-1.5 h-full w-full border-[3px]" />
 
       {/* Main quest card */}
-      <div className="relative bg-card text-card-foreground border-[3px] border-border shadow-[8px_8px_0_var(--color-border)] overflow-hidden">
+      <div className="bg-card text-card-foreground border-border relative overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
         {/* Card header */}
-        <div className="bg-primary border-b-[3px] border-border px-6 py-3 flex items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider">Active Quest</span>
+        <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
+          <span className="text-xs font-black tracking-wider uppercase">Active Quest</span>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 bg-success border border-border" />
+            <div className="bg-success border-border h-2.5 w-2.5 border" />
             <span className="text-xs font-bold">Live</span>
           </div>
         </div>
 
         <div className="p-6">
-          <h3 className="text-xl font-black mb-1">Stellar Dev Bootcamp</h3>
-          <p className="text-sm text-muted-foreground mb-6">
-            8 enrolled &middot; 1,000 USDC pool
-          </p>
+          <h3 className="mb-1 text-xl font-black">Stellar Dev Bootcamp</h3>
+          <p className="text-muted-foreground mb-6 text-sm">8 enrolled &middot; 1,000 USDC pool</p>
 
           {/* Milestones with animated check states */}
-          <div className="space-y-4 mb-6">
+          <div className="mb-6 space-y-4">
             {milestones.map((m, i) => {
               const done = i < completedCount
               return (
                 <div key={m.label} className="flex items-center gap-3">
                   <div
-                    className={`w-6 h-6 border-2 border-border flex items-center justify-center shrink-0 transition-all duration-500 ${
+                    className={`border-border flex h-6 w-6 shrink-0 items-center justify-center border-2 transition-all duration-500 ${
                       done ? "bg-success scale-110" : "bg-card"
                     }`}
                   >
-                    {done && <CheckCircle2 className="h-3.5 w-3.5 animate-scale-in" />}
+                    {done && <CheckCircle2 className="animate-scale-in h-3.5 w-3.5" />}
                   </div>
                   <span
                     className={`flex-1 text-sm font-bold transition-all duration-500 ${
-                      done ? "line-through text-muted-foreground" : ""
+                      done ? "text-muted-foreground line-through" : ""
                     }`}
                   >
                     {m.label}
                   </span>
                   <span
-                    className={`text-xs font-bold border-[1.5px] border-border px-2 py-0.5 shadow-[2px_2px_0_var(--color-border)] transition-colors duration-500 ${
+                    className={`border-border border-[1.5px] px-2 py-0.5 text-xs font-bold shadow-[2px_2px_0_var(--color-border)] transition-colors duration-500 ${
                       done ? "bg-success" : "bg-secondary"
                     }`}
                   >
@@ -118,35 +117,35 @@ function AnimatedQuestCard() {
           </div>
 
           {/* Animated progress bar */}
-          <div className="h-5 w-full border-[3px] border-border bg-secondary shadow-[2px_2px_0_var(--color-border)]">
+          <div className="border-border bg-secondary h-5 w-full border-[3px] shadow-[2px_2px_0_var(--color-border)]">
             <div
-              className={`h-full transition-all duration-700 ease-out ${
-                isComplete ? "bg-success" : "bg-primary"
-              }`}
-              style={{ width: `${progress}%` }}
+              className="bg-primary animate-float absolute -bottom-7 -left-5 h-8 w-8 -rotate-6 border-[2px] border-black shadow-[2px_2px_0_#000]"
+              style={{ animationDelay: "2s" }}
             />
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <p className="text-xs font-bold text-muted-foreground">{completedCount} of 3 milestones</p>
-            <p className="text-xs font-bold text-muted-foreground">{Math.round(progress)}%</p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-muted-foreground text-xs font-bold">
+              {completedCount} of 3 milestones
+            </p>
+            <p className="text-muted-foreground text-xs font-bold">{Math.round(progress)}%</p>
           </div>
 
           {/* Earned bar */}
           <div
-            className={`mt-4 border-2 border-border px-4 py-2 flex items-center justify-between transition-all duration-500 ${
+            className={`border-border mt-4 flex items-center justify-between border-2 px-4 py-2 transition-all duration-500 ${
               isComplete ? "bg-success/20" : "bg-success/10"
             }`}
           >
-            <span className="text-xs font-bold text-muted-foreground">Total earned</span>
-            <span className="text-sm font-black text-success transition-all duration-300">
+            <span className="text-muted-foreground text-xs font-bold">Total earned</span>
+            <span className="text-success text-sm font-black transition-all duration-300">
               +{totalEarned} USDC
             </span>
           </div>
 
           {/* Quest complete banner */}
           {isComplete && (
-            <div className="mt-4 bg-success border-2 border-border px-4 py-2.5 text-center animate-bounce-in">
-              <span className="font-black text-sm flex items-center justify-center gap-2">
+            <div className="bg-success border-border animate-bounce-in mt-4 border-2 px-4 py-2.5 text-center">
+              <span className="flex items-center justify-center gap-2 text-sm font-black">
                 <Sparkles className="h-4 w-4" />
                 Quest Complete!
                 <Sparkles className="h-4 w-4" />
@@ -160,15 +159,18 @@ function AnimatedQuestCard() {
       {completedCount > 0 && !isComplete && (
         <div
           key={completedCount}
-          className="absolute -bottom-5 -right-4 bg-success border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2.5 animate-bounce-in"
+          className="bg-success border-border animate-bounce-in absolute -right-4 -bottom-5 border-2 px-4 py-2.5 shadow-[3px_3px_0_var(--color-border)]"
         >
-          <span className="font-black text-sm">+{milestones[completedCount - 1]?.reward} USDC</span>
+          <span className="text-sm font-black">+{milestones[completedCount - 1]?.reward} USDC</span>
         </div>
       )}
 
       {/* Floating accent blocks */}
-      <div className="absolute -top-8 -right-6 w-10 h-10 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] rotate-12 animate-float" />
-      <div className="absolute -bottom-7 -left-5 w-8 h-8 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] -rotate-6 animate-float" style={{ animationDelay: "2s" }} />
+      <div className="bg-primary border-border animate-float absolute -top-8 -right-6 h-10 w-10 rotate-12 border-2 shadow-[3px_3px_0_var(--color-border)]" />
+      <div
+        className="bg-primary border-border animate-float absolute -bottom-7 -left-5 h-8 w-8 -rotate-6 border-2 shadow-[2px_2px_0_var(--color-border)]"
+        style={{ animationDelay: "2s" }}
+      />
     </div>
   )
 }
@@ -176,28 +178,24 @@ function AnimatedQuestCard() {
 /* ─── Marquee Banner ─── */
 
 function MarqueeBanner() {
-  const items = [
-    "LEARN TO EARN ON STELLAR",
-    "ON THE DRIPS WAVE",
-    "ON-CHAIN REWARDS, NO MIDDLEMEN",
-  ]
+  const items = ["LEARN TO EARN ON STELLAR", "ON THE DRIPS WAVE", "ON-CHAIN REWARDS, NO MIDDLEMEN"]
   const repeated = Array.from({ length: 8 }, () => items).flat()
 
   return (
-    <div className="border-y-[3px] border-border bg-primary overflow-hidden select-none">
-      <div className="flex whitespace-nowrap py-3.5 animate-marquee">
+    <div className="border-border bg-primary overflow-hidden border-y-[3px] select-none">
+      <div className="animate-marquee flex py-3.5 whitespace-nowrap">
         <div className="flex shrink-0">
           {repeated.map((item, i) => (
-            <span key={`a-${i}`} className="flex items-center gap-4 mx-5">
-              <span className="text-sm font-black uppercase tracking-wider">{item}</span>
+            <span key={`a-${i}`} className="mx-5 flex items-center gap-4">
+              <span className="text-sm font-black tracking-wider uppercase">{item}</span>
               <Star className="h-3.5 w-3.5 fill-current" />
             </span>
           ))}
         </div>
         <div className="flex shrink-0">
           {repeated.map((item, i) => (
-            <span key={`b-${i}`} className="flex items-center gap-4 mx-5">
-              <span className="text-sm font-black uppercase tracking-wider">{item}</span>
+            <span key={`b-${i}`} className="mx-5 flex items-center gap-4">
+              <span className="text-sm font-black tracking-wider uppercase">{item}</span>
               <Star className="h-3.5 w-3.5 fill-current" />
             </span>
           ))}
@@ -209,11 +207,8 @@ function MarqueeBanner() {
 
 /* ─── Main Landing Component ─── */
 
-interface LandingProps {
-  onNavigate: (page: string) => void
-}
-
-export function Landing({ onNavigate }: LandingProps) {
+export function Landing() {
+  const navigate = useNavigate()
   const subtitle = useTypewriter(
     "Create quests, set milestones, and reward learners with tokens. The first learn-to-earn platform on Stellar.",
     25
@@ -226,46 +221,74 @@ export function Landing({ onNavigate }: LandingProps) {
   return (
     <div className="flex flex-col">
       {/* HERO */}
-      <section className="relative min-h-[calc(100vh-67px)] flex items-center overflow-hidden">
-        <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
+      <section className="relative flex min-h-[calc(100vh-67px)] items-center overflow-hidden">
+        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
 
         {/* Decorative floating shapes — intentionally low opacity, borders stay border-border */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-[6%] left-[3%] w-20 h-20 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] rotate-12 opacity-[0.08] animate-float" style={{ animationDuration: "8s" }} />
-          <div className="absolute top-[14%] right-[6%] w-14 h-14 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] -rotate-6 opacity-[0.1] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
-          <div className="absolute bottom-[22%] left-[7%] w-10 h-10 bg-success border-2 border-border shadow-[3px_3px_0_var(--color-border)] rotate-45 opacity-[0.06] animate-float" style={{ animationDuration: "7s", animationDelay: "2s" }} />
-          <div className="absolute top-[42%] right-[3%] w-8 h-8 bg-foreground opacity-[0.04] rotate-12 animate-float" style={{ animationDuration: "9s", animationDelay: "0.5s" }} />
-          <div className="absolute bottom-[16%] right-[10%] w-16 h-16 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] -rotate-12 opacity-[0.08] animate-float" style={{ animationDuration: "7s", animationDelay: "3s" }} />
-          <div className="absolute top-[55%] left-[14%] w-6 h-6 bg-primary border-2 border-border opacity-[0.1] rotate-6 animate-float" style={{ animationDuration: "5s", animationDelay: "1.5s" }} />
-          <div className="absolute top-[4%] left-[42%] w-12 h-12 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] rotate-45 opacity-[0.05] animate-float" style={{ animationDuration: "10s", animationDelay: "2s" }} />
-          <div className="absolute top-[75%] right-[25%] w-5 h-5 bg-success border border-border opacity-[0.08] rotate-12 animate-float" style={{ animationDuration: "6s", animationDelay: "3.5s" }} />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="bg-primary border-border animate-float absolute top-[6%] left-[3%] h-20 w-20 rotate-12 border-[3px] opacity-[0.08] shadow-[4px_4px_0_var(--color-border)]"
+            style={{ animationDuration: "8s" }}
+          />
+          <div
+            className="bg-primary border-border animate-float absolute top-[14%] right-[6%] h-14 w-14 -rotate-6 border-2 opacity-[0.1] shadow-[3px_3px_0_var(--color-border)]"
+            style={{ animationDuration: "6s", animationDelay: "1s" }}
+          />
+          <div
+            className="bg-success border-border animate-float absolute bottom-[22%] left-[7%] h-10 w-10 rotate-45 border-2 opacity-[0.06] shadow-[3px_3px_0_var(--color-border)]"
+            style={{ animationDuration: "7s", animationDelay: "2s" }}
+          />
+          <div
+            className="bg-foreground animate-float absolute top-[42%] right-[3%] h-8 w-8 rotate-12 opacity-[0.04]"
+            style={{ animationDuration: "9s", animationDelay: "0.5s" }}
+          />
+          <div
+            className="bg-primary border-border animate-float absolute right-[10%] bottom-[16%] h-16 w-16 -rotate-12 border-2 opacity-[0.08] shadow-[3px_3px_0_var(--color-border)]"
+            style={{ animationDuration: "7s", animationDelay: "3s" }}
+          />
+          <div
+            className="bg-primary border-border animate-float absolute top-[55%] left-[14%] h-6 w-6 rotate-6 border-2 opacity-[0.1]"
+            style={{ animationDuration: "5s", animationDelay: "1.5s" }}
+          />
+          <div
+            className="bg-primary border-border animate-float absolute top-[4%] left-[42%] h-12 w-12 rotate-45 border-2 opacity-[0.05] shadow-[2px_2px_0_var(--color-border)]"
+            style={{ animationDuration: "10s", animationDelay: "2s" }}
+          />
+          <div
+            className="bg-success border-border animate-float absolute top-[75%] right-[25%] h-5 w-5 rotate-12 border opacity-[0.08]"
+            style={{ animationDuration: "6s", animationDelay: "3.5s" }}
+          />
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 w-full">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+          <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-20">
             <div className="py-20 lg:py-0">
-              <div className="inline-flex items-center gap-2 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2 mb-10 animate-fade-in-up text-sm font-bold shimmer-on-hover cursor-default">
+              <div className="bg-primary border-border animate-fade-in-up shimmer-on-hover mb-10 inline-flex cursor-default items-center gap-2 border-2 px-4 py-2 text-sm font-bold shadow-[3px_3px_0_var(--color-border)]">
                 <Sparkles className="h-3.5 w-3.5" />
                 Built on Stellar
               </div>
 
-              <h1 className="text-6xl sm:text-7xl lg:text-[5.5rem] xl:text-[6.5rem] font-black leading-[0.88] tracking-tight mb-10">
-                <span className="block animate-slide-in-left">Learn.</span>
-                <span className="block animate-slide-in-left stagger-2">
-                  <span className="inline-block bg-primary px-4 py-2 border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] -rotate-2 my-2 hover:rotate-0 hover:shadow-[8px_8px_0_var(--color-border)] transition-all duration-300 cursor-default">
+              <h1 className="mb-10 text-6xl leading-[0.88] font-black tracking-tight sm:text-7xl lg:text-[5.5rem] xl:text-[6.5rem]">
+                <span className="animate-slide-in-left block">Learn.</span>
+                <span className="animate-slide-in-left stagger-2 block">
+                  <span className="bg-primary border-border my-2 inline-block -rotate-2 cursor-default border-[3px] px-4 py-2 shadow-[6px_6px_0_var(--color-border)] transition-all duration-300 hover:rotate-0 hover:shadow-[8px_8px_0_var(--color-border)]">
                     Earn.
                   </span>
                 </span>
-                <span className="block animate-slide-in-left stagger-3">On-chain.</span>
+                <span className="animate-slide-in-left stagger-3 block">On-chain.</span>
               </h1>
 
-              <p className="text-xl text-muted-foreground mb-12 max-w-lg leading-relaxed h-[3.5em] animate-fade-in stagger-4">
+              <p className="text-muted-foreground animate-fade-in stagger-4 mb-12 h-[3.5em] max-w-lg text-xl leading-relaxed">
                 <span>{subtitle}</span>
                 <span className="typewriter-cursor" />
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-up stagger-5">
-                <Button size="lg" className="text-base shimmer-on-hover group" onClick={() => onNavigate("dashboard")}>
+              <div className="animate-fade-in-up stagger-5 flex flex-col gap-4 sm:flex-row">
+                <Button
+                  size="lg"
+                  className="shimmer-on-hover group text-base"
+                  onClick={() => navigate("/dashboard")}
+                >
                   Launch App
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Button>
@@ -282,15 +305,17 @@ export function Landing({ onNavigate }: LandingProps) {
                 </Button>
               </div>
 
-              <div className="flex flex-wrap gap-6 mt-14 animate-fade-in-up stagger-6">
+              <div className="animate-fade-in-up stagger-6 mt-14 flex flex-wrap gap-6">
                 {[
                   { color: "bg-primary", text: "3 smart contracts" },
                   { color: "bg-success", text: "On-chain rewards" },
                   { color: "bg-foreground", text: "Open source" },
-                ].map((item) => (
-                  <div key={item.text} className="flex items-center gap-2 group cursor-default">
-                    <div className={`w-3 h-3 ${item.color} border border-border transition-transform group-hover:scale-125`} />
-                    <span className="text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors">
+                ].map(item => (
+                  <div key={item.text} className="group flex cursor-default items-center gap-2">
+                    <div
+                      className={`h-3 w-3 ${item.color} border-border border transition-transform group-hover:scale-125`}
+                    />
+                    <span className="text-muted-foreground group-hover:text-foreground text-sm font-bold transition-colors">
                       {item.text}
                     </span>
                   </div>
@@ -298,30 +323,34 @@ export function Landing({ onNavigate }: LandingProps) {
               </div>
             </div>
 
-            <div className="hidden lg:block animate-scale-in stagger-3">
+            <div className="animate-scale-in stagger-3 hidden lg:block">
               <AnimatedQuestCard />
             </div>
           </div>
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0">
+        <div className="absolute right-0 bottom-0 left-0">
           <MarqueeBanner />
         </div>
       </section>
 
       {/* HOW IT WORKS */}
-      <section id="how-it-works" ref={howRef} className="bg-secondary py-24 sm:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-diagonal-lines pointer-events-none" />
+      <section
+        id="how-it-works"
+        ref={howRef}
+        className="bg-secondary relative overflow-hidden py-24 sm:py-32"
+      >
+        <div className="bg-diagonal-lines pointer-events-none absolute inset-0" />
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 relative">
-          <div className={`text-center mb-16 reveal-up ${howInView ? "in-view" : ""}`}>
-            <div className="inline-block bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2 mb-6">
-              <span className="font-black text-sm uppercase tracking-wider">How it works</span>
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
+          <div className={`reveal-up mb-16 text-center ${howInView ? "in-view" : ""}`}>
+            <div className="bg-primary border-border mb-6 inline-block border-2 px-4 py-2 shadow-[3px_3px_0_var(--color-border)]">
+              <span className="text-sm font-black tracking-wider uppercase">How it works</span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-black">Three steps. Zero complexity.</h2>
+            <h2 className="text-4xl font-black sm:text-5xl">Three steps. Zero complexity.</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 items-stretch">
+          <div className="grid grid-cols-1 items-stretch gap-0 sm:grid-cols-3">
             {[
               {
                 step: "01",
@@ -344,25 +373,25 @@ export function Landing({ onNavigate }: LandingProps) {
             ].map((item, i) => (
               <div key={item.step} className="flex items-stretch">
                 <div
-                  className={`relative flex-1 bg-card text-card-foreground border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] p-8 card-tilt reveal-up ${howInView ? "in-view" : ""} shimmer-on-hover group`}
+                  className={`bg-card text-card-foreground border-border card-tilt reveal-up relative flex-1 border-[3px] p-8 shadow-[6px_6px_0_var(--color-border)] ${howInView ? "in-view" : ""} shimmer-on-hover group`}
                   style={{ transitionDelay: `${i * 200}ms` }}
                 >
-                  <div className="absolute top-3 right-4 text-[80px] font-black text-primary/15 leading-none select-none pointer-events-none group-hover:text-primary/25 transition-colors duration-300">
+                  <div className="text-primary/15 group-hover:text-primary/25 pointer-events-none absolute top-3 right-4 text-[80px] leading-none font-black transition-colors duration-300 select-none">
                     {item.step}
                   </div>
                   <div className="relative">
-                    <div className="w-14 h-14 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_var(--color-border)] group-hover:-translate-y-1 transition-all duration-300">
+                    <div className="bg-primary border-border mb-6 flex h-14 w-14 items-center justify-center border-2 shadow-[3px_3px_0_var(--color-border)] transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[5px_5px_0_var(--color-border)]">
                       <item.icon className="h-6 w-6" />
                     </div>
-                    <h3 className="text-xl font-black mb-3">{item.title}</h3>
+                    <h3 className="mb-3 text-xl font-black">{item.title}</h3>
                     <p className="text-muted-foreground leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
 
                 {i < 2 && (
-                  <div className="hidden sm:flex items-center justify-center w-8 -mx-1 z-10">
+                  <div className="z-10 -mx-1 hidden w-8 items-center justify-center sm:flex">
                     <div
-                      className={`w-full step-line ${howInView ? "in-view" : ""}`}
+                      className={`step-line w-full ${howInView ? "in-view" : ""}`}
                       style={{ transitionDelay: `${(i + 1) * 300}ms` }}
                     />
                   </div>
@@ -374,36 +403,69 @@ export function Landing({ onNavigate }: LandingProps) {
       </section>
 
       {/* FEATURES */}
-      <section ref={featRef} className="border-t-[3px] border-border py-24 sm:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
+      <section
+        ref={featRef}
+        className="border-border relative overflow-hidden border-t-[3px] py-24 sm:py-32"
+      >
+        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 relative">
-          <div className={`text-center mb-16 reveal-up ${featInView ? "in-view" : ""}`}>
-            <h2 className="text-4xl sm:text-5xl font-black mb-5">Why Lernza?</h2>
-            <p className="text-lg text-muted-foreground max-w-lg mx-auto">
+        <div className="relative mx-auto max-w-7xl px-4 sm:px-6">
+          <div className={`reveal-up mb-16 text-center ${featInView ? "in-view" : ""}`}>
+            <h2 className="mb-5 text-4xl font-black sm:text-5xl">Why Lernza?</h2>
+            <p className="text-muted-foreground mx-auto max-w-lg text-lg">
               Real incentives drive real learning. Everything on-chain, everything verifiable.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {[
-              { icon: Users,  title: "For anyone",         desc: "Teach a friend, mentor a team, run a bootcamp. Anyone can create a quest. No gatekeeping, no approval needed.", accent: "bg-primary", large: true },
-              { icon: Zap,    title: "Instant rewards",    desc: "Tokens transfer on-chain the moment you verify. No delays, no middleman, no withdrawal queues.",                 accent: "bg-primary", large: true },
-              { icon: Shield, title: "Fully transparent",  desc: "Everything on Stellar's ledger. Every milestone, every reward — verifiable and auditable by anyone.",            accent: "bg-success", large: false },
-              { icon: Trophy, title: "Real incentive",     desc: "Financial commitment drives real completion. Skin in the game works — learners finish what they start.",         accent: "bg-primary", large: false },
+              {
+                icon: Users,
+                title: "For anyone",
+                desc: "Teach a friend, mentor a team, run a bootcamp. Anyone can create a quest. No gatekeeping, no approval needed.",
+                accent: "bg-primary",
+                large: true,
+              },
+              {
+                icon: Zap,
+                title: "Instant rewards",
+                desc: "Tokens transfer on-chain the moment you verify. No delays, no middleman, no withdrawal queues.",
+                accent: "bg-primary",
+                large: true,
+              },
+              {
+                icon: Shield,
+                title: "Fully transparent",
+                desc: "Everything on Stellar's ledger. Every milestone, every reward — verifiable and auditable by anyone.",
+                accent: "bg-success",
+                large: false,
+              },
+              {
+                icon: Trophy,
+                title: "Real incentive",
+                desc: "Financial commitment drives real completion. Skin in the game works — learners finish what they start.",
+                accent: "bg-primary",
+                large: false,
+              },
             ].map((feature, i) => (
               <div
                 key={feature.title}
-                className={`border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] bg-card text-card-foreground card-tilt shimmer-on-hover group reveal-up ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
+                className={`border-border bg-card text-card-foreground card-tilt shimmer-on-hover group reveal-up border-[3px] shadow-[6px_6px_0_var(--color-border)] ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
                 style={{ transitionDelay: `${i * 150}ms` }}
               >
                 <div
-                  className={`w-14 h-14 ${feature.accent} border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_var(--color-border)] group-hover:-translate-y-1 transition-all duration-300`}
+                  className={`h-14 w-14 ${feature.accent} border-border mb-6 flex items-center justify-center border-2 shadow-[3px_3px_0_var(--color-border)] transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[5px_5px_0_var(--color-border)]`}
                 >
                   <feature.icon className="h-6 w-6" />
                 </div>
-                <h3 className={`font-black mb-3 ${feature.large ? "text-2xl" : "text-lg"}`}>{feature.title}</h3>
-                <p className={`text-muted-foreground leading-relaxed ${feature.large ? "text-base" : ""}`}>{feature.desc}</p>
+                <h3 className={`mb-3 font-black ${feature.large ? "text-2xl" : "text-lg"}`}>
+                  {feature.title}
+                </h3>
+                <p
+                  className={`text-muted-foreground leading-relaxed ${feature.large ? "text-base" : ""}`}
+                >
+                  {feature.desc}
+                </p>
               </div>
             ))}
           </div>
@@ -411,27 +473,55 @@ export function Landing({ onNavigate }: LandingProps) {
       </section>
 
       {/* CTA — lives on bg-primary so its internal decoration can stay semi-literal */}
-      <section ref={ctaRef} className="border-t-[3px] border-border bg-primary py-24 sm:py-32 relative overflow-hidden">
-        <div className="absolute inset-0 bg-diagonal-lines pointer-events-none opacity-50" />
+      <section
+        ref={ctaRef}
+        className="border-border bg-primary relative overflow-hidden border-t-[3px] py-24 sm:py-32"
+      >
+        <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-50" />
         {/* Decorative blocks inside a yellow section — rgba shadows are fine here */}
-        <div className="absolute top-8 left-[4%] w-24 h-24 bg-background border-[3px] border-border shadow-[5px_5px_0_rgba(0,0,0,0.2)] rotate-12 opacity-20 animate-float" style={{ animationDuration: "7s" }} />
-        <div className="absolute bottom-8 right-[6%] w-20 h-20 bg-foreground border-[3px] border-border/20 -rotate-6 opacity-20 animate-float" style={{ animationDuration: "9s", animationDelay: "2s" }} />
-        <div className="absolute top-[40%] left-[78%] w-14 h-14 bg-success border-[3px] border-border shadow-[4px_4px_0_rgba(0,0,0,0.2)] rotate-45 opacity-[0.18] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
-        <div className="absolute bottom-[25%] left-[12%] w-12 h-12 bg-background border-[3px] border-border shadow-[3px_3px_0_rgba(0,0,0,0.2)] -rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "3s" }} />
-        <div className="absolute top-[20%] right-[20%] w-10 h-10 bg-foreground border-2 border-border/20 rotate-45 opacity-[0.12] animate-float" style={{ animationDuration: "10s", animationDelay: "0.5s" }} />
-        <div className="absolute bottom-[40%] right-[35%] w-8 h-8 bg-background border-2 border-border -rotate-6 opacity-[0.12] animate-float" style={{ animationDuration: "7s", animationDelay: "4s" }} />
-        <div className="absolute top-[65%] left-[40%] w-16 h-16 bg-success/30 border-2 border-border/30 rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "1.5s" }} />
+        <div
+          className="bg-background border-border animate-float absolute top-8 left-[4%] h-24 w-24 rotate-12 border-[3px] opacity-20 shadow-[5px_5px_0_rgba(0,0,0,0.2)]"
+          style={{ animationDuration: "7s" }}
+        />
+        <div
+          className="bg-foreground border-border/20 animate-float absolute right-[6%] bottom-8 h-20 w-20 -rotate-6 border-[3px] opacity-20"
+          style={{ animationDuration: "9s", animationDelay: "2s" }}
+        />
+        <div
+          className="bg-success border-border animate-float absolute top-[40%] left-[78%] h-14 w-14 rotate-45 border-[3px] opacity-[0.18] shadow-[4px_4px_0_rgba(0,0,0,0.2)]"
+          style={{ animationDuration: "6s", animationDelay: "1s" }}
+        />
+        <div
+          className="bg-background border-border animate-float absolute bottom-[25%] left-[12%] h-12 w-12 -rotate-12 border-[3px] opacity-[0.15] shadow-[3px_3px_0_rgba(0,0,0,0.2)]"
+          style={{ animationDuration: "8s", animationDelay: "3s" }}
+        />
+        <div
+          className="bg-foreground border-border/20 animate-float absolute top-[20%] right-[20%] h-10 w-10 rotate-45 border-2 opacity-[0.12]"
+          style={{ animationDuration: "10s", animationDelay: "0.5s" }}
+        />
+        <div
+          className="bg-background border-border animate-float absolute right-[35%] bottom-[40%] h-8 w-8 -rotate-6 border-2 opacity-[0.12]"
+          style={{ animationDuration: "7s", animationDelay: "4s" }}
+        />
+        <div
+          className="bg-success/30 border-border/30 animate-float absolute top-[65%] left-[40%] h-16 w-16 rotate-12 border-2 opacity-[0.15]"
+          style={{ animationDuration: "8s", animationDelay: "1.5s" }}
+        />
 
-        <div className={`mx-auto max-w-7xl px-4 sm:px-6 text-center relative reveal-scale ${ctaInView ? "in-view" : ""}`}>
-          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black mb-5">Ready to start earning?</h2>
-          <p className="text-lg mb-12 max-w-md mx-auto opacity-80">
+        <div
+          className={`reveal-scale relative mx-auto max-w-7xl px-4 text-center sm:px-6 ${ctaInView ? "in-view" : ""}`}
+        >
+          <h2 className="mb-5 text-4xl font-black sm:text-5xl lg:text-6xl">
+            Ready to start earning?
+          </h2>
+          <p className="mx-auto mb-12 max-w-md text-lg opacity-80">
             Connect your Freighter wallet and create your first quest. It takes two minutes.
           </p>
           <Button
             variant="secondary"
             size="lg"
-            className="text-base shimmer-on-hover group"
-            onClick={() => onNavigate("dashboard")}
+            className="shimmer-on-hover group text-base"
+            onClick={() => navigate("/dashboard")}
           >
             Launch App
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -440,39 +530,49 @@ export function Landing({ onNavigate }: LandingProps) {
       </section>
 
       {/* FOOTER */}
-      <footer className="border-t-[3px] border-border bg-background">
+      <footer className="border-border bg-background border-t-[3px]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="py-12 grid grid-cols-1 sm:grid-cols-3 gap-10">
+          <div className="grid grid-cols-1 gap-10 py-12 sm:grid-cols-3">
             {/* Brand */}
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center overflow-hidden">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="bg-primary border-border flex h-8 w-8 items-center justify-center overflow-hidden border-2 shadow-[2px_2px_0_var(--color-border)]">
                   <svg viewBox="0 0 512 512" className="h-6 w-6" aria-hidden="true">
-                    <path d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z" fill="#000000" />
+                    <path
+                      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
+                      fill="#000000"
+                    />
                   </svg>
                 </div>
-                <span className="font-black text-xl">Lernza</span>
+                <span className="text-xl font-black">Lernza</span>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens.
+              <p className="text-muted-foreground max-w-xs text-sm leading-relaxed">
+                The first learn-to-earn platform on Stellar. Create quests, set milestones, reward
+                learners with tokens.
               </p>
             </div>
 
             {/* Links */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Resources</h4>
+              <h4 className="mb-4 text-sm font-black tracking-wider uppercase">Resources</h4>
               <div className="flex flex-col gap-3">
                 {[
                   { label: "Documentation", href: "https://github.com/lernza/lernza" },
-                  { label: "Contributing", href: "https://github.com/lernza/lernza/blob/main/CONTRIBUTING.md" },
-                  { label: "MIT License", href: "https://github.com/lernza/lernza/blob/main/LICENSE" },
-                ].map((link) => (
+                  {
+                    label: "Contributing",
+                    href: "https://github.com/lernza/lernza/blob/main/CONTRIBUTING.md",
+                  },
+                  {
+                    label: "MIT License",
+                    href: "https://github.com/lernza/lernza/blob/main/LICENSE",
+                  },
+                ].map(link => (
                   <a
                     key={link.label}
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm font-bold text-muted-foreground hover:text-foreground transition-colors animated-underline"
+                    className="text-muted-foreground hover:text-foreground animated-underline text-sm font-bold transition-colors"
                   >
                     {link.label}
                   </a>
@@ -482,36 +582,36 @@ export function Landing({ onNavigate }: LandingProps) {
 
             {/* Socials */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Community</h4>
+              <h4 className="mb-4 text-sm font-black tracking-wider uppercase">Community</h4>
               <div className="flex gap-3">
                 {[
                   { href: "https://github.com/lernza", label: "GitHub", Icon: GithubIcon },
                   { href: "https://x.com/lernza", label: "X", Icon: XIcon },
                   { href: "https://discord.gg/lernza", label: "Discord", Icon: DiscordIcon },
-                ].map((social) => (
+                ].map(social => (
                   <a
                     key={social.label}
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-10 h-10 bg-card border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center neo-press hover:shadow-[4px_4px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] hover:bg-primary transition-colors"
+                    className="bg-card border-border neo-press hover:bg-primary flex h-10 w-10 items-center justify-center border-2 shadow-[3px_3px_0_var(--color-border)] transition-colors hover:shadow-[4px_4px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]"
                     aria-label={social.label}
                   >
                     <social.Icon className="h-4 w-4" />
                   </a>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground mt-4">
+              <p className="text-muted-foreground mt-4 text-xs">
                 Join the community and help build the future of learn-to-earn.
               </p>
             </div>
           </div>
 
-          <div className="border-t-2 border-border py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs font-bold text-muted-foreground">
+          <div className="border-border flex flex-col items-center justify-between gap-3 border-t-2 py-5 sm:flex-row">
+            <p className="text-muted-foreground text-xs font-bold">
               Built on Stellar &middot; Open source &middot; MIT License
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-muted-foreground text-xs">
               &copy; {new Date().getFullYear()} Lernza
             </p>
           </div>

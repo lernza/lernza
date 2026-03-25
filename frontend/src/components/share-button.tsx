@@ -66,7 +66,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
 
   const handleOpen = () => {
     updatePos()
-    setOpen((v) => !v)
+    setOpen(v => !v)
   }
 
   // Reposition on scroll/resize while open
@@ -87,7 +87,8 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       if (
         panelRef.current?.contains(e.target as Node) ||
         triggerRef.current?.contains(e.target as Node)
-      ) return
+      )
+        return
       setOpen(false)
     }
     document.addEventListener("mousedown", handler)
@@ -160,18 +161,18 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         zIndex: 9999,
       }}
       className={cn(
-        "bg-card text-card-foreground border-[3px] border-border shadow-[6px_6px_0_var(--color-border)]",
-        "w-72 overflow-hidden animate-fade-in-down"
+        "bg-card text-card-foreground border-border border-[3px] shadow-[6px_6px_0_var(--color-border)]",
+        "animate-fade-in-down w-72 overflow-hidden"
       )}
       role="dialog"
       aria-label="Share options"
     >
       {/* Panel header */}
-      <div className="bg-primary border-b-[3px] border-border px-4 py-2.5 flex items-center justify-between">
-        <span className="text-xs font-black uppercase tracking-wider">Share this quest</span>
+      <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-4 py-2.5">
+        <span className="text-xs font-black tracking-wider uppercase">Share this quest</span>
         <button
           onClick={() => setOpen(false)}
-          className="w-5 h-5 flex items-center justify-center hover:opacity-70 transition-opacity cursor-pointer"
+          className="flex h-5 w-5 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
           aria-label="Close share menu"
         >
           <XClose className="h-3.5 w-3.5" />
@@ -179,13 +180,15 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       </div>
 
       {/* Quest name preview */}
-      <div className="px-4 py-3 border-b-[2px] border-border bg-secondary">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Quest</p>
-        <p className="text-sm font-black truncate">{questName}</p>
+      <div className="border-border bg-secondary border-b-[2px] px-4 py-3">
+        <p className="text-muted-foreground mb-0.5 text-xs font-bold tracking-wider uppercase">
+          Quest
+        </p>
+        <p className="truncate text-sm font-black">{questName}</p>
       </div>
 
       {/* Share options */}
-      <div className="p-3 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 p-3">
         <ShareOption
           icon={copied ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
           label={copied ? "Copied!" : "Copy Link"}
@@ -209,11 +212,11 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       </div>
 
       {/* URL bar */}
-      <div className="mx-3 mb-3 border-[2px] border-border bg-secondary px-3 py-2 flex items-center gap-2">
-        <p className="flex-1 text-xs font-mono text-muted-foreground truncate">{questUrl}</p>
+      <div className="border-border bg-secondary mx-3 mb-3 flex items-center gap-2 border-[2px] px-3 py-2">
+        <p className="text-muted-foreground flex-1 truncate font-mono text-xs">{questUrl}</p>
         <button
           onClick={handleCopyLink}
-          className="shrink-0 w-6 h-6 border-[1.5px] border-border bg-card flex items-center justify-center neo-press hover:bg-primary transition-colors cursor-pointer"
+          className="border-border bg-card neo-press hover:bg-primary flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-[1.5px] transition-colors"
           aria-label="Copy URL"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -236,11 +239,12 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         aria-label="Share quest"
         aria-expanded={open}
         className={cn(
-          "flex items-center gap-2 border-[2px] border-border font-bold text-sm",
+          "border-border flex items-center gap-2 border-[2px] text-sm font-bold",
           "bg-card text-card-foreground shadow-[3px_3px_0_var(--color-border)]",
-          "neo-press hover:bg-primary transition-colors cursor-pointer",
-          open && "bg-primary shadow-[1px_1px_0_var(--color-border)] translate-x-0.5 translate-y-0.5",
-          compact ? "w-9 h-9 justify-center" : "px-4 py-2"
+          "neo-press hover:bg-primary cursor-pointer transition-colors",
+          open &&
+            "bg-primary translate-x-0.5 translate-y-0.5 shadow-[1px_1px_0_var(--color-border)]",
+          compact ? "h-9 w-9 justify-center" : "px-4 py-2"
         )}
       >
         <Share2 className="h-4 w-4 shrink-0" />
@@ -268,16 +272,16 @@ function ShareOption({ icon, label, sublabel, onClick, active }: ShareOptionProp
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2.5 border-[2px] border-border",
-        "text-left transition-all cursor-pointer neo-press",
+        "border-border flex w-full items-center gap-3 border-[2px] px-3 py-2.5",
+        "neo-press cursor-pointer text-left transition-all",
         "shadow-[2px_2px_0_var(--color-border)] hover:shadow-[3px_3px_0_var(--color-border)]",
         active ? "bg-success" : "bg-card hover:bg-primary"
       )}
     >
       <div className="shrink-0">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-black leading-none mb-0.5">{label}</p>
-        <p className="text-xs text-muted-foreground truncate leading-none">{sublabel}</p>
+      <div className="min-w-0 flex-1">
+        <p className="mb-0.5 text-sm leading-none font-black">{label}</p>
+        <p className="text-muted-foreground truncate text-xs leading-none">{sublabel}</p>
       </div>
     </button>
   )

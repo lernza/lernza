@@ -1,4 +1,5 @@
 import React, { useState, Suspense } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Plus,
   Users,
@@ -17,6 +18,7 @@ import { Progress } from "@/components/ui/progress"
 import { useWallet } from "@/hooks/use-wallet"
 import {
   MOCK_WORKSPACES,
+  MOCK_WORKSPACE_STATS,
   MOCK_MILESTONES,
   MOCK_COMPLETIONS,
   MOCK_PLATFORM_STATS,
@@ -36,50 +38,58 @@ import { RecentActivity } from "./dashboard/recent-activity"
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 
-// The first two workspaces share the same owner — treat them as "owned"
+// The first two quests share the same owner — treat them as "owned"
 const MOCK_OWNER = "GBXR...K2YQ"
 
-interface DashboardProps {
-  onSelectWorkspace: (id: number) => void
-  onCreateQuest: () => void
-}
-
-export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) {
+export function Dashboard() {
+  const navigate = useNavigate()
   const { connected, connect, shortAddress } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
 
   if (!connected) {
     return (
-      <div className="min-h-[calc(100vh-67px)] flex items-center justify-center relative overflow-hidden">
+      <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
         {/* Background elements */}
-        <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
-        <div className="absolute top-[10%] left-[8%] w-20 h-20 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] rotate-12 opacity-[0.08] animate-float" style={{ animationDuration: "8s" }} />
-        <div className="absolute bottom-[15%] right-[6%] w-14 h-14 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] -rotate-6 opacity-[0.1] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
-        <div className="absolute top-[60%] left-[5%] w-10 h-10 bg-success border-[2px] border-border shadow-[2px_2px_0_var(--color-border)] rotate-45 opacity-[0.06] animate-float" style={{ animationDuration: "7s", animationDelay: "2s" }} />
-        <div className="absolute top-[20%] right-[12%] w-8 h-8 bg-primary border-[2px] border-border opacity-[0.07] -rotate-12 animate-float" style={{ animationDuration: "9s", animationDelay: "0.5s" }} />
+        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
+        <div
+          className="bg-primary border-border animate-float absolute top-[10%] left-[8%] h-20 w-20 rotate-12 border-[3px] opacity-[0.08] shadow-[4px_4px_0_var(--color-border)]"
+          style={{ animationDuration: "8s" }}
+        />
+        <div
+          className="bg-primary border-border animate-float absolute right-[6%] bottom-[15%] h-14 w-14 -rotate-6 border-[2px] opacity-[0.1] shadow-[3px_3px_0_var(--color-border)]"
+          style={{ animationDuration: "6s", animationDelay: "1s" }}
+        />
+        <div
+          className="bg-success border-border animate-float absolute top-[60%] left-[5%] h-10 w-10 rotate-45 border-[2px] opacity-[0.06] shadow-[2px_2px_0_var(--color-border)]"
+          style={{ animationDuration: "7s", animationDelay: "2s" }}
+        />
+        <div
+          className="bg-primary border-border animate-float absolute top-[20%] right-[12%] h-8 w-8 -rotate-12 border-[2px] opacity-[0.07]"
+          style={{ animationDuration: "9s", animationDelay: "0.5s" }}
+        />
 
-        <div className="relative px-4 max-w-lg mx-auto">
+        <div className="relative mx-auto max-w-lg px-4">
           {/* Card container */}
-          <div className="bg-background border-[3px] border-border shadow-[8px_8px_0_var(--color-border)] overflow-hidden animate-scale-in">
+          <div className="bg-background border-border animate-scale-in overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
             {/* Yellow header strip */}
-            <div className="bg-primary border-b-[3px] border-border px-6 py-3 flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider">Dashboard</span>
+            <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
+              <span className="text-xs font-black tracking-wider uppercase">Dashboard</span>
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 bg-destructive border border-border" />
+                <div className="bg-destructive border-border h-2.5 w-2.5 border" />
                 <span className="text-xs font-bold">Not Connected</span>
               </div>
             </div>
 
-            <div className="p-8 sm:p-10 text-center">
-              <div className="w-20 h-20 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] flex items-center justify-center mb-6 mx-auto animate-fade-in-up">
+            <div className="p-8 text-center sm:p-10">
+              <div className="bg-primary border-border animate-fade-in-up mx-auto mb-6 flex h-20 w-20 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                 <Wallet className="h-8 w-8" />
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black mb-3 animate-fade-in-up stagger-1">
+              <h2 className="animate-fade-in-up stagger-1 mb-3 text-2xl font-black sm:text-3xl">
                 Connect your wallet
               </h2>
-              <p className="text-muted-foreground mb-8 max-w-sm mx-auto animate-fade-in-up stagger-2">
-                Connect your Freighter wallet to view your quests, track your
-                progress, and start earning USDC.
+              <p className="text-muted-foreground animate-fade-in-up stagger-2 mx-auto mb-8 max-w-sm">
+                Connect your Freighter wallet to view your quests, track your progress, and start
+                earning USDC.
               </p>
               <Button
                 size="lg"
@@ -91,18 +101,18 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
               </Button>
 
               {/* Mini feature list */}
-              <div className="mt-8 pt-6 border-t-[2px] border-border animate-fade-in-up stagger-4">
+              <div className="border-border animate-fade-in-up stagger-4 mt-8 border-t-[2px] pt-6">
                 <div className="flex flex-wrap justify-center gap-4">
                   {[
                     { icon: Target, text: "Track quests" },
                     { icon: Coins, text: "Earn tokens" },
                     { icon: Sparkles, text: "On-chain" },
-                  ].map((item) => (
+                  ].map(item => (
                     <div key={item.text} className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-secondary border-[1.5px] border-border flex items-center justify-center">
+                      <div className="bg-secondary border-border flex h-6 w-6 items-center justify-center border-[1.5px]">
                         <item.icon className="h-3 w-3" />
                       </div>
-                      <span className="text-xs font-bold text-muted-foreground">{item.text}</span>
+                      <span className="text-muted-foreground text-xs font-bold">{item.text}</span>
                     </div>
                   ))}
                 </div>
@@ -111,41 +121,40 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
           </div>
 
           {/* Decorative accent blocks */}
-          <div className="absolute -top-4 -right-4 w-10 h-10 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-12 animate-fade-in-up stagger-5 hidden sm:block" />
-          <div className="absolute -bottom-3 -left-3 w-8 h-8 bg-success border-[2px] border-border shadow-[2px_2px_0_var(--color-border)] -rotate-6 animate-fade-in-up stagger-6 hidden sm:block" />
+          <div className="bg-primary border-border animate-fade-in-up stagger-5 absolute -top-4 -right-4 hidden h-10 w-10 rotate-12 border-[2px] shadow-[3px_3px_0_var(--color-border)] sm:block" />
+          <div className="bg-success border-border animate-fade-in-up stagger-6 absolute -bottom-3 -left-3 hidden h-8 w-8 -rotate-6 border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:block" />
         </div>
       </div>
     )
   }
 
   // Apply filter
-  const filteredWorkspaces = MOCK_WORKSPACES.filter((ws) => {
+  const filteredWorkspaces = MOCK_WORKSPACES.filter(ws => {
     if (filter === "owned") return ws.owner === MOCK_OWNER
     if (filter === "enrolled") return ws.owner !== MOCK_OWNER
     return true
   })
 
+  // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
-    <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-8">
+    <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
       {/* Welcome banner */}
-      <div className="relative bg-primary border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] p-6 sm:p-8 mb-8 overflow-hidden animate-fade-in-up">
-        <div className="absolute inset-0 bg-diagonal-lines pointer-events-none opacity-30" />
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-primary border-border animate-fade-in-up relative mb-8 overflow-hidden border-[3px] p-6 shadow-[6px_6px_0_var(--color-border)] sm:p-8">
+        <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-30" />
+        <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              <span className="text-sm font-bold uppercase tracking-wider">Welcome back</span>
+              <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black">
-              {shortAddress}
-            </h1>
-            <p className="text-sm font-bold opacity-70 mt-1">
-              You have {MOCK_USER_STATS.workspacesEnrolled} active quests
+            <h1 className="text-3xl font-black sm:text-4xl">{shortAddress}</h1>
+            <p className="mt-1 text-sm font-bold opacity-70">
+              You have {MOCK_USER_STATS.questsEnrolled} active quests
             </p>
           </div>
           <Button
             variant="secondary"
-            onClick={onCreateQuest}
+            onClick={() => navigate("/quest/create")}
             className="shimmer-on-hover group flex-shrink-0"
           >
             <Plus className="h-4 w-4" />
@@ -157,33 +166,34 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
       {/* Platform Stats Overview */}
       <PlatformStats stats={MOCK_PLATFORM_STATS} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column (Personal Stats, Chart, Quests) */}
-        <div className="lg:col-span-2 space-y-8 animate-fade-in-up stagger-2">
-          
+        <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
           {/* Personal Stats */}
           <PersonalProgress stats={MOCK_USER_STATS} />
 
           {/* Earnings Chart (Lazy Loaded) */}
-          <Suspense fallback={<div className="h-[250px] animate-pulse bg-muted border-[3px] border-border shadow-[6px_6px_0_var(--color-border)]" />}>
+          <Suspense
+            fallback={
+              <div className="bg-muted border-border h-[250px] animate-pulse border-[3px] shadow-[6px_6px_0_var(--color-border)]" />
+            }
+          >
             <EarningsChart data={MOCK_EARNINGS_HISTORY} />
           </Suspense>
 
           {/* Your Quests Section */}
           <div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-5 relative">
-              <h2 className="text-xl font-black flex items-center gap-2">
-                <LayoutDashboard className="w-5 h-5" /> Your Quests
+            <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+              <h2 className="flex items-center gap-2 text-xl font-black">
+                <LayoutDashboard className="h-5 w-5" /> Your Quests
               </h2>
-              <div className="flex gap-0 border-[2px] border-border shadow-[3px_3px_0_var(--color-border)]">
-                {(["all", "owned", "enrolled"] as const).map((f) => (
+              <div className="border-border flex gap-0 border-[2px] shadow-[3px_3px_0_var(--color-border)]">
+                {(["all", "owned", "enrolled"] as const).map(f => (
                   <button
                     key={f}
                     onClick={() => setFilter(f)}
-                    className={`px-4 py-2 text-xs font-black uppercase tracking-wider transition-colors capitalize cursor-pointer border-r-[2px] border-border last:border-r-0 ${
-                      filter === f
-                        ? "bg-primary"
-                        : "bg-background hover:bg-secondary"
+                    className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
+                      filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
                     }`}
                   >
                     {f}
@@ -192,73 +202,69 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
               </div>
             </div>
 
-            <div className="grid gap-5 relative">
+            <div className="relative grid gap-5">
               {filteredWorkspaces.map((ws, i) => {
+                const stats = MOCK_WORKSPACE_STATS[ws.id] || { enrolleeCount: 0, milestoneCount: 0, poolBalance: 0 }
                 const milestones = MOCK_MILESTONES[ws.id] || []
                 const completions = MOCK_COMPLETIONS[ws.id] || []
                 const totalMilestones = milestones.length
                 const completedCount = new Set(
-                  completions.filter((c) => c.completed).map((c) => c.milestoneId)
+                  completions.filter(c => c.completed).map(c => c.milestoneId)
                 ).size
-                const totalReward = milestones.reduce(
-                  (sum, m) => sum + m.rewardAmount,
-                  0
-                )
+                const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
                 const earnedReward = milestones
-                  .filter((m) =>
-                    completions.some(
-                      (c) => c.milestoneId === m.id && c.completed
-                    )
-                  )
-                  .reduce((sum, m) => sum + m.rewardAmount, 0)
+                  .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
+                  .reduce((sum, m) => sum + m.reward_amount, 0)
                 const isOwned = ws.owner === MOCK_OWNER
 
                 return (
                   <Card
                     key={ws.id}
-                    className={`card-tilt cursor-pointer group animate-fade-in-up stagger-${i + 1}`}
-                    onClick={() => onSelectWorkspace(ws.id)}
+                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1}`}
+                    onClick={() => navigate(`/quest/${ws.id}`)}
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-1">
-                            <CardTitle className="text-base group-hover:text-primary transition-colors">
+                          <div className="mb-1 flex items-center gap-3">
+                            <CardTitle className="group-hover:text-primary text-base transition-colors">
                               {ws.name}
                             </CardTitle>
-                            {completedCount === totalMilestones &&
-                              totalMilestones > 0 && (
-                                <Badge variant="success" className="gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Complete
-                                </Badge>
-                              )}
-                            <Badge variant={isOwned ? "default" : "secondary"} className="text-[10px]">
+                            {completedCount === totalMilestones && totalMilestones > 0 && (
+                              <Badge variant="success" className="gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                Complete
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={isOwned ? "default" : "secondary"}
+                              className="text-[10px]"
+                            >
                               {isOwned ? "Owner" : "Enrolled"}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                          <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
                             {ws.description}
                           </p>
                         </div>
-                        <div className="w-8 h-8 bg-secondary border-[2px] border-border flex items-center justify-center flex-shrink-0 ml-3 group-hover:bg-primary group-hover:shadow-[2px_2px_0_var(--color-border)] transition-all">
+                        <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
                           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex flex-wrap items-center gap-3 text-sm mb-4">
+                      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
                         <Badge variant="secondary" className="gap-1">
                           <Users className="h-3 w-3" />
-                          {ws.enrolleeCount} enrolled
+                          {stats.enrolleeCount} enrolled
                         </Badge>
                         <Badge variant="secondary" className="gap-1">
                           <Target className="h-3 w-3" />
-                          {ws.milestoneCount} milestones
+                          {stats.milestoneCount} milestones
                         </Badge>
                         <Badge variant="default" className="gap-1">
                           <Coins className="h-3 w-3" />
-                          {formatTokens(ws.poolBalance)} USDC
+                          {formatTokens(stats.poolBalance)} USDC
                         </Badge>
                       </div>
 
@@ -270,13 +276,13 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
                               max={totalMilestones}
                               className="flex-1"
                             />
-                            <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">
+                            <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
                               {completedCount}/{totalMilestones}
                             </span>
                           </div>
                           {earnedReward > 0 && (
                             <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-muted-foreground">
+                              <span className="text-muted-foreground text-xs font-bold">
                                 Earned so far
                               </span>
                               <span className="text-xs font-black text-green-700">
@@ -295,13 +301,13 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
             {filteredWorkspaces.length === 0 && (
               <Card className="animate-fade-in-up mt-5">
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-                  <div className="w-16 h-16 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] flex items-center justify-center mb-6">
+                  <div className="bg-primary border-border mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                     <Search className="h-6 w-6" />
                   </div>
-                  <h3 className="font-black text-lg mb-2">
+                  <h3 className="mb-2 text-lg font-black">
                     {filter === "all" ? "No quests yet" : `No ${filter} quests`}
                   </h3>
-                  <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                  <p className="text-muted-foreground mb-6 max-w-sm text-sm">
                     {filter === "all"
                       ? "Create your first quest to start incentivizing learning with on-chain rewards."
                       : filter === "owned"
@@ -309,7 +315,7 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
                         : "You haven't enrolled in any quests yet. Browse available quests to get started."}
                   </p>
                   {filter === "all" || filter === "owned" ? (
-                    <Button onClick={onCreateQuest} className="shimmer-on-hover">
+                    <Button onClick={() => navigate("/quest/create")} className="shimmer-on-hover">
                       <Plus className="h-4 w-4" />
                       Create Quest
                     </Button>
@@ -321,11 +327,8 @@ export function Dashboard({ onSelectWorkspace, onCreateQuest }: DashboardProps) 
         </div>
 
         {/* Right Column (Trending & Recent Activity) */}
-        <div className="space-y-8 animate-fade-in-up stagger-3">
-          <TrendingQuests 
-            quests={MOCK_TRENDING_QUESTS} 
-            onSelectQuest={onSelectWorkspace} 
-          />
+        <div className="animate-fade-in-up stagger-3 space-y-8">
+          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={id => navigate(`/quest/${id}`)} />
           <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
         </div>
       </div>

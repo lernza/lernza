@@ -99,6 +99,29 @@ See the full [project board](https://github.com/orgs/lernza/projects/1) for all 
 
 Three independent Soroban smart contracts orchestrated by the frontend:
 
+```mermaid
+sequenceDiagram
+    participant Admin
+    participant Quest as Quest Contract
+    participant Milestone as Milestone Contract
+    participant Rewards as Rewards Contract
+    participant Lerner
+
+    Note over Admin, Quest: Phase 1: Setup
+    Admin->>Quest: create_quest(owner, name, ...)
+    Admin->>Rewards: fund_quest(funder, quest_id, amount)
+    
+    Note over Admin, Milestone: Phase 2: Engagement
+    Admin->>Quest: add_enrollee(quest_id, lerner_addr)
+    Admin->>Milestone: create_milestone(owner, quest_id, title, ...)
+    
+    Note over Admin, Lerner: Phase 3: Completion
+    Lerner->>Admin: Proves completion (external)
+    Admin->>Milestone: verify_completion(owner, quest_id, ms_id, lerner_addr)
+    Admin->>Rewards: distribute_reward(authority, quest_id, lerner_addr, amount)
+    Rewards->>Lerner: Transfers USDC
+```
+
 <p align="center">
   <img src=".github/assets/architecture.svg" alt="Lernza architecture" width="100%" />
 </p>
@@ -113,6 +136,17 @@ Need the transaction-by-transaction flow? See the [contract interaction diagrams
 
 **Why no backend?**
 The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrastructure costs, zero database management, full transparency.
+
+**Integration Status**
+
+| Area | Status | Contract Method |
+|:-----|:-------|:----------------|
+| **Quest Creation** | Mocked | `create_quest` |
+| **Enrollment** | Mocked | `add_enrollee` |
+| **Milestone Track** | Mocked | `create_milestone` |
+| **Verification** | Mocked | `verify_completion` |
+| **Reward Distribution**| Mocked | `distribute_reward` |
+| **Profile & Analytics** | Implemented (Mock Data) | `get_user_earnings` |
 
 </details>
 
@@ -135,35 +169,33 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 <summary><strong>Smart Contracts</strong></summary>
 <br/>
 
-**Quest Contract** — `contracts/workspace/`
-
-> *Being renamed to `contracts/quest/` — see [#1](https://github.com/lernza/lernza/issues/1)*
+**Quest Contract** — `contracts/quest/`
 
 | Function | Description |
 |:---------|:------------|
-| `create_workspace(owner, name, description, token_addr)` | Create a new quest with a reward token |
-| `add_enrollee(owner, id, enrollee)` | Enroll a learner (owner only) |
-| `remove_enrollee(owner, id, enrollee)` | Remove a learner (owner only) |
-| `get_workspace(id)` / `get_enrollees(id)` | Query quest data |
-| `is_enrollee(id, user)` | Check enrollment status |
+| `create_quest(owner, name, description, token_addr)` | Create a new quest with a reward token |
+| `add_enrollee(quest_id, enrollee)` | Enroll a learner (owner only) |
+| `remove_enrollee(quest_id, enrollee)` | Remove a learner (owner only) |
+| `get_quest(quest_id)` / `get_enrollees(quest_id)` | Query quest data |
+| `is_enrollee(quest_id, user)` | Check enrollment status |
 
 **Milestone Contract** — `contracts/milestone/`
 
 | Function | Description |
 |:---------|:------------|
-| `create_milestone(owner, ws_id, title, desc, reward_amount)` | Add a milestone to a quest |
-| `verify_completion(owner, ws_id, ms_id, enrollee)` | Verify a learner completed a milestone |
-| `get_milestones(ws_id)` | List all milestones in a quest |
-| `is_completed(ws_id, ms_id, enrollee)` | Check completion status |
+| `create_milestone(owner, quest_id, title, desc, reward_amount)` | Add a milestone to a quest |
+| `verify_completion(owner, quest_id, ms_id, enrollee)` | Verify a learner completed a milestone |
+| `get_milestones(quest_id)` | List all milestones in a quest |
+| `is_completed(quest_id, ms_id, enrollee)` | Check completion status |
 
 **Rewards Contract** — `contracts/rewards/`
 
 | Function | Description |
 |:---------|:------------|
 | `initialize(token_addr)` | Set the reward token (one-time) |
-| `fund_workspace(funder, ws_id, amount)` | Deposit tokens into a quest's pool |
-| `distribute_reward(authority, ws_id, enrollee, amount)` | Send reward to a learner |
-| `get_pool_balance(ws_id)` / `get_user_earnings(user)` | Query balances |
+| `fund_quest(funder, quest_id, amount)` | Deposit tokens into a quest's pool |
+| `distribute_reward(authority, quest_id, enrollee, amount)` | Send reward to a learner |
+| `get_pool_balance(quest_id)` / `get_user_earnings(user)` | Query balances |
 
 **Patterns:**
 - **Auth:** `address.require_auth()` + storage-based ownership checks
@@ -180,13 +212,13 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 ```
 lernza/
 ├── contracts/
-│   ├── workspace/          # Quest creation + enrollment (10 tests)
+│   ├── quest/              # Quest creation + enrollment (10 tests)
 │   ├── milestone/          # Milestone definition + completion (12 tests)
 │   └── rewards/            # Token pools + reward distribution (11 tests)
 ├── frontend/
 │   ├── src/
 │   │   ├── components/     # shadcn/ui + Navbar
-│   │   ├── pages/          # Landing, Dashboard, Workspace, Profile
+│   │   ├── pages/          # Landing, Dashboard, Quest, Profile
 │   │   ├── hooks/          # useWallet (Freighter)
 │   │   └── lib/            # Utilities + mock data
 │   └── public/             # Logo, favicon, OG image

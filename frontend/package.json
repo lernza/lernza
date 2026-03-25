@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "generate:bindings": "bash ../scripts/generate-bindings.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "cd .. && husky"
@@ -19,10 +20,13 @@
     "@vercel/speed-insights": "^2.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^1.0.1",
+    "pnpm": "^10.33.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.72.0",
+    "react-router-dom": "^7.13.2",
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6"

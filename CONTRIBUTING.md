@@ -44,6 +44,54 @@ pnpm build      # Production build
 pnpm lint       # Run linter
 ```
 
+### Generating TypeScript Contract Bindings
+
+The Stellar CLI can generate fully-typed TypeScript clients directly from compiled WASM. These bindings live in `frontend/src/lib/contracts/generated/` and are **not committed** — regenerate them locally after deploying contracts or pulling WASM changes.
+
+**Prerequisites:**
+
+- [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) installed
+- Contracts deployed on testnet and their IDs recorded in `frontend/.env`
+
+**Steps:**
+
+```bash
+# 1. Copy the env template and fill in your deployed contract IDs
+cp frontend/.env.example frontend/.env
+# Edit frontend/.env:
+#   VITE_QUEST_CONTRACT_ID=<your quest contract ID>
+#   VITE_MILESTONE_CONTRACT_ID=<your milestone contract ID>
+#   VITE_REWARDS_CONTRACT_ID=<your rewards contract ID>
+
+# 2. Generate bindings (builds contracts first, then generates)
+cd frontend
+pnpm generate:bindings
+
+# 3. Install generated package dependencies and verify compilation
+pnpm install
+pnpm build
+```
+
+To skip the build step (use already-compiled WASM files):
+
+```bash
+cd .. && ./scripts/generate-bindings.sh --skip-build
+```
+
+**What gets generated:**
+
+| Contract | WASM source | Output directory |
+|---|---|---|
+| Quest | `target/wasm32v1-none/release/quest.wasm` | `frontend/src/lib/contracts/generated/quest/` |
+| Milestone | `target/wasm32v1-none/release/milestone.wasm` | `frontend/src/lib/contracts/generated/milestone/` |
+| Rewards | `target/wasm32v1-none/release/rewards.wasm` | `frontend/src/lib/contracts/generated/rewards/` |
+
+Each output directory is a self-contained npm package. Import the clients in frontend code like:
+
+```typescript
+import { Client as QuestClient } from '@/lib/contracts/generated/quest';
+```
+
 ### Pre-commit Hooks
 
 This project uses [husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to run automated checks before commits. The pre-commit hook runs:

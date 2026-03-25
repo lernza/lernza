@@ -1,6 +1,6 @@
 # Lernza Smart Contract Security Audit
 
-**Scope:** All three Soroban contracts — `workspace` (Quest), `milestone`, `rewards`
+**Scope:** All three Soroban contracts — `quest`, `milestone`, `rewards`
 **Auditor:** Internal pre-testnet review
 **Date:** 2026-03-24
 **Branch:** `security/access-control-audit`
@@ -11,7 +11,7 @@
 
 The three contracts implement a learn-to-earn flow where the frontend orchestrates cross-contract calls. The core access control model is sound, but several critical and high-severity issues were found stemming from two root causes:
 
-1. **No cross-contract validation** — The milestone and rewards contracts each cache an "owner" or "authority" independently of the workspace contract. Any caller who acts first can seize that role for any workspace ID.
+1. **No cross-contract validation** — The milestone and rewards contracts each cache an "owner" or "authority" independently of the quest contract. Any caller who acts first can seize that role for any quest ID.
 2. **Missing authorization guards** — The rewards `initialize` function has no `require_auth()` check; the deployer must race their own deployment to initialize safely.
 
 **Findings by severity:**
@@ -19,13 +19,13 @@ The three contracts implement a learn-to-earn flow where the frontend orchestrat
 | ID | Contract | Severity | Title |
 |----|----------|----------|-------|
 | CRIT-01 | milestone | Critical | Milestone ownership race condition |
-| CRIT-02 | rewards | Critical | `fund_workspace` front-running seizes authority |
+| CRIT-02 | rewards | Critical | `fund_quest` front-running seizes authority |
 | HIGH-01 | milestone | High | `verify_completion` does not check enrollment |
 | HIGH-02 | rewards | High | `initialize` has no auth guard |
 | MED-01 | rewards | Medium | `distribute_reward` bypasses milestone verification |
 | MED-02 | rewards | Medium | Authority can distribute rewards to themselves |
 | LOW-01 | rewards | Low | Token balance drift from direct transfers |
-| INFO-01 | workspace | Informational | Read-only functions are ungated (by design) |
+| INFO-01 | quest | Informational | Read-only functions are ungated (by design) |
 | INFO-02 | cross | Informational | Frontend-orchestrated flow creates ordering assumptions |
 
 ---
@@ -40,65 +40,65 @@ The three contracts implement a learn-to-earn flow where the frontend orchestrat
 
 #### Description
 
-The milestone contract stores a workspace owner the first time `create_milestone` is called for a given `workspace_id`. This cached owner is the sole authorization gate for all future milestone creation and completion verification on that workspace.
+The milestone contract stores a quest owner the first time `create_milestone` is called for a given `quest_id`. This cached owner is the sole authorization gate for all future milestone creation and completion verification on that quest.
 
-There is **no cross-contract validation** against the workspace (quest) contract. Any address that calls `create_milestone` first for a given `workspace_id` becomes the permanent milestone authority for that workspace, regardless of who actually owns the quest.
+There is **no cross-contract validation** against the quest contract. Any address that calls `create_milestone` first for a given `quest_id` becomes the permanent milestone authority for that quest, regardless of who actually owns the quest.
 
 **Vulnerable code** (`milestone/src/lib.rs:72-82`):
 
 ```rust
-let owner_key = DataKey::Owner(workspace_id);
+let owner_key = DataKey::Owner(quest_id);
 if let Some(stored_owner) = env.storage().persistent().get::<_, Address>(&owner_key) {
     if stored_owner != owner {
         return Err(Error::OwnerMismatch);
     }
 } else {
-    // First caller for this workspace_id wins — no validation against workspace contract
+    // First caller for this quest_id wins — no validation against quest contract
     env.storage().persistent().set(&owner_key, &owner);
 }
 ```
 
 #### Attack Scenario
 
-1. Alice creates quest `workspace_id=5` in the workspace contract.
+1. Alice creates quest `quest_id=5` in the quest contract.
 2. Bob (attacker) observes the creation event (ledger data is public).
 3. Bob calls `create_milestone(bob_address, 5, "backdoor", 9999)` before Alice does.
-4. Bob is now the permanent milestone authority for workspace 5.
+4. Bob is now the permanent milestone authority for quest 5.
 5. Bob can call `verify_completion` and trigger reward distributions; Alice cannot create any milestones for her own quest.
 
 This is exploitable within the same ledger close (~5 seconds) or any time before Alice's first `create_milestone` call.
 
 #### Fix
 
-Require callers to pass a workspace contract address and cross-call `get_workspace` to validate the owner:
+Require callers to pass a quest contract address and cross-call `get_quest` to validate the owner:
 
 ```rust
 // Pseudocode — one approach
-let ws_client = WorkspaceContractClient::new(&env, &workspace_contract_addr);
-let ws = ws_client.get_workspace(&workspace_id).map_err(|_| Error::NotFound)?;
+let ws_client = QuestContractClient::new(&env, &quest_contract_addr);
+let ws = ws_client.get_quest(&quest_id).map_err(|_| Error::NotFound)?;
 if ws.owner != owner {
     return Err(Error::Unauthorized);
 }
 ```
 
-Alternatively, store the workspace contract address at milestone contract initialization time and use it for every ownership check.
+Alternatively, store the quest contract address at milestone contract initialization time and use it for every ownership check.
 
 ---
 
-### CRIT-02 — `fund_workspace` Front-Running Seizes Rewards Authority
+### CRIT-02 — `fund_quest` Front-Running Seizes Rewards Authority
 
 **Contract:** `contracts/rewards/src/lib.rs`
 **Severity:** Critical
-**Function:** `fund_workspace`
+**Function:** `fund_quest`
 
 #### Description
 
-Similar to CRIT-01, the rewards contract assigns workspace authority to whoever calls `fund_workspace` first for a given `workspace_id`. Any subsequent caller receives `Unauthorized`, even the legitimate quest owner.
+Similar to CRIT-01, the rewards contract assigns quest authority to whoever calls `fund_quest` first for a given `quest_id`. Any subsequent caller receives `Unauthorized`, even the legitimate quest owner.
 
 **Vulnerable code** (`rewards/src/lib.rs:80-90`):
 
 ```rust
-let auth_key = DataKey::WorkspaceAuthority(workspace_id);
+let auth_key = DataKey::QuestAuthority(quest_id);
 if let Some(existing) = env.storage().persistent().get::<_, Address>(&auth_key) {
     if existing != funder {
         return Err(Error::Unauthorized);  // legitimate owner locked out
@@ -111,25 +111,25 @@ if let Some(existing) = env.storage().persistent().get::<_, Address>(&auth_key) 
 
 #### Attack Scenario
 
-1. Alice creates quest `workspace_id=5` and is about to fund the reward pool.
-2. Bob calls `fund_workspace(bob_address, 5, 1)` with a 1-token deposit.
-3. Bob is now the authority for workspace 5's reward pool.
-4. Alice's `fund_workspace` call returns `Unauthorized`.
+1. Alice creates quest `quest_id=5` and is about to fund the reward pool.
+2. Bob calls `fund_quest(bob_address, 5, 1)` with a 1-token deposit.
+3. Bob is now the authority for quest 5's reward pool.
+4. Alice's `fund_quest` call returns `Unauthorized`.
 5. Bob can distribute his 1 token to himself, and the quest can never be funded legitimately.
 
 #### Fix
 
-Validate the `funder` against the workspace contract's owner before setting authority:
+Validate the `funder` against the quest contract's owner before setting authority:
 
 ```rust
-let ws_client = WorkspaceContractClient::new(&env, &workspace_contract_addr);
-let ws = ws_client.get_workspace(&workspace_id).map_err(|_| Error::WorkspaceNotFunded)?;
+let ws_client = QuestContractClient::new(&env, &quest_contract_addr);
+let ws = ws_client.get_quest(&quest_id).map_err(|_| Error::QuestNotFunded)?;
 if ws.owner != funder {
     return Err(Error::Unauthorized);
 }
 ```
 
-The workspace contract address should be stored at rewards contract initialization.
+The quest contract address should be stored at rewards contract initialization.
 
 ---
 
@@ -142,7 +142,7 @@ The workspace contract address should be stored at rewards contract initializati
 
 #### Description
 
-`verify_completion` accepts any `enrollee: Address` and marks it as having completed a milestone. There is no check that the address is actually enrolled in the workspace. An owner can issue completion records and trigger reward distributions for arbitrary addresses — including addresses with no relationship to the quest.
+`verify_completion` accepts any `enrollee: Address` and marks it as having completed a milestone. There is no check that the address is actually enrolled in the quest. An owner can issue completion records and trigger reward distributions for arbitrary addresses — including addresses with no relationship to the quest.
 
 **Vulnerable code** (`milestone/src/lib.rs:107-143`): The function validates the milestone exists and checks for double-completion, but never verifies the `enrollee` is enrolled.
 
@@ -153,11 +153,11 @@ The workspace contract address should be stored at rewards contract initializati
 
 #### Fix
 
-Cross-call the workspace contract's `is_enrollee` before marking completion:
+Cross-call the quest contract's `is_enrollee` before marking completion:
 
 ```rust
-let ws_client = WorkspaceContractClient::new(&env, &workspace_contract_addr);
-let enrolled = ws_client.is_enrollee(&workspace_id, &enrollee);
+let ws_client = QuestContractClient::new(&env, &quest_contract_addr);
+let enrolled = ws_client.is_enrollee(&quest_id, &enrollee);
 if !enrolled {
     return Err(Error::Unauthorized);
 }
@@ -181,7 +181,7 @@ The `initialize` function sets the reward token address and can only be called o
 
 1. Attacker monitors the network for a rewards contract deployment.
 2. Before the deployer can call `initialize`, the attacker calls `initialize` with a token address they control.
-3. The contract is permanently initialized with a malicious token. All `fund_workspace` and `distribute_reward` calls operate on the attacker's token.
+3. The contract is permanently initialized with a malicious token. All `fund_quest` and `distribute_reward` calls operate on the attacker's token.
 4. The deployer cannot re-initialize (`AlreadyInitialized`).
 
 #### Fix
@@ -211,7 +211,7 @@ Alternatively, initialize via the constructor (deployer account auth) using `env
 
 #### Description
 
-The rewards contract has no linkage to the milestone contract. The workspace authority can call `distribute_reward` for any address and any amount at any time, without any milestone being verified first. The frontend is expected to enforce the correct sequencing, but a malicious or compromised frontend (or a direct API call) can distribute tokens freely.
+The rewards contract has no linkage to the milestone contract. The quest authority can call `distribute_reward` for any address and any amount at any time, without any milestone being verified first. The frontend is expected to enforce the correct sequencing, but a malicious or compromised frontend (or a direct API call) can distribute tokens freely.
 
 This is a cross-contract architectural concern rather than a single-contract bug: the design intentionally allows the frontend to orchestrate the flow, but it creates an on-chain invariant that cannot be enforced.
 
@@ -223,7 +223,7 @@ This is a cross-contract architectural concern rather than a single-contract bug
 
 #### Fix Recommendation
 
-The cleanest fix is for `distribute_reward` to accept a `workspace_id` and `milestone_id`, and cross-call the milestone contract's `is_completed` to verify the enrollee actually completed that milestone before distributing. This makes the on-chain state self-enforcing without relying on frontend coordination.
+The cleanest fix is for `distribute_reward` to accept a `quest_id` and `milestone_id`, and cross-call the milestone contract's `is_completed` to verify the enrollee actually completed that milestone before distributing. This makes the on-chain state self-enforcing without relying on frontend coordination.
 
 ---
 
@@ -235,7 +235,7 @@ The cleanest fix is for `distribute_reward` to accept a `workspace_id` and `mile
 
 #### Description
 
-There is no check preventing `authority == enrollee`. The workspace authority can call `distribute_reward(authority, workspace_id, authority, amount)` and pay themselves from the pool.
+There is no check preventing `authority == enrollee`. The quest authority can call `distribute_reward(authority, quest_id, authority, amount)` and pay themselves from the pool.
 
 While the funder and authority are the same address (they funded the pool), this still represents a loss of tokens intended for learners if the authority acts maliciously or is compromised.
 
@@ -258,7 +258,7 @@ if authority == enrollee {
 
 #### Description
 
-The contract tracks pool balances via an internal accounting ledger (`WorkspacePool`). If anyone sends tokens directly to the rewards contract address (outside of `fund_workspace`), the internal pool balances undercount the actual token holdings, and those tokens are permanently locked with no mechanism to recover them.
+The contract tracks pool balances via an internal accounting ledger (`QuestPool`). If anyone sends tokens directly to the rewards contract address (outside of `fund_quest`), the internal pool balances undercount the actual token holdings, and those tokens are permanently locked with no mechanism to recover them.
 
 This is a common smart contract issue. For Lernza, the practical risk is low since there is no incentive to donate tokens, but it is worth documenting.
 
@@ -270,10 +270,10 @@ Add an admin function to sweep unallocated tokens, or document that the contract
 
 ### INFO-01 — Read-Only Functions Are Ungated (By Design)
 
-**Contract:** `contracts/workspace/src/lib.rs`
+**Contract:** `contracts/quest/src/lib.rs`
 **Severity:** Informational
 
-`get_workspace`, `get_enrollees`, and `is_enrollee` require no authentication and return public data. This is consistent with the blockchain data model (all ledger data is publicly readable) and is intentional. No action required.
+`get_quest`, `get_enrollees`, and `is_enrollee` require no authentication and return public data. This is consistent with the blockchain data model (all ledger data is publicly readable) and is intentional. No action required.
 
 ---
 
@@ -283,9 +283,9 @@ Add an admin function to sweep unallocated tokens, or document that the contract
 
 The three contracts are independent: no cross-contract calls are made at runtime. The frontend is responsible for:
 
-1. Calling `create_milestone` only after `create_workspace`.
+1. Calling `create_milestone` only after `create_quest`.
 2. Calling `verify_completion` before `distribute_reward`.
-3. Calling `fund_workspace` with the workspace owner's identity.
+3. Calling `fund_quest` with the quest owner's identity.
 
 A malicious or buggy frontend can violate these assumptions. The findings above (MED-01, CRIT-01, CRIT-02) are the concrete exploits that this enables. The architectural recommendation is to add cross-contract validation for at minimum the ownership checks (CRIT-01, CRIT-02).
 
@@ -295,8 +295,8 @@ A malicious or buggy frontend can violate these assumptions. The findings above 
 
 | Priority | Action |
 |----------|--------|
-| Critical | Add workspace contract cross-validation to `create_milestone` and `fund_workspace` |
-| Critical | Store workspace contract address at initialization in both milestone and rewards contracts |
+| Critical | Add quest contract cross-validation to `create_milestone` and `fund_quest` |
+| Critical | Store quest contract address at initialization in both milestone and rewards contracts |
 | High | Add `require_auth()` to `initialize` in rewards contract |
 | High | Add enrollment check in `verify_completion` (cross-call `is_enrollee`) |
 | Medium | Add `authority != enrollee` guard in `distribute_reward` |
@@ -314,6 +314,6 @@ The following security-focused tests were added alongside this report. All exist
 | `test_milestone_ownership_race_condition` | `milestone/src/test.rs` | CRIT-01 |
 | `test_verify_completion_no_enrollment_check` | `milestone/src/test.rs` | HIGH-01 |
 | `test_initialize_no_auth_guard` | `rewards/src/test.rs` | HIGH-02 |
-| `test_fund_workspace_frontrun_attack` | `rewards/src/test.rs` | CRIT-02 |
+| `test_fund_quest_frontrun_attack` | `rewards/src/test.rs` | CRIT-02 |
 | `test_authority_self_distribution` | `rewards/src/test.rs` | MED-02 |
 | `test_distribute_reward_no_milestone_check` | `rewards/src/test.rs` | MED-01 |

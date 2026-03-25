@@ -51,6 +51,7 @@ pub struct QuestInfo {
     pub created_at: u64,
     pub visibility: Visibility,
     pub status: QuestStatus,
+    pub deadline: u64,
 }
 
 // Milestone contract: define milestones per quest, track completions.
@@ -65,6 +66,8 @@ pub struct QuestInfo {
 pub enum DataKey {
     // Quest contract address for cross-contract validation
     QuestContract,
+    // Certificate contract address for minting completion certificates
+    CertificateContract,
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Milestone data
@@ -155,6 +158,18 @@ pub enum Error {
     InvalidApprover = 11,
 }
 
+// Certificate client interface for cross-contract calls
+#[contractclient(name = "CertificateClient")]
+pub trait Certificate {
+    fn mint_quest_certificate(
+        env: Env,
+        quest_id: u32,
+        quest_name: String,
+        quest_category: String,
+        recipient: Address,
+    ) -> u32;
+}
+
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
 
@@ -165,7 +180,12 @@ pub struct MilestoneContract;
 impl MilestoneContract {
     /// Initialize the milestone contract with the quest contract address.
     /// Must be called once before any milestones can be created.
-    pub fn initialize(env: Env, admin: Address, quest_contract: Address) -> Result<(), Error> {
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        quest_contract: Address,
+        certificate_contract: Address,
+    ) -> Result<(), Error> {
         admin.require_auth();
 
         // Prevent re-initialization
@@ -176,6 +196,9 @@ impl MilestoneContract {
         env.storage()
             .instance()
             .set(&DataKey::QuestContract, &quest_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::CertificateContract, &certificate_contract);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         Ok(())
     }
@@ -418,8 +441,11 @@ impl MilestoneContract {
         // Event data: (milestone_id, quest_id, enrollee, reward_amount)
         env.events().publish(
             (symbol_short!("milestone"), symbol_short!("done")),
-            (milestone_id, quest_id, enrollee, reward),
+            (milestone_id, quest_id, enrollee.clone(), reward),
         );
+
+        // Check if this completes the quest and mint certificate if so
+        Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
 
         Ok(reward)
     }
@@ -622,8 +648,11 @@ impl MilestoneContract {
             // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount)
             env.events().publish(
                 (symbol_short!("milestone"), symbol_short!("peer_ok")),
-                (milestone_id, quest_id, enrollee, peer, reward),
+                (milestone_id, quest_id, enrollee.clone(), peer, reward),
             );
+
+            // Check if this completes the quest and mint certificate if so
+            Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
 
             Ok(Some(reward))
         } else {
@@ -813,6 +842,72 @@ impl MilestoneContract {
         let enrolled = quest_client.is_enrollee(&quest_id, user);
 
         Ok(enrolled)
+    }
+
+    /// Check if user has completed all milestones for a quest and mint certificate if so
+    fn check_and_mint_certificate(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        // Get total number of milestones for this quest
+        let total_milestones = Self::get_quest_milestone_count(env.clone(), quest_id)?;
+
+        // Get number of completed milestones for this user
+        let completed_count =
+            Self::get_enrollee_completions(env.clone(), quest_id, enrollee.clone());
+
+        // If user has completed all milestones, mint certificate
+        if completed_count >= total_milestones {
+            // Get quest info
+            let quest_contract_addr: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestContract)
+                .ok_or(Error::NotInitialized)?;
+
+            let quest_client = QuestClient::new(&env, &quest_contract_addr);
+            let quest_info = quest_client.get_quest(&quest_id);
+
+            // Get certificate contract address
+            let certificate_contract_addr: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::CertificateContract)
+                .ok_or(Error::NotInitialized)?;
+
+            // Create certificate client
+            let certificate_client = CertificateClient::new(&env, &certificate_contract_addr);
+
+            // Mint certificate
+            certificate_client.mint_quest_certificate(
+                &quest_id,
+                &quest_info.name,
+                &quest_info.category,
+                &enrollee,
+            );
+
+            // Emit certificate minted event
+            env.events().publish(
+                (symbol_short!("milestone"), symbol_short!("cert")),
+                (quest_id, enrollee),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Get total number of milestones for a quest
+    fn get_quest_milestone_count(env: Env, quest_id: u32) -> Result<u32, Error> {
+        let mut count = 0;
+        let mut current_id = 0;
+
+        loop {
+            let key = DataKey::Milestone(quest_id, current_id);
+            if !env.storage().persistent().has(&key) {
+                break;
+            }
+            count += 1;
+            current_id += 1;
+        }
+
+        Ok(count)
     }
 }
 

@@ -17,9 +17,12 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     const enterTimer = setTimeout(() => setVisible(true), 10)
 
     // Exit: start leave animation before removal
-    const leaveTimer = setTimeout(() => {
-      setLeaving(true)
-    }, (toast.duration ?? 3000) - 350)
+    const leaveTimer = setTimeout(
+      () => {
+        setLeaving(true)
+      },
+      (toast.duration ?? 3000) - 350
+    )
 
     return () => {
       clearTimeout(enterTimer)
@@ -49,21 +52,19 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 border-[3px] shadow-[4px_4px_0_var(--color-border)] px-4 py-3 min-w-[260px] max-w-sm",
+        "flex max-w-sm min-w-[260px] items-center gap-3 border-[3px] px-4 py-3 shadow-[4px_4px_0_var(--color-border)]",
         "transition-all duration-300 ease-out",
         accents[type],
-        visible && !leaving
-          ? "translate-x-0 opacity-100"
-          : "translate-x-full opacity-0"
+        visible && !leaving ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       )}
       role="alert"
       aria-live="polite"
     >
       {icons[type]}
-      <p className="flex-1 text-sm font-bold leading-snug">{toast.message}</p>
+      <p className="flex-1 text-sm leading-snug font-bold">{toast.message}</p>
       <button
         onClick={handleRemove}
-        className="w-5 h-5 flex items-center justify-center hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
+        className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
         aria-label="Dismiss"
       >
         <X className="h-3.5 w-3.5" />
@@ -82,10 +83,10 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 items-end pointer-events-none"
+      className="pointer-events-none fixed right-6 bottom-6 z-[100] flex flex-col items-end gap-3"
       aria-label="Notifications"
     >
-      {toasts.map((toast) => (
+      {toasts.map(toast => (
         <div key={toast.id} className="pointer-events-auto">
           <ToastItem toast={toast} onRemove={onRemove} />
         </div>

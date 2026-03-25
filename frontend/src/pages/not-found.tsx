@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Home, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-interface NotFoundProps {
-  onNavigate: (page: string) => void
-}
 
 function GlitchText({ text }: { text: string }) {
   const [glitchActive, setGlitchActive] = useState(true)
@@ -33,66 +30,65 @@ function GlitchText({ text }: { text: string }) {
   )
 }
 
-export function NotFound({ onNavigate }: NotFoundProps) {
+export function NotFound() {
+  const navigate = useNavigate()
   const [hovered, setHovered] = useState(false)
 
   return (
-    <div className="min-h-[calc(100vh-67px)] flex items-center justify-center relative overflow-hidden">
+    <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
       {/* Animated background grid */}
-      <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
+      <div className="bg-grid-dots pointer-events-none absolute inset-0" />
 
       {/* Floating background shapes */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
-          className="absolute top-[8%] left-[5%] w-28 h-28 bg-primary border-[3px] border-border shadow-[5px_5px_0_var(--color-border)] rotate-12 opacity-[0.08] animate-float"
+          className="bg-primary border-border animate-float absolute top-[8%] left-[5%] h-28 w-28 rotate-12 border-[3px] opacity-[0.08] shadow-[5px_5px_0_var(--color-border)]"
           style={{ animationDuration: "7s" }}
         />
         <div
-          className="absolute top-[15%] right-[8%] w-20 h-20 bg-destructive border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] -rotate-6 opacity-[0.07] animate-float"
+          className="bg-destructive border-border animate-float absolute top-[15%] right-[8%] h-20 w-20 -rotate-6 border-[3px] opacity-[0.07] shadow-[4px_4px_0_var(--color-border)]"
           style={{ animationDuration: "9s", animationDelay: "1s" }}
         />
         <div
-          className="absolute bottom-[12%] left-[10%] w-16 h-16 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-45 opacity-[0.06] animate-float"
+          className="bg-primary border-border animate-float absolute bottom-[12%] left-[10%] h-16 w-16 rotate-45 border-[2px] opacity-[0.06] shadow-[3px_3px_0_var(--color-border)]"
           style={{ animationDuration: "8s", animationDelay: "2s" }}
         />
         <div
-          className="absolute bottom-[20%] right-[6%] w-24 h-24 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] -rotate-12 opacity-[0.07] animate-float"
+          className="bg-primary border-border animate-float absolute right-[6%] bottom-[20%] h-24 w-24 -rotate-12 border-[3px] opacity-[0.07] shadow-[4px_4px_0_var(--color-border)]"
           style={{ animationDuration: "6s", animationDelay: "0.5s" }}
         />
         <div
-          className="absolute top-[50%] left-[50%] w-10 h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-6 opacity-[0.08] animate-float"
+          className="bg-success border-border animate-float absolute top-[50%] left-[50%] h-10 w-10 rotate-6 border-[2px] opacity-[0.08] shadow-[3px_3px_0_var(--color-border)]"
           style={{ animationDuration: "10s", animationDelay: "3s" }}
         />
         <div
-          className="absolute top-[30%] left-[25%] w-8 h-8 bg-success border-[2px] border-border shadow-[2px_2px_0_var(--color-border)] -rotate-45 opacity-[0.06] animate-float"
+          className="bg-success border-border animate-float absolute top-[30%] left-[25%] h-8 w-8 -rotate-45 border-[2px] opacity-[0.06] shadow-[2px_2px_0_var(--color-border)]"
           style={{ animationDuration: "11s", animationDelay: "1.5s" }}
         />
         {/* Spinning decorative element */}
-        <div
-          className="absolute top-[65%] right-[15%] w-14 h-14 border-[3px] border-border opacity-[0.04] animate-spin-slow"
-        />
+        <div className="border-border animate-spin-slow absolute top-[65%] right-[15%] h-14 w-14 border-[3px] opacity-[0.04]" />
       </div>
 
-      <div className="relative flex flex-col items-center text-center px-4">
+      <div className="relative flex flex-col items-center px-4 text-center">
         {/* Giant 404 with glitch + stacked neo-brutalist layers */}
         <div
-          className="relative mb-6 animate-scale-in"
+          className="animate-scale-in relative mb-6"
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
           {/* Shadow layers */}
-          <div className="absolute inset-0 text-[180px] sm:text-[240px] lg:text-[300px] font-black leading-none text-foreground translate-x-3 translate-y-3 opacity-100">
+          <div className="text-foreground absolute inset-0 translate-x-3 translate-y-3 text-[180px] leading-none font-black opacity-100 sm:text-[240px] lg:text-[300px]">
             404
           </div>
           <div
-            className={`absolute inset-0 text-[180px] sm:text-[240px] lg:text-[300px] font-black leading-none text-primary translate-x-1.5 translate-y-1.5 transition-transform duration-300 ${
+            className={`text-primary absolute inset-0 translate-x-1.5 translate-y-1.5 text-[180px] leading-none font-black transition-transform duration-300 sm:text-[240px] lg:text-[300px] ${
               hovered ? "translate-x-2.5 translate-y-2.5" : ""
             }`}
           >
             404
           </div>
           <div
-            className="relative text-[180px] sm:text-[240px] lg:text-[300px] font-black leading-none text-white"
+            className="relative text-[180px] leading-none font-black text-white sm:text-[240px] lg:text-[300px]"
             style={{ WebkitTextStroke: "4px black" }}
           >
             <GlitchText text="404" />
@@ -100,31 +96,22 @@ export function NotFound({ onNavigate }: NotFoundProps) {
         </div>
 
         {/* Message card */}
-        <div className="bg-background border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] px-8 py-6 max-w-md animate-fade-in-up stagger-1 shimmer-on-hover">
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <Sparkles className="h-5 w-5 text-primary" />
-            <h2 className="text-2xl sm:text-3xl font-black">
-              Lost in the chain
-            </h2>
-            <Sparkles className="h-5 w-5 text-primary" />
+        <div className="bg-background border-border animate-fade-in-up stagger-1 shimmer-on-hover max-w-md border-[3px] px-8 py-6 shadow-[6px_6px_0_var(--color-border)]">
+          <div className="mb-3 flex items-center justify-center gap-2">
+            <Sparkles className="text-primary h-5 w-5" />
+            <h2 className="text-2xl font-black sm:text-3xl">Lost in the chain</h2>
+            <Sparkles className="text-primary h-5 w-5" />
           </div>
           <p className="text-muted-foreground mb-6 leading-relaxed">
-            This page doesn't exist on any ledger. It might have been moved,
-            deleted, or never deployed.
+            This page doesn't exist on any ledger. It might have been moved, deleted, or never
+            deployed.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button
-              onClick={() => onNavigate("landing")}
-              className="shimmer-on-hover group"
-            >
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
+            <Button onClick={() => navigate("/")} className="shimmer-on-hover group">
               <Home className="h-4 w-4" />
               Back to Home
             </Button>
-            <Button
-              variant="secondary"
-              onClick={() => window.history.back()}
-              className="group"
-            >
+            <Button variant="secondary" onClick={() => window.history.back()} className="group">
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
               Go Back
             </Button>
@@ -132,8 +119,8 @@ export function NotFound({ onNavigate }: NotFoundProps) {
         </div>
 
         {/* Decorative accent blocks */}
-        <div className="absolute -left-6 sm:-left-12 top-1/2 w-8 h-8 sm:w-12 sm:h-12 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-12 animate-fade-in-up stagger-2 hidden sm:block" />
-        <div className="absolute -right-6 sm:-right-12 top-1/2 -translate-y-8 w-6 h-6 sm:w-10 sm:h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] -rotate-6 animate-fade-in-up stagger-3 hidden sm:block" />
+        <div className="bg-primary border-border animate-fade-in-up stagger-2 absolute top-1/2 -left-6 hidden h-8 w-8 rotate-12 border-[2px] shadow-[3px_3px_0_var(--color-border)] sm:-left-12 sm:block sm:h-12 sm:w-12" />
+        <div className="bg-success border-border animate-fade-in-up stagger-3 absolute top-1/2 -right-6 hidden h-6 w-6 -translate-y-8 -rotate-6 border-[2px] shadow-[3px_3px_0_var(--color-border)] sm:-right-12 sm:block sm:h-10 sm:w-10" />
       </div>
     </div>
   )

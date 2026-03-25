@@ -1,6 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, Address, Env, String, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
+    Env, String, Vec,
 };
 
 // Quest contract error type (must match the quest contract)
@@ -217,6 +218,14 @@ impl MilestoneContract {
         env.storage().persistent().set(&ms_key, &milestone);
         env.storage().persistent().set(&next_key, &(id + 1));
 
+        // Emit milestone creation event
+        // Event topics: (milestone, created)
+        // Event data: (milestone_id, quest_id, reward_amount)
+        env.events().publish(
+            (symbol_short!("milestone"), symbol_short!("new")),
+            (id, quest_id, milestone.reward_amount),
+        );
+
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &next_key);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
@@ -374,6 +383,14 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .extend_ttl(&earnings_key, THRESHOLD, BUMP);
+
+        // Emit milestone completion event
+        // Event topics: (milestone, completed)
+        // Event data: (milestone_id, quest_id, enrollee, reward_amount)
+        env.events().publish(
+            (symbol_short!("milestone"), symbol_short!("done")),
+            (milestone_id, quest_id, enrollee, reward),
+        );
 
         Ok(reward)
     }
@@ -565,6 +582,14 @@ impl MilestoneContract {
                     }
                 }
             };
+
+            // Emit peer approval completion event
+            // Event topics: (milestone, peer_approved)
+            // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount)
+            env.events().publish(
+                (symbol_short!("milestone"), symbol_short!("peer_ok")),
+                (milestone_id, quest_id, enrollee, peer, reward),
+            );
 
             Ok(Some(reward))
         } else {

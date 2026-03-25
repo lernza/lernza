@@ -1,7 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
-    String,
+    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
+    Address, Env, String,
 };
 
 #[contracttype]
@@ -152,6 +152,14 @@ impl RewardsContract {
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
+        // Emit quest funding event
+        // Event topics: (reward, funded)
+        // Event data: (quest_id, funder, amount)
+        env.events().publish(
+            (symbol_short!("reward"), symbol_short!("funded")),
+            (quest_id, funder, amount),
+        );
+
         Ok(())
     }
 
@@ -200,7 +208,7 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Track user earnings
-        let earn_key = DataKey::UserEarnings(enrollee);
+        let earn_key = DataKey::UserEarnings(enrollee.clone());
         let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
         env.storage()
             .persistent()
@@ -219,6 +227,14 @@ impl RewardsContract {
             .instance()
             .set(&DataKey::TotalDistributed, &(total + amount));
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+
+        // Emit reward distribution event
+        // Event topics: (reward, distributed)
+        // Event data: (quest_id, enrollee, amount)
+        env.events().publish(
+            (symbol_short!("reward"), symbol_short!("paid")),
+            (quest_id, enrollee, amount),
+        );
 
         Ok(())
     }

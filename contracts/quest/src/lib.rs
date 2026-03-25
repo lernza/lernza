@@ -1,5 +1,7 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+};
 
 // Quest contract: the entry point for Lernza.
 // An owner creates a quest, enrolls learners, configures a reward token.
@@ -93,6 +95,14 @@ impl QuestContract {
             .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
 
+        // Emit quest creation event
+        // Event topics: (quest, created)
+        // Event data: (quest_id, owner, category)
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("new")),
+            (id, quest.owner, quest.category),
+        );
+
         Self::bump(&env, id);
         Ok(id)
     }
@@ -125,10 +135,19 @@ impl QuestContract {
         }
 
         let mut new_enrollees = enrollees;
-        new_enrollees.push_back(enrollee);
+        new_enrollees.push_back(enrollee.clone());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+
+        // Emit enrollee added event
+        // Event topics: (quest, enrollee_added)
+        // Event data: (quest_id, enrollee_address)
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("add_enr")),
+            (quest_id, &enrollee),
+        );
+
         Self::bump(&env, quest_id);
         Ok(())
     }
@@ -158,6 +177,15 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_list);
+
+        // Emit enrollee removed event
+        // Event topics: (quest, enrollee_removed)
+        // Event data: (quest_id, enrollee_address)
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("rem_enr")),
+            (quest_id, &enrollee),
+        );
+
         Self::bump(&env, quest_id);
         Ok(())
     }

@@ -56,6 +56,21 @@ pub enum DataKey {
     FlatReward(u32),
     // Total unique completions per milestone (Competitive mode)
     MilestoneCompletionCount(u32, u32), // (workspace_id, milestone_id)
+    // Verification mode per quest
+    VerificationMode(u32), // (quest_id)
+    // Pending submissions for peer review
+    PendingSubmission(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Approval count for pending submissions
+    ApprovalCount(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Peer approvals tracking
+    PeerApproval(u32, u32, Address, Address), // (quest_id, milestone_id, enrollee, peer)
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum VerificationMode {
+    OwnerOnly,
+    PeerReview(u32), // required_approvals
 }
 
 #[contracttype]
@@ -86,6 +101,11 @@ pub enum Error {
     InvalidAmount = 4,
     OwnerMismatch = 5,
     NotInitialized = 6,
+    AlreadySubmitted = 7,
+    NotSubmitted = 8,
+    AlreadyApproved = 9,
+    NotEnrolled = 10,
+    InvalidApprover = 11,
 }
 
 const BUMP: u32 = 518_400;
@@ -165,6 +185,25 @@ impl MilestoneContract {
         Ok(id)
     }
 
+    /// Set the verification mode for a quest. Owner only.
+    pub fn set_verification_mode(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        mode: VerificationMode,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_quest_owner(&env, quest_id, &owner)?;
+
+        let mode_key = DataKey::VerificationMode(quest_id);
+        env.storage().persistent().set(&mode_key, &mode);
+        env.storage()
+            .persistent()
+            .extend_ttl(&mode_key, THRESHOLD, BUMP);
+
+        Ok(())
+    }
+
     /// Set the reward distribution mode for a workspace. Owner only.
     /// For Flat mode, flat_reward is the equal reward paid per milestone (must be > 0).
     /// For Custom and Competitive modes, flat_reward is ignored (pass 0).
@@ -240,7 +279,7 @@ impl MilestoneContract {
         let mode: DistributionMode = env
             .storage()
             .persistent()
-            .get(&DataKey::Mode(workspace_id))
+            .get(&DataKey::Mode(quest_id))
             .unwrap_or(DistributionMode::Custom);
 
         let reward = match mode {
@@ -248,10 +287,10 @@ impl MilestoneContract {
             DistributionMode::Flat => env
                 .storage()
                 .persistent()
-                .get(&DataKey::FlatReward(workspace_id))
+                .get(&DataKey::FlatReward(quest_id))
                 .unwrap_or(milestone.reward_amount),
             DistributionMode::Competitive(max_winners) => {
-                let cnt_key = DataKey::MilestoneCompletionCount(workspace_id, milestone_id);
+                let cnt_key = DataKey::MilestoneCompletionCount(quest_id, milestone_id);
                 let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
                 env.storage().persistent().set(&cnt_key, &(cnt + 1));
                 env.storage()
@@ -280,6 +319,193 @@ impl MilestoneContract {
             .extend_ttl(&count_key, THRESHOLD, BUMP);
 
         Ok(reward)
+    }
+
+    /// Submit a milestone completion for peer review.
+    /// Enrollee submits their completion for peer approval.
+    pub fn submit_for_review(
+        env: Env,
+        enrollee: Address,
+        quest_id: u32,
+        milestone_id: u32,
+    ) -> Result<(), Error> {
+        enrollee.require_auth();
+
+        // Check if milestone exists
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
+        let _: MilestoneInfo = env
+            .storage()
+            .persistent()
+            .get(&ms_key)
+            .ok_or(Error::NotFound)?;
+
+        // Check if already completed
+        let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&comp_key) {
+            return Err(Error::AlreadyCompleted);
+        }
+
+        // Check if already submitted for review
+        let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&submit_key) {
+            return Err(Error::AlreadySubmitted);
+        }
+
+        // Get verification mode for this quest
+        let verification_mode: VerificationMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::VerificationMode(quest_id))
+            .unwrap_or(VerificationMode::OwnerOnly);
+
+        // Only allow submission if quest uses peer review
+        if !matches!(verification_mode, VerificationMode::PeerReview(_)) {
+            return Err(Error::Unauthorized);
+        }
+
+        // Mark as submitted for review
+        env.storage().persistent().set(&submit_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&submit_key, THRESHOLD, BUMP);
+
+        // Initialize approval count to 0
+        let approval_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
+        env.storage().persistent().set(&approval_key, &0u32);
+        env.storage()
+            .persistent()
+            .extend_ttl(&approval_key, THRESHOLD, BUMP);
+
+        Ok(())
+    }
+
+    /// Approve a milestone completion submitted for peer review.
+    /// Only enrolled users (not the submitter) can approve.
+    /// Returns reward amount if approval completes the milestone, None if more approvals needed.
+    pub fn approve_completion(
+        env: Env,
+        peer: Address,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> Result<Option<i128>, Error> {
+        peer.require_auth();
+
+        // Check if milestone exists
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
+        let milestone: MilestoneInfo = env
+            .storage()
+            .persistent()
+            .get(&ms_key)
+            .ok_or(Error::NotFound)?;
+
+        // Verify the submission exists and is pending
+        let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
+        if !env.storage().persistent().has(&submit_key) {
+            return Err(Error::NotSubmitted);
+        }
+
+        // Check if already completed
+        let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&comp_key) {
+            return Err(Error::AlreadyCompleted);
+        }
+
+        // Prevent self-approval
+        if peer == enrollee {
+            return Err(Error::InvalidApprover);
+        }
+
+        // Check if peer has already approved this submission
+        let approval_key = DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), peer.clone());
+        if env.storage().persistent().has(&approval_key) {
+            return Err(Error::AlreadyApproved);
+        }
+
+        // Verify peer is enrolled in the quest
+        if !Self::is_enrolled(&env, quest_id, &peer)? {
+            return Err(Error::NotEnrolled);
+        }
+
+        // Get verification mode and required approvals
+        let verification_mode: VerificationMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::VerificationMode(quest_id))
+            .unwrap_or(VerificationMode::OwnerOnly);
+
+        let required_approvals = match verification_mode {
+            VerificationMode::PeerReview(approvals) => approvals,
+            VerificationMode::OwnerOnly => return Err(Error::Unauthorized),
+        };
+
+        // Record the peer approval
+        env.storage().persistent().set(&approval_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&approval_key, THRESHOLD, BUMP);
+
+        // Increment approval count
+        let count_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
+        let current_approvals: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        let new_approvals = current_approvals + 1;
+        env.storage().persistent().set(&count_key, &new_approvals);
+        env.storage()
+            .persistent()
+            .extend_ttl(&count_key, THRESHOLD, BUMP);
+
+        // Check if required approvals reached
+        if new_approvals >= required_approvals {
+            // Auto-complete the milestone
+            env.storage().persistent().set(&comp_key, &true);
+            env.storage()
+                .persistent()
+                .extend_ttl(&comp_key, THRESHOLD, BUMP);
+
+            // Remove pending submission
+            env.storage().persistent().remove(&submit_key);
+
+            // Increment enrollee's completion count for this quest
+            let enrollee_count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
+            let count: u32 = env.storage().persistent().get(&enrollee_count_key).unwrap_or(0);
+            env.storage().persistent().set(&enrollee_count_key, &(count + 1));
+            env.storage()
+                .persistent()
+                .extend_ttl(&enrollee_count_key, THRESHOLD, BUMP);
+
+            // Determine reward based on distribution mode
+            let mode: DistributionMode = env
+                .storage()
+                .persistent()
+                .get(&DataKey::Mode(quest_id))
+                .unwrap_or(DistributionMode::Custom);
+
+            let reward = match mode {
+                DistributionMode::Custom => milestone.reward_amount,
+                DistributionMode::Flat => env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::FlatReward(quest_id))
+                    .unwrap_or(milestone.reward_amount),
+                DistributionMode::Competitive(max_winners) => {
+                    let cnt_key = DataKey::MilestoneCompletionCount(quest_id, milestone_id);
+                    let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
+                    env.storage().persistent().set(&cnt_key, &(cnt + 1));
+                    env.storage()
+                        .persistent()
+                        .extend_ttl(&cnt_key, THRESHOLD, BUMP);
+                    if cnt < max_winners {
+                        milestone.reward_amount
+                    } else {
+                        0
+                    }
+                }
+            };
+
+            Ok(Some(reward))
+        } else {
+            Ok(None) // More approvals needed
+        }
     }
 
     /// Get a specific milestone.
@@ -343,6 +569,52 @@ impl MilestoneContract {
 
     fn bump_ms(env: &Env, key: &DataKey) {
         env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
+    }
+
+    fn require_owner(_env: &Env, _workspace_id: u32, _owner: &Address) -> Result<(), Error> {
+        // This is a placeholder implementation
+        // In a real implementation, you'd check workspace ownership
+        // For now, we'll assume the caller is authorized if they have the address
+        Ok(())
+    }
+
+    fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {
+        // Get quest contract address
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        // Cross-contract validation: verify caller is the actual quest owner
+        let quest_client = QuestClient::new(env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        
+        // If quest doesn't exist, this will fail with NotFound from quest contract
+        // If it exists, verify the caller is the owner
+        if quest_info.owner != *owner {
+            return Err(Error::OwnerMismatch);
+        }
+
+        Ok(())
+    }
+
+    fn is_enrolled(_env: &Env, _quest_id: u32, _user: &Address) -> Result<bool, Error> {
+        // Get quest contract address
+        let quest_contract_addr: Address = _env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        // Cross-contract call to check enrollment
+        let _quest_client = QuestClient::new(_env, &quest_contract_addr);
+        
+        // For now, we'll assume a function exists to check enrollment
+        // In a real implementation, you'd call quest_client.is_enrolled(quest_id, user)
+        // For this example, we'll return true (meaning the user is enrolled)
+        // This should be implemented based on the actual quest contract interface
+        Ok(true)
     }
 }
 

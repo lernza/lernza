@@ -438,3 +438,29 @@ fn test_private_quest_not_in_public_listings() {
     let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
 }
+
+#[test]
+fn test_leave_quest() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&0, &enrollee);
+    assert!(client.is_enrollee(&0, &enrollee));
+
+    client.leave_quest(&enrollee, &0);
+
+    let enrollees = client.get_enrollees(&0);
+    assert_eq!(enrollees.len(), 0);
+    assert!(!client.is_enrollee(&0, &enrollee));
+}
+
+#[test]
+fn test_leave_quest_not_enrolled() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let random = Address::generate(&env);
+    let result = client.try_leave_quest(&random, &0);
+    assert_eq!(result, Err(Ok(Error::NotEnrolled)));
+}

@@ -16,3 +16,6 @@ soroban-sdk = { workspace = true }
 
 soroban-sdk = { workspace = true, features = ["testutils"] }
 quest = { path = "../quest" }
+
+[features]
+testutils = []

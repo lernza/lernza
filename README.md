@@ -8,7 +8,8 @@
   <a href="https://github.com/lernza/lernza"><img src="https://img.shields.io/github/stars/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=github&logoColor=FACC15" alt="Stars"></a>&nbsp;
   <a href="https://stellar.org"><img src="https://img.shields.io/badge/Stellar-Soroban-FACC15?style=flat-square&logo=stellar&logoColor=FACC15&labelColor=000" alt="Stellar Soroban"></a>&nbsp;
   <a href="https://github.com/lernza/lernza/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/lernza/lernza/good%20first%20issue?style=flat-square&color=FACC15&labelColor=000&label=good%20first%20issues&logo=git&logoColor=FACC15" alt="Good First Issues"></a>&nbsp;
-  <a href="https://github.com/lernza/lernza/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-FACC15?style=flat-square&labelColor=000&logo=opensourceinitiative&logoColor=FACC15" alt="MIT License"></a>
+  <a href="https://github.com/lernza/lernza/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-FACC15?style=flat-square&labelColor=000&logo=opensourceinitiative&logoColor=FACC15" alt="MIT License"></a>&nbsp;
+  <a href="https://codecov.io/gh/lernza/lernza"><img src="https://img.shields.io/codecov/c/github/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=codecov&logoColor=FACC15" alt="Coverage"></a>
 </p>
 
 > **The idea is simple:** I want to help my brother learn to code. I create a Quest, enroll him, set milestones like "Build your first API" and "Deploy a smart contract," and fund it with tokens. He completes them, gets verified, earns. That's Lernza. **Commitment through incentive.**

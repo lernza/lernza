@@ -79,7 +79,6 @@ function App() {
         return (
           <CreateQuest
             onBack={() => handleNavigate("dashboard")}
-            onQuestCreated={(id) => handleSelectWorkspace(id)}
           />
         )
       case "profile":

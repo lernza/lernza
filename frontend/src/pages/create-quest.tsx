@@ -12,7 +12,6 @@ import {
   Check,
   Wallet,
   Loader2,
-  ExternalLink,
   Coins,
   Target,
   FileText,
@@ -22,11 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
-import { MOCK_WORKSPACES, MOCK_MILESTONES } from "@/lib/mock-data"
 import { formatTokens, cn } from "@/lib/utils"
-
-// Testnet USDC SAC contract address (pre-filled)
-const TESTNET_USDC = "CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -60,12 +55,11 @@ type Step2Values = z.infer<typeof step2Schema>
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type FormStep = 1 | 2 | 3 | "success"
+type FormStep = 1 | 2 | 3
 type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
 interface CreateQuestProps {
   onBack: () => void
-  onQuestCreated: (id: number) => void
 }
 
 // ─── Helper components ────────────────────────────────────────────────────────
@@ -457,9 +451,8 @@ function Step3Review({
   step1Data: Step1Values
   step2Data: Step2Values
   onBack: () => void
-  onComplete: (questId: number) => void
+  onComplete: () => void
 }) {
-  const { address } = useWallet()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
 
   const totalReward = step2Data.milestones.reduce(
@@ -478,32 +471,8 @@ function Step3Review({
     setTxPhase("creating")
     // Simulate quest creation transaction via Freighter
     await new Promise((r) => setTimeout(r, 2000))
-
-    // Add to mock data
-    const newId = MOCK_WORKSPACES.length
-    MOCK_WORKSPACES.push({
-      id: newId,
-      owner: address ?? "GUNK...NOWN",
-      name: step1Data.name,
-      description: step1Data.description,
-      tokenAddr: TESTNET_USDC,
-      enrolleeCount: 0,
-      milestoneCount: step2Data.milestones.length,
-      poolBalance: totalReward,
-      // eslint-disable-next-line react-hooks/purity
-      createdAt: Math.floor(Date.now() / 1000),
-    })
-    // eslint-disable-next-line react-hooks/immutability
-    MOCK_MILESTONES[newId] = step2Data.milestones.map((m, i) => ({
-      id: i,
-      workspaceId: newId,
-      title: m.title,
-      description: m.description,
-      rewardAmount: m.rewardAmount,
-    }))
-
     setTxPhase("done")
-    onComplete(newId)
+    onComplete()
   }
 
   return (
@@ -651,58 +620,11 @@ function Step3Review({
   )
 }
 
-// ─── Success screen ───────────────────────────────────────────────────────────
-
-function SuccessScreen({
-  questId,
-  questName,
-  onViewQuest,
-  onDashboard,
-}: {
-  questId: number
-  questName: string
-  onViewQuest: (id: number) => void
-  onDashboard: () => void
-}) {
-  return (
-    <div className="flex flex-col items-center text-center py-8 animate-fade-in-up">
-      <div className="w-20 h-20 bg-success border-[3px] border-black shadow-[6px_6px_0_#000] flex items-center justify-center mb-6 animate-scale-in">
-        <Check className="h-10 w-10" />
-      </div>
-      <h2 className="text-3xl font-black mb-3 animate-fade-in-up stagger-1">
-        Quest Created!
-      </h2>
-      <p className="text-muted-foreground mb-2 max-w-sm animate-fade-in-up stagger-2">
-        <span className="font-black text-foreground">"{questName}"</span> is
-        now live on Stellar testnet with a funded reward pool.
-      </p>
-      <div className="flex items-center gap-2 mb-8 bg-secondary border-[2px] border-black px-4 py-2 shadow-[2px_2px_0_#000] animate-fade-in-up stagger-3">
-        <div className="w-2 h-2 bg-success border border-black" />
-        <span className="text-xs font-black font-mono">Quest #{questId} on Stellar Testnet</span>
-      </div>
-      <div className="flex flex-col sm:flex-row gap-3 animate-fade-in-up stagger-4">
-        <Button
-          onClick={() => onViewQuest(questId)}
-          className="shimmer-on-hover"
-        >
-          <ExternalLink className="h-4 w-4" />
-          View Quest
-        </Button>
-        <Button variant="outline" onClick={onDashboard}>
-          Back to Dashboard
-        </Button>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function CreateQuest({ onBack, onQuestCreated }: CreateQuestProps) {
+export function CreateQuest({ onBack }: CreateQuestProps) {
   const { connected, connect, loading } = useWallet()
   const [step, setStep] = useState<FormStep>(1)
-  const [createdQuestId, setCreatedQuestId] = useState<number | null>(null)
-  const [createdQuestName, setCreatedQuestName] = useState("")
 
   const [step1Data, setStep1Data] = useState<Step1Values>({
     name: "",
@@ -764,35 +686,29 @@ export function CreateQuest({ onBack, onQuestCreated }: CreateQuestProps) {
     <div className="relative mx-auto max-w-2xl px-4 sm:px-6 py-8">
       <div className="absolute inset-0 bg-grid-dots pointer-events-none opacity-30" />
 
-      {/* Back button (hidden on success) */}
-      {step !== "success" && (
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer group"
-        >
-          <div className="w-7 h-7 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press hover:bg-primary transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </div>
-          Back to Dashboard
-        </button>
-      )}
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer group"
+      >
+        <div className="w-7 h-7 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press hover:bg-primary transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </div>
+        Back to Dashboard
+      </button>
 
       {/* Page heading */}
-      {step !== "success" && (
-        <div className="mb-6 relative animate-fade-in-up">
-          <h1 className="text-3xl font-black">Create a Quest</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Set up milestones and fund the reward pool to incentivize learners.
-          </p>
-        </div>
-      )}
+      <div className="mb-6 relative animate-fade-in-up">
+        <h1 className="text-3xl font-black">Create a Quest</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Set up milestones and fund the reward pool to incentivize learners.
+        </p>
+      </div>
 
       {/* Step indicator */}
-      {step !== "success" && (
-        <div className="relative animate-fade-in-up stagger-1">
-          <StepIndicator current={step} />
-        </div>
-      )}
+      <div className="relative animate-fade-in-up stagger-1">
+        <StepIndicator current={step} />
+      </div>
 
       {/* Step content */}
       <div className="relative animate-fade-in-up stagger-2">
@@ -830,21 +746,7 @@ export function CreateQuest({ onBack, onQuestCreated }: CreateQuestProps) {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={(questId) => {
-              setCreatedQuestId(questId)
-              setCreatedQuestName(step1Data.name)
-              setStep("success")
-              window.scrollTo({ top: 0, behavior: "smooth" })
-            }}
-          />
-        )}
-
-        {step === "success" && createdQuestId !== null && (
-          <SuccessScreen
-            questId={createdQuestId}
-            questName={createdQuestName}
-            onViewQuest={(id) => onQuestCreated(id)}
-            onDashboard={onBack}
+            onComplete={onBack}
           />
         )}
       </div>

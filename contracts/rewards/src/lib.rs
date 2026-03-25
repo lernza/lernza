@@ -38,7 +38,7 @@ pub enum FundingModel {
 // Rewards contract: holds token pools per quest and distributes rewards.
 //
 // Flow:
-// 1. Quest owner calls fund_quest() to deposit tokens into the pool
+// 1. First funder calls fund_quest() to deposit tokens into the pool
 // 2. When owner verifies a milestone completion, frontend calls distribute_reward()
 // 3. Tokens transfer from the contract's pool to the enrollee
 

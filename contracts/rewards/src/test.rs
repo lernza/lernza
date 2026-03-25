@@ -344,7 +344,10 @@ fn test_funding_model_host_only() {
     // Owner funds quest with HostOnly model
     client.fund_quest(&owner, &q_id, &1_000, &FundingModel::HostOnly);
     assert_eq!(client.get_pool_balance(&q_id), 1_000);
-    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+    assert_eq!(
+        client.get_funding_model(&q_id),
+        Some(FundingModel::HostOnly)
+    );
 
     // Owner can add more funds
     client.fund_quest(&owner, &q_id, &500, &FundingModel::HostOnly);
@@ -475,11 +478,17 @@ fn test_funding_model_set_on_first_funding() {
     client.fund_quest(&owner, &q_id, &1_000, &FundingModel::HostOnly);
 
     // Funding model should now be set
-    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+    assert_eq!(
+        client.get_funding_model(&q_id),
+        Some(FundingModel::HostOnly)
+    );
 
     // Add more funds with same model - should succeed
     client.fund_quest(&owner, &q_id, &500, &FundingModel::HostOnly);
-    assert_eq!(client.get_funding_model(&q_id), Some(FundingModel::HostOnly));
+    assert_eq!(
+        client.get_funding_model(&q_id),
+        Some(FundingModel::HostOnly)
+    );
 
     // Try to fund with different model - should fail
     let result = client.try_fund_quest(&owner, &q_id, &500, &FundingModel::Anyone);

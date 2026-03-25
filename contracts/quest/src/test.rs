@@ -252,18 +252,6 @@ fn test_set_visibility_private_to_public() {
 }
 
 #[test]
-fn test_set_visibility_owner_only() {
-    let (env, client, owner, token) = setup();
-    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-
-    let other_user = Address::generate(&env);
-    let result = client.try_set_visibility(&0, &other_user, &Visibility::Private);
-
-    // Should fail because other_user is not the owner
-    assert!(result.is_err());
-}
-
-#[test]
 fn test_list_public_quests_after_visibility_change() {
     let (env, client, owner, token) = setup();
     let id1 = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);

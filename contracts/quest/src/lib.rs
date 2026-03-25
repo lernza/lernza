@@ -93,7 +93,7 @@ impl QuestContract {
 
         // Check not already enrolled
         for i in 0..enrollees.len() {
-            if let Ok(existing) = enrollees.get(i) {
+            if let Some(existing) = enrollees.get(i) {
                 if existing == enrollee {
                     return Err(Error::AlreadyEnrolled);
                 }
@@ -158,7 +158,7 @@ impl QuestContract {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
         for i in 0..enrollees.len() {
-            if let Ok(enrollee) = enrollees.get(i) {
+            if let Some(enrollee) = enrollees.get(i) {
                 if enrollee == user {
                     return Ok(true);
                 }

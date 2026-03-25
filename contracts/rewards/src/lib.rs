@@ -5,6 +5,13 @@ use soroban_sdk::{
 };
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Visibility {
+    Public = 0,
+    Private = 1,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
@@ -13,6 +20,7 @@ pub struct QuestInfo {
     pub description: String,
     pub token_addr: Address,
     pub created_at: u64,
+    pub visibility: Visibility,
 }
 
 #[contractclient(name = "QuestClient")]

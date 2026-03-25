@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use quest::{QuestContract, QuestContractClient};
+use quest::{QuestContract, QuestContractClient, Visibility};
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
@@ -66,6 +66,7 @@ fn test_fund_quest() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -90,6 +91,7 @@ fn test_fund_quest_adds_to_existing() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &3_000);
@@ -108,6 +110,7 @@ fn test_fund_invalid_amount() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     let result = client.try_fund_quest(&owner, &q_id, &0);
@@ -129,6 +132,7 @@ fn test_different_funder_unauthorized() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     // Owner funds first
@@ -153,6 +157,7 @@ fn test_distribute_reward() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -185,6 +190,7 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -214,6 +220,7 @@ fn test_insufficient_pool() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &100);
@@ -236,6 +243,7 @@ fn test_distribute_unauthorized() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -295,6 +303,7 @@ fn test_authority_self_distribution() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -323,6 +332,7 @@ fn test_distribute_reward_no_milestone_check() {
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
         &token_addr,
+        &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -352,6 +362,7 @@ fn test_fund_quest_not_owner_fails() {
         &String::from_str(&env, "Secret"),
         &String::from_str(&env, "Hidden"),
         &token_addr,
+        &Visibility::Public,
     );
 
     // Attacker tries to fund and become authority ΓÇö should FAIL with Unauthorized

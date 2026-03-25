@@ -26,6 +26,9 @@
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                },
+                {
+                  "u64": "0"
                 }
               ]
             }
@@ -54,6 +57,9 @@
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                },
+                {
+                  "u64": "0"
                 }
               ]
             }
@@ -158,6 +164,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "deadline"
+                    },
+                    "val": {
+                      "u64": "0"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "description"
                     },
                     "val": {
@@ -227,6 +241,14 @@
                   {
                     "key": {
                       "symbol": "created_at"
+                    },
+                    "val": {
+                      "u64": "0"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "deadline"
                     },
                     "val": {
                       "u64": "0"

@@ -29,6 +29,9 @@
                 },
                 {
                   "i128": "50"
+                },
+                {
+                  "u64": "0"
                 }
               ]
             }
@@ -60,6 +63,9 @@
                 },
                 {
                   "i128": "100"
+                },
+                {
+                  "u64": "0"
                 }
               ]
             }
@@ -91,6 +97,9 @@
                 },
                 {
                   "i128": "200"
+                },
+                {
+                  "u64": "0"
                 }
               ]
             }
@@ -111,6 +120,33 @@
     "min_temp_entry_ttl": 16,
     "max_entry_ttl": 6312000,
     "ledger_entries": [
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Deadline"
+                  },
+                  {
+                    "u32": 0
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "u64": "0"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 518400
+      },
       {
         "entry": {
           "last_modified_ledger_seq": 0,

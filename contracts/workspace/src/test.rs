@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, Env, String,
+};
 
 fn setup() -> (Env, WorkspaceContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -19,6 +22,7 @@ fn create_ws(env: &Env, client: &WorkspaceContractClient, owner: &Address, token
         &String::from_str(env, "My Workspace"),
         &String::from_str(env, "Teaching my brother to code"),
         token,
+        &0,
     )
 }
 
@@ -134,4 +138,79 @@ fn test_is_enrollee_false() {
     create_ws(&env, &client, &owner, &token);
     let random = Address::generate(&env);
     assert!(!client.is_enrollee(&0, &random));
+}
+
+#[test]
+fn test_create_workspace_with_deadline() {
+    let (env, client, owner, token) = setup();
+    let deadline: u64 = 9_999_999;
+    client.create_workspace(
+        &owner,
+        &String::from_str(&env, "Timed Quest"),
+        &String::from_str(&env, "desc"),
+        &token,
+        &deadline,
+    );
+    let ws = client.get_workspace(&0);
+    assert_eq!(ws.deadline, deadline);
+}
+
+#[test]
+fn test_no_deadline_not_expired() {
+    let (env, client, owner, token) = setup();
+    create_ws(&env, &client, &owner, &token);
+    assert!(!client.is_expired(&0));
+}
+
+#[test]
+fn test_is_expired_false_before_deadline() {
+    let (env, client, owner, token) = setup();
+    env.ledger().with_mut(|li| li.timestamp = 1_000);
+    client.create_workspace(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, "desc"),
+        &token,
+        &2_000,
+    );
+    assert!(!client.is_expired(&0));
+}
+
+#[test]
+fn test_is_expired_true_after_deadline() {
+    let (env, client, owner, token) = setup();
+    env.ledger().with_mut(|li| li.timestamp = 1_000);
+    client.create_workspace(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, "desc"),
+        &token,
+        &500,
+    );
+    assert!(client.is_expired(&0));
+}
+
+#[test]
+fn test_set_deadline() {
+    let (env, client, owner, token) = setup();
+    create_ws(&env, &client, &owner, &token);
+
+    client.set_deadline(&0, &5_000);
+    let ws = client.get_workspace(&0);
+    assert_eq!(ws.deadline, 5_000);
+}
+
+#[test]
+fn test_set_deadline_clear() {
+    let (env, client, owner, token) = setup();
+    client.create_workspace(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, "desc"),
+        &token,
+        &1_000,
+    );
+    // Clear deadline
+    client.set_deadline(&0, &0);
+    assert!(!client.is_expired(&0));
 }

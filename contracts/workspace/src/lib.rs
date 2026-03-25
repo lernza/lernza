@@ -22,6 +22,7 @@ pub struct WorkspaceInfo {
     pub description: String,
     pub token_addr: Address,
     pub created_at: u64,
+    pub deadline: u64, // Unix timestamp; 0 = no deadline
 }
 
 #[contracterror]
@@ -44,12 +45,14 @@ pub struct WorkspaceContract;
 #[contractimpl]
 impl WorkspaceContract {
     /// Create a new workspace. Returns the workspace ID.
+    /// Pass deadline as a Unix timestamp, or 0 for no deadline.
     pub fn create_workspace(
         env: Env,
         owner: Address,
         name: String,
         description: String,
         token_addr: Address,
+        deadline: u64,
     ) -> Result<u32, Error> {
         owner.require_auth();
 
@@ -62,6 +65,7 @@ impl WorkspaceContract {
             description,
             token_addr,
             created_at: env.ledger().timestamp(),
+            deadline,
         };
 
         env.storage().persistent().set(&DataKey::Workspace(id), &ws);
@@ -150,6 +154,28 @@ impl WorkspaceContract {
             }
         }
         Ok(false)
+    }
+
+    /// Update or clear the deadline for a workspace. Owner only.
+    /// Pass 0 to remove the deadline.
+    pub fn set_deadline(env: Env, workspace_id: u32, deadline: u64) -> Result<(), Error> {
+        let mut ws = Self::load_workspace(&env, workspace_id)?;
+        ws.owner.require_auth();
+        ws.deadline = deadline;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Workspace(workspace_id), &ws);
+        Self::bump(&env, workspace_id);
+        Ok(())
+    }
+
+    /// Returns true if the workspace has a non-zero deadline that has passed.
+    pub fn is_expired(env: Env, workspace_id: u32) -> Result<bool, Error> {
+        let ws = Self::load_workspace(&env, workspace_id)?;
+        if ws.deadline == 0 {
+            return Ok(false);
+        }
+        Ok(env.ledger().timestamp() > ws.deadline)
     }
 
     /// Get total workspace count.

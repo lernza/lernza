@@ -21,6 +21,22 @@ pub enum DataKey {
     Completed(u32, u32, Address), // (workspace_id, milestone_id, enrollee)
     // Count of completions per enrollee per workspace
     EnrolleeCompletions(u32, Address),
+    // Cached quest deadline per workspace (0 = no deadline)
+    Deadline(u32),
+    // Distribution mode per workspace
+    Mode(u32),
+    // Flat reward per milestone (Flat mode only)
+    FlatReward(u32),
+    // Total unique completions per milestone (Competitive mode)
+    MilestoneCompletionCount(u32, u32), // (workspace_id, milestone_id)
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum DistributionMode {
+    Custom,           // per-milestone reward_amount (default)
+    Flat,             // equal reward for all milestones
+    Competitive(u32), // max_winners: first N completers rewarded; rest get 0
 }
 
 #[contracttype]
@@ -42,6 +58,7 @@ pub enum Error {
     AlreadyCompleted = 3,
     InvalidAmount = 4,
     OwnerMismatch = 5,
+    DeadlineExpired = 6,
 }
 
 const BUMP: u32 = 518_400;
@@ -53,7 +70,8 @@ pub struct MilestoneContract;
 #[contractimpl]
 impl MilestoneContract {
     /// Create a milestone for a workspace. Owner auth required.
-    /// On first call for a workspace, records the owner for future auth.
+    /// On first call for a workspace, records the owner and deadline for future auth.
+    /// Pass workspace_deadline as a Unix timestamp, or 0 for no deadline.
     pub fn create_milestone(
         env: Env,
         owner: Address,
@@ -61,6 +79,7 @@ impl MilestoneContract {
         title: String,
         description: String,
         reward_amount: i128,
+        workspace_deadline: u64,
     ) -> Result<u32, Error> {
         owner.require_auth();
 
@@ -68,7 +87,7 @@ impl MilestoneContract {
             return Err(Error::InvalidAmount);
         }
 
-        // Set or verify workspace owner
+        // Set or verify workspace owner; cache deadline on first call
         let owner_key = DataKey::Owner(workspace_id);
         if let Some(stored_owner) = env.storage().persistent().get::<_, Address>(&owner_key) {
             if stored_owner != owner {
@@ -79,6 +98,13 @@ impl MilestoneContract {
             env.storage()
                 .persistent()
                 .extend_ttl(&owner_key, THRESHOLD, BUMP);
+            let deadline_key = DataKey::Deadline(workspace_id);
+            env.storage()
+                .persistent()
+                .set(&deadline_key, &workspace_deadline);
+            env.storage()
+                .persistent()
+                .extend_ttl(&deadline_key, THRESHOLD, BUMP);
         }
 
         let next_key = DataKey::NextMilestoneId(workspace_id);
@@ -102,8 +128,61 @@ impl MilestoneContract {
         Ok(id)
     }
 
+    /// Update the cached deadline for a workspace. Owner only.
+    /// Pass 0 to remove the deadline.
+    pub fn set_deadline(
+        env: Env,
+        owner: Address,
+        workspace_id: u32,
+        deadline: u64,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_owner(&env, workspace_id, &owner)?;
+        let deadline_key = DataKey::Deadline(workspace_id);
+        env.storage().persistent().set(&deadline_key, &deadline);
+        env.storage()
+            .persistent()
+            .extend_ttl(&deadline_key, THRESHOLD, BUMP);
+        Ok(())
+    }
+
+    /// Set the reward distribution mode for a workspace. Owner only.
+    /// For Flat mode, flat_reward is the equal reward paid per milestone (must be > 0).
+    /// For Custom and Competitive modes, flat_reward is ignored (pass 0).
+    pub fn set_distribution_mode(
+        env: Env,
+        owner: Address,
+        workspace_id: u32,
+        mode: DistributionMode,
+        flat_reward: i128,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_owner(&env, workspace_id, &owner)?;
+
+        if matches!(mode, DistributionMode::Flat) && flat_reward <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let mode_key = DataKey::Mode(workspace_id);
+        env.storage().persistent().set(&mode_key, &mode);
+        env.storage()
+            .persistent()
+            .extend_ttl(&mode_key, THRESHOLD, BUMP);
+
+        if matches!(mode, DistributionMode::Flat) {
+            let flat_key = DataKey::FlatReward(workspace_id);
+            env.storage().persistent().set(&flat_key, &flat_reward);
+            env.storage()
+                .persistent()
+                .extend_ttl(&flat_key, THRESHOLD, BUMP);
+        }
+
+        Ok(())
+    }
+
     /// Verify an enrollee's completion of a milestone. Owner only.
     /// Returns the reward_amount so the frontend can trigger token distribution.
+    /// Returns DeadlineExpired if the quest deadline has passed.
     pub fn verify_completion(
         env: Env,
         owner: Address,
@@ -113,6 +192,16 @@ impl MilestoneContract {
     ) -> Result<i128, Error> {
         owner.require_auth();
         Self::require_owner(&env, workspace_id, &owner)?;
+
+        // Reject if the quest deadline has passed
+        let deadline: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Deadline(workspace_id))
+            .unwrap_or(0);
+        if deadline > 0 && env.ledger().timestamp() > deadline {
+            return Err(Error::DeadlineExpired);
+        }
 
         let ms_key = DataKey::Milestone(workspace_id, milestone_id);
         let milestone: MilestoneInfo = env
@@ -126,6 +215,35 @@ impl MilestoneContract {
             return Err(Error::AlreadyCompleted);
         }
 
+        // Determine reward based on distribution mode
+        let mode: DistributionMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(workspace_id))
+            .unwrap_or(DistributionMode::Custom);
+
+        let reward = match mode {
+            DistributionMode::Custom => milestone.reward_amount,
+            DistributionMode::Flat => env
+                .storage()
+                .persistent()
+                .get(&DataKey::FlatReward(workspace_id))
+                .unwrap_or(milestone.reward_amount),
+            DistributionMode::Competitive(max_winners) => {
+                let cnt_key = DataKey::MilestoneCompletionCount(workspace_id, milestone_id);
+                let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
+                env.storage().persistent().set(&cnt_key, &(cnt + 1));
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&cnt_key, THRESHOLD, BUMP);
+                if cnt < max_winners {
+                    milestone.reward_amount
+                } else {
+                    0
+                }
+            }
+        };
+
         // Mark completed
         env.storage().persistent().set(&comp_key, &true);
         env.storage()
@@ -133,14 +251,14 @@ impl MilestoneContract {
             .extend_ttl(&comp_key, THRESHOLD, BUMP);
 
         // Increment enrollee's completion count for this workspace
-        let count_key = DataKey::EnrolleeCompletions(workspace_id, enrollee);
-        let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        env.storage().persistent().set(&count_key, &(count + 1));
+        let ec_key = DataKey::EnrolleeCompletions(workspace_id, enrollee);
+        let ec: u32 = env.storage().persistent().get(&ec_key).unwrap_or(0);
+        env.storage().persistent().set(&ec_key, &(ec + 1));
         env.storage()
             .persistent()
-            .extend_ttl(&count_key, THRESHOLD, BUMP);
+            .extend_ttl(&ec_key, THRESHOLD, BUMP);
 
-        Ok(milestone.reward_amount)
+        Ok(reward)
     }
 
     /// Get a specific milestone.

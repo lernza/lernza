@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState } from "react";
 import {
   ArrowLeft,
   Plus,
@@ -11,56 +11,57 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { useInView, useCountUp } from "@/hooks/use-animations"
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { useInView, useCountUp } from "@/hooks/use-animations";
 import {
   MOCK_WORKSPACES,
   MOCK_MILESTONES,
   MOCK_ENROLLEES,
   MOCK_COMPLETIONS,
-} from "@/lib/mock-data"
-import { formatTokens } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
-import { ToastContainer } from "@/components/Toast"
-import { ShareButton } from "@/components/ShareButton"
+} from "@/lib/mock-data";
+import { formatTokens } from "@/lib/utils";
 
 interface WorkspaceViewProps {
-  workspaceId: number
-  onBack: () => void
+  workspaceId: number;
+  onBack: () => void;
 }
 
-type Tab = "milestones" | "enrollees"
+type Tab = "milestones" | "enrollees";
 
 export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("milestones")
-  const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
-const { toasts, addToast, removeToast } = useToast()
-  const ws = MOCK_WORKSPACES.find((w) => w.id === workspaceId)
-  const milestones = MOCK_MILESTONES[workspaceId] || []
-  const enrollees = MOCK_ENROLLEES[workspaceId] || []
-  const completions = MOCK_COMPLETIONS[workspaceId] || []
+  const [activeTab, setActiveTab] = useState<Tab>("milestones");
+  const [expandedMilestone, setExpandedMilestone] = useState<number | null>(
+    null,
+  );
 
-  const [statsRef, statsInView] = useInView()
-  const [contentRef, contentInView] = useInView()
+  const ws = MOCK_WORKSPACES.find((w) => w.id === workspaceId);
+  const milestones = MOCK_MILESTONES[workspaceId] || [];
+  const enrollees = MOCK_ENROLLEES[workspaceId] || [];
+  const completions = MOCK_COMPLETIONS[workspaceId] || [];
 
-  const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
+  const [statsRef, statsInView] = useInView();
+  const [contentRef, contentInView] = useInView();
+
+  const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0);
   const completedMilestones = new Set(
-    completions.filter((c) => c.completed).map((c) => c.milestoneId)
-  ).size
+    completions.filter((c) => c.completed).map((c) => c.milestoneId),
+  ).size;
   const isComplete =
-    completedMilestones === milestones.length && milestones.length > 0
+    completedMilestones === milestones.length && milestones.length > 0;
   const earnedReward = milestones
-    .filter((m) => completions.some((c) => c.milestoneId === m.id && c.completed))
-    .reduce((sum, m) => sum + m.rewardAmount, 0)
+    .filter((m) =>
+      completions.some((c) => c.milestoneId === m.id && c.completed),
+    )
+    .reduce((sum, m) => sum + m.rewardAmount, 0);
 
-  const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
-  const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalance = useCountUp(ws?.poolBalance ?? 0, 800, statsInView)
-  const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+  const enrolleesCount = useCountUp(enrollees.length, 400, statsInView);
+  const milestonesCount = useCountUp(milestones.length, 400, statsInView);
+  const poolBalance = useCountUp(ws?.poolBalance ?? 0, 800, statsInView);
+  const totalRewardCount = useCountUp(totalReward, 800, statsInView);
 
   if (!ws) {
     return (
@@ -70,7 +71,7 @@ const { toasts, addToast, removeToast } = useToast()
           Go back
         </Button>
       </div>
-    )
+    );
   }
 
   return (
@@ -128,23 +129,41 @@ const { toasts, addToast, removeToast } = useToast()
                 <Plus className="h-4 w-4" />
                 Add Milestone
               </Button>
-              <ShareButton
-          questId={workspaceId}
-          questName={ws.name}
-          onToast={addToast}
-        />
             </div>
           </div>
         </div>
       </div>
 
       {/* Stats row */}
-      <div ref={statsRef} className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div
+        ref={statsRef}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8"
+      >
         {[
-          { icon: Users,  label: "Enrollees",     value: enrolleesCount,              bg: "bg-primary" },
-          { icon: Target, label: "Milestones",     value: milestonesCount,             bg: "bg-primary" },
-          { icon: Coins,  label: "Pool Balance",   value: formatTokens(poolBalance),   bg: "bg-primary" },
-          { icon: Coins,  label: "Total Rewards",  value: formatTokens(totalRewardCount), bg: "bg-success" },
+          {
+            icon: Users,
+            label: "Enrollees",
+            value: enrolleesCount,
+            bg: "bg-primary",
+          },
+          {
+            icon: Target,
+            label: "Milestones",
+            value: milestonesCount,
+            bg: "bg-primary",
+          },
+          {
+            icon: Coins,
+            label: "Pool Balance",
+            value: formatTokens(poolBalance),
+            bg: "bg-primary",
+          },
+          {
+            icon: Coins,
+            label: "Total Rewards",
+            value: formatTokens(totalRewardCount),
+            bg: "bg-success",
+          },
         ].map((stat, i) => (
           <div
             key={stat.label}
@@ -195,7 +214,10 @@ const { toasts, addToast, removeToast } = useToast()
       )}
 
       {/* Tabs */}
-      <div className="flex gap-0 border-b-[3px] border-border mb-6" ref={contentRef}>
+      <div
+        className="flex gap-0 border-b-[3px] border-border mb-6"
+        ref={contentRef}
+      >
         {(["milestones", "enrollees"] as Tab[]).map((tab) => (
           <button
             key={tab}
@@ -232,17 +254,16 @@ const { toasts, addToast, removeToast } = useToast()
                   Add Milestone
                 </Button>
               </CardContent>
-          
             </Card>
           ) : (
             milestones.map((ms, i) => {
               const isCompleted = completions.some(
-                (c) => c.milestoneId === ms.id && c.completed
-              )
+                (c) => c.milestoneId === ms.id && c.completed,
+              );
               const completedBy = completions
                 .filter((c) => c.milestoneId === ms.id && c.completed)
-                .map((c) => c.enrollee)
-              const isExpanded = expandedMilestone === ms.id
+                .map((c) => c.enrollee);
+              const isExpanded = expandedMilestone === ms.id;
 
               return (
                 <div
@@ -254,13 +275,17 @@ const { toasts, addToast, removeToast } = useToast()
                     className={`neo-lift hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] cursor-pointer group transition-all ${
                       isCompleted ? "border-success" : ""
                     }`}
-                    onClick={() => setExpandedMilestone(isExpanded ? null : ms.id)}
+                    onClick={() =>
+                      setExpandedMilestone(isExpanded ? null : ms.id)
+                    }
                   >
                     <CardContent className="p-5">
                       <div className="flex items-start gap-4">
                         <div
                           className={`w-8 h-8 border-2 border-border shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center shrink-0 mt-0.5 transition-all duration-300 ${
-                            isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
+                            isCompleted
+                              ? "bg-success"
+                              : "bg-background group-hover:bg-secondary"
                           }`}
                         >
                           {isCompleted ? (
@@ -271,11 +296,17 @@ const { toasts, addToast, removeToast } = useToast()
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-3">
-                            <h3 className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}>
+                            <h3
+                              className={`font-black ${
+                                isCompleted ? "text-muted-foreground" : ""
+                              }`}
+                            >
                               {ms.title}
                             </h3>
                             <div className="flex items-center gap-2 shrink-0">
-                              <Badge variant={isCompleted ? "success" : "default"}>
+                              <Badge
+                                variant={isCompleted ? "success" : "default"}
+                              >
                                 {ms.rewardAmount} USDC
                               </Badge>
                               {isExpanded ? (
@@ -327,7 +358,7 @@ const { toasts, addToast, removeToast } = useToast()
                     </CardContent>
                   </Card>
                 </div>
-              )
+              );
             })
           )}
         </div>
@@ -355,17 +386,20 @@ const { toasts, addToast, removeToast } = useToast()
           ) : (
             enrollees.map((addr, i) => {
               const completed = completions.filter(
-                (c) => c.enrollee === addr && c.completed
-              ).length
+                (c) => c.enrollee === addr && c.completed,
+              ).length;
               const earned = milestones
                 .filter((m) =>
                   completions.some(
-                    (c) => c.enrollee === addr && c.milestoneId === m.id && c.completed
-                  )
+                    (c) =>
+                      c.enrollee === addr &&
+                      c.milestoneId === m.id &&
+                      c.completed,
+                  ),
                 )
-                .reduce((sum, m) => sum + m.rewardAmount, 0)
+                .reduce((sum, m) => sum + m.rewardAmount, 0);
               const isAllDone =
-                completed === milestones.length && milestones.length > 0
+                completed === milestones.length && milestones.length > 0;
 
               return (
                 <div
@@ -413,12 +447,11 @@ const { toasts, addToast, removeToast } = useToast()
                     </CardContent>
                   </Card>
                 </div>
-              )
+              );
             })
           )}
         </div>
       )}
-       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
-  )
+  );
 }

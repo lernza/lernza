@@ -44,27 +44,27 @@ export function NotFound({ onNavigate }: NotFoundProps) {
       {/* Floating background shapes */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div
-          className="absolute top-[8%] left-[5%] w-28 h-28 bg-primary border-[3px] border-border shadow-[5px_5px_0_#000] rotate-12 opacity-[0.08] animate-float"
+          className="absolute top-[8%] left-[5%] w-28 h-28 bg-primary border-[3px] border-border shadow-[5px_5px_0_var(--color-border)] rotate-12 opacity-[0.08] animate-float"
           style={{ animationDuration: "7s" }}
         />
         <div
-          className="absolute top-[15%] right-[8%] w-20 h-20 bg-destructive border-[3px] border-border shadow-[4px_4px_0_#000] -rotate-6 opacity-[0.07] animate-float"
+          className="absolute top-[15%] right-[8%] w-20 h-20 bg-destructive border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] -rotate-6 opacity-[0.07] animate-float"
           style={{ animationDuration: "9s", animationDelay: "1s" }}
         />
         <div
-          className="absolute bottom-[12%] left-[10%] w-16 h-16 bg-primary border-[2px] border-border shadow-[3px_3px_0_#000] rotate-45 opacity-[0.06] animate-float"
+          className="absolute bottom-[12%] left-[10%] w-16 h-16 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-45 opacity-[0.06] animate-float"
           style={{ animationDuration: "8s", animationDelay: "2s" }}
         />
         <div
-          className="absolute bottom-[20%] right-[6%] w-24 h-24 bg-primary border-[3px] border-border shadow-[4px_4px_0_#000] -rotate-12 opacity-[0.07] animate-float"
+          className="absolute bottom-[20%] right-[6%] w-24 h-24 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] -rotate-12 opacity-[0.07] animate-float"
           style={{ animationDuration: "6s", animationDelay: "0.5s" }}
         />
         <div
-          className="absolute top-[50%] left-[50%] w-10 h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_#000] rotate-6 opacity-[0.08] animate-float"
+          className="absolute top-[50%] left-[50%] w-10 h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-6 opacity-[0.08] animate-float"
           style={{ animationDuration: "10s", animationDelay: "3s" }}
         />
         <div
-          className="absolute top-[30%] left-[25%] w-8 h-8 bg-success border-[2px] border-border shadow-[2px_2px_0_#000] -rotate-45 opacity-[0.06] animate-float"
+          className="absolute top-[30%] left-[25%] w-8 h-8 bg-success border-[2px] border-border shadow-[2px_2px_0_var(--color-border)] -rotate-45 opacity-[0.06] animate-float"
           style={{ animationDuration: "11s", animationDelay: "1.5s" }}
         />
         {/* Spinning decorative element */}
@@ -100,7 +100,7 @@ export function NotFound({ onNavigate }: NotFoundProps) {
         </div>
 
         {/* Message card */}
-        <div className="bg-background border-[3px] border-border shadow-[6px_6px_0_#000] px-8 py-6 max-w-md animate-fade-in-up stagger-1 shimmer-on-hover">
+        <div className="bg-background border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] px-8 py-6 max-w-md animate-fade-in-up stagger-1 shimmer-on-hover">
           <div className="flex items-center justify-center gap-2 mb-3">
             <Sparkles className="h-5 w-5 text-primary" />
             <h2 className="text-2xl sm:text-3xl font-black">
@@ -132,8 +132,8 @@ export function NotFound({ onNavigate }: NotFoundProps) {
         </div>
 
         {/* Decorative accent blocks */}
-        <div className="absolute -left-6 sm:-left-12 top-1/2 w-8 h-8 sm:w-12 sm:h-12 bg-primary border-[2px] border-border shadow-[3px_3px_0_#000] rotate-12 animate-fade-in-up stagger-2 hidden sm:block" />
-        <div className="absolute -right-6 sm:-right-12 top-1/2 -translate-y-8 w-6 h-6 sm:w-10 sm:h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_#000] -rotate-6 animate-fade-in-up stagger-3 hidden sm:block" />
+        <div className="absolute -left-6 sm:-left-12 top-1/2 w-8 h-8 sm:w-12 sm:h-12 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] rotate-12 animate-fade-in-up stagger-2 hidden sm:block" />
+        <div className="absolute -right-6 sm:-right-12 top-1/2 -translate-y-8 w-6 h-6 sm:w-10 sm:h-10 bg-success border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] -rotate-6 animate-fade-in-up stagger-3 hidden sm:block" />
       </div>
     </div>
   )

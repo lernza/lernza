@@ -45,31 +45,15 @@ function ThemeToggle() {
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
       className={cn(
-        "relative w-9 h-9 border-2 border-border shadow-[2px_2px_0_#000]",
-        "flex items-center justify-center neo-press cursor-pointer overflow-hidden",
+        "w-9 h-9 border-[2px] border-border shadow-[2px_2px_0_var(--color-border)]",
+        "flex items-center justify-center neo-press cursor-pointer",
+        "transition-colors duration-300",
         isDark
-          ? "bg-primary text-foreground hover:bg-yellow-300"
+          ? "bg-primary text-black hover:bg-yellow-300"
           : "bg-background text-foreground hover:bg-secondary"
       )}
     >
-      {/* Sun icon - visible in dark mode (click to go light) */}
-      <Sun
-        className={cn(
-          "h-4 w-4 absolute transition-all duration-300",
-          isDark
-            ? "opacity-100 rotate-0 scale-100"
-            : "opacity-0 rotate-90 scale-50"
-        )}
-      />
-      {/* Moon icon - visible in light mode (click to go dark) */}
-      <Moon
-        className={cn(
-          "h-4 w-4 absolute transition-all duration-300",
-          isDark
-            ? "opacity-0 -rotate-90 scale-50"
-            : "opacity-100 rotate-0 scale-100"
-        )}
-      />
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
   )
 }
@@ -102,9 +86,9 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
               key={item.key}
               onClick={() => handleNavigate(item.key)}
               className={cn(
-                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-2 animated-underline",
+                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px] animated-underline",
                 activePage === item.key
-                  ? "bg-primary border-border shadow-[2px_2px_0_#000] active"
+                  ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)] active"
                   : "border-transparent hover:border-border hover:bg-secondary"
               )}
             >
@@ -119,7 +103,7 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
 
           {connected ? (
             <>
-              <div className="hidden sm:flex items-center gap-2 border-2 border-border bg-secondary px-3 py-1.5 shadow-[2px_2px_0_#000]">
+              <div className="hidden sm:flex items-center gap-2 border-[2px] border-border bg-secondary px-3 py-1.5 shadow-[2px_2px_0_var(--color-border)]">
                 <div className="h-2.5 w-2.5 bg-success border border-border" />
                 <span className="text-sm font-mono font-bold">{shortAddress}</span>
               </div>
@@ -128,12 +112,7 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
               </Button>
             </>
           ) : (
-            <Button
-              onClick={connect}
-              disabled={loading}
-              size="sm"
-              className="shimmer-on-hover"
-            >
+            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>
@@ -142,7 +121,7 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="sm:hidden w-9 h-9 border-2 border-border bg-card shadow-[2px_2px_0_#000] flex items-center justify-center neo-press cursor-pointer"
+            className="sm:hidden w-9 h-9 border-[2px] border-border bg-background shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center neo-press cursor-pointer"
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -158,9 +137,9 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
                 key={item.key}
                 onClick={() => handleNavigate(item.key)}
                 className={cn(
-                  "w-full text-left px-4 py-3 text-sm font-bold transition-all cursor-pointer border-2",
+                  "w-full text-left px-4 py-3 text-sm font-bold transition-all cursor-pointer border-[2px]",
                   activePage === item.key
-                    ? "bg-primary border-border shadow-[2px_2px_0_#000]"
+                    ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
                     : "border-transparent hover:border-border hover:bg-secondary"
                 )}
               >

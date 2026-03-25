@@ -39,11 +39,11 @@
 
 /* ── Dark mode token overrides ────────────────────────────────────────────── */
 /*
-  Pure neo-brutalist dark: yellow borders and shadows on near-black bg.
-  --color-border: #FACC15 means ALL border-border utilities (which resolve
-  to var(--color-border)) become yellow in dark mode — sharp and visible
-  against the dark background, including hardcoded shadow-[N_N_0_#000]
-  usages on cards, buttons, and nav elements throughout the pages.
+  Neo-brutalist dark: cream borders/shadows on near-black bg.
+  --color-border: #F5F0E8 mirrors what black does in light mode — it's the
+  structural color that gives cards and buttons their sharp offset shadow depth.
+  Yellow stays as --color-primary and --color-accent only (brand/highlight).
+  --color-ring stays yellow so focus rings remain visually distinct.
   Card bg is one step lighter than page bg so cards read as distinct surfaces.
 */
 .dark {
@@ -57,8 +57,8 @@
   --color-muted-foreground: #A8A29E;
   --color-card: #1C1917;
   --color-card-foreground: #F5F0E8;
-  --color-border: #FACC15;
-  --color-input: #FACC15;
+  --color-border: #F5F0E8;
+  --color-input: #F5F0E8;
   --color-ring: #FACC15;
   --color-accent: #FACC15;
   --color-accent-foreground: #000000;
@@ -88,7 +88,7 @@ main,
 [class*="text-card-foreground"],
 [class*="text-muted-foreground"],
 [class*="border-border"],
-[class*="border-border"] {
+[class*="border-black"] {
   transition-property: background-color, border-color, color, box-shadow;
   transition-duration: 250ms;
   transition-timing-function: ease;
@@ -309,7 +309,7 @@ main,
 }
 
 .dark .bg-grid-dots {
-  background-image: radial-gradient(circle, rgba(250, 204, 21, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(245, 240, 232, 0.06) 1px, transparent 1px);
 }
 
 .bg-diagonal-lines {
@@ -327,8 +327,8 @@ main,
     -45deg,
     transparent,
     transparent 8px,
-    rgba(250, 204, 21, 0.04) 8px,
-    rgba(250, 204, 21, 0.04) 9px
+    rgba(245, 240, 232, 0.03) 8px,
+    rgba(245, 240, 232, 0.03) 9px
   );
 }
 

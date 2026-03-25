@@ -1,7 +1,10 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String};
+use soroban_sdk::{
+    testutils::{Address as _, MuxedAddress as _},
+    Address, Env, MuxedAddress, String,
+};
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -79,6 +82,101 @@ fn test_create_quest() {
     assert_eq!(quest.owner, owner);
     assert_eq!(quest.name, String::from_str(&env, "My Quest"));
     assert_eq!(quest.token_addr, token);
+}
+
+#[test]
+fn test_create_quest_empty_name_fails() {
+    let (env, client, owner, token) = setup();
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, ""),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_whitespace_name_fails() {
+    let (env, client, owner, token) = setup();
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "   "),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_empty_description_fails() {
+    let (env, client, owner, token) = setup();
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, ""),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_oversized_name_fails() {
+    let (env, client, owner, token) = setup();
+    let bytes = [b'a'; 65];
+    let long_name = String::from_bytes(&env, &bytes);
+    let result = client.try_create_quest(
+        &owner,
+        &long_name,
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_oversized_description_fails() {
+    let (env, client, owner, token) = setup();
+    let bytes = [b'a'; 2001];
+    let long_desc = String::from_bytes(&env, &bytes);
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &long_desc,
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_non_contract_token_fails() {
+    let (env, client, owner, _token) = setup();
+    let account_addr = MuxedAddress::generate(&env).address();
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &account_addr,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
 
 #[test]

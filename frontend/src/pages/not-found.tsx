@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Home, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-interface NotFoundProps {
-  onNavigate: (page: string) => void
-}
 
 function GlitchText({ text }: { text: string }) {
   const [glitchActive, setGlitchActive] = useState(true)
@@ -33,7 +30,8 @@ function GlitchText({ text }: { text: string }) {
   )
 }
 
-export function NotFound({ onNavigate }: NotFoundProps) {
+export function NotFound() {
+  const navigate = useNavigate()
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -109,7 +107,7 @@ export function NotFound({ onNavigate }: NotFoundProps) {
             deployed.
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Button onClick={() => onNavigate("landing")} className="shimmer-on-hover group">
+            <Button onClick={() => navigate("/")} className="shimmer-on-hover group">
               <Home className="h-4 w-4" />
               Back to Home
             </Button>

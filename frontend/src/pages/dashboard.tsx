@@ -1,4 +1,5 @@
 import React, { useState, Suspense } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   Plus,
   Users,
@@ -39,12 +40,8 @@ const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 // The first two quests share the same owner — treat them as "owned"
 const MOCK_OWNER = "GBXR...K2YQ"
 
-interface DashboardProps {
-  onSelectQuest: (id: number) => void
-  onCreateQuest: () => void
-}
-
-export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
+export function Dashboard() {
+  const navigate = useNavigate()
   const { connected, connect, shortAddress } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
 
@@ -155,7 +152,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
           </div>
           <Button
             variant="secondary"
-            onClick={onCreateQuest}
+            onClick={() => navigate("/quest/create")}
             className="shimmer-on-hover group flex-shrink-0"
           >
             <Plus className="h-4 w-4" />
@@ -221,7 +218,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
                   <Card
                     key={ws.id}
                     className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1}`}
-                    onClick={() => onSelectQuest(ws.id)}
+                    onClick={() => navigate(`/quest/${ws.id}`)}
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-start justify-between">
@@ -315,7 +312,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
                         : "You haven't enrolled in any quests yet. Browse available quests to get started."}
                   </p>
                   {filter === "all" || filter === "owned" ? (
-                    <Button onClick={onCreateQuest} className="shimmer-on-hover">
+                    <Button onClick={() => navigate("/quest/create")} className="shimmer-on-hover">
                       <Plus className="h-4 w-4" />
                       Create Quest
                     </Button>
@@ -328,7 +325,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
 
         {/* Right Column (Trending & Recent Activity) */}
         <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={onSelectQuest} />
+          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={id => navigate(`/quest/${id}`)} />
           <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
         </div>
       </div>

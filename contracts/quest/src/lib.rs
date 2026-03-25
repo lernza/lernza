@@ -53,8 +53,28 @@ pub enum Error {
 
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
+const MAX_QUEST_NAME_LEN: u32 = 64;
+const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
+
+fn is_blank_ascii(s: &String) -> bool {
+    if s.is_empty() {
+        return true;
+    }
+
+    for b in s.to_bytes().iter() {
+        if !matches!(b, b' ' | b'\n' | b'\r' | b'\t') {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn is_contract_address(addr: &Address) -> bool {
+    addr.to_string().to_bytes().get(0) == Some(b'C')
+}
 
 #[contract]
 pub struct QuestContract;
@@ -75,6 +95,17 @@ impl QuestContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
+        if is_blank_ascii(&name) || name.len() > MAX_QUEST_NAME_LEN {
+            return Err(Error::InvalidInput);
+        }
+
+        if is_blank_ascii(&description) || description.len() > MAX_QUEST_DESCRIPTION_LEN {
+            return Err(Error::InvalidInput);
+        }
+
+        if !is_contract_address(&token_addr) {
+            return Err(Error::InvalidInput);
+        }
         Self::validate_tags(&tags)?;
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);

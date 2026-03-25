@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useParams, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
   Plus,
@@ -23,14 +24,12 @@ import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
 
-interface QuestViewProps {
-  questId: number
-  onBack: () => void
-}
-
 type Tab = "milestones" | "enrollees"
 
-export function QuestView({ questId, onBack }: QuestViewProps) {
+export function QuestView() {
+  const { id } = useParams()
+  const questId = Number(id)
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
 
@@ -60,7 +59,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
         <h2 className="mb-4 text-2xl font-black">Quest not found</h2>
-        <Button variant="outline" onClick={onBack}>
+        <Button variant="outline" onClick={() => navigate("/dashboard")}>
           Go back
         </Button>
       </div>
@@ -74,7 +73,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
       {/* Back button */}
       <button
-        onClick={onBack}
+        onClick={() => navigate("/dashboard")}
         className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
         <div className="border-border bg-background neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-colors hover:shadow-[3px_3px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]">

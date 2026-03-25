@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -47,9 +48,6 @@ type Step2Values = z.infer<typeof step2Schema>
 type FormStep = 1 | 2 | 3
 type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
-interface CreateQuestProps {
-  onBack: () => void
-}
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
@@ -582,7 +580,8 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function CreateQuest({ onBack }: CreateQuestProps) {
+export function CreateQuest() {
+  const navigate = useNavigate()
   const { connected, connect, loading } = useWallet()
   const [step, setStep] = useState<FormStep>(1)
 
@@ -627,7 +626,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
                 {loading ? "Connecting..." : "Connect Wallet"}
               </Button>
               <button
-                onClick={onBack}
+                onClick={() => navigate("/dashboard")}
                 className="text-muted-foreground hover:text-foreground mx-auto mt-4 flex cursor-pointer items-center gap-1 text-xs font-bold transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" />
@@ -646,7 +645,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
 
       {/* Back button */}
       <button
-        onClick={onBack}
+        onClick={() => navigate("/dashboard")}
         className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
         <div className="border-border bg-background neo-press hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-colors">
@@ -704,7 +703,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={onBack}
+            onComplete={() => navigate("/dashboard")}
           />
         )}
       </div>

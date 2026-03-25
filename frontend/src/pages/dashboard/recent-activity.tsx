@@ -12,18 +12,18 @@ export function RecentActivity({ activities }: RecentActivityProps) {
       <h2 className="text-xl font-black mb-4 flex items-center gap-2">
         <Clock className="w-5 h-5" /> Recent Activity
       </h2>
-      <Card className="border-[3px] border-black shadow-[4px_4px_0_#000]">
+      <Card className="border-[3px] border-border shadow-[4px_4px_0_var(--color-border)]">
         <CardContent className="p-0">
-          <div className="divide-y-[2px] divide-black">
+          <div className="divide-y-[2px] divide-border">
             {activities.map((activity) => {
               const isEnrolled = activity.action === "enrolled"
               const isCompleted = activity.action === "completed"
               const Icon = isEnrolled ? Plus : isCompleted ? Target : Sparkles
-              const iconColor = isEnrolled ? "bg-primary" : isCompleted ? "bg-success" : "bg-white"
+              const iconColor = isEnrolled ? "bg-primary" : isCompleted ? "bg-success" : "bg-background"
 
               return (
                 <div key={activity.id} className="p-4 flex gap-3 hover:bg-secondary transition-colors">
-                  <div className={`w-8 h-8 ${iconColor} border-[2px] border-black flex-shrink-0 flex items-center justify-center shadow-[2px_2px_0_#000] mt-1`}>
+                  <div className={`w-8 h-8 ${iconColor} border-[2px] border-border flex-shrink-0 flex items-center justify-center shadow-[2px_2px_0_var(--color-border)] mt-1`}>
                      <Icon className="w-4 h-4" />
                   </div>
                   <div>

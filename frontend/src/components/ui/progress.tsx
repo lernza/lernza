@@ -13,7 +13,7 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
       <div
         ref={ref}
         className={cn(
-          "bg-secondary h-5 w-full border-[3px] border-black shadow-[2px_2px_0_#000]",
+          "h-5 w-full border-[3px] border-border bg-secondary shadow-[2px_2px_0_var(--color-border)]",
           className
         )}
         {...props}

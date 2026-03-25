@@ -104,16 +104,16 @@ function StepIndicator({ current }: { current: FormStep }) {
           <div key={s.n} className="flex items-center">
             <div
               className={cn(
-                "flex items-center gap-2 px-4 py-2 border-[2px] border-black text-xs font-black uppercase tracking-wider",
-                active && "bg-primary shadow-[2px_2px_0_#000]",
+                "flex items-center gap-2 px-4 py-2 border-[2px] border-border text-xs font-black uppercase tracking-wider",
+                active && "bg-primary shadow-[2px_2px_0_var(--color-border)]",
                 done && "bg-success",
-                !active && !done && "bg-white text-muted-foreground"
+                !active && !done && "bg-background text-muted-foreground"
               )}
             >
               <div
                 className={cn(
                   "w-5 h-5 border-[1.5px] border-current flex items-center justify-center text-[10px] font-black",
-                  done && "border-black"
+                  done && "border-border"
                 )}
               >
                 {done ? <Check className="h-3 w-3" /> : s.n}
@@ -155,7 +155,7 @@ function Step1Form({
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3">
+        <div className="bg-primary border-b-[3px] border-border px-6 py-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             <span className="text-sm font-black uppercase tracking-wider">
@@ -163,7 +163,7 @@ function Step1Form({
             </span>
           </div>
         </div>
-        <div className="border-[3px] border-t-0 border-black p-6 bg-white shadow-[4px_4px_0_#000] space-y-5">
+        <div className="border-[3px] border-t-0 border-border p-6 bg-background shadow-[4px_4px_0_var(--color-border)] space-y-5">
           {/* Name */}
           <div>
             <FormLabel required>Quest Name</FormLabel>
@@ -171,7 +171,7 @@ function Step1Form({
               {...register("name")}
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
-                "w-full border-[2px] border-black px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
+                "w-full border-[2px] border-border px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_var(--color-border)] transition-shadow bg-background",
                 errors.name && "border-destructive"
               )}
               maxLength={64}
@@ -199,7 +199,7 @@ function Step1Form({
               rows={5}
               placeholder="Describe what learners will accomplish..."
               className={cn(
-                "w-full border-[2px] border-black px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow resize-none bg-white",
+                "w-full border-[2px] border-border px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_var(--color-border)] transition-shadow resize-none bg-background",
                 errors.description && "border-destructive"
               )}
               maxLength={2000}
@@ -268,7 +268,7 @@ function Step2Form({
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
+        <div className="bg-primary border-b-[3px] border-border px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4" />
             <span className="text-sm font-black uppercase tracking-wider">
@@ -283,7 +283,7 @@ function Step2Form({
           </div>
         </div>
 
-        <div className="border-[3px] border-t-0 border-black bg-white shadow-[4px_4px_0_#000]">
+        <div className="border-[3px] border-t-0 border-border bg-background shadow-[4px_4px_0_var(--color-border)]">
           {/* Array-level error */}
           {errors.milestones?.root && (
             <div className="px-6 pt-4">
@@ -292,13 +292,13 @@ function Step2Form({
           )}
 
           {/* Milestone list */}
-          <div className="divide-y-[2px] divide-black">
+          <div className="divide-y-[2px] divide-border">
             {fields.map((field, index) => (
               <div key={field.id} className="p-5 space-y-4">
                 {/* Milestone header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-primary border-[2px] border-black flex items-center justify-center text-xs font-black">
+                    <div className="w-6 h-6 bg-primary border-[2px] border-border flex items-center justify-center text-xs font-black">
                       {index + 1}
                     </div>
                     <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">
@@ -310,7 +310,7 @@ function Step2Form({
                       type="button"
                       onClick={() => swap(index, index - 1)}
                       disabled={index === 0}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="w-7 h-7 border-[2px] border-border bg-background flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
                     >
                       <ChevronUp className="h-3.5 w-3.5" />
                     </button>
@@ -318,7 +318,7 @@ function Step2Form({
                       type="button"
                       onClick={() => swap(index, index + 1)}
                       disabled={index === fields.length - 1}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="w-7 h-7 border-[2px] border-border bg-background flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
                     >
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
@@ -326,7 +326,7 @@ function Step2Form({
                       type="button"
                       onClick={() => remove(index)}
                       disabled={fields.length === 1}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-destructive/10 hover:border-destructive disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="w-7 h-7 border-[2px] border-border bg-background flex items-center justify-center hover:bg-destructive/10 hover:border-destructive disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -340,7 +340,7 @@ function Step2Form({
                     {...register(`milestones.${index}.title`)}
                     placeholder="e.g. Hello World"
                     className={cn(
-                      "w-full border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
+                      "w-full border-[2px] border-border px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_var(--color-border)] transition-shadow bg-background",
                       errors.milestones?.[index]?.title && "border-destructive"
                     )}
                     maxLength={100}
@@ -358,7 +358,7 @@ function Step2Form({
                     rows={2}
                     placeholder="What should the learner do to complete this milestone?"
                     className={cn(
-                      "w-full border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow resize-none bg-white",
+                      "w-full border-[2px] border-border px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_var(--color-border)] transition-shadow resize-none bg-background",
                       errors.milestones?.[index]?.description &&
                         "border-destructive"
                     )}
@@ -373,7 +373,7 @@ function Step2Form({
                 <div>
                   <FormLabel required>Reward Amount (USDC)</FormLabel>
                   <div className="flex items-center gap-0">
-                    <div className="border-[2px] border-r-0 border-black bg-secondary px-3 py-2 text-xs font-black">
+                    <div className="border-[2px] border-r-0 border-border bg-secondary px-3 py-2 text-xs font-black">
                       USDC
                     </div>
                     <input
@@ -385,7 +385,7 @@ function Step2Form({
                       step="0.01"
                       placeholder="100"
                       className={cn(
-                        "flex-1 border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
+                        "flex-1 border-[2px] border-border px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_var(--color-border)] transition-shadow bg-background",
                         errors.milestones?.[index]?.rewardAmount &&
                           "border-destructive"
                       )}
@@ -400,13 +400,13 @@ function Step2Form({
           </div>
 
           {/* Add milestone button */}
-          <div className="p-5 border-t-[2px] border-black">
+          <div className="p-5 border-t-[2px] border-border">
             <button
               type="button"
               onClick={() =>
                 append({ title: "", description: "", rewardAmount: 0 })
               }
-              className="w-full border-[2px] border-dashed border-black py-3 flex items-center justify-center gap-2 text-sm font-black hover:bg-secondary transition-colors cursor-pointer"
+              className="w-full border-[2px] border-dashed border-border py-3 flex items-center justify-center gap-2 text-sm font-black hover:bg-secondary transition-colors cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Add Milestone
@@ -416,7 +416,7 @@ function Step2Form({
       </div>
 
       {/* Running total */}
-      <div className="bg-secondary border-[2px] border-black px-5 py-3 flex items-center justify-between shadow-[3px_3px_0_#000]">
+      <div className="bg-secondary border-[2px] border-border px-5 py-3 flex items-center justify-between shadow-[3px_3px_0_var(--color-border)]">
         <div className="flex items-center gap-2">
           <Coins className="h-4 w-4" />
           <span className="text-sm font-black">Total reward pool needed</span>
@@ -478,7 +478,7 @@ function Step3Review({
   return (
     <div className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3">
+        <div className="bg-primary border-b-[3px] border-border px-6 py-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
             <span className="text-sm font-black uppercase tracking-wider">
@@ -486,7 +486,7 @@ function Step3Review({
             </span>
           </div>
         </div>
-        <div className="border-[3px] border-t-0 border-black bg-white shadow-[4px_4px_0_#000] divide-y-[2px] divide-black">
+        <div className="border-[3px] border-t-0 border-border bg-background shadow-[4px_4px_0_var(--color-border)] divide-y-[2px] divide-border">
           {/* Quest summary */}
           <div className="p-5 space-y-2">
             <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-3">
@@ -507,10 +507,10 @@ function Step3Review({
               {step2Data.milestones.map((m: z.infer<typeof milestoneSchema>, i: number) => (
                 <div
                   key={i}
-                  className="flex items-start justify-between gap-3 p-3 bg-secondary border-[1.5px] border-black"
+                  className="flex items-start justify-between gap-3 p-3 bg-secondary border-[1.5px] border-border"
                 >
                   <div className="flex items-start gap-2">
-                    <div className="w-5 h-5 bg-primary border-[1.5px] border-black flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">
+                    <div className="w-5 h-5 bg-primary border-[1.5px] border-border flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">
                       {i + 1}
                     </div>
                     <div>
@@ -533,7 +533,7 @@ function Step3Review({
             <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-3">
               Reward Pool
             </p>
-            <div className="flex items-center justify-between p-4 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] mb-4">
+            <div className="flex items-center justify-between p-4 bg-primary border-[2px] border-border shadow-[3px_3px_0_var(--color-border)] mb-4">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
                 <span className="font-black">Total USDC needed</span>
@@ -640,18 +640,18 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
       <div className="min-h-[calc(100vh-67px)] flex items-center justify-center relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
         <div className="relative px-4 max-w-md mx-auto w-full">
-          <div className="bg-white border-[3px] border-black shadow-[8px_8px_0_#000] overflow-hidden animate-scale-in">
-            <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
+          <div className="bg-background border-[3px] border-border shadow-[8px_8px_0_var(--color-border)] overflow-hidden animate-scale-in">
+            <div className="bg-primary border-b-[3px] border-border px-6 py-3 flex items-center justify-between">
               <span className="text-xs font-black uppercase tracking-wider">
                 Create Quest
               </span>
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 bg-destructive border border-black" />
+                <div className="w-2.5 h-2.5 bg-destructive border border-border" />
                 <span className="text-xs font-bold">Not Connected</span>
               </div>
             </div>
             <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-5 mx-auto">
+              <div className="w-16 h-16 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] flex items-center justify-center mb-5 mx-auto">
                 <Wallet className="h-7 w-7" />
               </div>
               <h2 className="text-2xl font-black mb-2">Connect your wallet</h2>
@@ -691,7 +691,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
         onClick={onBack}
         className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer group"
       >
-        <div className="w-7 h-7 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press hover:bg-primary transition-colors">
+        <div className="w-7 h-7 border-[2px] border-border bg-background shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center neo-press hover:bg-primary transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" />
         </div>
         Back to Dashboard

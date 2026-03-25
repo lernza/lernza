@@ -39,9 +39,9 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   }
 
   const accents = {
-    success: "bg-success border-black",
-    error: "bg-destructive text-destructive-foreground border-black",
-    info: "bg-primary border-black",
+    success: "bg-success border-border",
+    error: "bg-destructive text-destructive-foreground border-border",
+    info: "bg-primary border-border",
   }
 
   const type = toast.type ?? "success"
@@ -49,7 +49,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 border-[3px] shadow-[4px_4px_0_#000] px-4 py-3 min-w-[260px] max-w-sm",
+        "flex items-center gap-3 border-[3px] shadow-[4px_4px_0_var(--color-border)] px-4 py-3 min-w-[260px] max-w-sm",
         "transition-all duration-300 ease-out",
         accents[type],
         visible && !leaving

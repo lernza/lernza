@@ -19,13 +19,13 @@ export function TrendingQuests({ quests, onSelectQuest }: TrendingQuestsProps) {
         {quests.map((quest) => (
           <Card 
             key={quest.id} 
-            className="card-tilt cursor-pointer border-[2px] border-black shadow-[4px_4px_0_#000]"
+            className="card-tilt cursor-pointer border-[2px] border-border shadow-[4px_4px_0_var(--color-border)]"
             onClick={() => onSelectQuest(quest.id)}
           >
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-start">
                  <CardTitle className="text-sm font-bold line-clamp-1">{quest.name}</CardTitle>
-                 <Badge variant="default" className="text-[10px] bg-primary text-black border-[1px] border-black ml-2 px-1">
+                 <Badge variant="default" className="text-[10px] bg-primary text-foreground border-[1px] border-border ml-2 px-1">
                    Trending
                  </Badge>
               </div>

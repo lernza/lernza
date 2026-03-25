@@ -1,25 +1,25 @@
 #![no_std]
 use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
 
-// Milestone contract: define milestones per workspace, track completions.
+// Milestone contract: define milestones per quest, track completions.
 // Owner-approved verification for MVP. When owner verifies a completion,
 // the frontend triggers the rewards contract to distribute tokens.
 //
-// Auth model: The workspace owner is stored per-workspace the first time
+// Auth model: The quest owner is stored per-quest the first time
 // a milestone is created. Only that owner can create milestones or verify.
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    // Owner of a workspace (cached for auth, set on first milestone creation)
+    // Owner of a quest (cached for auth, set on first milestone creation)
     Owner(u32),
-    // Auto-incrementing milestone ID per workspace
+    // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Milestone data
-    Milestone(u32, u32), // (workspace_id, milestone_id)
+    Milestone(u32, u32), // (quest_id, milestone_id)
     // Completion flag
-    Completed(u32, u32, Address), // (workspace_id, milestone_id, enrollee)
-    // Count of completions per enrollee per workspace
+    Completed(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Count of completions per enrollee per quest
     EnrolleeCompletions(u32, Address),
 }
 
@@ -27,7 +27,7 @@ pub enum DataKey {
 #[derive(Clone, Debug, PartialEq)]
 pub struct MilestoneInfo {
     pub id: u32,
-    pub workspace_id: u32,
+    pub quest_id: u32,
     pub title: String,
     pub description: String,
     pub reward_amount: i128,
@@ -52,12 +52,12 @@ pub struct MilestoneContract;
 
 #[contractimpl]
 impl MilestoneContract {
-    /// Create a milestone for a workspace. Owner auth required.
-    /// On first call for a workspace, records the owner for future auth.
+    /// Create a milestone for a quest. Owner auth required.
+    /// On first call for a quest, records the owner for future auth.
     pub fn create_milestone(
         env: Env,
         owner: Address,
-        workspace_id: u32,
+        quest_id: u32,
         title: String,
         description: String,
         reward_amount: i128,
@@ -68,8 +68,8 @@ impl MilestoneContract {
             return Err(Error::InvalidAmount);
         }
 
-        // Set or verify workspace owner
-        let owner_key = DataKey::Owner(workspace_id);
+        // Set or verify quest owner
+        let owner_key = DataKey::Owner(quest_id);
         if let Some(stored_owner) = env.storage().persistent().get::<_, Address>(&owner_key) {
             if stored_owner != owner {
                 return Err(Error::OwnerMismatch);
@@ -81,18 +81,18 @@ impl MilestoneContract {
                 .extend_ttl(&owner_key, THRESHOLD, BUMP);
         }
 
-        let next_key = DataKey::NextMilestoneId(workspace_id);
+        let next_key = DataKey::NextMilestoneId(quest_id);
         let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
 
         let milestone = MilestoneInfo {
             id,
-            workspace_id,
+            quest_id,
             title,
             description,
             reward_amount,
         };
 
-        let ms_key = DataKey::Milestone(workspace_id, id);
+        let ms_key = DataKey::Milestone(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
         env.storage().persistent().set(&next_key, &(id + 1));
 
@@ -107,21 +107,21 @@ impl MilestoneContract {
     pub fn verify_completion(
         env: Env,
         owner: Address,
-        workspace_id: u32,
+        quest_id: u32,
         milestone_id: u32,
         enrollee: Address,
     ) -> Result<i128, Error> {
         owner.require_auth();
-        Self::require_owner(&env, workspace_id, &owner)?;
+        Self::require_owner(&env, quest_id, &owner)?;
 
-        let ms_key = DataKey::Milestone(workspace_id, milestone_id);
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
         let milestone: MilestoneInfo = env
             .storage()
             .persistent()
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
 
-        let comp_key = DataKey::Completed(workspace_id, milestone_id, enrollee.clone());
+        let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
         if env.storage().persistent().has(&comp_key) {
             return Err(Error::AlreadyCompleted);
         }
@@ -132,8 +132,8 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&comp_key, THRESHOLD, BUMP);
 
-        // Increment enrollee's completion count for this workspace
-        let count_key = DataKey::EnrolleeCompletions(workspace_id, enrollee);
+        // Increment enrollee's completion count for this quest
+        let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee);
         let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
         env.storage().persistent().set(&count_key, &(count + 1));
         env.storage()
@@ -146,22 +146,22 @@ impl MilestoneContract {
     /// Get a specific milestone.
     pub fn get_milestone(
         env: Env,
-        workspace_id: u32,
+        quest_id: u32,
         milestone_id: u32,
     ) -> Result<MilestoneInfo, Error> {
-        let ms_key = DataKey::Milestone(workspace_id, milestone_id);
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
         env.storage()
             .persistent()
             .get(&ms_key)
             .ok_or(Error::NotFound)
     }
 
-    /// Get all milestones for a workspace.
-    pub fn get_milestones(env: Env, workspace_id: u32) -> Vec<MilestoneInfo> {
+    /// Get all milestones for a quest.
+    pub fn get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
         let count: u32 = env
             .storage()
             .persistent()
-            .get(&DataKey::NextMilestoneId(workspace_id))
+            .get(&DataKey::NextMilestoneId(quest_id))
             .unwrap_or(0);
 
         let mut result = Vec::new(&env);
@@ -169,7 +169,7 @@ impl MilestoneContract {
             if let Some(ms) = env
                 .storage()
                 .persistent()
-                .get::<_, MilestoneInfo>(&DataKey::Milestone(workspace_id, i))
+                .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, i))
             {
                 result.push_back(ms);
             }
@@ -177,36 +177,36 @@ impl MilestoneContract {
         result
     }
 
-    /// Get milestone count for a workspace.
-    pub fn get_milestone_count(env: Env, workspace_id: u32) -> u32 {
+    /// Get milestone count for a quest.
+    pub fn get_milestone_count(env: Env, quest_id: u32) -> u32 {
         env.storage()
             .persistent()
-            .get(&DataKey::NextMilestoneId(workspace_id))
+            .get(&DataKey::NextMilestoneId(quest_id))
             .unwrap_or(0)
     }
 
     /// Check if an enrollee has completed a milestone.
-    pub fn is_completed(env: Env, workspace_id: u32, milestone_id: u32, enrollee: Address) -> bool {
+    pub fn is_completed(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool {
         env.storage()
             .persistent()
-            .has(&DataKey::Completed(workspace_id, milestone_id, enrollee))
+            .has(&DataKey::Completed(quest_id, milestone_id, enrollee))
     }
 
-    /// Get total completions for an enrollee in a workspace.
-    pub fn get_enrollee_completions(env: Env, workspace_id: u32, enrollee: Address) -> u32 {
+    /// Get total completions for an enrollee in a quest.
+    pub fn get_enrollee_completions(env: Env, quest_id: u32, enrollee: Address) -> u32 {
         env.storage()
             .persistent()
-            .get(&DataKey::EnrolleeCompletions(workspace_id, enrollee))
+            .get(&DataKey::EnrolleeCompletions(quest_id, enrollee))
             .unwrap_or(0)
     }
 
     // --- internals ---
 
-    fn require_owner(env: &Env, workspace_id: u32, caller: &Address) -> Result<(), Error> {
+    fn require_owner(env: &Env, quest_id: u32, caller: &Address) -> Result<(), Error> {
         let stored: Address = env
             .storage()
             .persistent()
-            .get(&DataKey::Owner(workspace_id))
+            .get(&DataKey::Owner(quest_id))
             .ok_or(Error::NotFound)?;
         if stored != *caller {
             return Err(Error::Unauthorized);

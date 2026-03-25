@@ -19,3 +19,4 @@ frontend/dist
 # Environment
 .env
 .env.local
+pr.md

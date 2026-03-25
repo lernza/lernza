@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { setupGlobalErrorHandlers } from "@/components/ErrorBoundary.tsx"
+import { setupGlobalErrorHandlers } from "@/components/error-utils.ts"
 
 setupGlobalErrorHandlers()
 

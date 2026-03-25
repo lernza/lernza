@@ -7,7 +7,7 @@ import { Dashboard } from "@/pages/dashboard"
 import { WorkspaceView } from "@/pages/workspace"
 import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
-import { ErrorBoundary } from "@/components/ErrorBoundary" 
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { CreateQuest } from "@/pages/create-quest"
 
 const VALID_PAGES = ["landing", "dashboard", "profile", "create-quest"] as const
@@ -68,7 +68,9 @@ function App() {
       case "landing":
         return <Landing onNavigate={handleNavigate} />
       case "dashboard":
-        return <Dashboard onSelectWorkspace={handleSelectWorkspace} />
+        return <Dashboard onSelectWorkspace={handleSelectWorkspace} onCreateQuest={function (): void {
+          throw new Error("Function not implemented.")
+        }} />
         return (
           <Dashboard
             onSelectWorkspace={handleSelectWorkspace}
@@ -95,7 +97,6 @@ function App() {
         <ErrorBoundary key={`${state.page}-${state.workspaceId ?? ""}`}>
           <main>{renderPage()}</main>
         </ErrorBoundary>
-
         <Analytics />
         <SpeedInsights />
       </div>

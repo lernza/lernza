@@ -365,6 +365,63 @@ fn test_distribute_reward_no_milestone_check() {
     assert_eq!(client.get_pool_balance(&q_id), 4_500);
 }
 
+/// fix(#160) regression test: broken quest contract linkage should fail with QuestLookupFailed
+#[test]
+fn test_fund_quest_broken_contract_linkage() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy token contract
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_addr = token_contract.address();
+
+    // Deploy rewards contract
+    let contract_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &contract_id);
+
+    // Initialize rewards contract with a fake quest contract address (not deployed)
+    let fake_quest_contract = Address::generate(&env);
+    client.initialize(&token_addr, &fake_quest_contract);
+
+    let funder = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&funder, &1_000);
+
+    // Try to fund a quest - should fail because quest contract doesn't exist
+    let result = client.try_fund_quest(&funder, &1, &500);
+    assert_eq!(result, Err(Ok(Error::QuestLookupFailed)));
+}
+
+/// fix(#160) regression test: nonexistent quest should fail with QuestLookupFailed
+#[test]
+fn test_fund_quest_nonexistent_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy test SAC token
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_addr = token_contract.address();
+
+    // Deploy quest contract directly from crate logic (no WASM needed in test)
+    let quest_id = env.register(QuestContract, ());
+    let _quest_client = QuestContractClient::new(&env, &quest_id);
+
+    // Deploy rewards contract
+    let contract_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &contract_id);
+    client.initialize(&token_addr, &quest_id);
+
+    let funder = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&funder, &1_000);
+
+    // Try to fund a quest that doesn't exist
+    let result = client.try_fund_quest(&funder, &999, &500);
+    assert_eq!(result, Err(Ok(Error::QuestLookupFailed)));
+}
+
 /// fix(#85) verification: only quest owner can fund
 #[test]
 fn test_fund_quest_not_owner_fails() {

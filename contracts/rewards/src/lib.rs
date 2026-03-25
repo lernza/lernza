@@ -63,6 +63,7 @@ pub enum Error {
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
+    QuestLookupFailed = 7,
 }
 
 const BUMP: u32 = 518_400;
@@ -105,7 +106,7 @@ impl RewardsContract {
             return Err(Error::InvalidAmount);
         }
 
-        // Security Fix: Verify that the funder is the quest owner
+        // Security Fix: Verify that the funder is the quest owner using direct contract invocation
         let quest_contract_addr = env
             .storage()
             .instance()
@@ -114,7 +115,12 @@ impl RewardsContract {
 
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id);
+        let quest_info_result = quest_client.try_get_quest(&quest_id);
+        let quest_info = match quest_info_result {
+            Ok(Ok(quest)) => quest,
+            Ok(Err(_)) => return Err(Error::QuestLookupFailed),
+            Err(_) => return Err(Error::QuestLookupFailed),
+        };
 
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);

@@ -58,6 +58,7 @@ pub struct QuestContract;
 #[contractimpl]
 impl QuestContract {
     /// Create a new quest. Returns the quest ID.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_quest(
         env: Env,
         owner: Address,

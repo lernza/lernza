@@ -438,3 +438,206 @@ fn test_private_quest_not_in_public_listings() {
     let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
 }
+
+// --- QuestStatus / Update / Archive Tests ---
+
+#[test]
+fn test_new_quest_is_active_by_default() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.status, QuestStatus::Active);
+}
+
+#[test]
+fn test_update_quest() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.update_quest(
+        &0,
+        &String::from_str(&env, "Updated Name"),
+        &String::from_str(&env, "Updated description"),
+        &String::from_str(&env, "Design"),
+        &Vec::<String>::new(&env),
+        &Visibility::Private,
+    );
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.name, String::from_str(&env, "Updated Name"));
+    assert_eq!(
+        quest.description,
+        String::from_str(&env, "Updated description")
+    );
+    assert_eq!(quest.category, String::from_str(&env, "Design"));
+    assert_eq!(quest.visibility, Visibility::Private);
+    // status stays active
+    assert_eq!(quest.status, QuestStatus::Active);
+}
+
+#[test]
+fn test_update_quest_with_tags() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let mut new_tags = Vec::new(&env);
+    new_tags.push_back(String::from_str(&env, "rust"));
+    new_tags.push_back(String::from_str(&env, "stellar"));
+
+    client.update_quest(
+        &0,
+        &String::from_str(&env, "My Quest"),
+        &String::from_str(&env, "desc"),
+        &String::from_str(&env, "Programming"),
+        &new_tags,
+        &Visibility::Public,
+    );
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.tags.len(), 2);
+}
+
+#[test]
+fn test_update_quest_rejects_too_many_tags() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let mut tags = Vec::new(&env);
+    for _ in 0..6u32 {
+        tags.push_back(String::from_str(&env, "tag"));
+    }
+
+    let result = client.try_update_quest(
+        &0,
+        &String::from_str(&env, "Name"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Cat"),
+        &tags,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_update_quest_not_found() {
+    let (env, client, _owner, _token) = setup();
+
+    let result = client.try_update_quest(
+        &999,
+        &String::from_str(&env, "Name"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Cat"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::NotFound)));
+}
+
+#[test]
+fn test_archive_quest() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    // Quest is active before archiving
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.status, QuestStatus::Active);
+
+    client.archive_quest(&0);
+
+    let archived_quest = client.get_quest(&0);
+    assert_eq!(archived_quest.status, QuestStatus::Archived);
+    // owner, name and other fields are preserved
+    assert_eq!(archived_quest.owner, owner);
+    assert_eq!(archived_quest.name, String::from_str(&env, "My Quest"));
+}
+
+#[test]
+fn test_archive_quest_not_found() {
+    let (_env, client, _owner, _token) = setup();
+    let result = client.try_archive_quest(&999);
+    assert_eq!(result, Err(Ok(Error::NotFound)));
+}
+
+#[test]
+fn test_archived_quest_rejects_new_enrollment() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.archive_quest(&0);
+
+    let enrollee = Address::generate(&env);
+    let result = client.try_add_enrollee(&0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
+fn test_archived_quest_allows_viewing() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    // Enroll someone before archiving
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&0, &enrollee);
+
+    client.archive_quest(&0);
+
+    // get_quest still works
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.status, QuestStatus::Archived);
+
+    // get_enrollees still works (pending reward claims need this)
+    let enrollees = client.get_enrollees(&0);
+    assert_eq!(enrollees.len(), 1);
+    assert_eq!(enrollees.get(0).unwrap(), enrollee);
+
+    // is_enrollee still works
+    assert!(client.is_enrollee(&0, &enrollee));
+}
+
+#[test]
+fn test_archived_quest_rejects_update() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.archive_quest(&0);
+
+    let result = client.try_update_quest(
+        &0,
+        &String::from_str(&env, "New Name"),
+        &String::from_str(&env, "New desc"),
+        &String::from_str(&env, "Cat"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
+fn test_archive_quest_twice_is_idempotent() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.archive_quest(&0);
+    // Archiving an already-archived quest should succeed (idempotent)
+    client.archive_quest(&0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.status, QuestStatus::Archived);
+}
+
+#[test]
+fn test_pre_existing_enrollees_retained_after_archive() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+    client.add_enrollee(&0, &e2);
+
+    client.archive_quest(&0);
+
+    let enrollees = client.get_enrollees(&0);
+    assert_eq!(enrollees.len(), 2);
+}

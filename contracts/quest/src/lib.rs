@@ -16,6 +16,13 @@ pub enum Visibility {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestStatus {
+    Active = 0,
+    Archived = 1,
+}
+
+#[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     NextId,
@@ -36,6 +43,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub status: QuestStatus,
 }
 
 #[contracterror]
@@ -48,6 +56,7 @@ pub enum Error {
     NotEnrolled = 4,
     InvalidInput = 5,
     QuestFull = 6,
+    QuestArchived = 7,
 }
 
 const BUMP: u32 = 518_400;
@@ -88,6 +97,7 @@ impl QuestContract {
             token_addr,
             created_at: env.ledger().timestamp(),
             visibility,
+            status: QuestStatus::Active,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -108,10 +118,77 @@ impl QuestContract {
         Ok(id)
     }
 
+    /// Update quest details. Owner only. Quest must be active.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_quest(
+        env: Env,
+        quest_id: u32,
+        name: String,
+        description: String,
+        category: String,
+        tags: Vec<String>,
+        visibility: Visibility,
+    ) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        Self::validate_tags(&tags)?;
+
+        quest.name = name;
+        quest.description = description;
+        quest.category = category;
+        quest.tags = tags;
+        quest.visibility = visibility;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest updated event
+        // Event topics: (quest, updated)
+        // Event data: (quest_id)
+        env.events()
+            .publish((symbol_short!("quest"), symbol_short!("updated")), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Archive a quest. Owner only. Archived quests do not accept new enrollments.
+    pub fn archive_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        quest.status = QuestStatus::Archived;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest archived event
+        // Event topics: (quest, archived)
+        // Event data: (quest_id)
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("archived")),
+            quest_id,
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Add an enrollee to a quest. Owner only.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 

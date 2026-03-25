@@ -13,6 +13,13 @@ pub enum Visibility {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestStatus {
+    Active = 0,
+    Archived = 1,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
@@ -24,6 +31,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub status: QuestStatus,
 }
 
 #[contractclient(name = "QuestClient")]

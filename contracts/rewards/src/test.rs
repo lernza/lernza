@@ -65,6 +65,8 @@ fn test_fund_quest() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -90,6 +92,8 @@ fn test_fund_quest_adds_to_existing() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -109,6 +113,8 @@ fn test_fund_invalid_amount() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -131,6 +137,8 @@ fn test_different_funder_unauthorized() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -156,6 +164,8 @@ fn test_distribute_reward() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -189,6 +199,8 @@ fn test_distribute_multiple_rewards() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -219,6 +231,8 @@ fn test_insufficient_pool() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -242,6 +256,8 @@ fn test_distribute_unauthorized() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -277,7 +293,7 @@ fn test_initialize_no_auth_guard() {
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
 
-    // Any random address can initialize ΓÇö no deployer auth required
+    // Any random address can initialize — no deployer auth required
     let attacker_token = Address::generate(&env);
     client.initialize(&attacker_token, &quest_id);
 
@@ -302,6 +318,8 @@ fn test_authority_self_distribution() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
@@ -331,13 +349,15 @@ fn test_distribute_reward_no_milestone_check() {
         &owner,
         &String::from_str(&env, "Test"),
         &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
 
-    // No milestone created, no completion verified ΓÇö distribute succeeds anyway
+    // No milestone created, no completion verified — distribute succeeds anyway
     client.distribute_reward(&owner, &q_id, &arbitrary_recipient, &500);
 
     let token_client = TokenClient::new(&env, &token_addr);
@@ -361,6 +381,8 @@ fn test_fund_quest_not_owner_fails() {
         &legitimate_owner,
         &String::from_str(&env, "Secret"),
         &String::from_str(&env, "Hidden"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
     );

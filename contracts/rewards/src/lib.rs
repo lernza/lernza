@@ -18,6 +18,8 @@ pub struct QuestInfo {
     pub owner: Address,
     pub name: String,
     pub description: String,
+    pub category: String,
+    pub tags: soroban_sdk::Vec<String>,
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,

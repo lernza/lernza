@@ -23,6 +23,8 @@ fn create_quest_helper(
         owner,
         &String::from_str(env, "My Quest"),
         &String::from_str(env, "Teaching my brother to code"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
         token,
         &Visibility::Public,
     )
@@ -39,6 +41,28 @@ fn create_quest_with_visibility(
         owner,
         &String::from_str(env, "My Quest"),
         &String::from_str(env, "Teaching my brother to code"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
+        token,
+        &visibility,
+    )
+}
+
+fn create_quest_with_category_and_tags(
+    env: &Env,
+    client: &QuestContractClient,
+    owner: &Address,
+    token: &Address,
+    category: &str,
+    tags: Vec<String>,
+    visibility: Visibility,
+) -> u32 {
+    client.create_quest(
+        owner,
+        &String::from_str(env, "My Quest"),
+        &String::from_str(env, "Teaching my brother to code"),
+        &String::from_str(env, category),
+        &tags,
         token,
         &visibility,
     )
@@ -178,6 +202,129 @@ fn test_create_private_workspace() {
 
     let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
+}
+
+// --- Category/Tag Tests ---
+
+#[test]
+fn test_create_quest_with_category_and_tags() {
+    let (env, client, owner, token) = setup();
+
+    let mut tags = Vec::new(&env);
+    tags.push_back(String::from_str(&env, "stellar"));
+    tags.push_back(String::from_str(&env, "rust"));
+
+    let id = create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        "Blockchain",
+        tags,
+        Visibility::Public,
+    );
+    assert_eq!(id, 0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.category, String::from_str(&env, "Blockchain"));
+    assert_eq!(quest.tags.len(), 2);
+}
+
+#[test]
+fn test_create_quest_rejects_too_many_tags() {
+    let (env, client, owner, token) = setup();
+
+    let mut tags = Vec::new(&env);
+    tags.push_back(String::from_str(&env, "t1"));
+    tags.push_back(String::from_str(&env, "t2"));
+    tags.push_back(String::from_str(&env, "t3"));
+    tags.push_back(String::from_str(&env, "t4"));
+    tags.push_back(String::from_str(&env, "t5"));
+    tags.push_back(String::from_str(&env, "t6"));
+
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "My Quest"),
+        &String::from_str(&env, "Teaching my brother to code"),
+        &String::from_str(&env, "Programming"),
+        &tags,
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_quest_rejects_tag_too_long() {
+    let (env, client, owner, token) = setup();
+
+    let long_tag = String::from_str(
+        &env,
+        "012345678901234567890123456789012", // 33 chars
+    );
+    let mut tags = Vec::new(&env);
+    tags.push_back(long_tag);
+
+    let result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "My Quest"),
+        &String::from_str(&env, "Teaching my brother to code"),
+        &String::from_str(&env, "Programming"),
+        &tags,
+        &token,
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_get_quests_by_category_only_public() {
+    let (env, client, owner, token) = setup();
+
+    // Public quests
+    create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        "Blockchain",
+        Vec::new(&env),
+        Visibility::Public,
+    );
+    create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        "Blockchain",
+        Vec::new(&env),
+        Visibility::Public,
+    );
+
+    // Private quest in same category should not appear
+    create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        "Blockchain",
+        Vec::new(&env),
+        Visibility::Private,
+    );
+
+    // Public quest in different category should not appear
+    create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        "Design",
+        Vec::new(&env),
+        Visibility::Public,
+    );
+
+    let res = client.get_quests_by_category(&String::from_str(&env, "Blockchain"));
+    assert_eq!(res.len(), 2);
 }
 
 #[test]

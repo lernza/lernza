@@ -49,6 +49,8 @@ fn create_ms(
             owner,
             &String::from_str(env, "Quest"),
             &String::from_str(env, "Quest description"),
+            &String::from_str(env, "Programming"),
+            &Vec::<String>::new(env),
             &Address::generate(env), // token address
             &Visibility::Public,
         );
@@ -319,6 +321,8 @@ fn test_milestone_ownership_race_condition() {
         &legitimate_owner,
         &String::from_str(&env, "Legitimate Quest"),
         &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
         &Address::generate(&env), // token address
         &Visibility::Public,
     );
@@ -383,6 +387,8 @@ fn test_set_verification_mode() {
         &owner,
         &String::from_str(&env, "Quest"),
         &String::from_str(&env, "Quest description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
         &Address::generate(&env),
         &Visibility::Public,
     );

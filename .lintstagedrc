@@ -1,4 +1,0 @@
-{
-  "*.{ts,tsx}": ["cd frontend && pnpm exec eslint --fix"],
-  "*.rs": ["cargo fmt --check"]
-}

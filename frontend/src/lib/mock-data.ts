@@ -62,8 +62,7 @@ export const MOCK_QUESTS: Quest[] = [
     id: 2,
     owner: "GCMN...P8TL",
     name: "Design Fundamentals",
-    description:
-      "Learn UI/UX design principles. From Figma basics to shipping a design system.",
+    description: "Learn UI/UX design principles. From Figma basics to shipping a design system.",
     tokenAddr: "USDC...STELLAR",
     enrolleeCount: 5,
     milestoneCount: 4,
@@ -174,10 +173,7 @@ export const MOCK_PLATFORM_STATS: PlatformStats = {
 }
 
 // We can just reuse some of the existing quests for trending
-export const MOCK_TRENDING_QUESTS = [
-  MOCK_QUESTS[1],
-  MOCK_QUESTS[0],
-]
+export const MOCK_TRENDING_QUESTS = [MOCK_QUESTS[1], MOCK_QUESTS[0]]
 
 export const MOCK_RECENT_ACTIVITY: ActivityEvent[] = [
   {

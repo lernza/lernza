@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, createContext, useContext } from "react"
 import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Navbar } from "@/components/navbar"
@@ -7,7 +7,38 @@ import { Dashboard } from "@/pages/dashboard"
 import { QuestView } from "@/pages/quest"
 import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { CreateQuest } from "@/pages/create-quest"
+
+// ─── Theme Context ─────────────────────────────────────────────────────────────
+
+type Theme = "light" | "dark"
+
+interface ThemeContextValue {
+  theme: Theme
+  toggleTheme: () => void
+}
+
+export const ThemeContext = createContext<ThemeContextValue>({
+  theme: "light",
+  toggleTheme: () => {},
+})
+
+export function useTheme() {
+  return useContext(ThemeContext)
+}
+
+function getInitialTheme(): Theme {
+  try {
+    const stored = localStorage.getItem("lernza-theme")
+    if (stored === "dark" || stored === "light") return stored
+  } catch {
+    return "light"
+  }
+  return "light"
+}
+
+// ─── Routing ───────────────────────────────────────────────────────────────────
 
 const VALID_PAGES = ["landing", "dashboard", "profile", "create-quest"] as const
 type Page = (typeof VALID_PAGES)[number] | "quest" | "404"
@@ -32,8 +63,25 @@ function pageToPath(page: Page, questId: number | null): string {
   return `/${page}`
 }
 
+// ─── App ───────────────────────────────────────────────────────────────────────
+
 function App() {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [state, setState] = useState(() => pathToPage(window.location.pathname))
+
+  // Apply .dark class to <html> and persist preference
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark")
+    try {
+      localStorage.setItem("lernza-theme", theme)
+    } catch {
+      // localStorage unavailable (sandboxed iframe, private mode quota) — ignore
+    }
+  }, [theme])
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => (t === "light" ? "dark" : "light"))
+  }, [])
 
   useEffect(() => {
     const onPopState = () => setState(pathToPage(window.location.pathname))
@@ -58,12 +106,7 @@ function App() {
 
   const renderPage = () => {
     if (state.page === "quest" && state.questId !== null) {
-      return (
-        <QuestView
-          questId={state.questId}
-          onBack={() => handleNavigate("dashboard")}
-        />
-      )
+      return <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
     }
     switch (state.page) {
       case "landing":
@@ -76,11 +119,7 @@ function App() {
           />
         )
       case "create-quest":
-        return (
-          <CreateQuest
-            onBack={() => handleNavigate("dashboard")}
-          />
-        )
+        return <CreateQuest onBack={() => handleNavigate("dashboard")} />
       case "profile":
         return <Profile />
       default:
@@ -89,13 +128,25 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navbar activePage={state.page} onNavigate={handleNavigate} />
-      <main>{renderPage()}</main>
-      <Analytics />
-      <SpeedInsights />
-    </div>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
+        <div className="bg-background text-foreground min-h-screen">
+          <Navbar activePage={state.page} onNavigate={handleNavigate} />
+          <ErrorBoundary key={`${state.page}-${state.questId ?? ""}`}>
+            <main>{renderPage()}</main>
+          </ErrorBoundary>
+          <Analytics />
+          <SpeedInsights />
+          <ToastViewport />
+        </div>
+      </ErrorBoundary>
+    </ThemeContext.Provider>
   )
+}
+
+function ToastViewport() {
+  // Simple placeholder for toast viewport if used by upstream additions
+  return <div id="toast-viewport" />
 }
 
 export default App

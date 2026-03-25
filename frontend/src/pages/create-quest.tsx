@@ -26,30 +26,19 @@ import { formatTokens, cn } from "@/lib/utils"
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
 const step1Schema = z.object({
-  name: z
-    .string()
-    .min(1, "Quest name is required")
-    .max(64, "Max 64 characters"),
-  description: z
-    .string()
-    .min(1, "Description is required")
-    .max(2000, "Max 2000 characters"),
+  name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
+  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
 })
 type Step1Values = z.infer<typeof step1Schema>
 
 const milestoneSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-  description: z
-    .string()
-    .min(1, "Description is required")
-    .max(500, "Max 500 characters"),
+  description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
   rewardAmount: z.number().positive("Must be greater than 0"),
 })
 
 const step2Schema = z.object({
-  milestones: z
-    .array(milestoneSchema)
-    .min(1, "At least one milestone is required"),
+  milestones: z.array(milestoneSchema).min(1, "At least one milestone is required"),
 })
 type Step2Values = z.infer<typeof step2Schema>
 
@@ -67,22 +56,16 @@ interface CreateQuestProps {
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
   return (
-    <p className="flex items-center gap-1.5 text-xs font-bold text-destructive mt-1">
+    <p className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold">
       <AlertCircle className="h-3 w-3 flex-shrink-0" />
       {message}
     </p>
   )
 }
 
-function FormLabel({
-  children,
-  required,
-}: {
-  children: React.ReactNode
-  required?: boolean
-}) {
+function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <label className="block text-sm font-black mb-1.5">
+    <label className="mb-1.5 block text-sm font-black">
       {children}
       {required && <span className="text-destructive ml-0.5">*</span>}
     </label>
@@ -96,7 +79,7 @@ function StepIndicator({ current }: { current: FormStep }) {
     { n: 3, label: "Fund & Review" },
   ]
   return (
-    <div className="flex items-center gap-0 mb-8">
+    <div className="mb-8 flex items-center gap-0">
       {steps.map((s, i) => {
         const done = typeof current === "number" && current > s.n
         const active = current === s.n
@@ -104,25 +87,23 @@ function StepIndicator({ current }: { current: FormStep }) {
           <div key={s.n} className="flex items-center">
             <div
               className={cn(
-                "flex items-center gap-2 px-4 py-2 border-[2px] border-black text-xs font-black uppercase tracking-wider",
-                active && "bg-primary shadow-[2px_2px_0_#000]",
+                "border-border flex items-center gap-2 border-[2px] px-4 py-2 text-xs font-black tracking-wider uppercase",
+                active && "bg-primary shadow-[2px_2px_0_var(--color-border)]",
                 done && "bg-success",
-                !active && !done && "bg-white text-muted-foreground"
+                !active && !done && "bg-background text-muted-foreground"
               )}
             >
               <div
                 className={cn(
-                  "w-5 h-5 border-[1.5px] border-current flex items-center justify-center text-[10px] font-black",
-                  done && "border-black"
+                  "flex h-5 w-5 items-center justify-center border-[1.5px] border-current text-[10px] font-black",
+                  done && "border-border"
                 )}
               >
                 {done ? <Check className="h-3 w-3" /> : s.n}
               </div>
               <span className="hidden sm:block">{s.label}</span>
             </div>
-            {i < steps.length - 1 && (
-              <div className="w-6 h-[2px] bg-black" />
-            )}
+            {i < steps.length - 1 && <div className="h-[2px] w-6 bg-black" />}
           </div>
         )
       })}
@@ -155,15 +136,15 @@ function Step1Form({
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3">
+        <div className="bg-primary border-border border-b-[3px] px-6 py-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            <span className="text-sm font-black uppercase tracking-wider">
+            <span className="text-sm font-black tracking-wider uppercase">
               Step 1 — Quest Basics
             </span>
           </div>
         </div>
-        <div className="border-[3px] border-t-0 border-black p-6 bg-white shadow-[4px_4px_0_#000] space-y-5">
+        <div className="border-border bg-background space-y-5 border-[3px] border-t-0 p-6 shadow-[4px_4px_0_var(--color-border)]">
           {/* Name */}
           <div>
             <FormLabel required>Quest Name</FormLabel>
@@ -171,19 +152,17 @@ function Step1Form({
               {...register("name")}
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
-                "w-full border-[2px] border-black px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
+                "border-border bg-background w-full border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                 errors.name && "border-destructive"
               )}
               maxLength={64}
             />
-            <div className="flex items-center justify-between mt-1">
+            <div className="mt-1 flex items-center justify-between">
               <FieldError message={errors.name?.message} />
               <span
                 className={cn(
-                  "text-xs font-bold ml-auto",
-                  nameValue.length > 56
-                    ? "text-destructive"
-                    : "text-muted-foreground"
+                  "ml-auto text-xs font-bold",
+                  nameValue.length > 56 ? "text-destructive" : "text-muted-foreground"
                 )}
               >
                 {nameValue.length}/64
@@ -199,26 +178,23 @@ function Step1Form({
               rows={5}
               placeholder="Describe what learners will accomplish..."
               className={cn(
-                "w-full border-[2px] border-black px-4 py-2.5 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow resize-none bg-white",
+                "border-border bg-background w-full resize-none border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                 errors.description && "border-destructive"
               )}
               maxLength={2000}
             />
-            <div className="flex items-center justify-between mt-1">
+            <div className="mt-1 flex items-center justify-between">
               <FieldError message={errors.description?.message} />
               <span
                 className={cn(
-                  "text-xs font-bold ml-auto",
-                  descValue.length > 1800
-                    ? "text-destructive"
-                    : "text-muted-foreground"
+                  "ml-auto text-xs font-bold",
+                  descValue.length > 1800 ? "text-destructive" : "text-muted-foreground"
                 )}
               >
                 {descValue.length}/2000
               </span>
             </div>
           </div>
-
         </div>
       </div>
 
@@ -260,7 +236,7 @@ function Step2Form({
   })
 
   const milestones = watch("milestones")
-  const totalReward = milestones.reduce((sum: number, m: any) => {
+  const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
     return sum + (isNaN(n) ? 0 : n)
   }, 0)
@@ -268,22 +244,18 @@ function Step2Form({
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
+        <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4" />
-            <span className="text-sm font-black uppercase tracking-wider">
-              Step 2 — Milestones
-            </span>
+            <span className="text-sm font-black tracking-wider uppercase">Step 2 — Milestones</span>
           </div>
           <div className="flex items-center gap-2">
             <Coins className="h-3.5 w-3.5" />
-            <span className="text-xs font-black">
-              Total: {formatTokens(totalReward)} USDC
-            </span>
+            <span className="text-xs font-black">Total: {formatTokens(totalReward)} USDC</span>
           </div>
         </div>
 
-        <div className="border-[3px] border-t-0 border-black bg-white shadow-[4px_4px_0_#000]">
+        <div className="border-border bg-background border-[3px] border-t-0 shadow-[4px_4px_0_var(--color-border)]">
           {/* Array-level error */}
           {errors.milestones?.root && (
             <div className="px-6 pt-4">
@@ -292,16 +264,16 @@ function Step2Form({
           )}
 
           {/* Milestone list */}
-          <div className="divide-y-[2px] divide-black">
-            {fields.map((field: any, index: number) => (
-              <div key={field.id} className="p-5 space-y-4">
+          <div className="divide-border divide-y-[2px]">
+            {fields.map((field, index) => (
+              <div key={field.id} className="space-y-4 p-5">
                 {/* Milestone header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 bg-primary border-[2px] border-black flex items-center justify-center text-xs font-black">
+                    <div className="bg-primary border-border flex h-6 w-6 items-center justify-center border-[2px] text-xs font-black">
                       {index + 1}
                     </div>
-                    <span className="text-xs font-black uppercase tracking-wider text-muted-foreground">
+                    <span className="text-muted-foreground text-xs font-black tracking-wider uppercase">
                       Milestone {index + 1}
                     </span>
                   </div>
@@ -310,7 +282,7 @@ function Step2Form({
                       type="button"
                       onClick={() => swap(index, index - 1)}
                       disabled={index === 0}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="border-border bg-background hover:bg-secondary neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <ChevronUp className="h-3.5 w-3.5" />
                     </button>
@@ -318,7 +290,7 @@ function Step2Form({
                       type="button"
                       onClick={() => swap(index, index + 1)}
                       disabled={index === fields.length - 1}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-secondary disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="border-border bg-background hover:bg-secondary neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
@@ -326,7 +298,7 @@ function Step2Form({
                       type="button"
                       onClick={() => remove(index)}
                       disabled={fields.length === 1}
-                      className="w-7 h-7 border-[2px] border-black bg-white flex items-center justify-center hover:bg-destructive/10 hover:border-destructive disabled:opacity-30 disabled:cursor-not-allowed transition-colors neo-press cursor-pointer"
+                      className="border-border bg-background hover:bg-destructive/10 hover:border-destructive neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -340,14 +312,12 @@ function Step2Form({
                     {...register(`milestones.${index}.title`)}
                     placeholder="e.g. Hello World"
                     className={cn(
-                      "w-full border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
+                      "border-border bg-background w-full border-[2px] px-4 py-2 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                       errors.milestones?.[index]?.title && "border-destructive"
                     )}
                     maxLength={100}
                   />
-                  <FieldError
-                    message={errors.milestones?.[index]?.title?.message}
-                  />
+                  <FieldError message={errors.milestones?.[index]?.title?.message} />
                 </div>
 
                 {/* Description */}
@@ -358,22 +328,19 @@ function Step2Form({
                     rows={2}
                     placeholder="What should the learner do to complete this milestone?"
                     className={cn(
-                      "w-full border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow resize-none bg-white",
-                      errors.milestones?.[index]?.description &&
-                        "border-destructive"
+                      "border-border bg-background w-full resize-none border-[2px] px-4 py-2 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
+                      errors.milestones?.[index]?.description && "border-destructive"
                     )}
                     maxLength={500}
                   />
-                  <FieldError
-                    message={errors.milestones?.[index]?.description?.message}
-                  />
+                  <FieldError message={errors.milestones?.[index]?.description?.message} />
                 </div>
 
                 {/* Reward Amount */}
                 <div>
                   <FormLabel required>Reward Amount (USDC)</FormLabel>
                   <div className="flex items-center gap-0">
-                    <div className="border-[2px] border-r-0 border-black bg-secondary px-3 py-2 text-xs font-black">
+                    <div className="border-border bg-secondary border-[2px] border-r-0 px-3 py-2 text-xs font-black">
                       USDC
                     </div>
                     <input
@@ -385,28 +352,23 @@ function Step2Form({
                       step="0.01"
                       placeholder="100"
                       className={cn(
-                        "flex-1 border-[2px] border-black px-4 py-2 text-sm font-medium focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
-                        errors.milestones?.[index]?.rewardAmount &&
-                          "border-destructive"
+                        "border-border bg-background flex-1 border-[2px] px-4 py-2 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
+                        errors.milestones?.[index]?.rewardAmount && "border-destructive"
                       )}
                     />
                   </div>
-                  <FieldError
-                    message={errors.milestones?.[index]?.rewardAmount?.message}
-                  />
+                  <FieldError message={errors.milestones?.[index]?.rewardAmount?.message} />
                 </div>
               </div>
             ))}
           </div>
 
           {/* Add milestone button */}
-          <div className="p-5 border-t-[2px] border-black">
+          <div className="border-border border-t-[2px] p-5">
             <button
               type="button"
-              onClick={() =>
-                append({ title: "", description: "", rewardAmount: 0 })
-              }
-              className="w-full border-[2px] border-dashed border-black py-3 flex items-center justify-center gap-2 text-sm font-black hover:bg-secondary transition-colors cursor-pointer"
+              onClick={() => append({ title: "", description: "", rewardAmount: 0 })}
+              className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border-[2px] border-dashed py-3 text-sm font-black transition-colors"
             >
               <Plus className="h-4 w-4" />
               Add Milestone
@@ -416,14 +378,12 @@ function Step2Form({
       </div>
 
       {/* Running total */}
-      <div className="bg-secondary border-[2px] border-black px-5 py-3 flex items-center justify-between shadow-[3px_3px_0_#000]">
+      <div className="bg-secondary border-border flex items-center justify-between border-[2px] px-5 py-3 shadow-[3px_3px_0_var(--color-border)]">
         <div className="flex items-center gap-2">
           <Coins className="h-4 w-4" />
           <span className="text-sm font-black">Total reward pool needed</span>
         </div>
-        <span className="text-lg font-black tabular-nums">
-          {formatTokens(totalReward)} USDC
-        </span>
+        <span className="text-lg font-black tabular-nums">{formatTokens(totalReward)} USDC</span>
       </div>
 
       <div className="flex items-center justify-between">
@@ -456,21 +416,21 @@ function Step3Review({
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
 
   const totalReward = step2Data.milestones.reduce(
-    (sum: number, m: any) => sum + m.rewardAmount,
+    (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
 
   const handleFund = async () => {
     setTxPhase("funding")
     // Simulate funding transaction via Freighter
-    await new Promise((r) => setTimeout(r, 2000))
+    await new Promise(r => setTimeout(r, 2000))
     setTxPhase("funded")
   }
 
   const handleCreate = async () => {
     setTxPhase("creating")
     // Simulate quest creation transaction via Freighter
-    await new Promise((r) => setTimeout(r, 2000))
+    await new Promise(r => setTimeout(r, 2000))
     setTxPhase("done")
     onComplete()
   }
@@ -478,46 +438,42 @@ function Step3Review({
   return (
     <div className="space-y-6">
       <div>
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3">
+        <div className="bg-primary border-border border-b-[3px] px-6 py-3">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
-            <span className="text-sm font-black uppercase tracking-wider">
+            <span className="text-sm font-black tracking-wider uppercase">
               Step 3 — Fund & Review
             </span>
           </div>
         </div>
-        <div className="border-[3px] border-t-0 border-black bg-white shadow-[4px_4px_0_#000] divide-y-[2px] divide-black">
+        <div className="border-border bg-background divide-border divide-y-[2px] border-[3px] border-t-0 shadow-[4px_4px_0_var(--color-border)]">
           {/* Quest summary */}
-          <div className="p-5 space-y-2">
-            <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-3">
+          <div className="space-y-2 p-5">
+            <p className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
               Quest Details
             </p>
             <h3 className="text-xl font-black">{step1Data.name}</h3>
-            <p className="text-sm text-muted-foreground">
-              {step1Data.description}
-            </p>
+            <p className="text-muted-foreground text-sm">{step1Data.description}</p>
           </div>
 
           {/* Milestones list */}
           <div className="p-5">
-            <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-3">
+            <p className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
               Milestones ({step2Data.milestones.length})
             </p>
             <div className="space-y-2">
-              {step2Data.milestones.map((m: any, i: number) => (
+              {step2Data.milestones.map((m: z.infer<typeof milestoneSchema>, i: number) => (
                 <div
                   key={i}
-                  className="flex items-start justify-between gap-3 p-3 bg-secondary border-[1.5px] border-black"
+                  className="bg-secondary border-border flex items-start justify-between gap-3 border-[1.5px] p-3"
                 >
                   <div className="flex items-start gap-2">
-                    <div className="w-5 h-5 bg-primary border-[1.5px] border-black flex items-center justify-center text-[10px] font-black flex-shrink-0 mt-0.5">
+                    <div className="bg-primary border-border mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center border-[1.5px] text-[10px] font-black">
                       {i + 1}
                     </div>
                     <div>
                       <p className="text-sm font-black">{m.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.description}
-                      </p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">{m.description}</p>
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
@@ -530,10 +486,10 @@ function Step3Review({
 
           {/* Fund pool section */}
           <div className="p-5">
-            <p className="text-xs font-black uppercase tracking-wider text-muted-foreground mb-3">
+            <p className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
               Reward Pool
             </p>
-            <div className="flex items-center justify-between p-4 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] mb-4">
+            <div className="bg-primary border-border mb-4 flex items-center justify-between border-[2px] p-4 shadow-[3px_3px_0_var(--color-border)]">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
                 <span className="font-black">Total USDC needed</span>
@@ -547,9 +503,13 @@ function Step3Review({
             <Button
               onClick={handleFund}
               disabled={txPhase !== "idle"}
-              variant={txPhase === "funded" || txPhase === "creating" || txPhase === "done" ? "secondary" : "default"}
+              variant={
+                txPhase === "funded" || txPhase === "creating" || txPhase === "done"
+                  ? "secondary"
+                  : "default"
+              }
               className={cn(
-                "w-full mb-3 shimmer-on-hover",
+                "shimmer-on-hover mb-3 w-full",
                 (txPhase === "funded" || txPhase === "creating" || txPhase === "done") &&
                   "border-success"
               )}
@@ -576,7 +536,7 @@ function Step3Review({
             <Button
               onClick={handleCreate}
               disabled={txPhase !== "funded"}
-              className="w-full shimmer-on-hover"
+              className="shimmer-on-hover w-full"
             >
               {txPhase === "creating" ? (
                 <>
@@ -592,12 +552,12 @@ function Step3Review({
             </Button>
 
             {txPhase === "idle" && (
-              <p className="text-xs font-bold text-muted-foreground text-center mt-2">
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Fund the pool first, then confirm to create the quest on Stellar.
               </p>
             )}
             {txPhase === "funded" && (
-              <p className="text-xs font-bold text-muted-foreground text-center mt-2">
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Pool funded! Sign the creation transaction to go live.
               </p>
             )}
@@ -637,27 +597,25 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
   // Wallet not connected guard
   if (!connected) {
     return (
-      <div className="min-h-[calc(100vh-67px)] flex items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
-        <div className="relative px-4 max-w-md mx-auto w-full">
-          <div className="bg-white border-[3px] border-black shadow-[8px_8px_0_#000] overflow-hidden animate-scale-in">
-            <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider">
-                Create Quest
-              </span>
+      <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
+        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
+        <div className="relative mx-auto w-full max-w-md px-4">
+          <div className="bg-background border-border animate-scale-in overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+            <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
+              <span className="text-xs font-black tracking-wider uppercase">Create Quest</span>
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 bg-destructive border border-black" />
+                <div className="bg-destructive border-border h-2.5 w-2.5 border" />
                 <span className="text-xs font-bold">Not Connected</span>
               </div>
             </div>
             <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-5 mx-auto">
+              <div className="bg-primary border-border mx-auto mb-5 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                 <Wallet className="h-7 w-7" />
               </div>
-              <h2 className="text-2xl font-black mb-2">Connect your wallet</h2>
-              <p className="text-muted-foreground text-sm mb-6">
-                You need a connected Freighter wallet to create a quest and sign
-                on-chain transactions.
+              <h2 className="mb-2 text-2xl font-black">Connect your wallet</h2>
+              <p className="text-muted-foreground mb-6 text-sm">
+                You need a connected Freighter wallet to create a quest and sign on-chain
+                transactions.
               </p>
               <Button
                 size="lg"
@@ -670,7 +628,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
               </Button>
               <button
                 onClick={onBack}
-                className="mt-4 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1 mx-auto"
+                className="text-muted-foreground hover:text-foreground mx-auto mt-4 flex cursor-pointer items-center gap-1 text-xs font-bold transition-colors"
               >
                 <ArrowLeft className="h-3 w-3" />
                 Back to Dashboard
@@ -683,39 +641,39 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
   }
 
   return (
-    <div className="relative mx-auto max-w-2xl px-4 sm:px-6 py-8">
-      <div className="absolute inset-0 bg-grid-dots pointer-events-none opacity-30" />
+    <div className="relative mx-auto max-w-2xl px-4 py-8 sm:px-6">
+      <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
       {/* Back button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer group"
+        className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
-        <div className="w-7 h-7 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press hover:bg-primary transition-colors">
+        <div className="border-border bg-background neo-press hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-colors">
           <ArrowLeft className="h-3.5 w-3.5" />
         </div>
         Back to Dashboard
       </button>
 
       {/* Page heading */}
-      <div className="mb-6 relative animate-fade-in-up">
+      <div className="animate-fade-in-up relative mb-6">
         <h1 className="text-3xl font-black">Create a Quest</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <p className="text-muted-foreground mt-1 text-sm">
           Set up milestones and fund the reward pool to incentivize learners.
         </p>
       </div>
 
       {/* Step indicator */}
-      <div className="relative animate-fade-in-up stagger-1">
+      <div className="animate-fade-in-up stagger-1 relative">
         <StepIndicator current={step} />
       </div>
 
       {/* Step content */}
-      <div className="relative animate-fade-in-up stagger-2">
+      <div className="animate-fade-in-up stagger-2 relative">
         {step === 1 && (
           <Step1Form
             defaultValues={step1Data}
-            onNext={(data) => {
+            onNext={data => {
               setStep1Data(data)
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
@@ -726,7 +684,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
         {step === 2 && (
           <Step2Form
             defaultValues={step2Data}
-            onNext={(data) => {
+            onNext={data => {
               setStep2Data(data)
               setStep(3)
               window.scrollTo({ top: 0, behavior: "smooth" })

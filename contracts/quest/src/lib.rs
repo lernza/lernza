@@ -112,8 +112,6 @@ impl QuestContract {
         quest.owner.require_auth();
 
         let enrollees = Self::load_enrollees(&env, quest_id);
-        let mut found = false;
-        let enrollees = Self::load_enrollees(&env, workspace_id);
         let mut new_list = Vec::new(&env);
         let mut found = false;
 
@@ -155,12 +153,6 @@ impl QuestContract {
     pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
-        for i in 0..enrollees.len() {
-            if enrollees.get(i).unwrap() == user {
-    /// Check if a user is enrolled in a workspace.
-    pub fn is_enrollee(env: Env, workspace_id: u32, user: Address) -> Result<bool, Error> {
-        Self::load_workspace(&env, workspace_id)?;
-        let enrollees = Self::load_enrollees(&env, workspace_id);
         for enrollee in enrollees.iter() {
             if enrollee == &user {
                 return Ok(true);
@@ -174,32 +166,28 @@ impl QuestContract {
         env.storage().instance().get(&DataKey::NextId).unwrap_or(0)
     }
 
-    /// Set visibility of a workspace. Owner only.
-    pub fn set_visibility(
-        env: Env,
-        workspace_id: u32,
-        visibility: Visibility,
-    ) -> Result<(), Error> {
-        let mut ws = Self::load_workspace(&env, workspace_id)?;
-        ws.owner.require_auth();
+    /// Set visibility of a quest. Owner only.
+    pub fn set_visibility(env: Env, quest_id: u32, visibility: Visibility) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
 
-        ws.visibility = visibility;
+        quest.visibility = visibility;
         env.storage()
             .persistent()
-            .set(&DataKey::Workspace(workspace_id), &ws);
-        Self::bump(&env, workspace_id);
+            .set(&DataKey::Quest(quest_id), &quest);
+        Self::bump(&env, quest_id);
         Ok(())
     }
 
-    /// Get all public workspaces.
-    pub fn list_public_quests(env: Env) -> Vec<WorkspaceInfo> {
+    /// Get all public quests.
+    pub fn list_public_quests(env: Env) -> Vec<QuestInfo> {
         let total_count: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
         let mut public_quests = Vec::new(&env);
 
         for i in 0..total_count {
-            if let Ok(ws) = Self::load_workspace(&env, i) {
-                if ws.visibility == Visibility::Public {
-                    public_quests.push_back(ws);
+            if let Ok(quest) = Self::load_quest(&env, i) {
+                if quest.visibility == Visibility::Public {
+                    public_quests.push_back(quest);
                 }
             }
         }

@@ -28,16 +28,16 @@ fn create_quest_helper(
     )
 }
 
-fn create_ws_with_visibility(
+fn create_quest_with_visibility(
     env: &Env,
-    client: &WorkspaceContractClient,
+    client: &QuestContractClient,
     owner: &Address,
     token: &Address,
     visibility: Visibility,
 ) -> u32 {
-    client.create_workspace(
+    client.create_quest(
         owner,
-        &String::from_str(env, "My Workspace"),
+        &String::from_str(env, "My Quest"),
         &String::from_str(env, "Teaching my brother to code"),
         token,
         &visibility,
@@ -163,7 +163,7 @@ fn test_is_enrollee_false() {
 #[test]
 fn test_create_public_workspace() {
     let (env, client, owner, token) = setup();
-    let id = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    let id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
     assert_eq!(id, 0);
 
     let ws = client.get_workspace(&0);
@@ -173,7 +173,7 @@ fn test_create_public_workspace() {
 #[test]
 fn test_create_private_workspace() {
     let (env, client, owner, token) = setup();
-    let id = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    let id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
     assert_eq!(id, 0);
 
     let ws = client.get_workspace(&0);
@@ -190,7 +190,7 @@ fn test_list_public_quests_empty() {
 #[test]
 fn test_list_public_quests_single() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
     let public_quests = client.list_public_quests();
     assert_eq!(public_quests.len(), 1);
@@ -200,9 +200,9 @@ fn test_list_public_quests_single() {
 #[test]
 fn test_list_public_quests_excludes_private() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
     let public_quests = client.list_public_quests();
     assert_eq!(public_quests.len(), 2);
@@ -216,8 +216,8 @@ fn test_list_public_quests_excludes_private() {
 #[test]
 fn test_list_public_quests_all_private() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     let public_quests = client.list_public_quests();
     assert_eq!(public_quests.len(), 0);
@@ -226,7 +226,7 @@ fn test_list_public_quests_all_private() {
 #[test]
 fn test_set_visibility_public_to_private() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
     let ws = client.get_workspace(&0);
     assert_eq!(ws.visibility, Visibility::Public);
@@ -240,7 +240,7 @@ fn test_set_visibility_public_to_private() {
 #[test]
 fn test_set_visibility_private_to_public() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     let ws = client.get_workspace(&0);
     assert_eq!(ws.visibility, Visibility::Private);
@@ -254,7 +254,7 @@ fn test_set_visibility_private_to_public() {
 #[test]
 fn test_set_visibility_owner_only() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
     let other_user = Address::generate(&env);
     let result = client.try_set_visibility(&0, &other_user, &Visibility::Private);
@@ -266,8 +266,8 @@ fn test_set_visibility_owner_only() {
 #[test]
 fn test_list_public_quests_after_visibility_change() {
     let (env, client, owner, token) = setup();
-    let id1 = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-    let id2 = create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    let id1 = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+    let id2 = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     // Verify workspaces were created
     let ws1 = client.get_workspace(&id1);
@@ -294,7 +294,7 @@ fn test_list_public_quests_after_visibility_change() {
 #[test]
 fn test_private_quest_not_in_public_listings() {
     let (env, client, owner, token) = setup();
-    create_ws_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     let public_quests = client.list_public_quests();
     assert_eq!(public_quests.len(), 0);

@@ -141,7 +141,7 @@ impl RewardsContract {
 
         // Transfer tokens from funder to this contract
         let client = token::Client::new(&env, &token_addr);
-        client.transfer(&funder, env.current_contract_address(), &amount);
+        client.transfer(&funder, &env.current_contract_address(), &amount);
 
         // Credit the quest pool
         let pool_key = DataKey::QuestPool(quest_id);

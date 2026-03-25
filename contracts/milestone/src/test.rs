@@ -27,7 +27,8 @@ fn setup() -> (
     let admin = Address::generate(&env);
 
     // Initialize milestone contract with quest contract address
-    milestone_client.initialize(&admin, &quest_contract_id);
+    let certificate_contract_id = Address::generate(&env);
+    milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
 
     (env, milestone_client, quest_client, admin)
 }
@@ -402,14 +403,14 @@ fn test_verify_completion_enrollee_check() {
 #[test]
 fn test_get_quest_not_found_fails() {
     let (env, client, quest_client, owner) = setup();
-    
+
     // Attempt to create milestone for non-existent quest
     let result = client.try_create_milestone(
         &owner,
         &99,
         &String::from_str(&env, "Title"),
         &String::from_str(&env, "Desc"),
-        &100
+        &100,
     );
     assert_eq!(result, Err(Ok(Error::NotFound)));
 }

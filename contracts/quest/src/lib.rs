@@ -1,7 +1,8 @@
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec, Map,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
+    Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -60,21 +61,31 @@ const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
 
 fn is_blank_ascii(s: &String) -> bool {
-    if s.is_empty() {
+    let len = s.len() as usize;
+    if len == 0 {
         return true;
     }
-
-    for b in s.to_bytes().iter() {
+    if len > MAX_QUEST_DESCRIPTION_LEN as usize {
+        return false;
+    }
+    let mut buf = [0u8; MAX_QUEST_DESCRIPTION_LEN as usize];
+    s.copy_into_slice(&mut buf[..len]);
+    for &b in buf[..len].iter() {
         if !matches!(b, b' ' | b'\n' | b'\r' | b'\t') {
             return false;
         }
     }
-
     true
 }
 
 fn is_contract_address(addr: &Address) -> bool {
-    addr.to_string().to_bytes().get(0) == Some(b'C')
+    let s = addr.to_string();
+    if s.len() != 56 {
+        return false;
+    }
+    let mut buf = [0u8; 56];
+    s.copy_into_slice(&mut buf);
+    buf[0] == b'C'
 }
 
 #[contract]
@@ -120,7 +131,7 @@ impl QuestContract {
             tags,
             token_addr,
             created_at: env.ledger().timestamp(),
-            visibility: visibility.clone(),
+            visibility,
             deadline: 0,
         };
 
@@ -158,7 +169,7 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let mut enrollees = Self::load_enrollees(&env, quest_id);
+        let enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check enrollment cap
         if let Some(cap) = env
@@ -250,7 +261,9 @@ impl QuestContract {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
         quest.deadline = deadline;
-        env.storage().persistent().set(&DataKey::Quest(quest_id), &quest);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
         Self::bump(&env, quest_id);
         Ok(())
     }

@@ -43,6 +43,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub deadline: u64,
 }
 
 // Milestone contract: define milestones per quest, track completions.
@@ -158,7 +159,7 @@ pub trait Certificate {
         quest_name: String,
         quest_category: String,
         recipient: Address,
-    );
+    ) -> u32;
 }
 
 const BUMP: u32 = 518_400;

@@ -3,8 +3,10 @@
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
-// Import the quest contract for testing
+// Import the quest and certificate contracts for testing
+extern crate certificate;
 extern crate quest;
+use certificate::CertificateContract;
 use quest::{QuestContract, QuestContractClient, Visibility};
 
 fn setup() -> (
@@ -20,16 +22,17 @@ fn setup() -> (
     let quest_contract_id = env.register(QuestContract, ());
     let quest_client = QuestContractClient::new(&env, &quest_contract_id);
 
-    // Use a dummy certificate contract address for setup (not needed for basic tests)
-    let certificate_contract_id = Address::generate(&env);
-
-    // Register milestone contract
+    // Register milestone contract first to get its address for certificate ownership
     let milestone_contract_id = env.register(MilestoneContract, ());
     let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
 
+    // Register certificate contract with milestone as owner
+    let certificate_contract_id =
+        env.register(CertificateContract, (milestone_contract_id.clone(),));
+
     let admin = Address::generate(&env);
 
-    // Initialize milestone contract with quest contract address
+    // Initialize milestone contract with quest and certificate contract addresses
     milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
 
     (env, milestone_client, quest_client, admin)
@@ -659,15 +662,16 @@ fn test_initialize_first_time_success_by_admin() {
     let quest_contract_id = env.register(QuestContract, ());
     // Use dummy certificate contract address for initialization tests
     let certificate_contract_id = Address::generate(&env);
-    
+
     let milestone_contract_id = env.register(MilestoneContract, ());
     let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
 
     // Designated admin performs first-time initialization
     let admin = Address::generate(&env);
-    
+
     // First initialization should succeed
-    let result = milestone_client.try_initialize(&admin, &quest_contract_id, &certificate_contract_id);
+    let result =
+        milestone_client.try_initialize(&admin, &quest_contract_id, &certificate_contract_id);
     assert_eq!(result, Ok(Ok(())));
 
     // Verify storage is properly set
@@ -701,12 +705,12 @@ fn test_initialize_re_entry_returns_unauthorized() {
     let quest_contract_id = env.register(QuestContract, ());
     // Use dummy certificate contract address for initialization tests
     let certificate_contract_id = Address::generate(&env);
-    
+
     let milestone_contract_id = env.register(MilestoneContract, ());
     let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
 
     let admin = Address::generate(&env);
-    
+
     // First initialization succeeds
     milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
 
@@ -750,7 +754,7 @@ fn test_initialize_unauthorized_admin_attempts() {
     let quest_contract_id = env.register(QuestContract, ());
     // Use dummy certificate contract address for initialization tests
     let certificate_contract_id = Address::generate(&env);
-    
+
     let milestone_contract_id = env.register(MilestoneContract, ());
     let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
 
@@ -790,22 +794,24 @@ fn test_initialize_different_admin_addresses() {
     let quest_contract_id = env.register(QuestContract, ());
     // Use dummy certificate contract address for initialization tests
     let certificate_contract_id = Address::generate(&env);
-    
+
     let milestone_contract_id = env.register(MilestoneContract, ());
     let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
 
     // Test that any address can be the admin for first initialization
     let admin_a = Address::generate(&env);
-    
-    let result = milestone_client.try_initialize(&admin_a, &quest_contract_id, &certificate_contract_id);
+
+    let result =
+        milestone_client.try_initialize(&admin_a, &quest_contract_id, &certificate_contract_id);
     assert_eq!(result, Ok(Ok(())));
 
     // Create a fresh contract to test with different admin
     let milestone_contract_id_2 = env.register(MilestoneContract, ());
     let milestone_client_2 = MilestoneContractClient::new(&env, &milestone_contract_id_2);
-    
+
     let admin_b = Address::generate(&env);
-    
-    let result = milestone_client_2.try_initialize(&admin_b, &quest_contract_id, &certificate_contract_id);
+
+    let result =
+        milestone_client_2.try_initialize(&admin_b, &quest_contract_id, &certificate_contract_id);
     assert_eq!(result, Ok(Ok(())));
 }

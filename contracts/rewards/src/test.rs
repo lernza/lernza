@@ -35,7 +35,15 @@ fn setup() -> (
     let admin = Address::generate(&env);
     client.initialize(&admin, &token_addr, &quest_id);
 
-    (env, client, contract_id, token_addr, quest_client, quest_id, admin)
+    (
+        env,
+        client,
+        contract_id,
+        token_addr,
+        quest_client,
+        quest_id,
+        admin,
+    )
 }
 
 #[test]
@@ -390,8 +398,9 @@ fn test_fund_quest_broken_contract_linkage() {
     let client = RewardsContractClient::new(&env, &contract_id);
 
     // Initialize rewards contract with a fake quest contract address (not deployed)
+    let admin = Address::generate(&env);
     let fake_quest_contract = Address::generate(&env);
-    client.initialize(&token_addr, &fake_quest_contract);
+    client.initialize(&admin, &token_addr, &fake_quest_contract);
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -420,7 +429,8 @@ fn test_fund_quest_nonexistent_fails() {
     // Deploy rewards contract
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
-    client.initialize(&token_addr, &quest_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &token_addr, &quest_id);
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -474,20 +484,20 @@ fn test_recover_tokens_success() {
     let recipient = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
-    
+
     // Send tokens directly to contract (simulating accidental transfer)
     sac.mint(&contract_id, &1_000);
-    
+
     // Check unallocated balance
     assert_eq!(client.get_unallocated_balance_public(), 1_000);
-    
+
     // Admin recovers tokens
     client.recover_tokens(&admin, &recipient, &500);
-    
+
     // Recipient received tokens
     let token_client = TokenClient::new(&env, &token_addr);
     assert_eq!(token_client.balance(&recipient), 500);
-    
+
     // Unallocated balance decreased
     assert_eq!(client.get_unallocated_balance_public(), 500);
 }
@@ -499,10 +509,10 @@ fn test_recover_tokens_insufficient_unallocated() {
     let recipient = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
-    
+
     // Send only 100 tokens directly to contract
     sac.mint(&contract_id, &100);
-    
+
     // Try to recover more than available
     let result = client.try_recover_tokens(&admin, &recipient, &500);
     assert_eq!(result, Err(Ok(Error::InsufficientUnallocated)));
@@ -517,7 +527,7 @@ fn test_recover_tokens_unauthorized() {
 
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&contract_id, &1_000);
-    
+
     // Non-admin tries to recover tokens
     let result = client.try_recover_tokens(&attacker, &recipient, &500);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
@@ -528,11 +538,11 @@ fn test_recover_tokens_unauthorized() {
 fn test_recover_tokens_invalid_amount() {
     let (env, client, _contract_id, _token_addr, _quest_client, _quest_id, admin) = setup();
     let recipient = Address::generate(&env);
-    
+
     // Try to recover zero amount
     let result = client.try_recover_tokens(&admin, &recipient, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-    
+
     // Try to recover negative amount
     let result = client.try_recover_tokens(&admin, &recipient, &-100);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
@@ -546,7 +556,7 @@ fn test_recover_tokens_preserves_quest_pools() {
     let recipient = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
-    
+
     // Fund a quest pool
     sac.mint(&owner, &5_000);
     let q_id = quest_client.create_quest(
@@ -559,17 +569,17 @@ fn test_recover_tokens_preserves_quest_pools() {
         &Visibility::Public,
     );
     client.fund_quest(&owner, &q_id, &3_000);
-    
+
     // Send additional tokens directly to contract
     sac.mint(&contract_id, &1_000);
-    
+
     // Check balances
     assert_eq!(client.get_pool_balance(&q_id), 3_000);
     assert_eq!(client.get_unallocated_balance_public(), 1_000);
-    
+
     // Admin recovers only unallocated tokens
     client.recover_tokens(&admin, &recipient, &500);
-    
+
     // Quest pool remains untouched
     assert_eq!(client.get_pool_balance(&q_id), 3_000);
     assert_eq!(client.get_unallocated_balance_public(), 500);

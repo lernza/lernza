@@ -24,6 +24,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub deadline: u64,
 }
 
 #[contractclient(name = "QuestClient")]
@@ -68,7 +69,7 @@ pub enum Error {
     InvalidAmount = 5,
     QuestNotFunded = 6,
     InsufficientUnallocated = 7,
-    QuestLookupFailed = 7,
+    QuestLookupFailed = 8,
 }
 
 const BUMP: u32 = 518_400;
@@ -100,9 +101,7 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::QuestContractAddr, &quest_contract_addr);
-        env.storage()
-            .instance()
-            .set(&DataKey::AdminAddr, &admin);
+        env.storage().instance().set(&DataKey::AdminAddr, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
@@ -326,20 +325,6 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::AdminAddr)
             .ok_or(Error::NotInitialized)
-    }
-
-    /// Calculate the total allocated balance across all quest pools.
-    /// Note: This is an O(n) operation that iterates through all quest pools.
-    /// In production, consider maintaining a separate total allocated counter.
-    fn get_total_allocated(env: &Env) -> i128 {
-        let mut total = 0_i128;
-        
-        // Since we can't iterate over storage keys directly in Soroban,
-        // we'll need to maintain a separate counter for production use.
-        // For now, we'll return 0 and implement a simpler approach.
-        // In a real implementation, you'd maintain a TotalAllocated counter.
-        
-        total
     }
 
     /// Get the actual token balance held by this contract.

@@ -93,7 +93,7 @@ impl QuestContract {
 
         // Check not already enrolled
         for existing in enrollees.iter() {
-            if existing == &enrollee {
+            if *existing == enrollee {
                 return Err(Error::AlreadyEnrolled);
             }
         }
@@ -116,10 +116,10 @@ impl QuestContract {
         let mut found = false;
 
         for addr in enrollees.iter() {
-            if addr == &enrollee {
+            if *addr == enrollee {
                 found = true;
             } else {
-                new_list.push_back(addr);
+                new_list.push_back(*addr);
             }
         }
 
@@ -154,7 +154,7 @@ impl QuestContract {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
         for enrollee in enrollees.iter() {
-            if enrollee == &user {
+            if *enrollee == user {
                 return Ok(true);
             }
         }

@@ -166,7 +166,7 @@ fn test_create_public_workspace() {
     let id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
     assert_eq!(id, 0);
 
-    let ws = client.get_workspace(&0);
+    let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Public);
 }
 
@@ -176,7 +176,7 @@ fn test_create_private_workspace() {
     let id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
     assert_eq!(id, 0);
 
-    let ws = client.get_workspace(&0);
+    let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
 }
 
@@ -228,12 +228,12 @@ fn test_set_visibility_public_to_private() {
     let (env, client, owner, token) = setup();
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
-    let ws = client.get_workspace(&0);
+    let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Public);
 
     client.set_visibility(&0, &Visibility::Private);
 
-    let ws_updated = client.get_workspace(&0);
+    let ws_updated = client.get_quest(&0);
     assert_eq!(ws_updated.visibility, Visibility::Private);
 }
 
@@ -242,12 +242,12 @@ fn test_set_visibility_private_to_public() {
     let (env, client, owner, token) = setup();
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
-    let ws = client.get_workspace(&0);
+    let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
 
     client.set_visibility(&0, &Visibility::Public);
 
-    let ws_updated = client.get_workspace(&0);
+    let ws_updated = client.get_quest(&0);
     assert_eq!(ws_updated.visibility, Visibility::Public);
 }
 
@@ -270,9 +270,9 @@ fn test_list_public_quests_after_visibility_change() {
     let id2 = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
 
     // Verify workspaces were created
-    let ws1 = client.get_workspace(&id1);
+    let ws1 = client.get_quest(&id1);
     assert_eq!(ws1.visibility, Visibility::Public);
-    let ws2 = client.get_workspace(&id2);
+    let ws2 = client.get_quest(&id2);
     assert_eq!(ws2.visibility, Visibility::Private);
 
     let initial_public = client.list_public_quests();
@@ -300,6 +300,6 @@ fn test_private_quest_not_in_public_listings() {
     assert_eq!(public_quests.len(), 0);
 
     // But the quest should still be retrievable by ID if you know it
-    let ws = client.get_workspace(&0);
+    let ws = client.get_quest(&0);
     assert_eq!(ws.visibility, Visibility::Private);
 }

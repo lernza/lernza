@@ -548,7 +548,10 @@ fn test_update_quest() {
     );
     let quest = client.get_quest(&0);
     assert_eq!(quest.name, String::from_str(&env, "Updated Name"));
-    assert_eq!(quest.description, String::from_str(&env, "Updated description"));
+    assert_eq!(
+        quest.description,
+        String::from_str(&env, "Updated description")
+    );
     assert_eq!(quest.category, String::from_str(&env, "Design"));
     assert_eq!(quest.visibility, Visibility::Private);
     assert_eq!(quest.status, QuestStatus::Active);

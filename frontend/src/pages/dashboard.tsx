@@ -1,4 +1,4 @@
-import { useState } from "react"
+import React, { useState, Suspense } from "react"
 import {
   Plus,
   Users,
@@ -8,9 +8,6 @@ import {
   Wallet,
   Sparkles,
   Search,
-  Activity,
-  TrendingUp,
-  Clock,
   LayoutDashboard,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -29,15 +26,15 @@ import {
   MOCK_EARNINGS_HISTORY,
 } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts"
+
+// Sub-components
+import { PlatformStats } from "./dashboard/platform-stats"
+import { PersonalProgress } from "./dashboard/personal-progress"
+import { TrendingQuests } from "./dashboard/trending-quests"
+import { RecentActivity } from "./dashboard/recent-activity"
+
+// Lazy-loaded chart
+const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 
 // The first two workspaces share the same owner — treat them as "owned"
 const MOCK_OWNER = "GBXR...K2YQ"
@@ -156,106 +153,19 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
       </div>
 
       {/* Platform Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in-up stagger-1">
-        <Card className="card-tilt bg-white border-[3px] border-black shadow-[4px_4px_0_#000]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-bold text-muted-foreground uppercase tracking-wide">Total Quests</p>
-                <h3 className="text-3xl font-black mt-1">{MOCK_PLATFORM_STATS.totalQuests}</h3>
-              </div>
-              <div className="w-10 h-10 bg-secondary border-[2px] border-black flex items-center justify-center">
-                <Target className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-tilt bg-white border-[3px] border-black shadow-[4px_4px_0_#000]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-bold text-muted-foreground uppercase tracking-wide">Active Users</p>
-                <h3 className="text-3xl font-black mt-1">{MOCK_PLATFORM_STATS.activeUsers}</h3>
-              </div>
-              <div className="w-10 h-10 bg-success border-[2px] border-black flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-tilt bg-white border-[3px] border-black shadow-[4px_4px_0_#000]">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-sm font-bold text-muted-foreground uppercase tracking-wide">Tokens Distributed</p>
-                <h3 className="text-3xl font-black mt-1 text-green-700">{formatTokens(MOCK_PLATFORM_STATS.tokensDistributed)} USDC</h3>
-              </div>
-              <div className="w-10 h-10 bg-primary border-[2px] border-black flex items-center justify-center">
-                <Coins className="w-5 h-5" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <PlatformStats stats={MOCK_PLATFORM_STATS} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="lg:col-span-2 space-y-8 animate-fade-in-up stagger-2">
           
           {/* Personal Stats */}
-          <div>
-            <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-              <Activity className="w-5 h-5" /> Your Progress
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="bg-secondary border-[2px] border-black p-4 shadow-[3px_3px_0_#000]">
-                <p className="text-xs font-bold text-muted-foreground uppercase text-center">Enrolled</p>
-                <p className="text-2xl font-black mt-1 text-center">{MOCK_USER_STATS.workspacesEnrolled}</p>
-              </div>
-              <div className="bg-secondary border-[2px] border-black p-4 shadow-[3px_3px_0_#000]">
-                <p className="text-xs font-bold text-muted-foreground uppercase text-center">Completed</p>
-                <p className="text-2xl font-black mt-1 text-center">{MOCK_USER_STATS.milestonesCompleted}</p>
-              </div>
-              <div className="bg-secondary border-[2px] border-black p-4 shadow-[3px_3px_0_#000]">
-                <p className="text-xs font-bold text-muted-foreground uppercase text-center">Owned</p>
-                <p className="text-2xl font-black mt-1 text-center">{MOCK_USER_STATS.workspacesOwned}</p>
-              </div>
-              <div className="bg-primary border-[2px] border-black p-4 shadow-[3px_3px_0_#000]">
-                <p className="text-xs font-bold text-black uppercase text-center">Earnings</p>
-                <p className="text-xl font-black mt-2 text-center text-green-800">{formatTokens(MOCK_USER_STATS.totalEarned)} USDC</p>
-              </div>
-            </div>
-          </div>
+          <PersonalProgress stats={MOCK_USER_STATS} />
 
-          {/* Earnings Chart */}
-          <Card className="border-[3px] border-black shadow-[6px_6px_0_#000] overflow-hidden">
-             <CardHeader className="bg-white border-b-[2px] border-black py-4">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" /> Earnings History
-                </CardTitle>
-             </CardHeader>
-             <CardContent className="p-6 bg-white">
-                <div className="h-[250px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={MOCK_EARNINGS_HISTORY} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis dataKey="date" tick={{ fontWeight: "bold", fontSize: 12 }} axisLine={{ stroke: '#000', strokeWidth: 2 }} tickLine={{ stroke: '#000', strokeWidth: 2 }} />
-                      <YAxis tick={{ fontWeight: "bold", fontSize: 12 }} axisLine={{ stroke: '#000', strokeWidth: 2 }} tickLine={{ stroke: '#000', strokeWidth: 2 }} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: "#fff", 
-                          border: "2px solid #000", 
-                          boxShadow: "4px 4px 0 #000",
-                          borderRadius: 0,
-                          fontWeight: "bold"
-                        }}
-                      />
-                      <Line type="monotone" dataKey="amount" stroke="#000" strokeWidth={4} activeDot={{ r: 6, stroke: '#000', strokeWidth: 2, fill: '#FACC15' }} dot={{ r: 4, stroke: '#000', strokeWidth: 2, fill: '#fff' }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-             </CardContent>
-          </Card>
+          {/* Earnings Chart (Lazy Loaded) */}
+          <Suspense fallback={<div className="h-[250px] animate-pulse bg-muted border-[3px] border-black shadow-[6px_6px_0_#000]" />}>
+            <EarningsChart data={MOCK_EARNINGS_HISTORY} />
+          </Suspense>
 
           {/* Your Quests Section */}
           <div>
@@ -410,78 +320,11 @@ export function Dashboard({ onSelectWorkspace }: DashboardProps) {
 
         {/* Right Column (Trending & Recent Activity) */}
         <div className="space-y-8 animate-fade-in-up stagger-3">
-          
-          {/* Trending Quests */}
-          <div>
-            <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-              <Sparkles className="w-5 h-5" /> Trending Quests
-            </h2>
-            <div className="space-y-4">
-              {MOCK_TRENDING_QUESTS.map((quest) => (
-                <Card 
-                  key={quest.id} 
-                  className="card-tilt cursor-pointer border-[2px] border-black shadow-[4px_4px_0_#000]"
-                  onClick={() => onSelectWorkspace(quest.id)}
-                >
-                  <CardHeader className="p-4 pb-2">
-                    <div className="flex justify-between items-start">
-                       <CardTitle className="text-sm font-bold line-clamp-1">{quest.name}</CardTitle>
-                       <Badge variant="default" className="text-[10px] bg-primary text-black border-[1px] border-black ml-2 px-1">
-                         Trending
-                       </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    <div className="flex items-center gap-3 text-xs mt-2 text-muted-foreground">
-                      <span className="flex items-center gap-1 font-bold">
-                        <Users className="w-3 h-3" /> {quest.enrolleeCount}
-                      </span>
-                      <span className="flex items-center gap-1 font-bold">
-                        <Coins className="w-3 h-3" /> {formatTokens(quest.poolBalance)}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div>
-            <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-              <Clock className="w-5 h-5" /> Recent Activity
-            </h2>
-            <Card className="border-[3px] border-black shadow-[4px_4px_0_#000]">
-              <CardContent className="p-0">
-                <div className="divide-y-[2px] divide-black">
-                  {MOCK_RECENT_ACTIVITY.map((activity) => {
-                    const isEnrolled = activity.action === "enrolled"
-                    const isCompleted = activity.action === "completed"
-                    const Icon = isEnrolled ? Plus : isCompleted ? Target : Sparkles
-                    const iconColor = isEnrolled ? "bg-primary" : isCompleted ? "bg-success" : "bg-white"
-
-                    return (
-                      <div key={activity.id} className="p-4 flex gap-3 hover:bg-secondary transition-colors">
-                        <div className={`w-8 h-8 ${iconColor} border-[2px] border-black flex-shrink-0 flex items-center justify-center shadow-[2px_2px_0_#000] mt-1`}>
-                           <Icon className="w-4 h-4" />
-                        </div>
-                        <div>
-                           <p className="text-sm">
-                             <span className="font-bold">{activity.user}</span>{" "}
-                             {isEnrolled ? "enrolled in" : isCompleted ? "completed a milestone in" : "created"}{" "}
-                             <span className="font-bold">{activity.workspaceName}</span>
-                           </p>
-                           <p className="text-xs text-muted-foreground font-bold mt-1">
-                             {new Date(activity.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                           </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <TrendingQuests 
+            quests={MOCK_TRENDING_QUESTS} 
+            onSelectQuest={onSelectWorkspace} 
+          />
+          <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
         </div>
       </div>
     </div>

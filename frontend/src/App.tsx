@@ -7,20 +7,18 @@ import { Dashboard } from "@/pages/dashboard"
 import { WorkspaceView } from "@/pages/workspace"
 import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
+import { ErrorBoundary } from "@/components/ErrorBoundary" 
 
 const VALID_PAGES = ["landing", "dashboard", "profile"] as const
 type Page = (typeof VALID_PAGES)[number] | "workspace" | "404"
 
 function pathToPage(pathname: string): { page: Page; workspaceId: number | null } {
   const clean = pathname.replace(/\/+$/, "") || "/"
-
   if (clean === "/") return { page: "landing", workspaceId: null }
   if (clean === "/dashboard") return { page: "dashboard", workspaceId: null }
   if (clean === "/profile") return { page: "profile", workspaceId: null }
-
   const wsMatch = clean.match(/^\/workspace\/(\d+)$/)
   if (wsMatch) return { page: "workspace", workspaceId: Number(wsMatch[1]) }
-
   return { page: "404", workspaceId: null }
 }
 
@@ -67,11 +65,7 @@ function App() {
       case "landing":
         return <Landing onNavigate={handleNavigate} />
       case "dashboard":
-        return (
-          <Dashboard
-            onSelectWorkspace={handleSelectWorkspace}
-          />
-        )
+        return <Dashboard onSelectWorkspace={handleSelectWorkspace} />
       case "profile":
         return <Profile />
       default:
@@ -80,12 +74,17 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Navbar activePage={state.page} onNavigate={handleNavigate} />
-      <main>{renderPage()}</main>
-      <Analytics />
-      <SpeedInsights />
-    </div>
+    <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
+      <div className="min-h-screen bg-background text-foreground">
+        <Navbar activePage={state.page} onNavigate={handleNavigate} />
+        <ErrorBoundary key={`${state.page}-${state.workspaceId ?? ""}`}>
+          <main>{renderPage()}</main>
+        </ErrorBoundary>
+
+        <Analytics />
+        <SpeedInsights />
+      </div>
+    </ErrorBoundary>
   )
 }
 

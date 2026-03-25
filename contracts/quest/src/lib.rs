@@ -18,6 +18,7 @@ pub enum DataKey {
     NextId,
     Quest(u32),
     Enrollees(u32),
+    EnrollmentCap(u32),
 }
 
 #[contracttype]
@@ -43,6 +44,7 @@ pub enum Error {
     AlreadyEnrolled = 3,
     NotEnrolled = 4,
     InvalidInput = 5,
+    QuestFull = 6,
 }
 
 const BUMP: u32 = 518_400;
@@ -100,6 +102,17 @@ impl QuestContract {
         quest.owner.require_auth();
 
         let enrollees = Self::load_enrollees(&env, quest_id);
+
+        // Check enrollment cap
+        if let Some(cap) = env
+            .storage()
+            .persistent()
+            .get::<_, u32>(&DataKey::EnrollmentCap(quest_id))
+        {
+            if enrollees.len() >= cap {
+                return Err(Error::QuestFull);
+            }
+        }
 
         // Check not already enrolled
         for i in 0..enrollees.len() {
@@ -229,6 +242,14 @@ impl QuestContract {
         matches
     }
 
+    /// Get enrollment cap for a quest.
+    pub fn get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32> {
+        Self::load_quest(&env, quest_id).ok()?;
+        env.storage()
+            .persistent()
+            .get(&DataKey::EnrollmentCap(quest_id))
+    }
+
     // --- internals ---
 
     fn load_quest(env: &Env, id: u32) -> Result<QuestInfo, Error> {
@@ -268,6 +289,17 @@ impl QuestContract {
         env.storage()
             .persistent()
             .extend_ttl(&DataKey::Enrollees(quest_id), THRESHOLD, BUMP);
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::EnrollmentCap(quest_id))
+        {
+            env.storage().persistent().extend_ttl(
+                &DataKey::EnrollmentCap(quest_id),
+                THRESHOLD,
+                BUMP,
+            );
+        }
     }
 }
 

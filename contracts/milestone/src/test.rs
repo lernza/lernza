@@ -377,13 +377,18 @@ fn test_verify_completion_no_enrollment_check() {
 
 #[test]
 fn test_set_verification_mode() {
-    let (_env, client, _quest_client, owner) = setup();
+    let (env, client, quest_client, owner) = setup();
+
+    quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Quest"),
+        &String::from_str(&env, "Quest description"),
+        &Address::generate(&env),
+        &Visibility::Public,
+    );
 
     // Set peer review mode requiring 2 approvals
     client.set_verification_mode(&owner, &0, &VerificationMode::PeerReview(2));
-
-    // Test that we can retrieve mode (would need a getter function)
-    // For now, just test that it doesn't error
 }
 
 #[test]

@@ -23,6 +23,13 @@ pub trait QuestContractTrait {
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
+pub enum Visibility {
+    Public = 0,
+    Private = 1,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
     pub owner: Address,
@@ -30,6 +37,7 @@ pub struct QuestInfo {
     pub description: String,
     pub token_addr: Address,
     pub created_at: u64,
+    pub visibility: Visibility,
 }
 
 // Milestone contract: define milestones per quest, track completions.
@@ -403,16 +411,16 @@ impl MilestoneContract {
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
 
-        // Verify the submission exists and is pending
-        let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
-        if !env.storage().persistent().has(&submit_key) {
-            return Err(Error::NotSubmitted);
-        }
-
         // Check if already completed
         let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
         if env.storage().persistent().has(&comp_key) {
             return Err(Error::AlreadyCompleted);
+        }
+
+        // Verify the submission exists and is pending
+        let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
+        if !env.storage().persistent().has(&submit_key) {
+            return Err(Error::NotSubmitted);
         }
 
         // Prevent self-approval

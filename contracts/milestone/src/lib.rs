@@ -1,5 +1,34 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, contractclient, Address, Env, String, Vec};
+
+// Quest contract error type (must match the quest contract)
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum QuestError {
+    NotFound = 1,
+    Unauthorized = 2,
+    AlreadyEnrolled = 3,
+    NotEnrolled = 4,
+    InvalidInput = 5,
+}
+
+// Quest contract interface for cross-contract calls
+#[contractclient(name = "QuestClient")]
+pub trait QuestContractTrait {
+    fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, QuestError>;
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct QuestInfo {
+    pub id: u32,
+    pub owner: Address,
+    pub name: String,
+    pub description: String,
+    pub token_addr: Address,
+    pub created_at: u64,
+}
 
 // Milestone contract: define milestones per quest, track completions.
 // Owner-approved verification for MVP. When owner verifies a completion,
@@ -11,8 +40,8 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, Address, 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    // Owner of a quest (cached for auth, set on first milestone creation)
-    Owner(u32),
+    // Quest contract address for cross-contract validation
+    QuestContract,
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Milestone data
@@ -42,6 +71,7 @@ pub enum Error {
     AlreadyCompleted = 3,
     InvalidAmount = 4,
     OwnerMismatch = 5,
+    NotInitialized = 6,
 }
 
 const BUMP: u32 = 518_400;
@@ -52,8 +82,23 @@ pub struct MilestoneContract;
 
 #[contractimpl]
 impl MilestoneContract {
+    /// Initialize the milestone contract with the quest contract address.
+    /// Must be called once before any milestones can be created.
+    pub fn initialize(env: Env, admin: Address, quest_contract: Address) -> Result<(), Error> {
+        admin.require_auth();
+        
+        // Prevent re-initialization
+        if env.storage().instance().has(&DataKey::QuestContract) {
+            return Err(Error::Unauthorized);
+        }
+        
+        env.storage().instance().set(&DataKey::QuestContract, &quest_contract);
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        Ok(())
+    }
+
     /// Create a milestone for a quest. Owner auth required.
-    /// On first call for a quest, records the owner for future auth.
+    /// Validates ownership via cross-contract call to quest contract.
     pub fn create_milestone(
         env: Env,
         owner: Address,
@@ -68,17 +113,21 @@ impl MilestoneContract {
             return Err(Error::InvalidAmount);
         }
 
-        // Set or verify quest owner
-        let owner_key = DataKey::Owner(quest_id);
-        if let Some(stored_owner) = env.storage().persistent().get::<_, Address>(&owner_key) {
-            if stored_owner != owner {
-                return Err(Error::OwnerMismatch);
-            }
-        } else {
-            env.storage().persistent().set(&owner_key, &owner);
-            env.storage()
-                .persistent()
-                .extend_ttl(&owner_key, THRESHOLD, BUMP);
+        // Get quest contract address
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        // Cross-contract validation: verify caller is the actual quest owner
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        
+        // If quest doesn't exist, this will fail with NotFound from quest contract
+        // If it exists, verify the caller is the owner
+        if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
         }
 
         let next_key = DataKey::NextMilestoneId(quest_id);
@@ -112,7 +161,20 @@ impl MilestoneContract {
         enrollee: Address,
     ) -> Result<i128, Error> {
         owner.require_auth();
-        Self::require_owner(&env, quest_id, &owner)?;
+        
+        // Validate owner via cross-contract call
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        
+        if quest_info.owner != owner {
+            return Err(Error::Unauthorized);
+        }
 
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
         let milestone: MilestoneInfo = env
@@ -201,18 +263,6 @@ impl MilestoneContract {
     }
 
     // --- internals ---
-
-    fn require_owner(env: &Env, quest_id: u32, caller: &Address) -> Result<(), Error> {
-        let stored: Address = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Owner(quest_id))
-            .ok_or(Error::NotFound)?;
-        if stored != *caller {
-            return Err(Error::Unauthorized);
-        }
-        Ok(())
-    }
 
     fn bump_ms(env: &Env, key: &DataKey) {
         env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);

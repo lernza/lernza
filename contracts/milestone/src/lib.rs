@@ -695,8 +695,8 @@ impl MilestoneContract {
             return 0;
         }
 
-        let mut fully_completed = 0u32;
-        for i in 0..total_milestones {
+        let fully_completed = 0u32;
+        for _i in 0..total_milestones {
             // Count enrollees who completed this milestone
             // This is a simplified approach - in production we'd need to iterate over enrollees
             // For now, return a placeholder based on available data

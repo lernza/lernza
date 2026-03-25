@@ -273,7 +273,7 @@ impl QuestContract {
 
         for i in 0..tags.len() {
             let tag = tags.get(i).ok_or(Error::InvalidInput)?;
-            if tag.len() == 0 || tag.len() > MAX_TAG_LEN {
+            if tag.is_empty() || tag.len() > MAX_TAG_LEN {
                 return Err(Error::InvalidInput);
             }
         }

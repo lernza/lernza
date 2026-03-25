@@ -13,5 +13,8 @@ stellar-tokens = { workspace = true }
 stellar-access = { workspace = true }
 stellar-macros = { workspace = true }
 
+[features]
+testutils = []
+
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

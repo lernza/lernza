@@ -52,7 +52,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info
-          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       - name: Post coverage comment on PR
         uses: romeovs/lcov-reporter-action@v0.4.0

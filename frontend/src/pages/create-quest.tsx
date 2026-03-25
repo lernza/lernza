@@ -48,7 +48,6 @@ type Step2Values = z.infer<typeof step2Schema>
 type FormStep = 1 | 2 | 3
 type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
-
 // ─── Helper components ────────────────────────────────────────────────────────
 
 function FieldError({ message }: { message?: string }) {
@@ -411,6 +410,7 @@ function Step3Review({
   onBack: () => void
   onComplete: () => void
 }) {
+  const { isSupportedNetwork } = useWallet()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
 
   const totalReward = step2Data.milestones.reduce(
@@ -497,10 +497,20 @@ function Step3Review({
               </span>
             </div>
 
+            {/* Network Warning */}
+            {!isSupportedNetwork && (
+              <div className="bg-destructive/10 border-destructive mb-4 border-[2px] p-4 text-center">
+                <AlertCircle className="text-destructive mx-auto mb-2 h-5 w-5" />
+                <p className="text-destructive text-sm font-bold">
+                  Please switch your Freighter wallet to Testnet to continue.
+                </p>
+              </div>
+            )}
+
             {/* Fund button */}
             <Button
               onClick={handleFund}
-              disabled={txPhase !== "idle"}
+              disabled={txPhase !== "idle" || !isSupportedNetwork}
               variant={
                 txPhase === "funded" || txPhase === "creating" || txPhase === "done"
                   ? "secondary"
@@ -533,7 +543,7 @@ function Step3Review({
             {/* Create button */}
             <Button
               onClick={handleCreate}
-              disabled={txPhase !== "funded"}
+              disabled={txPhase !== "funded" || !isSupportedNetwork}
               className="shimmer-on-hover w-full"
             >
               {txPhase === "creating" ? (

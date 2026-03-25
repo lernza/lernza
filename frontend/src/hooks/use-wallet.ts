@@ -2,10 +2,13 @@ import { useState, useCallback, useEffect } from "react"
 import freighter from "@stellar/freighter-api"
 
 const DISCONNECTED_KEY = "lernza_wallet_disconnected"
+import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
 
 interface WalletState {
   address: string | null
   connected: boolean
+  networkPassphrase: string | null
+  isSupportedNetwork: boolean
   loading: boolean
   error: string | null
 }
@@ -14,6 +17,8 @@ export function useWallet() {
   const [state, setState] = useState<WalletState>({
     address: null,
     connected: false,
+    networkPassphrase: null,
+    isSupportedNetwork: true,
     loading: false,
     error: null,
   })
@@ -24,7 +29,18 @@ export function useWallet() {
       // Clear the disconnected flag so auto-connect works again
       sessionStorage.removeItem(DISCONNECTED_KEY)
       const { address } = await freighter.requestAccess()
-      setState({ address, connected: true, loading: false, error: null })
+      const net = await freighter.getNetworkDetails()
+      const isSupportedNetwork =
+        !net.networkPassphrase || net.networkPassphrase === NETWORK_PASSPHRASE
+
+      setState({
+        address,
+        connected: true,
+        networkPassphrase: net.networkPassphrase || null,
+        isSupportedNetwork,
+        loading: false,
+        error: null,
+      })
     } catch (err) {
       setState(s => ({
         ...s,
@@ -37,7 +53,14 @@ export function useWallet() {
   const disconnect = useCallback(() => {
     // Set flag so auto-connect on mount doesn't re-connect
     sessionStorage.setItem(DISCONNECTED_KEY, "true")
-    setState({ address: null, connected: false, loading: false, error: null })
+    setState({
+      address: null,
+      connected: false,
+      networkPassphrase: null,
+      isSupportedNetwork: true,
+      loading: false,
+      error: null,
+    })
   }, [])
 
   useEffect(() => {
@@ -47,9 +70,20 @@ export function useWallet() {
     // Only check if already authorized — never prompt on page load
     freighter
       .getAddress()
-      .then(({ address }) => {
+      .then(async ({ address }) => {
         if (address) {
-          setState({ address, connected: true, loading: false, error: null })
+          const net = await freighter.getNetworkDetails()
+          const isSupportedNetwork =
+            !net.networkPassphrase || net.networkPassphrase === NETWORK_PASSPHRASE
+
+          setState({
+            address,
+            connected: true,
+            networkPassphrase: net.networkPassphrase || null,
+            isSupportedNetwork,
+            loading: false,
+            error: null,
+          })
         }
       })
       .catch(() => {})

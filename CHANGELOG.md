@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/lernza/lernza/compare/v0.2.3...v0.3.0) (2026-03-25)
+
+
+### Features
+
+* add multi-step quest creation form ([#118](https://github.com/lernza/lernza/issues/118)) ([3cf64d2](https://github.com/lernza/lernza/commit/3cf64d2ae3ee04983b0816b8d9b5c88777a30ce4))
+* **frontend:** add quest sharing and toast notifications ([b5668c2](https://github.com/lernza/lernza/commit/b5668c226c08d909d3c71833c0ac4b057e89fcce))
+* **frontend:** implement dashboard analytics ([cb0fd11](https://github.com/lernza/lernza/commit/cb0fd1154f07053c308ca8837fff31cab412d513)), closes [#56](https://github.com/lernza/lernza/issues/56)
+
+
+### Bug Fixes
+
+* **contracts:** verify workspace ownership during funding to prevent frontrunning ([#135](https://github.com/lernza/lernza/issues/135)) ([91c7cf7](https://github.com/lernza/lernza/commit/91c7cf7b76ca4545b4a2f31be68b0baef78c3a6b))
+* remove pr.md and fix any types in create-quest ([ac2a68c](https://github.com/lernza/lernza/commit/ac2a68cdb33edd7d14ce443f03d792107e025f3c))
+
 ## [0.2.3](https://github.com/lernza/lernza/compare/v0.2.2...v0.2.3) (2026-03-21)
 
 

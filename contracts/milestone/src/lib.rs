@@ -18,7 +18,8 @@ pub enum QuestError {
 // Quest contract interface for cross-contract calls
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
-    fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, QuestError>;
+    fn get_quest(env: Env, quest_id: u32) -> QuestInfo;
+    fn is_enrollee(env: Env, quest_id: u32, user: Address) -> bool;
 }
 
 #[contracttype]
@@ -194,7 +195,11 @@ impl MilestoneContract {
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
 
-        // If quest doesn't exist, this will fail with NotFound from quest contract
+        // If it exists, verify the caller is the owner
+        if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
+        }
+
         // If it exists, verify the caller is the owner
         if quest_info.owner != owner {
             return Err(Error::OwnerMismatch);
@@ -297,6 +302,11 @@ impl MilestoneContract {
 
         if quest_info.owner != owner {
             return Err(Error::Unauthorized);
+        }
+
+        // Verify enrollee is enrolled in the quest (Issue #162)
+        if !Self::is_enrolled(&env, quest_id, &enrollee)? {
+            return Err(Error::NotEnrolled);
         }
 
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
@@ -414,6 +424,11 @@ impl MilestoneContract {
         // Only allow submission if quest uses peer review
         if !matches!(verification_mode, VerificationMode::PeerReview(_)) {
             return Err(Error::Unauthorized);
+        }
+
+        // Verify enrollee is enrolled in the quest
+        if !Self::is_enrolled(&env, quest_id, &enrollee)? {
+            return Err(Error::NotEnrolled);
         }
 
         // Mark as submitted for review
@@ -739,7 +754,6 @@ impl MilestoneContract {
         let quest_client = QuestClient::new(env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
 
-        // If quest doesn't exist, this will fail with NotFound from quest contract
         // If it exists, verify the caller is the owner
         if quest_info.owner != *owner {
             return Err(Error::OwnerMismatch);
@@ -748,22 +762,20 @@ impl MilestoneContract {
         Ok(())
     }
 
-    fn is_enrolled(_env: &Env, _quest_id: u32, _user: &Address) -> Result<bool, Error> {
+    fn is_enrolled(env: &Env, quest_id: u32, user: &Address) -> Result<bool, Error> {
         // Get quest contract address
-        let quest_contract_addr: Address = _env
+        let quest_contract_addr: Address = env
             .storage()
             .instance()
             .get(&DataKey::QuestContract)
             .ok_or(Error::NotInitialized)?;
 
         // Cross-contract call to check enrollment
-        let _quest_client = QuestClient::new(_env, &quest_contract_addr);
+        let quest_client = QuestClient::new(env, &quest_contract_addr);
 
-        // For now, we'll assume a function exists to check enrollment
-        // In a real implementation, you'd call quest_client.is_enrolled(quest_id, user)
-        // For this example, we'll return true (meaning the user is enrolled)
-        // This should be implemented based on the actual quest contract interface
-        Ok(true)
+        let enrolled = quest_client.is_enrollee(&quest_id, user);
+
+        Ok(enrolled)
     }
 }
 

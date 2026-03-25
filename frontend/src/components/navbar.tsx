@@ -1,7 +1,8 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
+import { useTheme } from "@/App"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
@@ -34,6 +35,29 @@ function LogoMark({ className }: { className?: string }) {
   )
 }
 
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  const isDark = theme === "dark"
+
+  return (
+    <button
+      onClick={toggleTheme}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      title={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className={cn(
+        "w-9 h-9 border-[2px] border-border shadow-[2px_2px_0_var(--color-border)]",
+        "flex items-center justify-center neo-press cursor-pointer",
+        "transition-colors duration-300",
+        isDark
+          ? "bg-primary text-black hover:bg-yellow-300"
+          : "bg-background text-foreground hover:bg-secondary"
+      )}
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </button>
+  )
+}
+
 export function Navbar({ activePage, onNavigate }: NavbarProps) {
   const { connected, shortAddress, connect, disconnect, loading } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -43,10 +67,8 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
     setMobileOpen(false)
   }
 
-  const visibleItems = NAV_ITEMS
-
   return (
-    <header className="sticky top-0 z-50 border-b-[3px] border-black bg-white">
+    <header className="sticky top-0 z-50 border-b-[3px] border-border bg-background transition-colors duration-300">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button
@@ -59,15 +81,15 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
 
         {/* Desktop nav links */}
         <nav className="hidden sm:flex items-center gap-1">
-          {visibleItems.map((item) => (
+          {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
               onClick={() => handleNavigate(item.key)}
               className={cn(
                 "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px] animated-underline",
                 activePage === item.key
-                  ? "bg-primary border-black shadow-[2px_2px_0_#000] active"
-                  : "border-transparent hover:border-black hover:bg-secondary"
+                  ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)] active"
+                  : "border-transparent hover:border-border hover:bg-secondary"
               )}
             >
               {item.label}
@@ -75,27 +97,22 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           ))}
         </nav>
 
-        {/* Right side: wallet + mobile menu */}
-        <div className="flex items-center gap-3">
+        {/* Right side: theme toggle + wallet + mobile menu */}
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           {connected ? (
             <>
-              <div className="hidden sm:flex items-center gap-2 border-[2px] border-black bg-secondary px-3 py-1.5 shadow-[2px_2px_0_#000]">
-                <div className="h-2.5 w-2.5 bg-success border border-black" />
-                <span className="text-sm font-mono font-bold">
-                  {shortAddress}
-                </span>
+              <div className="hidden sm:flex items-center gap-2 border-[2px] border-border bg-secondary px-3 py-1.5 shadow-[2px_2px_0_var(--color-border)]">
+                <div className="h-2.5 w-2.5 bg-success border border-border" />
+                <span className="text-sm font-mono font-bold">{shortAddress}</span>
               </div>
               <Button variant="ghost" size="icon" onClick={disconnect}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </>
           ) : (
-            <Button
-              onClick={connect}
-              disabled={loading}
-              size="sm"
-              className="shimmer-on-hover"
-            >
+            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>
@@ -104,30 +121,26 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="sm:hidden w-9 h-9 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press cursor-pointer"
+            className="sm:hidden w-9 h-9 border-[2px] border-border bg-background shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center neo-press cursor-pointer"
           >
-            {mobileOpen ? (
-              <X className="h-4 w-4" />
-            ) : (
-              <Menu className="h-4 w-4" />
-            )}
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div className="sm:hidden border-t-[3px] border-black bg-white animate-fade-in-down">
+        <div className="sm:hidden border-t-[3px] border-border bg-background animate-fade-in-down transition-colors duration-300">
           <div className="px-4 py-3 space-y-1">
-            {visibleItems.map((item) => (
+            {NAV_ITEMS.map((item) => (
               <button
                 key={item.key}
                 onClick={() => handleNavigate(item.key)}
                 className={cn(
                   "w-full text-left px-4 py-3 text-sm font-bold transition-all cursor-pointer border-[2px]",
                   activePage === item.key
-                    ? "bg-primary border-black shadow-[2px_2px_0_#000]"
-                    : "border-transparent hover:border-black hover:bg-secondary"
+                    ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
+                    : "border-transparent hover:border-border hover:bg-secondary"
                 )}
               >
                 {item.label}

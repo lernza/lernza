@@ -37,6 +37,74 @@
   --animate-scale-in: scale-in 0.4s ease-out both;
 }
 
+/* ── Dark mode token overrides ────────────────────────────────────────────── */
+/*
+  Neo-brutalist dark: cream borders/shadows on near-black bg.
+  --color-border: #F5F0E8 mirrors what black does in light mode — it's the
+  structural color that gives cards and buttons their sharp offset shadow depth.
+  Yellow stays as --color-primary and --color-accent only (brand/highlight).
+  --color-ring stays yellow so focus rings remain visually distinct.
+  Card bg is one step lighter than page bg so cards read as distinct surfaces.
+*/
+.dark {
+  --color-background: #111110;
+  --color-foreground: #F5F0E8;
+  --color-primary: #FACC15;
+  --color-primary-foreground: #000000;
+  --color-secondary: #1C1917;
+  --color-secondary-foreground: #F5F0E8;
+  --color-muted: #292524;
+  --color-muted-foreground: #A8A29E;
+  --color-card: #1C1917;
+  --color-card-foreground: #F5F0E8;
+  --color-border: #F5F0E8;
+  --color-input: #F5F0E8;
+  --color-ring: #FACC15;
+  --color-accent: #FACC15;
+  --color-accent-foreground: #000000;
+  --color-destructive: #EF4444;
+  --color-destructive-foreground: #FFFFFF;
+  --color-success: #22C55E;
+  --color-success-foreground: #000000;
+  --color-warning: #F59E0B;
+  --color-warning-foreground: #000000;
+}
+
+/* ── Smooth theme transition — scoped, not global * ──────────────────────── */
+/*
+  Targeting only the structural/surface elements that actually change color
+  on theme switch. Avoids the page-load flash and performance cost of
+  transitioning every single DOM node.
+*/
+body,
+header,
+footer,
+main,
+[class*="bg-background"],
+[class*="bg-card"],
+[class*="bg-secondary"],
+[class*="bg-muted"],
+[class*="text-foreground"],
+[class*="text-card-foreground"],
+[class*="text-muted-foreground"],
+[class*="border-border"],
+[class*="border-black"] {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 250ms;
+  transition-timing-function: ease;
+}
+
+/* Keep interactive and animation classes snappy */
+.neo-press,
+.neo-lift,
+.card-tilt,
+.shimmer-on-hover,
+.shimmer-on-hover::after,
+[class*="animate-"],
+[class*="reveal-"] {
+  transition-property: translate, transform, opacity, box-shadow;
+}
+
 /* ── Keyframes ── */
 
 @keyframes fade-in {
@@ -240,6 +308,10 @@
   background-size: 28px 28px;
 }
 
+.dark .bg-grid-dots {
+  background-image: radial-gradient(circle, rgba(245, 240, 232, 0.06) 1px, transparent 1px);
+}
+
 .bg-diagonal-lines {
   background-image: repeating-linear-gradient(
     -45deg,
@@ -247,6 +319,16 @@
     transparent 8px,
     rgba(0, 0, 0, 0.02) 8px,
     rgba(0, 0, 0, 0.02) 9px
+  );
+}
+
+.dark .bg-diagonal-lines {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(245, 240, 232, 0.03) 8px,
+    rgba(245, 240, 232, 0.03) 9px
   );
 }
 
@@ -300,12 +382,12 @@ body {
 
 .card-tilt:hover {
   transform: perspective(800px) rotateX(2deg) rotateY(-3deg) translateY(-6px);
-  box-shadow: 10px 10px 0 #000;
+  box-shadow: 10px 10px 0 var(--color-border);
 }
 
 .card-tilt:active {
   transform: perspective(800px) rotateX(0) rotateY(0) translateY(0);
-  box-shadow: 3px 3px 0 #000;
+  box-shadow: 3px 3px 0 var(--color-border);
 }
 
 /* ── Stagger animation delays ── */
@@ -389,7 +471,7 @@ body {
   width: 0;
   height: 4px;
   background: var(--color-primary);
-  border: 1px solid black;
+  border: 1px solid var(--color-border);
   transition: width 0.4s ease-out;
 }
 
@@ -408,8 +490,8 @@ body {
 .step-line {
   height: 3px;
   background: var(--color-primary);
-  border-top: 1.5px solid black;
-  border-bottom: 1.5px solid black;
+  border-top: 1.5px solid var(--color-border);
+  border-bottom: 1.5px solid var(--color-border);
 }
 
 .step-line.in-view {

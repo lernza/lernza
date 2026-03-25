@@ -1,5 +1,32 @@
 #![no_std]
-use soroban_sdk::{contract, contracterror, contractimpl, contracttype, token, Address, Env};
+use soroban_sdk::{
+    contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
+    String,
+};
+
+#[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Visibility {
+    Public = 0,
+    Private = 1,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct QuestInfo {
+    pub id: u32,
+    pub owner: Address,
+    pub name: String,
+    pub description: String,
+    pub token_addr: Address,
+    pub created_at: u64,
+    pub visibility: Visibility,
+}
+
+#[contractclient(name = "QuestClient")]
+pub trait QuestContractTrait {
+    fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
+}
 
 // Rewards contract: holds token pools per quest and distributes rewards.
 //
@@ -7,14 +34,12 @@ use soroban_sdk::{contract, contracterror, contractimpl, contracttype, token, Ad
 // 1. Quest owner calls fund_quest() to deposit tokens into the pool
 // 2. When owner verifies a milestone completion, frontend calls distribute_reward()
 // 3. Tokens transfer from the contract's pool to the enrollee
-//
-// Auth model: whoever funds a quest becomes its authority.
-// Only the authority can distribute from that quest's pool.
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     TokenAddr,
+    QuestContractAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
     // Token balance allocated to a quest
@@ -45,14 +70,22 @@ pub struct RewardsContract;
 
 #[contractimpl]
 impl RewardsContract {
-    /// Initialize with the token contract address (SAC for the reward token).
-    pub fn initialize(env: Env, token_addr: Address) -> Result<(), Error> {
+    /// Initialize with the token contract address (SAC for the reward token)
+    /// and the quest contract address for ownership verification.
+    pub fn initialize(
+        env: Env,
+        token_addr: Address,
+        quest_contract_addr: Address,
+    ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
         }
         env.storage()
             .instance()
             .set(&DataKey::TokenAddr, &token_addr);
+        env.storage()
+            .instance()
+            .set(&DataKey::QuestContractAddr, &quest_contract_addr);
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
@@ -69,11 +102,30 @@ impl RewardsContract {
             return Err(Error::InvalidAmount);
         }
 
+        // Security Fix: Verify that the funder is the quest owner
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+
+        // Using QuestClient trait-based client to avoid WASM requirement in CI
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+
+        if quest_info.owner != funder {
+            return Err(Error::Unauthorized);
+        }
+
         let token_addr = Self::get_token(&env)?;
 
         // If quest already has an authority, only they can add more funds
         let auth_key = DataKey::QuestAuthority(quest_id);
-        if let Some(existing) = env.storage().persistent().get::<_, Address>(&auth_key) {
+        if let Some(existing) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+        {
             if existing != funder {
                 return Err(Error::Unauthorized);
             }
@@ -121,7 +173,7 @@ impl RewardsContract {
         let stored: Address = env
             .storage()
             .persistent()
-            .get(&auth_key)
+            .get::<DataKey, Address>(&auth_key)
             .ok_or(Error::QuestNotFunded)?;
         if stored != authority {
             return Err(Error::Unauthorized);
@@ -197,7 +249,7 @@ impl RewardsContract {
     pub fn get_token(env: &Env) -> Result<Address, Error> {
         env.storage()
             .instance()
-            .get(&DataKey::TokenAddr)
+            .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
     }
 }

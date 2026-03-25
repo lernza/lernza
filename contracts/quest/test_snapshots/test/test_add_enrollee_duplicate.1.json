@@ -26,6 +26,9 @@
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                },
+                {
+                  "u32": 0
                 }
               ]
             }
@@ -165,6 +168,14 @@
                     },
                     "val": {
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "visibility"
+                    },
+                    "val": {
+                      "u32": 0
                     }
                   }
                 ]

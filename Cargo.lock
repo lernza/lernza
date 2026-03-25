@@ -867,6 +867,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 name = "milestone"
 version = "0.0.0"
 dependencies = [
+ "quest",
  "soroban-sdk",
 ]
 
@@ -1062,6 +1063,7 @@ dependencies = [
 name = "rewards"
 version = "0.0.0"
 dependencies = [
+ "quest",
  "soroban-sdk",
 ]
 

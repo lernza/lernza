@@ -10,8 +10,7 @@ name: Release
 #      ALL commit types + contributors + full changelog link
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write

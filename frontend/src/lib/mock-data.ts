@@ -147,3 +147,65 @@ export const MOCK_USER_STATS: UserStats = {
   workspacesEnrolled: 1,
   milestonesCompleted: 4,
 }
+
+export interface PlatformStats {
+  totalQuests: number
+  activeUsers: number
+  tokensDistributed: number
+}
+
+export interface ActivityEvent {
+  id: string
+  user: string
+  action: "enrolled" | "completed" | "created"
+  workspaceName: string
+  timestamp: number
+}
+
+export interface EarningsDataPoint {
+  date: string
+  amount: number
+}
+
+export const MOCK_PLATFORM_STATS: PlatformStats = {
+  totalQuests: 156,
+  activeUsers: 842,
+  tokensDistributed: 125000,
+}
+
+// We can just reuse some of the existing workspaces for trending
+export const MOCK_TRENDING_QUESTS = [
+  MOCK_WORKSPACES[1],
+  MOCK_WORKSPACES[0],
+]
+
+export const MOCK_RECENT_ACTIVITY: ActivityEvent[] = [
+  {
+    id: "act_1",
+    user: "GBXR...K2YQ",
+    action: "completed",
+    workspaceName: "Stellar Development Bootcamp",
+    timestamp: Date.now() - 1000 * 60 * 30,
+  },
+  {
+    id: "act_2",
+    user: "GCMN...P8TL",
+    action: "enrolled",
+    workspaceName: "Design Fundamentals",
+    timestamp: Date.now() - 1000 * 60 * 60 * 2,
+  },
+  {
+    id: "act_3",
+    user: "GDVW...N5HS",
+    action: "created",
+    workspaceName: "Advanced Rust Patterns",
+    timestamp: Date.now() - 1000 * 60 * 60 * 24,
+  },
+]
+
+export const MOCK_EARNINGS_HISTORY: EarningsDataPoint[] = [
+  { date: "Jan", amount: 0 },
+  { date: "Feb", amount: 150 },
+  { date: "Mar", amount: 400 },
+  { date: "Apr", amount: 750 },
+]

@@ -175,7 +175,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "map": []
+                  "vec": []
                 }
               }
             },
@@ -220,7 +220,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "map": []
+                  "vec": []
                 }
               }
             },
@@ -320,6 +320,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "status"
+                      },
+                      "val": {
+                        "u32": 0
                       }
                     },
                     {
@@ -446,6 +454,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "status"
+                      },
+                      "val": {
+                        "u32": 0
                       }
                     },
                     {

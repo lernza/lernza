@@ -81,6 +81,7 @@ pub enum Error {
     QuestLookupFailed = 7,
     MilestoneNotCompleted = 8,
     MilestoneContractNotInitialized = 9,
+    ArithmeticOverflow = 10,
 }
 
 const BUMP: u32 = 518_400;
@@ -174,9 +175,10 @@ impl RewardsContract {
         // Credit the quest pool
         let pool_key = DataKey::QuestPool(quest_id);
         let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&pool_key, &(current + amount));
+        let new_pool = current
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
@@ -244,7 +246,8 @@ impl RewardsContract {
         client.transfer(&env.current_contract_address(), &enrollee, &amount);
 
         // Update pool balance
-        env.storage().persistent().set(&pool_key, &(pool - amount));
+        let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
@@ -252,9 +255,10 @@ impl RewardsContract {
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());
         let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&earn_key, &(earned + amount));
+        let new_earned = earned
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&earn_key, &new_earned);
         env.storage()
             .persistent()
             .extend_ttl(&earn_key, THRESHOLD, BUMP);
@@ -265,9 +269,10 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalDistributed)
             .unwrap_or(0);
+        let new_total = total.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
         env.storage()
             .instance()
-            .set(&DataKey::TotalDistributed, &(total + amount));
+            .set(&DataKey::TotalDistributed, &new_total);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 
         // Emit reward distribution event
@@ -314,4 +319,5 @@ impl RewardsContract {
     }
 }
 
+#[cfg(test)]
 mod test;

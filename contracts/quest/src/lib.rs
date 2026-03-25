@@ -89,19 +89,22 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let mut enrollees = Self::load_enrollees(&env, quest_id);
+        let enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check not already enrolled
-        for existing in enrollees.iter() {
-            if *existing == enrollee {
-                return Err(Error::AlreadyEnrolled);
+        for i in 0..enrollees.len() {
+            if let Ok(existing) = enrollees.get(i) {
+                if existing == enrollee {
+                    return Err(Error::AlreadyEnrolled);
+                }
             }
         }
 
-        enrollees.push_back(enrollee);
+        let mut new_enrollees = enrollees;
+        new_enrollees.push_back(enrollee);
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(quest_id), &enrollees);
+            .set(&DataKey::Enrollees(quest_id), &new_enrollees);
         Self::bump(&env, quest_id);
         Ok(())
     }
@@ -115,11 +118,12 @@ impl QuestContract {
         let mut new_list = Vec::new(&env);
         let mut found = false;
 
-        for addr in enrollees.iter() {
-            if *addr == enrollee {
+        for i in 0..enrollees.len() {
+            let addr = enrollees.get(i).unwrap();
+            if addr == enrollee {
                 found = true;
             } else {
-                new_list.push_back(*addr);
+                new_list.push_back(addr);
             }
         }
 
@@ -153,9 +157,11 @@ impl QuestContract {
     pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
-        for enrollee in enrollees.iter() {
-            if *enrollee == user {
-                return Ok(true);
+        for i in 0..enrollees.len() {
+            if let Ok(enrollee) = enrollees.get(i) {
+                if enrollee == user {
+                    return Ok(true);
+                }
             }
         }
         Ok(false)

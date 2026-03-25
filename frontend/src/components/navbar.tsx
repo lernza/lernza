@@ -51,23 +51,23 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
         {/* Logo */}
         <button
           onClick={() => handleNavigate("landing")}
-          className="flex items-center gap-2 cursor-pointer group"
+          className="group flex cursor-pointer items-center gap-2"
         >
           <LogoMark className="h-8 w-8 transition-transform group-hover:scale-110" />
           <span className="text-xl font-black tracking-tight">Lernza</span>
         </button>
 
         {/* Desktop nav links */}
-        <nav className="hidden sm:flex items-center gap-1">
-          {visibleItems.map((item) => (
+        <nav className="hidden items-center gap-1 sm:flex">
+          {visibleItems.map(item => (
             <button
               key={item.key}
               onClick={() => handleNavigate(item.key)}
               className={cn(
-                "px-4 py-2 text-sm font-bold transition-all cursor-pointer border-[2px] animated-underline",
+                "animated-underline cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all",
                 activePage === item.key
-                  ? "bg-primary border-black shadow-[2px_2px_0_#000] active"
-                  : "border-transparent hover:border-black hover:bg-secondary"
+                  ? "bg-primary active border-black shadow-[2px_2px_0_#000]"
+                  : "hover:bg-secondary border-transparent hover:border-black"
               )}
             >
               {item.label}
@@ -79,23 +79,16 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
         <div className="flex items-center gap-3">
           {connected ? (
             <>
-              <div className="hidden sm:flex items-center gap-2 border-[2px] border-black bg-secondary px-3 py-1.5 shadow-[2px_2px_0_#000]">
-                <div className="h-2.5 w-2.5 bg-success border border-black" />
-                <span className="text-sm font-mono font-bold">
-                  {shortAddress}
-                </span>
+              <div className="bg-secondary hidden items-center gap-2 border-[2px] border-black px-3 py-1.5 shadow-[2px_2px_0_#000] sm:flex">
+                <div className="bg-success h-2.5 w-2.5 border border-black" />
+                <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
               <Button variant="ghost" size="icon" onClick={disconnect}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </>
           ) : (
-            <Button
-              onClick={connect}
-              disabled={loading}
-              size="sm"
-              className="shimmer-on-hover"
-            >
+            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>
@@ -104,30 +97,26 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="sm:hidden w-9 h-9 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press cursor-pointer"
+            className="neo-press flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] border-black bg-white shadow-[2px_2px_0_#000] sm:hidden"
           >
-            {mobileOpen ? (
-              <X className="h-4 w-4" />
-            ) : (
-              <Menu className="h-4 w-4" />
-            )}
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div className="sm:hidden border-t-[3px] border-black bg-white animate-fade-in-down">
-          <div className="px-4 py-3 space-y-1">
-            {visibleItems.map((item) => (
+        <div className="animate-fade-in-down border-t-[3px] border-black bg-white sm:hidden">
+          <div className="space-y-1 px-4 py-3">
+            {visibleItems.map(item => (
               <button
                 key={item.key}
                 onClick={() => handleNavigate(item.key)}
                 className={cn(
-                  "w-full text-left px-4 py-3 text-sm font-bold transition-all cursor-pointer border-[2px]",
+                  "w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all",
                   activePage === item.key
                     ? "bg-primary border-black shadow-[2px_2px_0_#000]"
-                    : "border-transparent hover:border-black hover:bg-secondary"
+                    : "hover:bg-secondary border-transparent hover:border-black"
                 )}
               >
                 {item.label}

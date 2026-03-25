@@ -58,10 +58,7 @@ function App() {
   const renderPage = () => {
     if (state.page === "workspace" && state.workspaceId !== null) {
       return (
-        <WorkspaceView
-          workspaceId={state.workspaceId}
-          onBack={() => handleNavigate("dashboard")}
-        />
+        <WorkspaceView workspaceId={state.workspaceId} onBack={() => handleNavigate("dashboard")} />
       )
     }
     switch (state.page) {
@@ -75,11 +72,7 @@ function App() {
           />
         )
       case "create-quest":
-        return (
-          <CreateQuest
-            onBack={() => handleNavigate("dashboard")}
-          />
-        )
+        return <CreateQuest onBack={() => handleNavigate("dashboard")} />
       case "profile":
         return <Profile />
       default:
@@ -89,7 +82,7 @@ function App() {
 
   return (
     <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
-      <div className="min-h-screen bg-background text-foreground">
+      <div className="bg-background text-foreground min-h-screen">
         <Navbar activePage={state.page} onNavigate={handleNavigate} />
         <ErrorBoundary key={`${state.page}-${state.workspaceId ?? ""}`}>
           <main>{renderPage()}</main>

@@ -1,7 +1,7 @@
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec, Map,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -144,7 +144,7 @@ impl QuestContract {
         }
 
         let mut new_enrollees = enrollees;
-        new_enrollees.push_back(enrollee.clone());
+        new_enrollees.set(enrollee.clone(), ());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
@@ -172,7 +172,7 @@ impl QuestContract {
             return Err(Error::NotEnrolled);
         }
 
-        enrollees.remove(enrollee);
+        enrollees.remove(enrollee.clone());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &enrollees);

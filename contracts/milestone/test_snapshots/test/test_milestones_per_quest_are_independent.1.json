@@ -259,7 +259,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "vec": []
+                  "map": []
                 }
               }
             },
@@ -304,7 +304,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "vec": []
+                  "map": []
                 }
               }
             },
@@ -582,6 +582,25 @@
                         },
                         "val": {
                           "u32": 2
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "PublicQuests"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "u32": 0
+                            },
+                            {
+                              "u32": 1
+                            }
+                          ]
                         }
                       }
                     ]

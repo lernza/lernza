@@ -11,8 +11,7 @@ Contracts in this repo:
 
 ## 1. Prerequisites
 
-- Stellar CLI installed (`stellar --version`)  
-  Tested with: `stellar 25.1.0`
+- Stellar CLI v25.1.0 or later (`stellar --version`; tested with v25.2.0)
 - Rust installed (`rustc --version`, `cargo --version`)
 - Soroban WASM target available (`rustup target add wasm32-unknown-unknown`)
 - A funded Stellar testnet account (testnet XLM)
@@ -22,7 +21,7 @@ Optional checks:
 ```bash
 stellar --version
 cargo --version
-rustup target list --installed
+rustup target list | grep wasm32
 ```
 
 ## 2. Build Contracts
@@ -54,17 +53,25 @@ stellar keys generate lernza-deployer --network testnet --fund
 stellar keys fund lernza-deployer --network testnet
 ```
 
-## 4. Get Reward Token Contract Address
+## 4. Get USDC Token Contract Address
 
-Lernza rewards contract requires a token contract address at initialization.
+Lernza uses **USDC on Stellar** via its Stellar Asset Contract (SAC). The rewards contract requires a token contract address at initialization.
 
-For native testnet XLM (SAC wrapper):
+For testnet USDC (issued by the SDF test anchor):
+
+```bash
+stellar contract id asset \
+  --asset USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5 \
+  --network testnet
+```
+
+If you prefer native XLM for quick testing:
 
 ```bash
 stellar contract id asset --asset native --network testnet
 ```
 
-Save this as:
+Save the output as:
 
 ```bash
 TOKEN_ID=<output_from_command_above>
@@ -235,6 +242,7 @@ A deployment run was executed on **2026-03-24** with:
 - `REWARDS_ID=CCF2BR6PDYW4BAEPXHIXDNKBBCYWURFSFACHL5SG45XTSF3CT5YY753W`
 - `WORKSPACE_ID=CAWNB5LTEXQVXRMPLYT5HTEDEIGMUHNFGYMBWEIET6FQSP47Z7XGOJUD`
 - `MILESTONE_ID=CCM6NJGQG2IST2S3BMQC6SUBKYB4WIM7AWYA4UIYOVXY5OQQZBX5GJDO`
-- `TOKEN_ID=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` (native XLM SAC)
+- `TOKEN_ID=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` (native XLM SAC used for testing)
 
 Treat these as historical proof of process, not reusable deployment targets for your environment.
+

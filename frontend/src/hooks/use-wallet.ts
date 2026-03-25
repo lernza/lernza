@@ -19,14 +19,14 @@ export function useWallet() {
   })
 
   const connect = useCallback(async () => {
-    setState((s) => ({ ...s, loading: true, error: null }))
+    setState(s => ({ ...s, loading: true, error: null }))
     try {
       // Clear the disconnected flag so auto-connect works again
       sessionStorage.removeItem(DISCONNECTED_KEY)
       const { address } = await freighter.requestAccess()
       setState({ address, connected: true, loading: false, error: null })
     } catch (err) {
-      setState((s) => ({
+      setState(s => ({
         ...s,
         loading: false,
         error: err instanceof Error ? err.message : "Failed to connect wallet",

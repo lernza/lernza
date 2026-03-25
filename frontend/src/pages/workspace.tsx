@@ -17,12 +17,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useInView, useCountUp } from "@/hooks/use-animations"
-import {
-  MOCK_WORKSPACES,
-  MOCK_MILESTONES,
-  MOCK_ENROLLEES,
-  MOCK_COMPLETIONS,
-} from "@/lib/mock-data"
+import { MOCK_WORKSPACES, MOCK_MILESTONES, MOCK_ENROLLEES, MOCK_COMPLETIONS } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
@@ -37,11 +32,9 @@ type Tab = "milestones" | "enrollees"
 
 export function WorkspaceView({ workspaceId, onBack }: WorkspaceViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
-  const [expandedMilestone, setExpandedMilestone] = useState<number | null>(
-    null
-  )
+  const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
 
-  const ws = MOCK_WORKSPACES.find((w) => w.id === workspaceId)
+  const ws = MOCK_WORKSPACES.find(w => w.id === workspaceId)
   const milestones = MOCK_MILESTONES[workspaceId] || []
   const enrollees = MOCK_ENROLLEES[workspaceId] || []
   const completions = MOCK_COMPLETIONS[workspaceId] || []
@@ -50,15 +43,11 @@ const { toasts, addToast, removeToast } = useToast()
   const [contentRef, contentInView] = useInView()
 
   const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
-  const completedMilestones = new Set(
-    completions.filter((c) => c.completed).map((c) => c.milestoneId)
-  ).size
-  const isComplete =
-    completedMilestones === milestones.length && milestones.length > 0
+  const completedMilestones = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
+    .size
+  const isComplete = completedMilestones === milestones.length && milestones.length > 0
   const earnedReward = milestones
-    .filter((m) =>
-      completions.some((c) => c.milestoneId === m.id && c.completed)
-    )
+    .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
     .reduce((sum, m) => sum + m.rewardAmount, 0)
 
   const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
@@ -68,8 +57,8 @@ const { toasts, addToast, removeToast } = useToast()
 
   if (!ws) {
     return (
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-20 text-center">
-        <h2 className="text-2xl font-black mb-4">Quest not found</h2>
+      <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+        <h2 className="mb-4 text-2xl font-black">Quest not found</h2>
         <Button variant="outline" onClick={onBack}>
           Go back
         </Button>
@@ -78,29 +67,27 @@ const { toasts, addToast, removeToast } = useToast()
   }
 
   return (
-    <div className="relative mx-auto max-w-6xl px-4 sm:px-6 py-8">
+    <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Background */}
-      <div className="absolute inset-0 bg-grid-dots pointer-events-none opacity-30" />
+      <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
       {/* Back button */}
       <button
         onClick={onBack}
-        className="flex items-center gap-2 text-sm font-bold text-muted-foreground hover:text-foreground mb-6 transition-colors cursor-pointer group"
+        className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
-        <div className="w-7 h-7 border-[2px] border-black bg-white shadow-[2px_2px_0_#000] flex items-center justify-center neo-press hover:shadow-[3px_3px_0_#000] active:shadow-[1px_1px_0_#000] group-hover:bg-primary transition-colors">
+        <div className="neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] border-black bg-white shadow-[2px_2px_0_#000] transition-colors hover:shadow-[3px_3px_0_#000] active:shadow-[1px_1px_0_#000]">
           <ArrowLeft className="h-3.5 w-3.5" />
         </div>
         Back to Dashboard
       </button>
 
       {/* Quest header card */}
-      <div className="relative bg-white border-[3px] border-black shadow-[6px_6px_0_#000] overflow-hidden mb-8 animate-fade-in-up">
+      <div className="animate-fade-in-up relative mb-8 overflow-hidden border-[3px] border-black bg-white shadow-[6px_6px_0_#000]">
         {/* Header bar */}
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
+        <div className="bg-primary flex items-center justify-between border-b-[3px] border-black px-6 py-3">
           <div className="flex items-center gap-3">
-            <span className="text-xs font-black uppercase tracking-wider">
-              Quest Details
-            </span>
+            <span className="text-xs font-black tracking-wider uppercase">Quest Details</span>
             {isComplete && (
               <Badge variant="success" className="gap-1">
                 <Sparkles className="h-3 w-3" />
@@ -109,21 +96,19 @@ const { toasts, addToast, removeToast } = useToast()
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 bg-success border border-black" />
+            <div className="bg-success h-2.5 w-2.5 border border-black" />
             <span className="text-xs font-bold">Live</span>
           </div>
         </div>
 
-        <div className="p-6 relative">
-          <div className="absolute inset-0 bg-diagonal-lines pointer-events-none opacity-20" />
-          <div className="relative flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="relative p-6">
+          <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black">{ws.name}</h1>
-              <p className="text-muted-foreground text-sm mt-1 max-w-xl">
-                {ws.description}
-              </p>
+              <h1 className="text-2xl font-black sm:text-3xl">{ws.name}</h1>
+              <p className="text-muted-foreground mt-1 max-w-xl text-sm">{ws.description}</p>
             </div>
-            <div className="flex gap-3 flex-shrink-0">
+            <div className="flex flex-shrink-0 gap-3">
               <Button variant="outline" size="sm" className="shimmer-on-hover">
                 <UserPlus className="h-4 w-4" />
                 Add Enrollee
@@ -143,7 +128,7 @@ const { toasts, addToast, removeToast } = useToast()
       </div>
 
       {/* Stats row */}
-      <div ref={statsRef} className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div ref={statsRef} className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           {
             icon: Users,
@@ -176,19 +161,15 @@ const { toasts, addToast, removeToast } = useToast()
             style={{ transitionDelay: `${i * 100}ms` }}
           >
             <Card className="neo-lift hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000]">
-              <CardContent className="p-4 flex items-center gap-3">
+              <CardContent className="flex items-center gap-3 p-4">
                 <div
-                  className={`w-10 h-10 ${stat.bg} border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0`}
+                  className={`h-10 w-10 ${stat.bg} flex flex-shrink-0 items-center justify-center border-[2px] border-black shadow-[2px_2px_0_#000]`}
                 >
                   <stat.icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-muted-foreground">
-                    {stat.label}
-                  </p>
-                  <p className="text-lg font-black tabular-nums">
-                    {stat.value}
-                  </p>
+                  <p className="text-muted-foreground text-xs font-bold">{stat.label}</p>
+                  <p className="text-lg font-black tabular-nums">{stat.value}</p>
                 </div>
               </CardContent>
             </Card>
@@ -198,9 +179,9 @@ const { toasts, addToast, removeToast } = useToast()
 
       {/* Progress section */}
       {milestones.length > 0 && (
-        <div className="mb-8 animate-fade-in-up stagger-3">
-          <div className="bg-white border-[3px] border-black shadow-[4px_4px_0_#000] p-5">
-            <div className="flex items-center justify-between mb-3">
+        <div className="animate-fade-in-up stagger-3 mb-8">
+          <div className="border-[3px] border-black bg-white p-5 shadow-[4px_4px_0_#000]">
+            <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-black">Overall Progress</span>
               <div className="flex items-center gap-3">
                 {earnedReward > 0 && (
@@ -219,15 +200,15 @@ const { toasts, addToast, removeToast } = useToast()
       )}
 
       {/* Tabs */}
-      <div className="flex gap-0 border-b-[3px] border-black mb-6" ref={contentRef}>
-        {(["milestones", "enrollees"] as Tab[]).map((tab) => (
+      <div className="mb-6 flex gap-0 border-b-[3px] border-black" ref={contentRef}>
+        {(["milestones", "enrollees"] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-3 text-sm font-black uppercase tracking-wider border-[3px] border-b-0 transition-all capitalize cursor-pointer -mb-[3px] ${
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider capitalize uppercase transition-all ${
               activeTab === tab
-                ? "border-black bg-primary shadow-[2px_-2px_0_#000]"
-                : "border-transparent hover:bg-secondary"
+                ? "bg-primary border-black shadow-[2px_-2px_0_#000]"
+                : "hover:bg-secondary border-transparent"
             }`}
           >
             {tab}
@@ -244,11 +225,11 @@ const { toasts, addToast, removeToast } = useToast()
           {milestones.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="w-14 h-14 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-4">
+                <div className="bg-primary mb-4 flex h-14 w-14 items-center justify-center border-[3px] border-black shadow-[4px_4px_0_#000]">
                   <Target className="h-6 w-6" />
                 </div>
-                <h3 className="font-black mb-2">No milestones yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <h3 className="mb-2 font-black">No milestones yet</h3>
+                <p className="text-muted-foreground mb-4 text-sm">
                   Add milestones to define learning goals.
                 </p>
                 <Button size="sm" className="shimmer-on-hover">
@@ -259,12 +240,10 @@ const { toasts, addToast, removeToast } = useToast()
             </Card>
           ) : (
             milestones.map((ms, i) => {
-              const isCompleted = completions.some(
-                (c) => c.milestoneId === ms.id && c.completed
-              )
+              const isCompleted = completions.some(c => c.milestoneId === ms.id && c.completed)
               const completedBy = completions
-                .filter((c) => c.milestoneId === ms.id && c.completed)
-                .map((c) => c.enrollee)
+                .filter(c => c.milestoneId === ms.id && c.completed)
+                .map(c => c.enrollee)
               const isExpanded = expandedMilestone === ms.id
 
               return (
@@ -274,63 +253,57 @@ const { toasts, addToast, removeToast } = useToast()
                   style={{ transitionDelay: `${i * 100}ms` }}
                 >
                   <Card
-                    className={`neo-lift hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000] cursor-pointer group transition-all ${
+                    className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000] ${
                       isCompleted ? "border-success" : ""
                     }`}
-                    onClick={() =>
-                      setExpandedMilestone(isExpanded ? null : ms.id)
-                    }
+                    onClick={() => setExpandedMilestone(isExpanded ? null : ms.id)}
                   >
                     <CardContent className="p-5">
                       <div className="flex items-start gap-4">
                         <div
-                          className={`w-8 h-8 border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
-                            isCompleted ? "bg-success" : "bg-white group-hover:bg-secondary"
+                          className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] border-black shadow-[2px_2px_0_#000] transition-all duration-300 ${
+                            isCompleted ? "bg-success" : "group-hover:bg-secondary bg-white"
                           }`}
                         >
                           {isCompleted ? (
                             <CheckCircle2 className="h-4 w-4" />
                           ) : (
-                            <Circle className="h-4 w-4 text-muted-foreground" />
+                            <Circle className="text-muted-foreground h-4 w-4" />
                           )}
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <h3
                               className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
                             >
                               {ms.title}
                             </h3>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <Badge
-                                variant={isCompleted ? "success" : "default"}
-                              >
+                            <div className="flex flex-shrink-0 items-center gap-2">
+                              <Badge variant={isCompleted ? "success" : "default"}>
                                 {ms.rewardAmount} USDC
                               </Badge>
                               {isExpanded ? (
-                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                <ChevronUp className="text-muted-foreground h-4 w-4" />
                               ) : (
-                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                <ChevronDown className="text-muted-foreground h-4 w-4" />
                               )}
                             </div>
                           </div>
 
                           {/* Expanded content */}
                           {isExpanded && (
-                            <div className="mt-3 animate-fade-in-up">
-                              <p className="text-sm text-muted-foreground mb-3">
-                                {ms.description}
-                              </p>
+                            <div className="animate-fade-in-up mt-3">
+                              <p className="text-muted-foreground mb-3 text-sm">{ms.description}</p>
                               {completedBy.length > 0 && (
                                 <div className="mb-3">
-                                  <p className="text-xs font-bold text-muted-foreground mb-2">
+                                  <p className="text-muted-foreground mb-2 text-xs font-bold">
                                     Completed by:
                                   </p>
                                   <div className="flex flex-wrap gap-2">
-                                    {completedBy.map((addr) => (
+                                    {completedBy.map(addr => (
                                       <span
                                         key={addr}
-                                        className="text-xs font-mono font-bold bg-success/10 border-[1.5px] border-black px-2 py-1 shadow-[1px_1px_0_#000]"
+                                        className="bg-success/10 border-[1.5px] border-black px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_#000]"
                                       >
                                         {addr}
                                       </span>
@@ -343,7 +316,7 @@ const { toasts, addToast, removeToast } = useToast()
                                   variant="outline"
                                   size="sm"
                                   className="shimmer-on-hover"
-                                  onClick={(e) => e.stopPropagation()}
+                                  onClick={e => e.stopPropagation()}
                                 >
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                   Verify Completion
@@ -368,13 +341,11 @@ const { toasts, addToast, removeToast } = useToast()
           {enrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="w-14 h-14 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] flex items-center justify-center mb-4">
+                <div className="bg-primary mb-4 flex h-14 w-14 items-center justify-center border-[3px] border-black shadow-[4px_4px_0_#000]">
                   <Users className="h-6 w-6" />
                 </div>
-                <h3 className="font-black mb-2">No enrollees yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Add learners to this quest.
-                </p>
+                <h3 className="mb-2 font-black">No enrollees yet</h3>
+                <p className="text-muted-foreground mb-4 text-sm">Add learners to this quest.</p>
                 <Button size="sm" className="shimmer-on-hover">
                   <UserPlus className="h-4 w-4" />
                   Add Enrollee
@@ -383,21 +354,15 @@ const { toasts, addToast, removeToast } = useToast()
             </Card>
           ) : (
             enrollees.map((addr, i) => {
-              const completed = completions.filter(
-                (c) => c.enrollee === addr && c.completed
-              ).length
+              const completed = completions.filter(c => c.enrollee === addr && c.completed).length
               const earned = milestones
-                .filter((m) =>
+                .filter(m =>
                   completions.some(
-                    (c) =>
-                      c.enrollee === addr &&
-                      c.milestoneId === m.id &&
-                      c.completed
+                    c => c.enrollee === addr && c.milestoneId === m.id && c.completed
                   )
                 )
                 .reduce((sum, m) => sum + m.rewardAmount, 0)
-              const isAllDone =
-                completed === milestones.length && milestones.length > 0
+              const isAllDone = completed === milestones.length && milestones.length > 0
 
               return (
                 <div
@@ -405,23 +370,19 @@ const { toasts, addToast, removeToast } = useToast()
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
                   style={{ transitionDelay: `${i * 100}ms` }}
                 >
-                  <Card className="neo-lift hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000] group">
+                  <Card className="neo-lift group hover:shadow-[7px_7px_0_#000] active:shadow-[2px_2px_0_#000]">
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center text-sm font-mono font-black group-hover:shadow-[3px_3px_0_#000] transition-shadow">
+                          <div className="bg-primary flex h-10 w-10 items-center justify-center border-[2px] border-black font-mono text-sm font-black shadow-[2px_2px_0_#000] transition-shadow group-hover:shadow-[3px_3px_0_#000]">
                             {addr.slice(0, 2)}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="font-mono text-sm font-bold">
-                                {addr}
-                              </p>
-                              {isAllDone && (
-                                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                              )}
+                              <p className="font-mono text-sm font-bold">{addr}</p>
+                              {isAllDone && <Sparkles className="text-primary h-3.5 w-3.5" />}
                             </div>
-                            <p className="text-xs font-bold text-muted-foreground">
+                            <p className="text-muted-foreground text-xs font-bold">
                               {completed}/{milestones.length} milestones
                             </p>
                           </div>
@@ -430,17 +391,11 @@ const { toasts, addToast, removeToast } = useToast()
                           <Badge variant="success" className="tabular-nums">
                             +{formatTokens(earned)} USDC
                           </Badge>
-                          <p className="text-xs font-bold text-muted-foreground mt-1">
-                            earned
-                          </p>
+                          <p className="text-muted-foreground mt-1 text-xs font-bold">earned</p>
                         </div>
                       </div>
                       {milestones.length > 0 && (
-                        <Progress
-                          value={completed}
-                          max={milestones.length}
-                          className="mt-4"
-                        />
+                        <Progress value={completed} max={milestones.length} className="mt-4" />
                       )}
                     </CardContent>
                   </Card>

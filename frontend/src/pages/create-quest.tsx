@@ -39,9 +39,6 @@ const step1Schema = z.object({
     .string()
     .min(1, "Description is required")
     .max(2000, "Max 2000 characters"),
-  tokenAddress: z
-    .string()
-    .regex(/^[CG][A-Z2-7]{55}$/, "Invalid Stellar address (56 chars, starts with C or G)"),
 })
 type Step1Values = z.infer<typeof step1Schema>
 
@@ -228,22 +225,6 @@ function Step1Form({
             </div>
           </div>
 
-          {/* Token Address */}
-          <div>
-            <FormLabel required>Token Address (USDC SAC)</FormLabel>
-            <input
-              {...register("tokenAddress")}
-              placeholder={TESTNET_USDC}
-              className={cn(
-                "w-full border-[2px] border-black px-4 py-2.5 text-sm font-mono focus:outline-none focus:shadow-[3px_3px_0_#000] transition-shadow bg-white",
-                errors.tokenAddress && "border-destructive"
-              )}
-            />
-            <FieldError message={errors.tokenAddress?.message} />
-            <p className="text-xs font-bold text-muted-foreground mt-1">
-              Pre-filled with testnet USDC SAC address
-            </p>
-          </div>
         </div>
       </div>
 
@@ -505,7 +486,7 @@ function Step3Review({
       owner: address ?? "GUNK...NOWN",
       name: step1Data.name,
       description: step1Data.description,
-      tokenAddr: step1Data.tokenAddress,
+      tokenAddr: TESTNET_USDC,
       enrolleeCount: 0,
       milestoneCount: step2Data.milestones.length,
       poolBalance: totalReward,
@@ -546,11 +527,6 @@ function Step3Review({
             <p className="text-sm text-muted-foreground">
               {step1Data.description}
             </p>
-            <div className="pt-2">
-              <p className="text-xs font-bold text-muted-foreground break-all font-mono">
-                Token: {step1Data.tokenAddress}
-              </p>
-            </div>
           </div>
 
           {/* Milestones list */}
@@ -731,7 +707,6 @@ export function CreateQuest({ onBack, onQuestCreated }: CreateQuestProps) {
   const [step1Data, setStep1Data] = useState<Step1Values>({
     name: "",
     description: "",
-    tokenAddress: TESTNET_USDC,
   })
   const [step2Data, setStep2Data] = useState<Step2Values>({
     milestones: [{ title: "", description: "", rewardAmount: 0 }],

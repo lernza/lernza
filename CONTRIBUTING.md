@@ -35,6 +35,7 @@ cargo build --target wasm32-unknown-unknown --release
 
 ```bash
 cd frontend
+cp .env.example .env  # Copy environment variables
 pnpm install
 pnpm dev        # Start dev server
 pnpm build      # Production build
@@ -51,6 +52,7 @@ This project uses [husky](https://typicode.github.io/husky/) and [lint-staged](h
 These checks help prevent formatting issues from reaching CI. The hooks are automatically installed after running `pnpm install` in the frontend directory.
 
 To troubleshoot hook issues, check `.husky/pre-commit` and `.lintstagedrc`.
+The `.env.example` file contains optional configuration for connecting to Stellar testnet. These variables will be required once contract integration is complete.
 
 ## Branch Naming
 

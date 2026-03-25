@@ -245,7 +245,7 @@ See [SECURITY.md](SECURITY.md) for vulnerability disclosure.
 
 <p align="center">
   <a href="https://github.com/lernza/lernza/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=lernza/lernza" alt="Contributors" />
+    <img src="https://stg.contrib.rocks/image?repo=lernza/lernza" alt="Contributors" />
   </a>
 </p>
 

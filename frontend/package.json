@@ -10,9 +10,6 @@
     "preview": "vite preview",
     "prepare": "cd .. && husky"
   },
-  "lint-staged": {
-    "*.{ts,tsx}": ["pnpm exec eslint --fix"]
-  },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^14.6.1",

@@ -15,6 +15,7 @@ fn setup() -> (
     Address,                      // token address
     QuestContractClient<'static>, // quest client
     Address,                      // quest contract address
+    Address,                      // admin address
 ) {
     let env = Env::default();
     env.mock_all_auths();
@@ -31,29 +32,40 @@ fn setup() -> (
     // Deploy rewards contract
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
-    client.initialize(&token_addr, &quest_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &token_addr, &quest_id);
 
-    (env, client, contract_id, token_addr, quest_client, quest_id)
+    (
+        env,
+        client,
+        contract_id,
+        token_addr,
+        quest_client,
+        quest_id,
+        admin,
+    )
 }
 
 #[test]
 fn test_initialize() {
-    let (_env, client, _cid, token_addr, _ws, _ws_id) = setup();
+    let (_env, client, _cid, token_addr, _ws, _ws_id, admin) = setup();
     assert_eq!(client.get_token(), token_addr);
+    assert_eq!(client.get_admin(), admin);
     assert_eq!(client.get_total_distributed(), 0);
 }
 
 #[test]
 fn test_initialize_twice_fails() {
-    let (env, client, _cid, _token_addr, _ws, quest_id) = setup();
+    let (env, client, _cid, _token_addr, _ws, quest_id, _admin) = setup();
     let fake_token = Address::generate(&env);
-    let result = client.try_initialize(&fake_token, &quest_id);
+    let fake_admin = Address::generate(&env);
+    let result = client.try_initialize(&fake_admin, &fake_token, &quest_id);
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
 #[test]
 fn test_fund_quest() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
 
     // Mint tokens to owner
@@ -82,7 +94,7 @@ fn test_fund_quest() {
 
 #[test]
 fn test_fund_quest_adds_to_existing() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -106,7 +118,7 @@ fn test_fund_quest_adds_to_existing() {
 
 #[test]
 fn test_fund_invalid_amount() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
 
     let q_id = quest_client.create_quest(
@@ -125,7 +137,7 @@ fn test_fund_invalid_amount() {
 
 #[test]
 fn test_different_funder_unauthorized() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let other = Address::generate(&env);
 
@@ -153,7 +165,7 @@ fn test_different_funder_unauthorized() {
 
 #[test]
 fn test_distribute_reward() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
 
@@ -187,7 +199,7 @@ fn test_distribute_reward() {
 
 #[test]
 fn test_distribute_multiple_rewards() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
@@ -220,7 +232,7 @@ fn test_distribute_multiple_rewards() {
 
 #[test]
 fn test_insufficient_pool() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
 
@@ -244,7 +256,7 @@ fn test_insufficient_pool() {
 
 #[test]
 fn test_distribute_unauthorized() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let imposter = Address::generate(&env);
     let enrollee = Address::generate(&env);
@@ -270,13 +282,14 @@ fn test_distribute_unauthorized() {
 
 #[test]
 fn test_distribute_quest_not_funded() {
-    let (env, client, _cid, _token_addr, _quest_client, quest_id) = setup();
+    let (env, client, _cid, _token_addr, _quest_client, quest_id, admin) = setup();
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
     // Even if quest exists, if not funded it has no authority
     let result = client.try_distribute_reward(&owner, &999, &enrollee, &100);
     assert_eq!(result, Err(Ok(Error::QuestNotFunded)));
     let _ = quest_id;
+    let _ = admin;
 }
 
 // ---- Security tests (Audit Restored) ----
@@ -295,20 +308,23 @@ fn test_initialize_no_auth_guard() {
 
     // Any random address can initialize — no deployer auth required
     let attacker_token = Address::generate(&env);
-    client.initialize(&attacker_token, &quest_id);
+    let attacker_admin = Address::generate(&env);
+    client.initialize(&attacker_admin, &attacker_token, &quest_id);
 
     assert_eq!(client.get_token(), attacker_token);
+    assert_eq!(client.get_admin(), attacker_admin);
 
     // Legitimate deployer cannot override it
     let real_token = Address::generate(&env);
-    let result = client.try_initialize(&real_token, &quest_id);
+    let real_admin = Address::generate(&env);
+    let result = client.try_initialize(&real_admin, &real_token, &quest_id);
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
 /// MED-02: Self-distribution
 #[test]
 fn test_authority_self_distribution() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
 
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -327,18 +343,19 @@ fn test_authority_self_distribution() {
     client.fund_quest(&owner, &q_id, &5_000);
 
     // Authority distributes reward pool tokens back to themselves
-    client.distribute_reward(&owner, &q_id, &owner, &1_000);
+    let result = client.try_distribute_reward(&owner, &q_id, &owner, &1_000);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
 
     let token_client = TokenClient::new(&env, &token_addr);
-    assert_eq!(token_client.balance(&owner), 6_000);
-    assert_eq!(client.get_pool_balance(&q_id), 4_000);
-    assert_eq!(client.get_user_earnings(&owner), 1_000);
+    assert_eq!(token_client.balance(&owner), 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+    assert_eq!(client.get_user_earnings(&owner), 0);
 }
 
 /// MED-01: No milestone linkage
 #[test]
 fn test_distribute_reward_no_milestone_check() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let owner = Address::generate(&env);
     let arbitrary_recipient = Address::generate(&env);
 
@@ -365,10 +382,69 @@ fn test_distribute_reward_no_milestone_check() {
     assert_eq!(client.get_pool_balance(&q_id), 4_500);
 }
 
+/// fix(#160) regression test: broken quest contract linkage should fail with QuestLookupFailed
+#[test]
+fn test_fund_quest_broken_contract_linkage() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy token contract
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_addr = token_contract.address();
+
+    // Deploy rewards contract
+    let contract_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &contract_id);
+
+    // Initialize rewards contract with a fake quest contract address (not deployed)
+    let admin = Address::generate(&env);
+    let fake_quest_contract = Address::generate(&env);
+    client.initialize(&admin, &token_addr, &fake_quest_contract);
+
+    let funder = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&funder, &1_000);
+
+    // Try to fund a quest - should fail because quest contract doesn't exist
+    let result = client.try_fund_quest(&funder, &1, &500);
+    assert_eq!(result, Err(Ok(Error::QuestLookupFailed)));
+}
+
+/// fix(#160) regression test: nonexistent quest should fail with QuestLookupFailed
+#[test]
+fn test_fund_quest_nonexistent_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy test SAC token
+    let token_admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_addr = token_contract.address();
+
+    // Deploy quest contract directly from crate logic (no WASM needed in test)
+    let quest_id = env.register(QuestContract, ());
+    let _quest_client = QuestContractClient::new(&env, &quest_id);
+
+    // Deploy rewards contract
+    let contract_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &token_addr, &quest_id);
+
+    let funder = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&funder, &1_000);
+
+    // Try to fund a quest that doesn't exist
+    let result = client.try_fund_quest(&funder, &999, &500);
+    assert_eq!(result, Err(Ok(Error::QuestLookupFailed)));
+}
+
 /// fix(#85) verification: only quest owner can fund
 #[test]
 fn test_fund_quest_not_owner_fails() {
-    let (env, client, _cid, token_addr, quest_client, _quest_id) = setup();
+    let (env, client, _cid, token_addr, quest_client, _quest_id, _admin) = setup();
     let legitimate_owner = Address::generate(&env);
     let attacker = Address::generate(&env);
 
@@ -397,4 +473,114 @@ fn test_fund_quest_not_owner_fails() {
     // Legitimate owner can still fund their own quest
     client.fund_quest(&legitimate_owner, &q_id, &5_000);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+// ---- Recovery Flow Tests ----
+
+/// Test successful recovery of unallocated tokens
+#[test]
+fn test_recover_tokens_success() {
+    let (env, client, contract_id, token_addr, _quest_client, _quest_id, admin) = setup();
+    let recipient = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+
+    // Send tokens directly to contract (simulating accidental transfer)
+    sac.mint(&contract_id, &1_000);
+
+    // Check unallocated balance
+    assert_eq!(client.get_unallocated_balance_public(), 1_000);
+
+    // Admin recovers tokens
+    client.recover_tokens(&admin, &recipient, &500);
+
+    // Recipient received tokens
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&recipient), 500);
+
+    // Unallocated balance decreased
+    assert_eq!(client.get_unallocated_balance_public(), 500);
+}
+
+/// Test recovery fails when insufficient unallocated balance
+#[test]
+fn test_recover_tokens_insufficient_unallocated() {
+    let (env, client, contract_id, token_addr, _quest_client, _quest_id, admin) = setup();
+    let recipient = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+
+    // Send only 100 tokens directly to contract
+    sac.mint(&contract_id, &100);
+
+    // Try to recover more than available
+    let result = client.try_recover_tokens(&admin, &recipient, &500);
+    assert_eq!(result, Err(Ok(Error::InsufficientUnallocated)));
+}
+
+/// Test recovery fails when caller is not admin
+#[test]
+fn test_recover_tokens_unauthorized() {
+    let (env, client, contract_id, token_addr, _quest_client, _quest_id, _admin) = setup();
+    let attacker = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&contract_id, &1_000);
+
+    // Non-admin tries to recover tokens
+    let result = client.try_recover_tokens(&attacker, &recipient, &500);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+/// Test recovery fails with invalid amount
+#[test]
+fn test_recover_tokens_invalid_amount() {
+    let (env, client, _contract_id, _token_addr, _quest_client, _quest_id, admin) = setup();
+    let recipient = Address::generate(&env);
+
+    // Try to recover zero amount
+    let result = client.try_recover_tokens(&admin, &recipient, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+
+    // Try to recover negative amount
+    let result = client.try_recover_tokens(&admin, &recipient, &-100);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+/// Test recovery doesn't affect quest pools
+#[test]
+fn test_recover_tokens_preserves_quest_pools() {
+    let (env, client, contract_id, token_addr, quest_client, _quest_id, admin) = setup();
+    let owner = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+
+    // Fund a quest pool
+    sac.mint(&owner, &5_000);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &3_000);
+
+    // Send additional tokens directly to contract
+    sac.mint(&contract_id, &1_000);
+
+    // Check balances
+    assert_eq!(client.get_pool_balance(&q_id), 3_000);
+    assert_eq!(client.get_unallocated_balance_public(), 1_000);
+
+    // Admin recovers only unallocated tokens
+    client.recover_tokens(&admin, &recipient, &500);
+
+    // Quest pool remains untouched
+    assert_eq!(client.get_pool_balance(&q_id), 3_000);
+    assert_eq!(client.get_unallocated_balance_public(), 500);
 }

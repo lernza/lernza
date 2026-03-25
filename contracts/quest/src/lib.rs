@@ -1,7 +1,8 @@
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
+    Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -37,6 +38,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub deadline: u64, // Unix timestamp; 0 = no deadline
 }
 
 #[contracterror]
@@ -53,8 +55,38 @@ pub enum Error {
 
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
+const MAX_QUEST_NAME_LEN: u32 = 64;
+const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
+
+fn is_blank_ascii(s: &String) -> bool {
+    let len = s.len() as usize;
+    if len == 0 {
+        return true;
+    }
+    if len > MAX_QUEST_DESCRIPTION_LEN as usize {
+        return false;
+    }
+    let mut buf = [0u8; MAX_QUEST_DESCRIPTION_LEN as usize];
+    s.copy_into_slice(&mut buf[..len]);
+    for &b in buf[..len].iter() {
+        if !matches!(b, b' ' | b'\n' | b'\r' | b'\t') {
+            return false;
+        }
+    }
+    true
+}
+
+fn is_contract_address(addr: &Address) -> bool {
+    let s = addr.to_string();
+    if s.len() != 56 {
+        return false;
+    }
+    let mut buf = [0u8; 56];
+    s.copy_into_slice(&mut buf);
+    buf[0] == b'C'
+}
 
 #[contract]
 pub struct QuestContract;
@@ -75,6 +107,17 @@ impl QuestContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
+        if is_blank_ascii(&name) || name.len() > MAX_QUEST_NAME_LEN {
+            return Err(Error::InvalidInput);
+        }
+
+        if is_blank_ascii(&description) || description.len() > MAX_QUEST_DESCRIPTION_LEN {
+            return Err(Error::InvalidInput);
+        }
+
+        if !is_contract_address(&token_addr) {
+            return Err(Error::InvalidInput);
+        }
         Self::validate_tags(&tags)?;
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
@@ -88,7 +131,8 @@ impl QuestContract {
             tags,
             token_addr,
             created_at: env.ledger().timestamp(),
-            visibility: visibility.clone(),
+            visibility,
+            deadline: 0,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -125,7 +169,7 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let mut enrollees = Self::load_enrollees(&env, quest_id);
+        let enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check enrollment cap
         if let Some(cap) = env
@@ -144,7 +188,7 @@ impl QuestContract {
         }
 
         let mut new_enrollees = enrollees;
-        new_enrollees.push_back(enrollee.clone());
+        new_enrollees.set(enrollee.clone(), ());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
@@ -172,7 +216,7 @@ impl QuestContract {
             return Err(Error::NotEnrolled);
         }
 
-        enrollees.remove(enrollee);
+        enrollees.remove(enrollee.clone());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &enrollees);
@@ -241,6 +285,28 @@ impl QuestContract {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
         Ok(enrollees.contains_key(user))
+    }
+
+    /// Update or clear the deadline for a quest. Owner only.
+    /// Pass 0 to remove the deadline.
+    pub fn set_deadline(env: Env, quest_id: u32, deadline: u64) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+        quest.deadline = deadline;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Returns true if the quest has a non-zero deadline that has passed.
+    pub fn is_expired(env: Env, quest_id: u32) -> Result<bool, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.deadline == 0 {
+            return Ok(false);
+        }
+        Ok(env.ledger().timestamp() > quest.deadline)
     }
 
     /// Get total quest count.

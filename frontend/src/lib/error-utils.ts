@@ -1,8 +1,7 @@
-
 export function setupGlobalErrorHandlers() {
   if (typeof window === "undefined") return
 
-  window.addEventListener("unhandledrejection", (event) => {
+  window.addEventListener("unhandledrejection", event => {
     const reason = event.reason
     const error = reason instanceof Error ? reason : new Error(String(reason))
 
@@ -16,12 +15,9 @@ export function setupGlobalErrorHandlers() {
     }
   })
 
-  window.addEventListener("error", (event) => {
+  window.addEventListener("error", event => {
     if (import.meta.env.DEV) {
-      console.group(
-        "%c[GlobalErrorHandler] Uncaught Error",
-        "color:#e11d48;font-weight:bold"
-      )
+      console.group("%c[GlobalErrorHandler] Uncaught Error", "color:#e11d48;font-weight:bold")
       console.error(event.error ?? event.message)
       console.groupEnd()
     }
@@ -40,7 +36,9 @@ export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
       raw.message.includes("transaction simulation failed")
     ) {
       const match = raw.message.match(/Error\(Contract, #(\d+)\)/)
-      raw.message = match ? `Contract error #${match[1]}: ${raw.message}` : `Contract call failed: ${raw.message}`
+      raw.message = match
+        ? `Contract error #${match[1]}: ${raw.message}`
+        : `Contract call failed: ${raw.message}`
     } else if (
       raw.message.includes("could not detect network") ||
       raw.message.includes("failed to fetch")

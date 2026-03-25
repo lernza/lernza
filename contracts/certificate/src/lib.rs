@@ -28,7 +28,6 @@ pub enum DataKey {
     CertificateMetadata(u32),       // token_id -> metadata
     QuestCertificate(u32, Address), // quest_id -> recipient -> token_id
     UserCertificates(Address),      // user -> Vec<token_id>
-    NextCertificateId,
 }
 
 #[contracterror]
@@ -63,10 +62,6 @@ impl CertificateContract {
         // Set the contract owner
         ownable::set_owner(&env, &owner);
 
-        // Initialize next certificate ID
-        env.storage()
-            .instance()
-            .set(&DataKey::NextCertificateId, &1u32);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
     }
 
@@ -87,12 +82,8 @@ impl CertificateContract {
             return Err(Error::AlreadyIssued);
         }
 
-        // Get next certificate ID
-        let next_id: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::NextCertificateId)
-            .unwrap_or(1);
+        // Mint the NFT first to get the canonical token_id
+        let token_id = Base::sequential_mint(&env, &recipient);
 
         // Create metadata
         let metadata = CertificateMetadata {
@@ -104,15 +95,15 @@ impl CertificateContract {
             recipient: recipient.clone(),
         };
 
-        // Store metadata
-        let metadata_key = DataKey::CertificateMetadata(next_id);
+        // Store metadata at the canonical token_id
+        let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().set(&metadata_key, &metadata);
         env.storage()
             .persistent()
             .extend_ttl(&metadata_key, THRESHOLD, BUMP);
 
         // Store quest -> recipient -> token_id mapping
-        env.storage().persistent().set(&cert_key, &next_id);
+        env.storage().persistent().set(&cert_key, &token_id);
         env.storage()
             .persistent()
             .extend_ttl(&cert_key, THRESHOLD, BUMP);
@@ -124,20 +115,13 @@ impl CertificateContract {
             .persistent()
             .get(&user_key)
             .unwrap_or(Vec::new(&env));
-        certificates.push_back(next_id);
+        certificates.push_back(token_id);
         env.storage().persistent().set(&user_key, &certificates);
         env.storage()
             .persistent()
             .extend_ttl(&user_key, THRESHOLD, BUMP);
 
-        // Update next certificate ID
-        env.storage()
-            .instance()
-            .set(&DataKey::NextCertificateId, &(next_id + 1));
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
-
-        // Mint the NFT to the recipient
-        let token_id = Base::sequential_mint(&env, &recipient);
 
         // Emit certificate minted event
         // Event topics: (cert, minted)

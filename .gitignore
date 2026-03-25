@@ -15,8 +15,13 @@ frontend/dist
 # IDE
 .idea
 .vscode
+.claude/
 
 # Environment
 .env
 .env.local
 pr.md
+issue.md
+
+# Generated contract bindings (regenerated from WASM via pnpm generate:bindings)
+frontend/src/lib/contracts/generated/

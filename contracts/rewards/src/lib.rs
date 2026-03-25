@@ -24,6 +24,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub deadline: u64,
 }
 
 #[contractclient(name = "QuestClient")]
@@ -42,7 +43,9 @@ pub trait QuestContractTrait {
 #[derive(Clone)]
 pub enum DataKey {
     TokenAddr,
+    Admin,
     QuestContractAddr,
+    AdminAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
     // Token balance allocated to a quest
@@ -51,6 +54,8 @@ pub enum DataKey {
     UserEarnings(Address),
     // Global stats
     TotalDistributed,
+    // Total tokens allocated to quest pools
+    TotalAllocated,
 }
 
 #[contracterror]
@@ -63,6 +68,8 @@ pub enum Error {
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
+    InsufficientUnallocated = 7,
+    QuestLookupFailed = 8,
 }
 
 const BUMP: u32 = 518_400;
@@ -73,25 +80,34 @@ pub struct RewardsContract;
 
 #[contractimpl]
 impl RewardsContract {
-    /// Initialize with the token contract address (SAC for the reward token)
-    /// and the quest contract address for ownership verification.
+    /// Initialize with the token contract address (SAC for the reward token),
+    /// the quest contract address for ownership verification,
+    /// and the admin address for recovery operations.
     pub fn initialize(
         env: Env,
+        admin: Address,
         token_addr: Address,
         quest_contract_addr: Address,
     ) -> Result<(), Error> {
+        admin.require_auth();
+
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
         }
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TokenAddr, &token_addr);
         env.storage()
             .instance()
             .set(&DataKey::QuestContractAddr, &quest_contract_addr);
+        env.storage().instance().set(&DataKey::AdminAddr, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalAllocated, &0_i128);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         Ok(())
     }
@@ -105,7 +121,7 @@ impl RewardsContract {
             return Err(Error::InvalidAmount);
         }
 
-        // Security Fix: Verify that the funder is the quest owner
+        // Security Fix: Verify that the funder is the quest owner using direct contract invocation
         let quest_contract_addr = env
             .storage()
             .instance()
@@ -114,7 +130,12 @@ impl RewardsContract {
 
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id);
+        let quest_info_result = quest_client.try_get_quest(&quest_id);
+        let quest_info = match quest_info_result {
+            Ok(Ok(quest)) => quest,
+            Ok(Err(_)) => return Err(Error::QuestLookupFailed),
+            Err(_) => return Err(Error::QuestLookupFailed),
+        };
 
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);
@@ -153,6 +174,17 @@ impl RewardsContract {
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
+        // Update total allocated counter
+        let total_allocated: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalAllocated)
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalAllocated, &(total_allocated + amount));
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+
         // Emit quest funding event
         // Event topics: (reward, funded)
         // Event data: (quest_id, funder, amount)
@@ -190,6 +222,10 @@ impl RewardsContract {
             return Err(Error::Unauthorized);
         }
 
+        if authority == enrollee {
+            return Err(Error::Unauthorized);
+        }
+
         // Check pool balance
         let pool_key = DataKey::QuestPool(quest_id);
         let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
@@ -207,6 +243,17 @@ impl RewardsContract {
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Update total allocated counter
+        let total_allocated: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalAllocated)
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalAllocated, &(total_allocated - amount));
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());
@@ -270,6 +317,80 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
+    }
+
+    /// Get the admin address.
+    pub fn get_admin(env: &Env) -> Result<Address, Error> {
+        env.storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::AdminAddr)
+            .ok_or(Error::NotInitialized)
+    }
+
+    /// Get the actual token balance held by this contract.
+    fn get_actual_balance(env: &Env) -> Result<i128, Error> {
+        let token_addr = Self::get_token(env)?;
+        let token_client = token::Client::new(env, &token_addr);
+        Ok(token_client.balance(&env.current_contract_address()))
+    }
+
+    /// Calculate unallocated balance (actual balance minus allocated pools).
+    fn get_unallocated_balance(env: &Env) -> Result<i128, Error> {
+        let actual_balance = Self::get_actual_balance(env)?;
+        let total_allocated: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalAllocated)
+            .unwrap_or(0);
+        Ok(actual_balance - total_allocated)
+    }
+
+    /// Recover tokens that were sent directly to the contract address.
+    /// Only admin can call this function, and only unallocated tokens can be recovered.
+    /// This provides a safety mechanism for accidental direct transfers.
+    pub fn recover_tokens(
+        env: Env,
+        admin: Address,
+        recipient: Address,
+        amount: i128,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+
+        // Verify caller is admin
+        let stored_admin = Self::get_admin(&env)?;
+        if stored_admin != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Check unallocated balance
+        let unallocated = Self::get_unallocated_balance(&env)?;
+        if unallocated < amount {
+            return Err(Error::InsufficientUnallocated);
+        }
+
+        // Transfer tokens to recipient
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &recipient, &amount);
+
+        // Emit recovery event for audit trail
+        // Event topics: (reward, recovered)
+        // Event data: (admin, recipient, amount)
+        env.events().publish(
+            (symbol_short!("reward"), symbol_short!("recovered")),
+            (admin, recipient, amount),
+        );
+
+        Ok(())
+    }
+
+    /// Get the current unallocated balance available for recovery.
+    pub fn get_unallocated_balance_public(env: Env) -> Result<i128, Error> {
+        Self::get_unallocated_balance(&env)
     }
 }
 

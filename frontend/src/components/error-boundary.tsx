@@ -39,8 +39,7 @@ function classifyError(err: Error): ErrorKind {
   )
     return "network"
 
-  if (msg.includes("loading chunk") || msg.includes("dynamically imported module"))
-    return "chunk"
+  if (msg.includes("loading chunk") || msg.includes("dynamically imported module")) return "chunk"
 
   return "generic"
 }
@@ -59,13 +58,15 @@ const ERROR_COPY: Record<
   network: {
     icon: <Wifi size={48} strokeWidth={1.5} />,
     title: "Network Error",
-    description: "Unable to reach the network. Your connection may be offline or the RPC endpoint is down.",
+    description:
+      "Unable to reach the network. Your connection may be offline or the RPC endpoint is down.",
     hint: "Check your internet connection, try switching RPC providers, or wait a moment and retry.",
   },
   chunk: {
     icon: <Package size={48} strokeWidth={1.5} />,
     title: "Failed to Load Module",
-    description: "A required part of the app could not be downloaded — likely caused by a stale cache after a recent update.",
+    description:
+      "A required part of the app could not be downloaded — likely caused by a stale cache after a recent update.",
     hint: "Refreshing the page usually fixes this immediately.",
   },
   generic: {
@@ -78,10 +79,7 @@ const ERROR_COPY: Record<
 
 function devLog(error: Error, info: ErrorInfo | null) {
   if (import.meta.env.DEV) {
-    console.group(
-      "%c[ErrorBoundary]",
-      "color:#e11d48;font-weight:bold;font-size:14px"
-    )
+    console.group("%c[ErrorBoundary]", "color:#e11d48;font-weight:bold;font-size:14px")
     console.error("Error:", error)
     console.error("Message:", error.message)
     console.error("Stack:", error.stack)
@@ -199,7 +197,17 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo }: Fa
           <p style={{ margin: "0 0 8px", fontSize: 15, lineHeight: 1.6, color: "#333" }}>
             {copy.description}
           </p>
-          <p style={{ margin: "0 0 24px", fontSize: 13, lineHeight: 1.5, color: "#666", display: "flex", alignItems: "flex-start", gap: 6 }}>
+          <p
+            style={{
+              margin: "0 0 24px",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "#666",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 6,
+            }}
+          >
             <Lightbulb size={14} style={{ marginTop: 2, flexShrink: 0 }} />
             {copy.hint}
           </p>
@@ -338,9 +346,7 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo }: Fa
                 }}
               >
                 {error.stack}
-                {errorInfo?.componentStack
-                  ? `\n\nComponent Stack:${errorInfo.componentStack}`
-                  : ""}
+                {errorInfo?.componentStack ? `\n\nComponent Stack:${errorInfo.componentStack}` : ""}
               </pre>
             </div>
           </details>

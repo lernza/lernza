@@ -12,6 +12,8 @@ Thanks for your interest in contributing. Lernza is an open source learn-to-earn
 
 ## Development Setup
 
+For detailed setup instructions, see [DEV_SETUP.md](DEV_SETUP.md).
+
 ### Smart Contracts (Rust/Soroban)
 
 ```bash

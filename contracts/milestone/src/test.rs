@@ -179,3 +179,86 @@ fn test_zero_reward_milestone() {
     let reward = client.verify_completion(&owner, &0, &0, &enrollee);
     assert_eq!(reward, 0);
 }
+
+// --- distribution mode tests ---
+
+#[test]
+fn test_custom_mode_uses_per_milestone_amounts() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task 1", 100);
+    create_ms(&env, &client, &owner, 0, "Task 2", 200);
+
+    client.set_distribution_mode(&owner, &0, &DistributionMode::Custom, &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 100);
+    assert_eq!(client.verify_completion(&owner, &0, &1, &e2), 200);
+}
+
+#[test]
+fn test_flat_mode_equal_rewards() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task 1", 100);
+    create_ms(&env, &client, &owner, 0, "Task 2", 999); // per-milestone amount is ignored
+
+    client.set_distribution_mode(&owner, &0, &DistributionMode::Flat, &50);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 50);
+    assert_eq!(client.verify_completion(&owner, &0, &1, &e2), 50);
+}
+
+#[test]
+fn test_flat_mode_invalid_amount() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task", 100);
+
+    let result = client.try_set_distribution_mode(&owner, &0, &DistributionMode::Flat, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_competitive_mode_first_winners_rewarded() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task", 100);
+    client.set_distribution_mode(&owner, &0, &DistributionMode::Competitive(2), &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 100);
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e2), 100);
+}
+
+#[test]
+fn test_competitive_mode_exhausted_gets_nothing() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task", 100);
+    client.set_distribution_mode(&owner, &0, &DistributionMode::Competitive(2), &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    client.verify_completion(&owner, &0, &0, &e1);
+    client.verify_completion(&owner, &0, &0, &e2);
+    // N+1th completer: still marked complete but gets 0 reward
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e3), 0);
+    assert!(client.is_completed(&0, &0, &e3));
+}
+
+#[test]
+fn test_competitive_mode_counts_per_milestone() {
+    let (env, client, owner) = setup();
+    create_ms(&env, &client, &owner, 0, "Task 1", 100);
+    create_ms(&env, &client, &owner, 0, "Task 2", 200);
+    client.set_distribution_mode(&owner, &0, &DistributionMode::Competitive(1), &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    // Milestone 0: e1 is the single winner; e2 gets nothing
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 100);
+    assert_eq!(client.verify_completion(&owner, &0, &0, &e2), 0);
+    // Milestone 1: e2 is the winner (fresh count)
+    assert_eq!(client.verify_completion(&owner, &0, &1, &e2), 200);
+}

@@ -21,6 +21,20 @@ pub enum DataKey {
     Completed(u32, u32, Address), // (workspace_id, milestone_id, enrollee)
     // Count of completions per enrollee per workspace
     EnrolleeCompletions(u32, Address),
+    // Distribution mode per workspace
+    Mode(u32),
+    // Flat reward per milestone (Flat mode only)
+    FlatReward(u32),
+    // Total unique completions per milestone (Competitive mode)
+    MilestoneCompletionCount(u32, u32), // (workspace_id, milestone_id)
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub enum DistributionMode {
+    Custom,           // per-milestone reward_amount (default)
+    Flat,             // equal reward for all milestones
+    Competitive(u32), // max_winners: first N completers rewarded; rest get 0
 }
 
 #[contracttype]
@@ -102,6 +116,40 @@ impl MilestoneContract {
         Ok(id)
     }
 
+    /// Set the reward distribution mode for a workspace. Owner only.
+    /// For Flat mode, flat_reward is the equal reward paid per milestone (must be > 0).
+    /// For Custom and Competitive modes, flat_reward is ignored (pass 0).
+    pub fn set_distribution_mode(
+        env: Env,
+        owner: Address,
+        workspace_id: u32,
+        mode: DistributionMode,
+        flat_reward: i128,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_owner(&env, workspace_id, &owner)?;
+
+        if matches!(mode, DistributionMode::Flat) && flat_reward <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let mode_key = DataKey::Mode(workspace_id);
+        env.storage().persistent().set(&mode_key, &mode);
+        env.storage()
+            .persistent()
+            .extend_ttl(&mode_key, THRESHOLD, BUMP);
+
+        if matches!(mode, DistributionMode::Flat) {
+            let flat_key = DataKey::FlatReward(workspace_id);
+            env.storage().persistent().set(&flat_key, &flat_reward);
+            env.storage()
+                .persistent()
+                .extend_ttl(&flat_key, THRESHOLD, BUMP);
+        }
+
+        Ok(())
+    }
+
     /// Verify an enrollee's completion of a milestone. Owner only.
     /// Returns the reward_amount so the frontend can trigger token distribution.
     pub fn verify_completion(
@@ -126,6 +174,35 @@ impl MilestoneContract {
             return Err(Error::AlreadyCompleted);
         }
 
+        // Determine reward based on distribution mode
+        let mode: DistributionMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(workspace_id))
+            .unwrap_or(DistributionMode::Custom);
+
+        let reward = match mode {
+            DistributionMode::Custom => milestone.reward_amount,
+            DistributionMode::Flat => env
+                .storage()
+                .persistent()
+                .get(&DataKey::FlatReward(workspace_id))
+                .unwrap_or(milestone.reward_amount),
+            DistributionMode::Competitive(max_winners) => {
+                let cnt_key = DataKey::MilestoneCompletionCount(workspace_id, milestone_id);
+                let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
+                env.storage().persistent().set(&cnt_key, &(cnt + 1));
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&cnt_key, THRESHOLD, BUMP);
+                if cnt < max_winners {
+                    milestone.reward_amount
+                } else {
+                    0
+                }
+            }
+        };
+
         // Mark completed
         env.storage().persistent().set(&comp_key, &true);
         env.storage()
@@ -140,7 +217,7 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&count_key, THRESHOLD, BUMP);
 
-        Ok(milestone.reward_amount)
+        Ok(reward)
     }
 
     /// Get a specific milestone.

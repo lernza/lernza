@@ -23,11 +23,10 @@ jobs:
   # 2. PR title prefix → type labels (enhancement, bug, docs, etc.)
   auto-label:
     if: >-
+      github.event.action == 'opened' &&
       github.event.pull_request.user.login != 'github-actions[bot]' &&
       github.event.pull_request.user.login != 'release-please[bot]' &&
-      github.event.pull_request.user.login != 'dependabot[bot]' &&
-      github.event.action != 'labeled' &&
-      github.event.action != 'unlabeled'
+      github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

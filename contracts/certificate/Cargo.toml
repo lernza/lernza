@@ -1,20 +1,17 @@
 [package]
-name = "milestone"
+name = "certificate"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
 [lib]
 crate-type = ["lib", "cdylib"]
-doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+stellar-tokens = { workspace = true }
+stellar-access = { workspace = true }
+stellar-macros = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-quest = { path = "../quest" }
-certificate = { path = "../certificate" }
-
-[features]
-testutils = []

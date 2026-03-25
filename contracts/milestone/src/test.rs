@@ -27,7 +27,8 @@ fn setup() -> (
     let admin = Address::generate(&env);
 
     // Initialize milestone contract with quest contract address
-    milestone_client.initialize(&admin, &quest_contract_id);
+    let certificate_contract_id = Address::generate(&env);
+    milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
 
     (env, milestone_client, quest_client, admin)
 }
@@ -143,6 +144,9 @@ fn test_verify_completion() {
     );
 
     let enrollee = Address::generate(&env);
+    // Enroll the user first (Issue #162 fix requires this)
+    quest_client.add_enrollee(&0, &enrollee);
+
     let reward = client.verify_completion(&owner, &0, &0, &enrollee);
     assert_eq!(reward, 100);
     assert!(client.is_completed(&0, &0, &enrollee));
@@ -156,6 +160,9 @@ fn test_verify_multiple_completions() {
     create_ms(&env, &client, &quest_client, &owner, 0, "Task 2", 100);
 
     let enrollee = Address::generate(&env);
+    // Enroll the user
+    quest_client.add_enrollee(&0, &enrollee);
+
     client.verify_completion(&owner, &0, &0, &enrollee);
     client.verify_completion(&owner, &0, &1, &enrollee);
 
@@ -170,6 +177,8 @@ fn test_double_verify_fails() {
     create_ms(&env, &client, &quest_client, &owner, 0, "Task", 50);
 
     let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+
     client.verify_completion(&owner, &0, &0, &enrollee);
 
     let result = client.try_verify_completion(&owner, &0, &0, &enrollee);
@@ -228,6 +237,8 @@ fn test_zero_reward_milestone() {
     assert_eq!(id, 0);
 
     let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+
     let reward = client.verify_completion(&owner, &0, &0, &enrollee);
     assert_eq!(reward, 0);
 }
@@ -244,6 +255,9 @@ fn test_custom_mode_uses_per_milestone_amounts() {
 
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
+    quest_client.add_enrollee(&0, &e1);
+    quest_client.add_enrollee(&0, &e2);
+
     assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 100);
     assert_eq!(client.verify_completion(&owner, &0, &1, &e2), 200);
 }
@@ -258,6 +272,9 @@ fn test_flat_mode_equal_rewards() {
 
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
+    quest_client.add_enrollee(&0, &e1);
+    quest_client.add_enrollee(&0, &e2);
+
     assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 50);
     assert_eq!(client.verify_completion(&owner, &0, &1, &e2), 50);
 }
@@ -280,6 +297,10 @@ fn test_competitive_mode_first_winners_rewarded() {
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
     let e3 = Address::generate(&env);
+    quest_client.add_enrollee(&0, &e1);
+    quest_client.add_enrollee(&0, &e2);
+    quest_client.add_enrollee(&0, &e3);
+
     // First two get rewards
     assert_eq!(client.verify_completion(&owner, &0, &0, &e1), 100);
     assert_eq!(client.verify_completion(&owner, &0, &0, &e2), 100);
@@ -296,6 +317,9 @@ fn test_competitive_mode_limited_winners() {
 
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
+    quest_client.add_enrollee(&0, &e1);
+    quest_client.add_enrollee(&0, &e2);
+
     // First completer gets reward, second gets nothing
     assert_eq!(client.verify_completion(&owner, &0, &id1, &e1), 100);
     assert_eq!(client.verify_completion(&owner, &0, &id1, &e2), 0);
@@ -351,6 +375,7 @@ fn test_milestone_ownership_race_condition() {
 
     // Legitimate owner can verify completions
     let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
     let reward = client.verify_completion(&legitimate_owner, &0, &0, &enrollee);
     assert_eq!(reward, 100);
 
@@ -363,18 +388,31 @@ fn test_milestone_ownership_race_condition() {
 /// whether that address is actually enrolled in the quest. Any arbitrary
 /// address can have milestone completion recorded and trigger reward distribution.
 #[test]
-fn test_verify_completion_no_enrollment_check() {
+fn test_verify_completion_enrollee_check() {
     let (env, client, quest_client, owner) = setup();
     create_ms(&env, &client, &quest_client, &owner, 0, "Task", 100);
 
     // This address has never been enrolled in any quest contract
     let unenrolled = Address::generate(&env);
 
-    // Succeeds despite unenrolled address — no cross-contract enrollment check
-    let reward = client.verify_completion(&owner, &0, &0, &unenrolled);
-    assert_eq!(reward, 100);
-    assert!(client.is_completed(&0, &0, &unenrolled));
-    assert_eq!(client.get_enrollee_completions(&0, &unenrolled), 1);
+    // Should fail with NotEnrolled (Issue #162 fix)
+    let result = client.try_verify_completion(&owner, &0, &0, &unenrolled);
+    assert_eq!(result, Err(Ok(Error::NotEnrolled)));
+}
+
+#[test]
+fn test_get_quest_not_found_fails() {
+    let (env, client, quest_client, owner) = setup();
+
+    // Attempt to create milestone for non-existent quest
+    let result = client.try_create_milestone(
+        &owner,
+        &99,
+        &String::from_str(&env, "Title"),
+        &String::from_str(&env, "Desc"),
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::NotFound)));
 }
 
 // ===== PEER VERIFICATION TESTS =====
@@ -406,6 +444,7 @@ fn test_submit_for_review() {
     client.set_verification_mode(&owner, &0, &VerificationMode::PeerReview(2));
 
     let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
 
     // Submit for review should succeed
     client.submit_for_review(&enrollee, &0, &0);
@@ -438,6 +477,8 @@ fn test_approve_completion() {
 
     let enrollee = Address::generate(&env);
     let peer = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+    quest_client.add_enrollee(&0, &peer);
 
     // Submit for review
     client.submit_for_review(&enrollee, &0, &0);
@@ -462,6 +503,9 @@ fn test_approve_completion_multiple_approvals() {
     let enrollee = Address::generate(&env);
     let peer1 = Address::generate(&env);
     let peer2 = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+    quest_client.add_enrollee(&0, &peer1);
+    quest_client.add_enrollee(&0, &peer2);
 
     // Submit for review
     client.submit_for_review(&enrollee, &0, &0);
@@ -486,6 +530,7 @@ fn test_self_approval_fails() {
     client.set_verification_mode(&owner, &0, &VerificationMode::PeerReview(1));
 
     let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
 
     // Submit for review
     client.submit_for_review(&enrollee, &0, &0);
@@ -504,6 +549,8 @@ fn test_double_approval_fails() {
 
     let enrollee = Address::generate(&env);
     let peer = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+    quest_client.add_enrollee(&0, &peer);
 
     // Submit for review
     client.submit_for_review(&enrollee, &0, &0);
@@ -540,6 +587,8 @@ fn test_approve_already_completed_fails() {
 
     let enrollee = Address::generate(&env);
     let peer = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+    quest_client.add_enrollee(&0, &peer);
 
     // Submit for review and approve
     client.submit_for_review(&enrollee, &0, &0);
@@ -581,6 +630,8 @@ fn test_peer_verification_with_different_distribution_modes() {
 
     let enrollee = Address::generate(&env);
     let peer = Address::generate(&env);
+    quest_client.add_enrollee(&0, &enrollee);
+    quest_client.add_enrollee(&0, &peer);
 
     // Submit for review
     client.submit_for_review(&enrollee, &0, &0);

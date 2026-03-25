@@ -22,6 +22,7 @@ pub enum DataKey {
     Quest(u32),
     Enrollees(u32),
     EnrollmentCap(u32),
+    PublicQuests,
 }
 
 #[contracttype]
@@ -87,15 +88,26 @@ impl QuestContract {
             tags,
             token_addr,
             created_at: env.ledger().timestamp(),
-            visibility,
+            visibility: visibility.clone(),
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
+            .set(&DataKey::Enrollees(id), &Map::<Address, ()>::new(&env));
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
 
+        if visibility == Visibility::Public {
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .instance()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(&env));
+            public_ids.push_back(id);
+            env.storage()
+                .instance()
+                .set(&DataKey::PublicQuests, &public_ids);
+        }
         // Emit quest creation event
         // Event topics: (quest, created)
         // Event data: (quest_id, owner, category)
@@ -113,7 +125,7 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut enrollees = Self::load_enrollees(&env, quest_id);
 
         // Check enrollment cap
         if let Some(cap) = env
@@ -126,13 +138,9 @@ impl QuestContract {
             }
         }
 
-        // Check not already enrolled
-        for i in 0..enrollees.len() {
-            if let Some(existing) = enrollees.get(i) {
-                if existing == enrollee {
-                    return Err(Error::AlreadyEnrolled);
-                }
-            }
+        // Check not already enrolled (O(1) with Map)
+        if enrollees.contains_key(enrollee.clone()) {
+            return Err(Error::AlreadyEnrolled);
         }
 
         let mut new_enrollees = enrollees;
@@ -158,26 +166,16 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let enrollees = Self::load_enrollees(&env, quest_id);
-        let mut new_list = Vec::new(&env);
-        let mut found = false;
+        let mut enrollees = Self::load_enrollees(&env, quest_id);
 
-        for i in 0..enrollees.len() {
-            let addr = enrollees.get(i).unwrap();
-            if addr == enrollee {
-                found = true;
-            } else {
-                new_list.push_back(addr);
-            }
-        }
-
-        if !found {
+        if !enrollees.contains_key(enrollee.clone()) {
             return Err(Error::NotEnrolled);
         }
 
+        enrollees.remove(enrollee);
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(quest_id), &new_list);
+            .set(&DataKey::Enrollees(quest_id), &enrollees);
 
         // Emit enrollee removed event
         // Event topics: (quest, enrollee_removed)
@@ -203,21 +201,14 @@ impl QuestContract {
         Self::load_quest(&env, quest_id)?; // verify exists
         let enrollees = Self::load_enrollees(&env, quest_id);
         Self::bump(&env, quest_id);
-        Ok(enrollees)
+        Ok(enrollees.keys())
     }
 
     /// Check if a user is enrolled in a quest.
     pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
-        for i in 0..enrollees.len() {
-            if let Some(enrollee) = enrollees.get(i) {
-                if enrollee == user {
-                    return Ok(true);
-                }
-            }
-        }
-        Ok(false)
+        Ok(enrollees.contains_key(user))
     }
 
     /// Get total quest count.
@@ -230,6 +221,25 @@ impl QuestContract {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
+        if quest.visibility != visibility {
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .instance()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(&env));
+
+            if visibility == Visibility::Public {
+                public_ids.push_back(quest_id);
+            } else {
+                if let Some(index) = public_ids.first_index_of(quest_id) {
+                    public_ids.remove(index);
+                }
+            }
+            env.storage()
+                .instance()
+                .set(&DataKey::PublicQuests, &public_ids);
+        }
+
         quest.visibility = visibility;
         env.storage()
             .persistent()
@@ -238,15 +248,23 @@ impl QuestContract {
         Ok(())
     }
 
-    /// Get all public quests.
-    pub fn list_public_quests(env: Env) -> Vec<QuestInfo> {
-        let total_count: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
+    /// Get all public quests (paginated).
+    pub fn list_public_quests(env: Env, start: u32, limit: u32) -> Vec<QuestInfo> {
+        let public_ids: Vec<u32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::PublicQuests)
+            .unwrap_or(Vec::new(&env));
         let mut public_quests = Vec::new(&env);
+        let total = public_ids.len();
 
-        for i in 0..total_count {
-            if let Ok(quest) = Self::load_quest(&env, i) {
-                if quest.visibility == Visibility::Public {
-                    public_quests.push_back(quest);
+        if start < total {
+            let end = core::cmp::min(start + limit, total);
+            for i in start..end {
+                if let Some(id) = public_ids.get(i) {
+                    if let Ok(quest) = Self::load_quest(&env, id) {
+                        public_quests.push_back(quest);
+                    }
                 }
             }
         }
@@ -257,13 +275,19 @@ impl QuestContract {
 
     /// Get all public quests within a category.
     pub fn get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo> {
-        let total_count: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
+        let public_ids: Vec<u32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::PublicQuests)
+            .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
 
-        for i in 0..total_count {
-            if let Ok(quest) = Self::load_quest(&env, i) {
-                if quest.visibility == Visibility::Public && quest.category == category {
-                    matches.push_back(quest);
+        for i in 0..public_ids.len() {
+            if let Some(id) = public_ids.get(i) {
+                if let Ok(quest) = Self::load_quest(&env, id) {
+                    if quest.category == category {
+                        matches.push_back(quest);
+                    }
                 }
             }
         }
@@ -289,11 +313,11 @@ impl QuestContract {
             .ok_or(Error::NotFound)
     }
 
-    fn load_enrollees(env: &Env, id: u32) -> Vec<Address> {
+    fn load_enrollees(env: &Env, id: u32) -> Map<Address, ()> {
         env.storage()
             .persistent()
             .get(&DataKey::Enrollees(id))
-            .unwrap_or(Vec::new(env))
+            .unwrap_or(Map::new(env))
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {

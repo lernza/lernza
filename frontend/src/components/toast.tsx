@@ -1,0 +1,95 @@
+import { useEffect, useState } from "react"
+import { X, CheckCircle2, AlertCircle, Info } from "lucide-react"
+import { cn } from "@/lib/utils"
+import type { Toast } from "@/hooks/use-toast"
+
+interface ToastItemProps {
+  toast: Toast
+  onRemove: (id: string) => void
+}
+
+function ToastItem({ toast, onRemove }: ToastItemProps) {
+  const [visible, setVisible] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+
+  useEffect(() => {
+    // Mount: trigger enter animation
+    const enterTimer = setTimeout(() => setVisible(true), 10)
+
+    // Exit: start leave animation before removal
+    const leaveTimer = setTimeout(() => {
+      setLeaving(true)
+    }, (toast.duration ?? 3000) - 350)
+
+    return () => {
+      clearTimeout(enterTimer)
+      clearTimeout(leaveTimer)
+    }
+  }, [toast.duration])
+
+  const handleRemove = () => {
+    setLeaving(true)
+    setTimeout(() => onRemove(toast.id), 340)
+  }
+
+  const icons = {
+    success: <CheckCircle2 className="h-4 w-4 flex-shrink-0" />,
+    error: <AlertCircle className="h-4 w-4 flex-shrink-0" />,
+    info: <Info className="h-4 w-4 flex-shrink-0" />,
+  }
+
+  const accents = {
+    success: "bg-success border-black",
+    error: "bg-destructive text-destructive-foreground border-black",
+    info: "bg-primary border-black",
+  }
+
+  const type = toast.type ?? "success"
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 border-[3px] shadow-[4px_4px_0_#000] px-4 py-3 min-w-[260px] max-w-sm",
+        "transition-all duration-300 ease-out",
+        accents[type],
+        visible && !leaving
+          ? "translate-x-0 opacity-100"
+          : "translate-x-full opacity-0"
+      )}
+      role="alert"
+      aria-live="polite"
+    >
+      {icons[type]}
+      <p className="flex-1 text-sm font-bold leading-snug">{toast.message}</p>
+      <button
+        onClick={handleRemove}
+        className="w-5 h-5 flex items-center justify-center hover:opacity-70 transition-opacity flex-shrink-0 cursor-pointer"
+        aria-label="Dismiss"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
+}
+
+interface ToastContainerProps {
+  toasts: Toast[]
+  onRemove: (id: string) => void
+}
+
+export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
+  if (toasts.length === 0) return null
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 items-end pointer-events-none"
+      aria-label="Notifications"
+    >
+      {toasts.map((toast) => (
+        <div key={toast.id} className="pointer-events-auto">
+          <ToastItem toast={toast} onRemove={onRemove} />
+        </div>
+      ))}
+    </div>
+  )
+}

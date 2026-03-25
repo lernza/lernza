@@ -260,7 +260,7 @@ function Step2Form({
   })
 
   const milestones = watch("milestones")
-  const totalReward = milestones.reduce((sum, m) => {
+  const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
     return sum + (isNaN(n) ? 0 : n)
   }, 0)
@@ -456,7 +456,7 @@ function Step3Review({
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
 
   const totalReward = step2Data.milestones.reduce(
-    (sum, m) => sum + m.rewardAmount,
+    (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
 
@@ -504,7 +504,7 @@ function Step3Review({
               Milestones ({step2Data.milestones.length})
             </p>
             <div className="space-y-2">
-              {step2Data.milestones.map((m, i) => (
+              {step2Data.milestones.map((m: z.infer<typeof milestoneSchema>, i: number) => (
                 <div
                   key={i}
                   className="flex items-start justify-between gap-3 p-3 bg-secondary border-[1.5px] border-black"

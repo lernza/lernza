@@ -92,19 +92,3 @@ jobs:
 
           echo "::error::PR must link to an issue. Use 'Closes #N' in the description, or link via the Development sidebar. Add the 'no-issue' label for trivial changes."
           exit 1
-
-      - name: Check labels
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Re-fetch labels (auto-label may have just added some)
-          LABEL_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
-            --repo "${{ github.repository }}" --json labels \
-            -q '.labels | length')
-
-          if [ "$LABEL_COUNT" -eq 0 ]; then
-            echo "::error::PR must have at least one label. Labels are usually added automatically from the PR title and changed files. If auto-labeling didn't trigger, add a label manually."
-            exit 1
-          fi
-
-          echo "PR has $LABEL_COUNT label(s)"

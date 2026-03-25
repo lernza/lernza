@@ -103,7 +103,7 @@ impl RewardsContract {
 
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id).unwrap(); // In prod, handle the result
+        let quest_info = quest_client.get_quest(&quest_id);
 
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);

@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -63,6 +64,68 @@ jobs:
 
       - name: Type-check & build
         run: pnpm run build
+
+      - name: Get baseline bundle size
+        id: baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE_SHA="${{ github.base_ref }}"
+          git fetch origin "$BASE_SHA" --depth=1
+          BASELINE=$(git show "origin/$BASE_SHA:frontend/dist/assets" 2>/dev/null | grep -oP '\d+ KB' | head -1 || echo "unknown")
+          echo "size=$BASELINE" >> $GITHUB_OUTPUT
+
+      - name: Analyze bundle size
+        id: bundle
+        run: |
+          cd dist
+          TOTAL_SIZE=$(du -sh . | cut -f1)
+          ASSETS_SIZE=$(du -sh assets | cut -f1)
+          echo "total_size=$TOTAL_SIZE" >> $GITHUB_OUTPUT
+          echo "assets_size=$ASSETS_SIZE" >> $GITHUB_OUTPUT
+
+          echo "### Bundle Size Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Size |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Total dist | $TOTAL_SIZE |" >> $GITHUB_STEP_SUMMARY
+          echo "| Assets | $ASSETS_SIZE |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Comment bundle size
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { total_size, assets_size } = process.env;
+            const body = `## 📦 Bundle Size Report\n\n| Metric | Size |\n|--------|------|\n| Total dist | ${total_size} |\n| Assets | ${assets_size} |\n\n_This helps track frontend bundle size changes._`;
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(c => 
+              c.user.type === 'Bot' && c.body.includes('Bundle Size Report')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+        env:
+          total_size: ${{ steps.bundle.outputs.total_size }}
+          assets_size: ${{ steps.bundle.outputs.assets_size }}
 
   # ── Contracts: fmt + clippy + test + build WASM ──────────────────
   contracts:

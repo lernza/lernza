@@ -31,6 +31,11 @@ pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
 }
 
+#[contractclient(name = "MilestoneClient")]
+pub trait MilestoneContractTrait {
+    fn is_completed(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool;
+}
+
 // Rewards contract: holds token pools per quest and distributes rewards.
 //
 // Flow:
@@ -43,6 +48,7 @@ pub trait QuestContractTrait {
 pub enum DataKey {
     TokenAddr,
     QuestContractAddr,
+    MilestoneContractAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
     // Token balance allocated to a quest
@@ -64,6 +70,8 @@ pub enum Error {
     InvalidAmount = 5,
     QuestNotFunded = 6,
     QuestLookupFailed = 7,
+    MilestoneNotCompleted = 8,
+    MilestoneContractNotInitialized = 9,
 }
 
 const BUMP: u32 = 518_400;
@@ -80,6 +88,7 @@ impl RewardsContract {
         env: Env,
         token_addr: Address,
         quest_contract_addr: Address,
+        milestone_contract_addr: Address,
     ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
@@ -90,6 +99,9 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::QuestContractAddr, &quest_contract_addr);
+        env.storage()
+            .instance()
+            .set(&DataKey::MilestoneContractAddr, &milestone_contract_addr);
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
@@ -171,11 +183,12 @@ impl RewardsContract {
     }
 
     /// Distribute reward tokens to an enrollee. Authority only.
-    /// Called after milestone verification.
+    /// Requires milestone completion verification before payment.
     pub fn distribute_reward(
         env: Env,
         authority: Address,
         quest_id: u32,
+        milestone_id: u32,
         enrollee: Address,
         amount: i128,
     ) -> Result<(), Error> {
@@ -194,6 +207,18 @@ impl RewardsContract {
             .ok_or(Error::QuestNotFunded)?;
         if stored != authority {
             return Err(Error::Unauthorized);
+        }
+
+        // Verify milestone completion before allowing reward distribution
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::MilestoneContractNotInitialized)?;
+        
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        if !milestone_client.is_completed(&quest_id, &milestone_id, &enrollee) {
+            return Err(Error::MilestoneNotCompleted);
         }
 
         // Check pool balance
@@ -237,10 +262,10 @@ impl RewardsContract {
 
         // Emit reward distribution event
         // Event topics: (reward, distributed)
-        // Event data: (quest_id, enrollee, amount)
+        // Event data: (quest_id, milestone_id, enrollee, amount)
         env.events().publish(
             (symbol_short!("reward"), symbol_short!("paid")),
-            (quest_id, enrollee, amount),
+            (quest_id, milestone_id, enrollee, amount),
         );
 
         Ok(())

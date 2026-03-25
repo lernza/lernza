@@ -730,8 +730,6 @@ impl MilestoneContract {
         env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
     }
 
-
-
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {
         // Get quest contract address
         let quest_contract_addr: Address = env

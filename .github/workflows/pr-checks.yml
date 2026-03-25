@@ -1,0 +1,110 @@
+name: PR Checks
+
+# pull_request_target runs in the BASE repo context, so GITHUB_TOKEN
+# has write access even when the PR comes from a fork.
+# SAFETY: This workflow only reads PR metadata (title, labels, body)
+# and applies labels — it never checks out or executes fork code.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ── PR quality checks ───────────────────────────────────────────
+  # Labels are managed by the reviewer, not automated.
+  pr-checks:
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'release-please[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            security
+
+      - name: Check linked issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          PR_DATA=$(gh pr view "$PR_NUM" --repo "${{ github.repository }}" \
+            --json author,labels,body)
+
+          AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
+          HAS_NO_ISSUE=$(echo "$PR_DATA" | jq -r '.labels | map(.name) | any(. == "no-issue")')
+
+          # Skip for bots and no-issue PRs
+          if [ "$AUTHOR" = "dependabot[bot]" ] || [ "$HAS_NO_ISSUE" = "true" ]; then
+            echo "Skipped (bot or no-issue label)"
+            exit 0
+          fi
+
+          # Check GitHub's closing references API (catches sidebar links too)
+          OWNER="${{ github.repository_owner }}"
+          NAME=$(echo "${{ github.repository }}" | cut -d/ -f2)
+
+          LINKED=$(gh api graphql -f query="
+            query {
+              repository(owner: \"$OWNER\", name: \"$NAME\") {
+                pullRequest(number: $PR_NUM) {
+                  closingIssuesReferences(first: 5) {
+                    nodes { number }
+                  }
+                }
+              }
+            }" -q '.data.repository.pullRequest.closingIssuesReferences.nodes | length' 2>/dev/null || echo "0")
+
+          if [ "$LINKED" -gt 0 ]; then
+            echo "Linked to $LINKED issue(s)"
+            exit 0
+          fi
+
+          # Fallback: check body text
+          BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+          if echo "$BODY" | grep -qiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+'; then
+            echo "Body contains closing keyword"
+            exit 0
+          fi
+
+          echo "::error::PR must link to an issue. Use 'Closes #N' in the description, or link via the Development sidebar. Add the 'no-issue' label for trivial changes."
+          exit 1
+
+      - name: Check labels
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Re-fetch labels (auto-label may have just added some)
+          LABEL_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
+            --repo "${{ github.repository }}" --json labels \
+            -q '.labels | length')
+
+          if [ "$LABEL_COUNT" -eq 0 ]; then
+            echo "::error::PR must have at least one label. Labels are usually added automatically from the PR title and changed files. If auto-labeling didn't trigger, add a label manually."
+            exit 1
+          fi
+
+          echo "PR has $LABEL_COUNT label(s)"

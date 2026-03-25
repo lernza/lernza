@@ -1,0 +1,5 @@
+{
+  "*.{ts,tsx}": ["cd frontend && pnpm exec eslint --fix", "cd frontend && pnpm exec prettier --write"],
+  "*.{json,md,html,css}": ["cd frontend && pnpm exec prettier --write"],
+  "*.rs": ["cargo fmt --check"]
+}

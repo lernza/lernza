@@ -22,7 +22,7 @@
                   "u32": 0
                 },
                 {
-                  "string": "WS0 Task"
+                  "string": "Quest0 Task"
                 },
                 {
                   "string": "Description"
@@ -53,7 +53,7 @@
                   "u32": 0
                 },
                 {
-                  "string": "WS0 Task 2"
+                  "string": "Quest0 Task 2"
                 },
                 {
                   "string": "Description"
@@ -84,7 +84,7 @@
                   "u32": 1
                 },
                 {
-                  "string": "WS1 Task"
+                  "string": "Quest1 Task"
                 },
                 {
                   "string": "Description"
@@ -153,6 +153,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 0
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "reward_amount"
                     },
                     "val": {
@@ -164,15 +172,7 @@
                       "symbol": "title"
                     },
                     "val": {
-                      "string": "WS0 Task"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 0
+                      "string": "Quest0 Task"
                     }
                   }
                 ]
@@ -220,6 +220,14 @@
                     },
                     "val": {
                       "u32": 1
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 0
                     }
                   },
                   {
@@ -235,15 +243,7 @@
                       "symbol": "title"
                     },
                     "val": {
-                      "string": "WS0 Task 2"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 0
+                      "string": "Quest0 Task 2"
                     }
                   }
                 ]
@@ -295,6 +295,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "quest_id"
+                    },
+                    "val": {
+                      "u32": 1
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "reward_amount"
                     },
                     "val": {
@@ -306,15 +314,7 @@
                       "symbol": "title"
                     },
                     "val": {
-                      "string": "WS1 Task"
-                    }
-                  },
-                  {
-                    "key": {
-                      "symbol": "workspace_id"
-                    },
-                    "val": {
-                      "u32": 1
+                      "string": "Quest1 Task"
                     }
                   }
                 ]

@@ -8,13 +8,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
+          "bg-primary text-primary-foreground border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] neo-press",
         secondary:
-          "bg-white text-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
+          // bg-background (white in light, near-black in dark) keeps secondary buttons
+          // visually distinct from card surfaces (bg-card) in both modes.
+          "bg-background text-foreground border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] neo-press",
         destructive:
-          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
+          "bg-destructive text-destructive-foreground border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] neo-press",
         outline:
-          "bg-transparent text-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
+          "bg-transparent text-foreground border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] neo-press",
         ghost:
           "border-0 shadow-none hover:bg-secondary transition-colors",
         link:

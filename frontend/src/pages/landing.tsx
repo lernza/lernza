@@ -59,26 +59,22 @@ function AnimatedQuestCard() {
 
   const completedCount = Math.min(step, 3)
   const progress = (completedCount / 3) * 100
-  const totalEarned = milestones
-    .slice(0, completedCount)
-    .reduce((s, m) => s + m.reward, 0)
+  const totalEarned = milestones.slice(0, completedCount).reduce((s, m) => s + m.reward, 0)
   const isComplete = completedCount >= 3
 
   return (
     <div className="relative">
       {/* Stacked back cards */}
-      <div className="absolute -top-3 -left-3 w-full h-full bg-primary/20 border-[3px] border-black" />
-      <div className="absolute -top-1.5 -left-1.5 w-full h-full bg-primary/40 border-[3px] border-black" />
+      <div className="absolute -top-3 -left-3 w-full h-full bg-primary/20 border-[3px] border-border" />
+      <div className="absolute -top-1.5 -left-1.5 w-full h-full bg-primary/40 border-[3px] border-border" />
 
       {/* Main quest card */}
-      <div className="relative bg-white border-[3px] border-black shadow-[8px_8px_0_#000] overflow-hidden">
+      <div className="relative bg-card text-card-foreground border-[3px] border-border shadow-[8px_8px_0_var(--color-border)] overflow-hidden">
         {/* Card header */}
-        <div className="bg-primary border-b-[3px] border-black px-6 py-3 flex items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider">
-            Active Quest
-          </span>
+        <div className="bg-primary border-b-[3px] border-border px-6 py-3 flex items-center justify-between">
+          <span className="text-xs font-black uppercase tracking-wider">Active Quest</span>
           <div className="flex items-center gap-1.5">
-            <div className="w-2.5 h-2.5 bg-success border border-black" />
+            <div className="w-2.5 h-2.5 bg-success border border-border" />
             <span className="text-xs font-bold">Live</span>
           </div>
         </div>
@@ -96,15 +92,11 @@ function AnimatedQuestCard() {
               return (
                 <div key={m.label} className="flex items-center gap-3">
                   <div
-                    className={`w-6 h-6 border-[2px] border-black flex items-center justify-center flex-shrink-0 transition-all duration-500 ${
-                      done
-                        ? "bg-success scale-110"
-                        : "bg-white"
+                    className={`w-6 h-6 border-2 border-border flex items-center justify-center shrink-0 transition-all duration-500 ${
+                      done ? "bg-success scale-110" : "bg-card"
                     }`}
                   >
-                    {done && (
-                      <CheckCircle2 className="h-3.5 w-3.5 animate-scale-in" />
-                    )}
+                    {done && <CheckCircle2 className="h-3.5 w-3.5 animate-scale-in" />}
                   </div>
                   <span
                     className={`flex-1 text-sm font-bold transition-all duration-500 ${
@@ -114,7 +106,7 @@ function AnimatedQuestCard() {
                     {m.label}
                   </span>
                   <span
-                    className={`text-xs font-bold border-[1.5px] border-black px-2 py-0.5 shadow-[2px_2px_0_#000] transition-colors duration-500 ${
+                    className={`text-xs font-bold border-[1.5px] border-border px-2 py-0.5 shadow-[2px_2px_0_var(--color-border)] transition-colors duration-500 ${
                       done ? "bg-success" : "bg-secondary"
                     }`}
                   >
@@ -126,7 +118,7 @@ function AnimatedQuestCard() {
           </div>
 
           {/* Animated progress bar */}
-          <div className="h-5 w-full border-[3px] border-black bg-secondary shadow-[2px_2px_0_#000]">
+          <div className="h-5 w-full border-[3px] border-border bg-secondary shadow-[2px_2px_0_var(--color-border)]">
             <div
               className={`h-full transition-all duration-700 ease-out ${
                 isComplete ? "bg-success" : "bg-primary"
@@ -135,31 +127,25 @@ function AnimatedQuestCard() {
             />
           </div>
           <div className="flex items-center justify-between mt-2">
-            <p className="text-xs font-bold text-muted-foreground">
-              {completedCount} of 3 milestones
-            </p>
-            <p className="text-xs font-bold text-muted-foreground">
-              {Math.round(progress)}%
-            </p>
+            <p className="text-xs font-bold text-muted-foreground">{completedCount} of 3 milestones</p>
+            <p className="text-xs font-bold text-muted-foreground">{Math.round(progress)}%</p>
           </div>
 
           {/* Earned bar */}
           <div
-            className={`mt-4 border-[2px] border-black px-4 py-2 flex items-center justify-between transition-all duration-500 ${
-              isComplete ? "bg-green-100" : "bg-green-50"
+            className={`mt-4 border-2 border-border px-4 py-2 flex items-center justify-between transition-all duration-500 ${
+              isComplete ? "bg-success/20" : "bg-success/10"
             }`}
           >
-            <span className="text-xs font-bold text-muted-foreground">
-              Total earned
-            </span>
-            <span className="text-sm font-black text-green-700 transition-all duration-300">
+            <span className="text-xs font-bold text-muted-foreground">Total earned</span>
+            <span className="text-sm font-black text-success transition-all duration-300">
               +{totalEarned} USDC
             </span>
           </div>
 
           {/* Quest complete banner */}
           {isComplete && (
-            <div className="mt-4 bg-success border-[2px] border-black px-4 py-2.5 text-center animate-bounce-in">
+            <div className="mt-4 bg-success border-2 border-border px-4 py-2.5 text-center animate-bounce-in">
               <span className="font-black text-sm flex items-center justify-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 Quest Complete!
@@ -174,17 +160,15 @@ function AnimatedQuestCard() {
       {completedCount > 0 && !isComplete && (
         <div
           key={completedCount}
-          className="absolute -bottom-5 -right-4 bg-success border-[2px] border-black shadow-[3px_3px_0_#000] px-4 py-2.5 animate-bounce-in"
+          className="absolute -bottom-5 -right-4 bg-success border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2.5 animate-bounce-in"
         >
-          <span className="font-black text-sm">
-            +{milestones[completedCount - 1]?.reward} USDC
-          </span>
+          <span className="font-black text-sm">+{milestones[completedCount - 1]?.reward} USDC</span>
         </div>
       )}
 
       {/* Floating accent blocks */}
-      <div className="absolute -top-8 -right-6 w-10 h-10 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] rotate-12 animate-float" />
-      <div className="absolute -bottom-7 -left-5 w-8 h-8 bg-primary border-[2px] border-black shadow-[2px_2px_0_#000] -rotate-6 animate-float" style={{ animationDelay: "2s" }} />
+      <div className="absolute -top-8 -right-6 w-10 h-10 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] rotate-12 animate-float" />
+      <div className="absolute -bottom-7 -left-5 w-8 h-8 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] -rotate-6 animate-float" style={{ animationDelay: "2s" }} />
     </div>
   )
 }
@@ -197,31 +181,23 @@ function MarqueeBanner() {
     "ON THE DRIPS WAVE",
     "ON-CHAIN REWARDS, NO MIDDLEMEN",
   ]
-
-  // Repeat items enough times so one half is always wider than the viewport
   const repeated = Array.from({ length: 8 }, () => items).flat()
 
   return (
-    <div className="border-y-[3px] border-black bg-primary overflow-hidden select-none">
+    <div className="border-y-[3px] border-border bg-primary overflow-hidden select-none">
       <div className="flex whitespace-nowrap py-3.5 animate-marquee">
-        {/* First half */}
         <div className="flex shrink-0">
           {repeated.map((item, i) => (
             <span key={`a-${i}`} className="flex items-center gap-4 mx-5">
-              <span className="text-sm font-black uppercase tracking-wider">
-                {item}
-              </span>
+              <span className="text-sm font-black uppercase tracking-wider">{item}</span>
               <Star className="h-3.5 w-3.5 fill-current" />
             </span>
           ))}
         </div>
-        {/* Duplicate half — seamless loop */}
         <div className="flex shrink-0">
           {repeated.map((item, i) => (
             <span key={`b-${i}`} className="flex items-center gap-4 mx-5">
-              <span className="text-sm font-black uppercase tracking-wider">
-                {item}
-              </span>
+              <span className="text-sm font-black uppercase tracking-wider">{item}</span>
               <Star className="h-3.5 w-3.5 fill-current" />
             </span>
           ))}
@@ -249,54 +225,26 @@ export function Landing({ onNavigate }: LandingProps) {
 
   return (
     <div className="flex flex-col">
-      {/* ══════════════════════════════════════════════ */}
-      {/* HERO                                          */}
-      {/* ══════════════════════════════════════════════ */}
+      {/* HERO */}
       <section className="relative min-h-[calc(100vh-67px)] flex items-center overflow-hidden">
-        {/* Dot grid background */}
         <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
 
-        {/* Floating geometric shapes */}
+        {/* Decorative floating shapes — intentionally low opacity, borders stay border-border */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div
-            className="absolute top-[6%] left-[3%] w-20 h-20 bg-primary border-[3px] border-black shadow-[4px_4px_0_#000] rotate-12 opacity-[0.08] animate-float"
-            style={{ animationDuration: "8s" }}
-          />
-          <div
-            className="absolute top-[14%] right-[6%] w-14 h-14 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] -rotate-6 opacity-[0.1] animate-float"
-            style={{ animationDuration: "6s", animationDelay: "1s" }}
-          />
-          <div
-            className="absolute bottom-[22%] left-[7%] w-10 h-10 bg-success border-[2px] border-black shadow-[3px_3px_0_#000] rotate-45 opacity-[0.06] animate-float"
-            style={{ animationDuration: "7s", animationDelay: "2s" }}
-          />
-          <div
-            className="absolute top-[42%] right-[3%] w-8 h-8 bg-black opacity-[0.04] rotate-12 animate-float"
-            style={{ animationDuration: "9s", animationDelay: "0.5s" }}
-          />
-          <div
-            className="absolute bottom-[16%] right-[10%] w-16 h-16 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] -rotate-12 opacity-[0.08] animate-float"
-            style={{ animationDuration: "7s", animationDelay: "3s" }}
-          />
-          <div
-            className="absolute top-[55%] left-[14%] w-6 h-6 bg-primary border-[2px] border-black opacity-[0.1] rotate-6 animate-float"
-            style={{ animationDuration: "5s", animationDelay: "1.5s" }}
-          />
-          <div
-            className="absolute top-[4%] left-[42%] w-12 h-12 bg-primary border-[2px] border-black shadow-[2px_2px_0_#000] rotate-45 opacity-[0.05] animate-float"
-            style={{ animationDuration: "10s", animationDelay: "2s" }}
-          />
-          <div
-            className="absolute top-[75%] right-[25%] w-5 h-5 bg-success border border-black opacity-[0.08] rotate-12 animate-float"
-            style={{ animationDuration: "6s", animationDelay: "3.5s" }}
-          />
+          <div className="absolute top-[6%] left-[3%] w-20 h-20 bg-primary border-[3px] border-border shadow-[4px_4px_0_var(--color-border)] rotate-12 opacity-[0.08] animate-float" style={{ animationDuration: "8s" }} />
+          <div className="absolute top-[14%] right-[6%] w-14 h-14 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] -rotate-6 opacity-[0.1] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
+          <div className="absolute bottom-[22%] left-[7%] w-10 h-10 bg-success border-2 border-border shadow-[3px_3px_0_var(--color-border)] rotate-45 opacity-[0.06] animate-float" style={{ animationDuration: "7s", animationDelay: "2s" }} />
+          <div className="absolute top-[42%] right-[3%] w-8 h-8 bg-foreground opacity-[0.04] rotate-12 animate-float" style={{ animationDuration: "9s", animationDelay: "0.5s" }} />
+          <div className="absolute bottom-[16%] right-[10%] w-16 h-16 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] -rotate-12 opacity-[0.08] animate-float" style={{ animationDuration: "7s", animationDelay: "3s" }} />
+          <div className="absolute top-[55%] left-[14%] w-6 h-6 bg-primary border-2 border-border opacity-[0.1] rotate-6 animate-float" style={{ animationDuration: "5s", animationDelay: "1.5s" }} />
+          <div className="absolute top-[4%] left-[42%] w-12 h-12 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] rotate-45 opacity-[0.05] animate-float" style={{ animationDuration: "10s", animationDelay: "2s" }} />
+          <div className="absolute top-[75%] right-[25%] w-5 h-5 bg-success border border-border opacity-[0.08] rotate-12 animate-float" style={{ animationDuration: "6s", animationDelay: "3.5s" }} />
         </div>
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 w-full">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-            {/* ── Left: Copy ── */}
             <div className="py-20 lg:py-0">
-              <div className="inline-flex items-center gap-2 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] px-4 py-2 mb-10 animate-fade-in-up text-sm font-bold shimmer-on-hover cursor-default">
+              <div className="inline-flex items-center gap-2 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2 mb-10 animate-fade-in-up text-sm font-bold shimmer-on-hover cursor-default">
                 <Sparkles className="h-3.5 w-3.5" />
                 Built on Stellar
               </div>
@@ -304,13 +252,11 @@ export function Landing({ onNavigate }: LandingProps) {
               <h1 className="text-6xl sm:text-7xl lg:text-[5.5rem] xl:text-[6.5rem] font-black leading-[0.88] tracking-tight mb-10">
                 <span className="block animate-slide-in-left">Learn.</span>
                 <span className="block animate-slide-in-left stagger-2">
-                  <span className="inline-block bg-primary px-4 py-2 border-[3px] border-black shadow-[6px_6px_0_#000] -rotate-2 my-2 hover:rotate-0 hover:shadow-[8px_8px_0_#000] transition-all duration-300 cursor-default">
+                  <span className="inline-block bg-primary px-4 py-2 border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] -rotate-2 my-2 hover:rotate-0 hover:shadow-[8px_8px_0_var(--color-border)] transition-all duration-300 cursor-default">
                     Earn.
                   </span>
                 </span>
-                <span className="block animate-slide-in-left stagger-3">
-                  On-chain.
-                </span>
+                <span className="block animate-slide-in-left stagger-3">On-chain.</span>
               </h1>
 
               <p className="text-xl text-muted-foreground mb-12 max-w-lg leading-relaxed h-[3.5em] animate-fade-in stagger-4">
@@ -319,11 +265,7 @@ export function Landing({ onNavigate }: LandingProps) {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 animate-fade-in-up stagger-5">
-                <Button
-                  size="lg"
-                  className="text-base shimmer-on-hover group"
-                  onClick={() => onNavigate("dashboard")}
-                >
+                <Button size="lg" className="text-base shimmer-on-hover group" onClick={() => onNavigate("dashboard")}>
                   Launch App
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </Button>
@@ -332,9 +274,7 @@ export function Landing({ onNavigate }: LandingProps) {
                   size="lg"
                   className="text-base"
                   onClick={() => {
-                    document
-                      .getElementById("how-it-works")
-                      ?.scrollIntoView({ behavior: "smooth" })
+                    document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })
                   }}
                 >
                   How it works
@@ -342,7 +282,6 @@ export function Landing({ onNavigate }: LandingProps) {
                 </Button>
               </div>
 
-              {/* Social proof */}
               <div className="flex flex-wrap gap-6 mt-14 animate-fade-in-up stagger-6">
                 {[
                   { color: "bg-primary", text: "3 smart contracts" },
@@ -350,7 +289,7 @@ export function Landing({ onNavigate }: LandingProps) {
                   { color: "bg-foreground", text: "Open source" },
                 ].map((item) => (
                   <div key={item.text} className="flex items-center gap-2 group cursor-default">
-                    <div className={`w-3 h-3 ${item.color} border border-black transition-transform group-hover:scale-125`} />
+                    <div className={`w-3 h-3 ${item.color} border border-border transition-transform group-hover:scale-125`} />
                     <span className="text-sm font-bold text-muted-foreground group-hover:text-foreground transition-colors">
                       {item.text}
                     </span>
@@ -359,39 +298,27 @@ export function Landing({ onNavigate }: LandingProps) {
               </div>
             </div>
 
-            {/* ── Right: Animated Hero illustration ── */}
             <div className="hidden lg:block animate-scale-in stagger-3">
               <AnimatedQuestCard />
             </div>
           </div>
         </div>
 
-        {/* Marquee at bottom of hero */}
         <div className="absolute bottom-0 left-0 right-0">
           <MarqueeBanner />
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════ */}
-      {/* HOW IT WORKS                                  */}
-      {/* ══════════════════════════════════════════════ */}
-      <section
-        id="how-it-works"
-        ref={howRef}
-        className="bg-secondary py-24 sm:py-32 relative overflow-hidden"
-      >
+      {/* HOW IT WORKS */}
+      <section id="how-it-works" ref={howRef} className="bg-secondary py-24 sm:py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-diagonal-lines pointer-events-none" />
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 relative">
           <div className={`text-center mb-16 reveal-up ${howInView ? "in-view" : ""}`}>
-            <div className="inline-block bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] px-4 py-2 mb-6">
-              <span className="font-black text-sm uppercase tracking-wider">
-                How it works
-              </span>
+            <div className="inline-block bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] px-4 py-2 mb-6">
+              <span className="font-black text-sm uppercase tracking-wider">How it works</span>
             </div>
-            <h2 className="text-4xl sm:text-5xl font-black">
-              Three steps. Zero complexity.
-            </h2>
+            <h2 className="text-4xl sm:text-5xl font-black">Three steps. Zero complexity.</h2>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-0 items-stretch">
@@ -417,25 +344,21 @@ export function Landing({ onNavigate }: LandingProps) {
             ].map((item, i) => (
               <div key={item.step} className="flex items-stretch">
                 <div
-                  className={`relative flex-1 bg-white border-[3px] border-black shadow-[6px_6px_0_#000] p-8 card-tilt reveal-up ${howInView ? "in-view" : ""} shimmer-on-hover group`}
+                  className={`relative flex-1 bg-card text-card-foreground border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] p-8 card-tilt reveal-up ${howInView ? "in-view" : ""} shimmer-on-hover group`}
                   style={{ transitionDelay: `${i * 200}ms` }}
                 >
-                  {/* Large watermark number */}
                   <div className="absolute top-3 right-4 text-[80px] font-black text-primary/15 leading-none select-none pointer-events-none group-hover:text-primary/25 transition-colors duration-300">
                     {item.step}
                   </div>
                   <div className="relative">
-                    <div className="w-14 h-14 bg-primary border-[2px] border-black shadow-[3px_3px_0_#000] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_#000] group-hover:-translate-y-1 transition-all duration-300">
+                    <div className="w-14 h-14 bg-primary border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_var(--color-border)] group-hover:-translate-y-1 transition-all duration-300">
                       <item.icon className="h-6 w-6" />
                     </div>
                     <h3 className="text-xl font-black mb-3">{item.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {item.desc}
-                    </p>
+                    <p className="text-muted-foreground leading-relaxed">{item.desc}</p>
                   </div>
                 </div>
 
-                {/* Connector arrow between cards */}
                 {i < 2 && (
                   <div className="hidden sm:flex items-center justify-center w-8 -mx-1 z-10">
                     <div
@@ -450,109 +373,59 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════ */}
-      {/* FEATURES                                      */}
-      {/* ══════════════════════════════════════════════ */}
-      <section
-        ref={featRef}
-        className="border-t-[3px] border-black py-24 sm:py-32 relative overflow-hidden"
-      >
+      {/* FEATURES */}
+      <section ref={featRef} className="border-t-[3px] border-border py-24 sm:py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-grid-dots pointer-events-none" />
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 relative">
           <div className={`text-center mb-16 reveal-up ${featInView ? "in-view" : ""}`}>
-            <h2 className="text-4xl sm:text-5xl font-black mb-5">
-              Why Lernza?
-            </h2>
+            <h2 className="text-4xl sm:text-5xl font-black mb-5">Why Lernza?</h2>
             <p className="text-lg text-muted-foreground max-w-lg mx-auto">
-              Real incentives drive real learning. Everything on-chain,
-              everything verifiable.
+              Real incentives drive real learning. Everything on-chain, everything verifiable.
             </p>
           </div>
 
-          {/* Bento grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {[
-              {
-                icon: Users,
-                title: "For anyone",
-                desc: "Teach a friend, mentor a team, run a bootcamp. Anyone can create a quest. No gatekeeping, no approval needed.",
-                accent: "bg-primary",
-                large: true,
-              },
-              {
-                icon: Zap,
-                title: "Instant rewards",
-                desc: "Tokens transfer on-chain the moment you verify. No delays, no middleman, no withdrawal queues.",
-                accent: "bg-primary",
-                large: true,
-              },
-              {
-                icon: Shield,
-                title: "Fully transparent",
-                desc: "Everything on Stellar's ledger. Every milestone, every reward — verifiable and auditable by anyone.",
-                accent: "bg-success",
-                large: false,
-              },
-              {
-                icon: Trophy,
-                title: "Real incentive",
-                desc: "Financial commitment drives real completion. Skin in the game works — learners finish what they start.",
-                accent: "bg-primary",
-                large: false,
-              },
+              { icon: Users,  title: "For anyone",         desc: "Teach a friend, mentor a team, run a bootcamp. Anyone can create a quest. No gatekeeping, no approval needed.", accent: "bg-primary", large: true },
+              { icon: Zap,    title: "Instant rewards",    desc: "Tokens transfer on-chain the moment you verify. No delays, no middleman, no withdrawal queues.",                 accent: "bg-primary", large: true },
+              { icon: Shield, title: "Fully transparent",  desc: "Everything on Stellar's ledger. Every milestone, every reward — verifiable and auditable by anyone.",            accent: "bg-success", large: false },
+              { icon: Trophy, title: "Real incentive",     desc: "Financial commitment drives real completion. Skin in the game works — learners finish what they start.",         accent: "bg-primary", large: false },
             ].map((feature, i) => (
               <div
                 key={feature.title}
-                className={`border-[3px] border-black shadow-[6px_6px_0_#000] bg-white card-tilt shimmer-on-hover group reveal-up ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
+                className={`border-[3px] border-border shadow-[6px_6px_0_var(--color-border)] bg-card text-card-foreground card-tilt shimmer-on-hover group reveal-up ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
                 style={{ transitionDelay: `${i * 150}ms` }}
               >
                 <div
-                  className={`w-14 h-14 ${feature.accent} border-[2px] border-black shadow-[3px_3px_0_#000] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_#000] group-hover:-translate-y-1 transition-all duration-300`}
+                  className={`w-14 h-14 ${feature.accent} border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center mb-6 group-hover:shadow-[5px_5px_0_var(--color-border)] group-hover:-translate-y-1 transition-all duration-300`}
                 >
                   <feature.icon className="h-6 w-6" />
                 </div>
-                <h3
-                  className={`font-black mb-3 ${feature.large ? "text-2xl" : "text-lg"}`}
-                >
-                  {feature.title}
-                </h3>
-                <p
-                  className={`text-muted-foreground leading-relaxed ${feature.large ? "text-base" : ""}`}
-                >
-                  {feature.desc}
-                </p>
+                <h3 className={`font-black mb-3 ${feature.large ? "text-2xl" : "text-lg"}`}>{feature.title}</h3>
+                <p className={`text-muted-foreground leading-relaxed ${feature.large ? "text-base" : ""}`}>{feature.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════ */}
-      {/* CTA                                           */}
-      {/* ══════════════════════════════════════════════ */}
-      <section
-        ref={ctaRef}
-        className="border-t-[3px] border-black bg-primary py-24 sm:py-32 relative overflow-hidden"
-      >
+      {/* CTA — lives on bg-primary so its internal decoration can stay semi-literal */}
+      <section ref={ctaRef} className="border-t-[3px] border-border bg-primary py-24 sm:py-32 relative overflow-hidden">
         <div className="absolute inset-0 bg-diagonal-lines pointer-events-none opacity-50" />
-
-        {/* Floating shapes - brutalist variety, bold and visible */}
-        <div className="absolute top-8 left-[4%] w-24 h-24 bg-white border-[3px] border-black shadow-[5px_5px_0_rgba(0,0,0,0.4)] rotate-12 opacity-20 animate-float" style={{ animationDuration: "7s" }} />
-        <div className="absolute bottom-8 right-[6%] w-20 h-20 bg-black border-[3px] border-white/20 -rotate-6 opacity-20 animate-float" style={{ animationDuration: "9s", animationDelay: "2s" }} />
-        <div className="absolute top-[40%] left-[78%] w-14 h-14 bg-success border-[3px] border-black shadow-[4px_4px_0_rgba(0,0,0,0.3)] rotate-45 opacity-[0.18] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
-        <div className="absolute bottom-[25%] left-[12%] w-12 h-12 bg-white border-[3px] border-black shadow-[3px_3px_0_rgba(0,0,0,0.3)] -rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "3s" }} />
-        <div className="absolute top-[20%] right-[20%] w-10 h-10 bg-black border-[2px] border-white/20 rotate-45 opacity-[0.12] animate-float" style={{ animationDuration: "10s", animationDelay: "0.5s" }} />
-        <div className="absolute bottom-[40%] right-[35%] w-8 h-8 bg-white border-[2px] border-black -rotate-6 opacity-[0.12] animate-float" style={{ animationDuration: "7s", animationDelay: "4s" }} />
-        <div className="absolute top-[65%] left-[40%] w-16 h-16 bg-success/30 border-[2px] border-black/30 rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "1.5s" }} />
+        {/* Decorative blocks inside a yellow section — rgba shadows are fine here */}
+        <div className="absolute top-8 left-[4%] w-24 h-24 bg-background border-[3px] border-border shadow-[5px_5px_0_rgba(0,0,0,0.2)] rotate-12 opacity-20 animate-float" style={{ animationDuration: "7s" }} />
+        <div className="absolute bottom-8 right-[6%] w-20 h-20 bg-foreground border-[3px] border-border/20 -rotate-6 opacity-20 animate-float" style={{ animationDuration: "9s", animationDelay: "2s" }} />
+        <div className="absolute top-[40%] left-[78%] w-14 h-14 bg-success border-[3px] border-border shadow-[4px_4px_0_rgba(0,0,0,0.2)] rotate-45 opacity-[0.18] animate-float" style={{ animationDuration: "6s", animationDelay: "1s" }} />
+        <div className="absolute bottom-[25%] left-[12%] w-12 h-12 bg-background border-[3px] border-border shadow-[3px_3px_0_rgba(0,0,0,0.2)] -rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "3s" }} />
+        <div className="absolute top-[20%] right-[20%] w-10 h-10 bg-foreground border-2 border-border/20 rotate-45 opacity-[0.12] animate-float" style={{ animationDuration: "10s", animationDelay: "0.5s" }} />
+        <div className="absolute bottom-[40%] right-[35%] w-8 h-8 bg-background border-2 border-border -rotate-6 opacity-[0.12] animate-float" style={{ animationDuration: "7s", animationDelay: "4s" }} />
+        <div className="absolute top-[65%] left-[40%] w-16 h-16 bg-success/30 border-2 border-border/30 rotate-12 opacity-[0.15] animate-float" style={{ animationDuration: "8s", animationDelay: "1.5s" }} />
 
         <div className={`mx-auto max-w-7xl px-4 sm:px-6 text-center relative reveal-scale ${ctaInView ? "in-view" : ""}`}>
-          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black mb-5">
-            Ready to start earning?
-          </h2>
+          <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black mb-5">Ready to start earning?</h2>
           <p className="text-lg mb-12 max-w-md mx-auto opacity-80">
-            Connect your Freighter wallet and create your first quest. It takes
-            two minutes.
+            Connect your Freighter wallet and create your first quest. It takes two minutes.
           </p>
           <Button
             variant="secondary"
@@ -566,36 +439,28 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </section>
 
-      {/* ══════════════════════════════════════════════ */}
-      {/* FOOTER                                        */}
-      {/* ══════════════════════════════════════════════ */}
-      <footer className="border-t-[3px] border-black bg-white">
+      {/* FOOTER */}
+      <footer className="border-t-[3px] border-border bg-background">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="py-12 grid grid-cols-1 sm:grid-cols-3 gap-10">
             {/* Brand */}
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-primary border-[2px] border-black shadow-[2px_2px_0_#000] flex items-center justify-center overflow-hidden">
+                <div className="w-8 h-8 bg-primary border-2 border-border shadow-[2px_2px_0_var(--color-border)] flex items-center justify-center overflow-hidden">
                   <svg viewBox="0 0 512 512" className="h-6 w-6" aria-hidden="true">
-                    <path
-                      d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z"
-                      fill="#000000"
-                    />
+                    <path d="M 149 117 L 149 382 L 349 382 L 349 317 L 214 317 L 214 117 Z" fill="#000000" />
                   </svg>
                 </div>
                 <span className="font-black text-xl">Lernza</span>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-                The first learn-to-earn platform on Stellar. Create quests, set
-                milestones, reward learners with tokens.
+                The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens.
               </p>
             </div>
 
             {/* Links */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">
-                Resources
-              </h4>
+              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Resources</h4>
               <div className="flex flex-col gap-3">
                 {[
                   { label: "Documentation", href: "https://github.com/lernza/lernza" },
@@ -617,9 +482,7 @@ export function Landing({ onNavigate }: LandingProps) {
 
             {/* Socials */}
             <div>
-              <h4 className="font-black text-sm uppercase tracking-wider mb-4">
-                Community
-              </h4>
+              <h4 className="font-black text-sm uppercase tracking-wider mb-4">Community</h4>
               <div className="flex gap-3">
                 {[
                   { href: "https://github.com/lernza", label: "GitHub", Icon: GithubIcon },
@@ -631,7 +494,7 @@ export function Landing({ onNavigate }: LandingProps) {
                     href={social.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-10 h-10 bg-white border-[2px] border-black shadow-[3px_3px_0_#000] flex items-center justify-center neo-press hover:shadow-[4px_4px_0_#000] active:shadow-[1px_1px_0_#000] hover:bg-primary transition-colors"
+                    className="w-10 h-10 bg-card border-2 border-border shadow-[3px_3px_0_var(--color-border)] flex items-center justify-center neo-press hover:shadow-[4px_4px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)] hover:bg-primary transition-colors"
                     aria-label={social.label}
                   >
                     <social.Icon className="h-4 w-4" />
@@ -644,7 +507,7 @@ export function Landing({ onNavigate }: LandingProps) {
             </div>
           </div>
 
-          <div className="border-t-[2px] border-black py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="border-t-2 border-border py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs font-bold text-muted-foreground">
               Built on Stellar &middot; Open source &middot; MIT License
             </p>

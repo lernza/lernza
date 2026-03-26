@@ -177,6 +177,7 @@ const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
 pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
 pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
+pub const MAX_MILESTONES: u32 = 50;
 
 #[contract]
 pub struct MilestoneContract;
@@ -260,6 +261,10 @@ impl MilestoneContract {
 
         let next_key = DataKey::NextMilestoneId(quest_id);
         let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+
+        if id >= MAX_MILESTONES {
+            return Err(Error::InvalidInput);
+        }
 
         let milestone = MilestoneInfo {
             id,

@@ -27,23 +27,45 @@ import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
 import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
+import {
+  MAX_QUEST_NAME_LEN,
+  MAX_QUEST_DESCRIPTION_LEN,
+  MAX_MILESTONE_TITLE_LEN,
+  MAX_MILESTONE_DESCRIPTION_LEN,
+  MAX_MILESTONES,
+} from "@/lib/contract-types"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
 const step1Schema = z.object({
-  name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
-  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
+  name: z
+    .string()
+    .min(1, "Quest name is required")
+    .max(MAX_QUEST_NAME_LEN, `Max ${MAX_QUEST_NAME_LEN} characters`),
+  description: z
+    .string()
+    .min(1, "Description is required")
+    .max(MAX_QUEST_DESCRIPTION_LEN, `Max ${MAX_QUEST_DESCRIPTION_LEN} characters`),
 })
 type Step1Values = z.infer<typeof step1Schema>
 
 const milestoneSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-  description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(MAX_MILESTONE_TITLE_LEN, `Max ${MAX_MILESTONE_TITLE_LEN} characters`),
+  description: z
+    .string()
+    .min(1, "Description is required")
+    .max(MAX_MILESTONE_DESCRIPTION_LEN, `Max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`),
   rewardAmount: z.number().positive("Must be greater than 0"),
 })
 
 const step2Schema = z.object({
-  milestones: z.array(milestoneSchema).min(1, "At least one milestone is required"),
+  milestones: z
+    .array(milestoneSchema)
+    .min(1, "At least one milestone is required")
+    .max(MAX_MILESTONES, `Maximum ${MAX_MILESTONES} milestones`),
 })
 type Step2Values = z.infer<typeof step2Schema>
 
@@ -167,17 +189,19 @@ function Step1Form({
                 "border-border bg-background w-full border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                 errors.name && "border-destructive"
               )}
-              maxLength={64}
+              maxLength={MAX_QUEST_NAME_LEN}
             />
             <div className="mt-1 flex items-center justify-between">
               <FieldError message={errors.name?.message} />
               <span
                 className={cn(
                   "ml-auto text-xs font-bold",
-                  nameValue.length > 56 ? "text-destructive" : "text-muted-foreground"
+                  nameValue.length > MAX_QUEST_NAME_LEN - 8
+                    ? "text-destructive"
+                    : "text-muted-foreground"
                 )}
               >
-                {nameValue.length}/64
+                {nameValue.length}/{MAX_QUEST_NAME_LEN}
               </span>
             </div>
           </div>
@@ -193,17 +217,19 @@ function Step1Form({
                 "border-border bg-background w-full resize-none border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                 errors.description && "border-destructive"
               )}
-              maxLength={2000}
+              maxLength={MAX_QUEST_DESCRIPTION_LEN}
             />
             <div className="mt-1 flex items-center justify-between">
               <FieldError message={errors.description?.message} />
               <span
                 className={cn(
                   "ml-auto text-xs font-bold",
-                  descValue.length > 1800 ? "text-destructive" : "text-muted-foreground"
+                  descValue.length > MAX_QUEST_DESCRIPTION_LEN - 200
+                    ? "text-destructive"
+                    : "text-muted-foreground"
                 )}
               >
-                {descValue.length}/2000
+                {descValue.length}/{MAX_QUEST_DESCRIPTION_LEN}
               </span>
             </div>
           </div>
@@ -327,9 +353,21 @@ function Step2Form({
                       "border-border bg-background w-full border-[2px] px-4 py-2 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                       errors.milestones?.[index]?.title && "border-destructive"
                     )}
-                    maxLength={100}
+                    maxLength={MAX_MILESTONE_TITLE_LEN}
                   />
-                  <FieldError message={errors.milestones?.[index]?.title?.message} />
+                  <div className="mt-1 flex items-center justify-between">
+                    <FieldError message={errors.milestones?.[index]?.title?.message} />
+                    <span
+                      className={cn(
+                        "ml-auto text-xs font-bold",
+                        (milestones[index]?.title?.length ?? 0) > MAX_MILESTONE_TITLE_LEN - 16
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {milestones[index]?.title?.length ?? 0}/{MAX_MILESTONE_TITLE_LEN}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Description */}
@@ -343,9 +381,22 @@ function Step2Form({
                       "border-border bg-background w-full resize-none border-[2px] px-4 py-2 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
                       errors.milestones?.[index]?.description && "border-destructive"
                     )}
-                    maxLength={500}
+                    maxLength={MAX_MILESTONE_DESCRIPTION_LEN}
                   />
-                  <FieldError message={errors.milestones?.[index]?.description?.message} />
+                  <div className="mt-1 flex items-center justify-between">
+                    <FieldError message={errors.milestones?.[index]?.description?.message} />
+                    <span
+                      className={cn(
+                        "ml-auto text-xs font-bold",
+                        (milestones[index]?.description?.length ?? 0) >
+                          MAX_MILESTONE_DESCRIPTION_LEN - 100
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {milestones[index]?.description?.length ?? 0}/{MAX_MILESTONE_DESCRIPTION_LEN}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Reward Amount */}
@@ -380,10 +431,11 @@ function Step2Form({
             <button
               type="button"
               onClick={() => append({ title: "", description: "", rewardAmount: 0 })}
-              className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border-[2px] border-dashed py-3 text-sm font-black transition-colors"
+              disabled={fields.length >= MAX_MILESTONES}
+              className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border-[2px] border-dashed py-3 text-sm font-black transition-colors disabled:cursor-not-allowed disabled:opacity-30"
             >
               <Plus className="h-4 w-4" />
-              Add Milestone
+              Add Milestone ({fields.length}/{MAX_MILESTONES})
             </button>
           </div>
         </div>

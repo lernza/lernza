@@ -760,3 +760,120 @@ fn test_create_milestone_max_length_description_succeeds() {
     );
     assert_eq!(id, 0);
 }
+
+// ── MAX_MILESTONES cap tests ───────────────────────────────────────────────────
+
+/// Prove the milestone cap works: 50 milestones succeed, the 51st is rejected.
+#[test]
+fn test_create_milestone_exceeds_max_milestones() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Create exactly MAX_MILESTONES (50) milestones — all must succeed
+    for i in 0..MAX_MILESTONES {
+        let title = String::from_str(&env, "MS");
+        let id = client.create_milestone(
+            &owner,
+            &q_id,
+            &title,
+            &String::from_str(&env, "Desc"),
+            &1,
+        );
+        assert_eq!(id, i);
+    }
+    assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);
+
+    // The 51st must be rejected with InvalidInput
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Overflow"),
+        &String::from_str(&env, "Desc"),
+        &1,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+
+    // Count must remain unchanged
+    assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);
+}
+
+/// Boundary: the 50th milestone (id=49) succeeds; the 51st (id=50) fails.
+/// This explicitly checks the boundary value without iterating from 0.
+#[test]
+fn test_create_milestone_at_boundary() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Fill up to MAX_MILESTONES - 1
+    for _ in 0..(MAX_MILESTONES - 1) {
+        client.create_milestone(
+            &owner,
+            &q_id,
+            &String::from_str(&env, "MS"),
+            &String::from_str(&env, "D"),
+            &1,
+        );
+    }
+    assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES - 1);
+
+    // The last allowed milestone (id = 49) must succeed
+    let last_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Last"),
+        &String::from_str(&env, "D"),
+        &1,
+    );
+    assert_eq!(last_id, MAX_MILESTONES - 1);
+    assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);
+
+    // One more must fail
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Over"),
+        &String::from_str(&env, "D"),
+        &1,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+/// Milestone cap is per-quest — filling one quest does not block another.
+#[test]
+fn test_milestone_cap_per_quest_independent() {
+    let (env, client, quest_client, owner) = setup();
+    let q1 = create_quest(&env, &quest_client, &owner);
+    let q2 = create_quest(&env, &quest_client, &owner);
+
+    // Fill q1 to the cap
+    for _ in 0..MAX_MILESTONES {
+        client.create_milestone(
+            &owner,
+            &q1,
+            &String::from_str(&env, "MS"),
+            &String::from_str(&env, "D"),
+            &1,
+        );
+    }
+
+    // q1 is full
+    let result = client.try_create_milestone(
+        &owner,
+        &q1,
+        &String::from_str(&env, "Over"),
+        &String::from_str(&env, "D"),
+        &1,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+
+    // q2 must still accept milestones
+    let id = client.create_milestone(
+        &owner,
+        &q2,
+        &String::from_str(&env, "First"),
+        &String::from_str(&env, "D"),
+        &1,
+    );
+    assert_eq!(id, 0);
+    assert_eq!(client.get_milestone_count(&q2), 1);
+}

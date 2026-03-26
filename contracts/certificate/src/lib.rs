@@ -8,9 +8,6 @@ use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
 use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base, NonFungibleToken};
 
-#[cfg(test)]
-mod test;
-
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CertificateMetadata {
@@ -271,3 +268,6 @@ impl NonFungibleBurnable for CertificateContract {}
 #[default_impl]
 #[contractimpl]
 impl Ownable for CertificateContract {}
+
+#[cfg(test)]
+mod test;

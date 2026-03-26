@@ -1,0 +1,21 @@
+{
+  "name": "lernza",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Learn-to-earn platform on Stellar",
+  "scripts": {
+    "check:docs": "node scripts/check-docs.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lernza/lernza.git"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "learn-to-earn",
+    "blockchain"
+  ],
+  "author": "Lernza Contributors",
+  "license": "MIT"
+}

@@ -8,6 +8,7 @@ import {
   Keypair,
   Account,
 } from "@stellar/stellar-sdk"
+import type { TransactionResult } from "./client"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 
 const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
@@ -18,6 +19,18 @@ export interface MilestoneInfo {
   title: string
   description: string
   rewardAmount: bigint
+  requiresPrevious: boolean
+}
+
+export interface VerifyCompletionResult extends TransactionResult {
+  rewardAmount?: bigint
+}
+
+function toBigInt(value: unknown): bigint {
+  if (typeof value === "bigint") return value
+  if (typeof value === "number") return BigInt(value)
+  if (typeof value === "string" && value.length > 0) return BigInt(value)
+  return 0n
 }
 
 export class MilestoneClient {
@@ -49,14 +62,19 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
       nativeToScVal(milestoneId, { type: "u32" }),
     ])
-    return result || null
+    return result ? this.parseMilestoneInfo(result) : null
   }
 
   async getMilestones(questId: number): Promise<MilestoneInfo[]> {
-    const result = await this.invokeRead("get_milestones", [
+    const result = await this.invokeRead("list_milestones", [
       nativeToScVal(questId, { type: "u32" }),
     ])
-    return result || []
+    if (!Array.isArray(result)) return []
+    return result.map(raw => this.parseMilestoneInfo(raw))
+  }
+
+  async listMilestones(questId: number): Promise<MilestoneInfo[]> {
+    return this.getMilestones(questId)
   }
 
   async getMilestoneCount(questId: number): Promise<number> {
@@ -90,7 +108,8 @@ export class MilestoneClient {
     questId: number,
     title: string,
     description: string,
-    rewardAmount: bigint
+    rewardAmount: bigint,
+    requiresPrevious = false
   ) {
     const tx = await this.buildTx(owner, "create_milestone", [
       new Address(owner).toScVal(),
@@ -98,21 +117,54 @@ export class MilestoneClient {
       nativeToScVal(title, { type: "string" }),
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(rewardAmount, { type: "i128" }),
+      nativeToScVal(requiresPrevious, { type: "bool" }),
     ])
     return signAndSubmit(tx)
   }
 
-  async verifyCompletion(owner: string, questId: number, milestoneId: number, enrollee: string) {
+  async verifyCompletion(
+    owner: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string
+  ): Promise<VerifyCompletionResult> {
     const tx = await this.buildTx(owner, "verify_completion", [
       new Address(owner).toScVal(),
       nativeToScVal(questId, { type: "u32" }),
       nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])
-    return signAndSubmit(tx)
+    const result = await signAndSubmit(tx)
+    return {
+      ...result,
+      rewardAmount: this.parseNumericResult(result.resultXdr),
+    }
   }
 
   // --- Private Helpers ---
+
+  private parseMilestoneInfo(raw: unknown): MilestoneInfo {
+    const record = raw as Record<string, unknown>
+    return {
+      id: Number(record.id),
+      questId: Number(record.quest_id),
+      title: String(record.title),
+      description: String(record.description),
+      rewardAmount: toBigInt(record.reward_amount),
+      requiresPrevious: Boolean(record.requires_previous),
+    }
+  }
+
+  private parseNumericResult(resultXdr?: string): bigint | undefined {
+    if (!resultXdr) return undefined
+
+    try {
+      const value = scValToNative(xdr.ScVal.fromXDR(resultXdr, "base64"))
+      return toBigInt(value)
+    } catch {
+      return undefined
+    }
+  }
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
     try {

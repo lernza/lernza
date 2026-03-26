@@ -140,6 +140,7 @@ impl QuestSystemTest {
             &String::from_str(&self.env, title),
             &String::from_str(&self.env, "Description"),
             &reward,
+            &false,
         )
     }
 }

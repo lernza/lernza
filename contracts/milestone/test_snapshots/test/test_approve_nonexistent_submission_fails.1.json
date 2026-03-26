@@ -96,6 +96,9 @@
                     "hi": 0,
                     "lo": 100
                   }
+                },
+                {
+                  "bool": false
                 }
               ]
             }
@@ -459,6 +462,14 @@
                       },
                       "val": {
                         "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "requires_previous"
+                      },
+                      "val": {
+                        "bool": false
                       }
                     },
                     {

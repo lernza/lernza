@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import { useForm, useFieldArray } from "react-hook-form"
+import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import {
@@ -44,12 +44,14 @@ const milestoneSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
   description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
   rewardAmount: z.number().positive("Must be greater than 0"),
+  requiresPrevious: z.boolean().default(false),
 })
 
 const step2Schema = z.object({
   milestones: z.array(milestoneSchema).min(1, "At least one milestone is required"),
 })
 type Step2Values = z.infer<typeof step2Schema>
+type Step2FormInput = z.input<typeof step2Schema>
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -137,17 +139,17 @@ function Step1Form({
   onNext: (data: Step1Values) => void
 }) {
   const {
+    control,
     register,
     handleSubmit,
-    watch,
     formState: { errors },
   } = useForm<Step1Values>({
     resolver: zodResolver(step1Schema),
     defaultValues,
   })
 
-  const nameValue = watch("name", "")
-  const descValue = watch("description", "")
+  const nameValue = useWatch({ control, name: "name" }) ?? ""
+  const descValue = useWatch({ control, name: "description" }) ?? ""
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
@@ -227,7 +229,7 @@ function Step1Form({
                 errors.maxEnrollees && "border-destructive"
               )}
             />
-            <p className="mt-1 text-xs font-bold text-muted-foreground">
+            <p className="text-muted-foreground mt-1 text-xs font-bold">
               Leave empty for unlimited spots. Once set, only this many users can enroll.
             </p>
             <FieldError message={errors.maxEnrollees?.message} />
@@ -260,9 +262,8 @@ function Step2Form({
     register,
     control,
     handleSubmit,
-    watch,
     formState: { errors },
-  } = useForm<Step2Values>({
+  } = useForm<Step2FormInput, undefined, Step2Values>({
     resolver: zodResolver(step2Schema),
     defaultValues,
   })
@@ -272,9 +273,9 @@ function Step2Form({
     name: "milestones",
   })
 
-  const milestones = watch("milestones")
-  const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
-    const n = Number(m.rewardAmount)
+  const milestones = useWatch({ control, name: "milestones" }) ?? []
+  const totalReward = milestones.reduce<number>((sum, milestone) => {
+    const n = Number(milestone.rewardAmount)
     return sum + (Number.isNaN(n) ? 0 : n)
   }, 0)
 
@@ -396,6 +397,23 @@ function Step2Form({
                   </div>
                   <FieldError message={errors.milestones?.[index]?.rewardAmount?.message} />
                 </div>
+
+                <label className="flex items-start gap-3 text-sm font-bold">
+                  <input
+                    {...register(`milestones.${index}.requiresPrevious`)}
+                    type="checkbox"
+                    disabled={index === 0}
+                    className="mt-1 h-4 w-4 accent-black"
+                  />
+                  <span>
+                    Require previous milestone first
+                    <span className="text-muted-foreground block text-xs font-medium">
+                      {index === 0
+                        ? "The first milestone is always unlocked."
+                        : `Learners must complete milestone ${index} before this one.`}
+                    </span>
+                  </span>
+                </label>
               </div>
             ))}
           </div>
@@ -404,7 +422,9 @@ function Step2Form({
           <div className="border-border border-t-[2px] p-5">
             <button
               type="button"
-              onClick={() => append({ title: "", description: "", rewardAmount: 0 })}
+              onClick={() =>
+                append({ title: "", description: "", rewardAmount: 0, requiresPrevious: false })
+              }
               className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border-[2px] border-dashed py-3 text-sm font-black transition-colors"
             >
               <Plus className="h-4 w-4" />
@@ -512,13 +532,14 @@ function Step3Review({
       setQuestId(createdQuestId)
       setCreateQuestTxHash(createResult.txHash)
 
-      for (const m of step2Data.milestones) {
+      for (const [index, m] of step2Data.milestones.entries()) {
         const msResult = await milestoneClient.createMilestone(
           address,
           createdQuestId,
           m.title,
           m.description,
-          BigInt(Math.round(m.rewardAmount))
+          BigInt(Math.round(m.rewardAmount)),
+          m.requiresPrevious && index > 0
         )
         if (msResult.status !== "SUCCESS") {
           throw new Error(msResult.error ?? "Milestone creation transaction failed")
@@ -594,7 +615,8 @@ function Step3Review({
               questId,
               milestone.title,
               milestone.description,
-              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)) // Convert to USDC smallest unit (6 decimals)
+              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)), // Convert to USDC smallest unit (6 decimals)
+              milestone.requiresPrevious && i > 0
             )
 
             if (result.status !== "SUCCESS") {
@@ -697,6 +719,11 @@ function Step3Review({
                     <div>
                       <p className="text-sm font-black">{m.title}</p>
                       <p className="text-muted-foreground mt-0.5 text-xs">{m.description}</p>
+                      {m.requiresPrevious && i > 0 && (
+                        <p className="text-muted-foreground mt-1 text-[10px] font-bold uppercase">
+                          Sequential
+                        </p>
+                      )}
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
@@ -843,7 +870,7 @@ function Step3Review({
 
 const DEFAULT_STEP1: Step1Values = { name: "", description: "", maxEnrollees: "" }
 const DEFAULT_STEP2: Step2Values = {
-  milestones: [{ title: "", description: "", rewardAmount: 0 }],
+  milestones: [{ title: "", description: "", rewardAmount: 0, requiresPrevious: false }],
 }
 
 export function CreateQuest() {

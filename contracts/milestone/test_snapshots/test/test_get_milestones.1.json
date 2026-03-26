@@ -96,6 +96,9 @@
                     "hi": 0,
                     "lo": 10
                   }
+                },
+                {
+                  "bool": false
                 }
               ]
             }
@@ -130,6 +133,9 @@
                     "hi": 0,
                     "lo": 20
                   }
+                },
+                {
+                  "bool": false
                 }
               ]
             }
@@ -465,6 +471,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "requires_previous"
+                      },
+                      "val": {
+                        "bool": false
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "reward_amount"
                       },
                       "val": {
@@ -556,6 +570,14 @@
                       },
                       "val": {
                         "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "requires_previous"
+                      },
+                      "val": {
+                        "bool": false
                       }
                     },
                     {

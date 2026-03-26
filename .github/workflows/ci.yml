@@ -109,20 +109,24 @@ jobs:
               c.user?.type === 'Bot' && c.body?.includes('Bundle Size Report')
             );
             
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
+            try {
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.log("Failed to post bundle size comment. This is expected for PRs from forks due to read-only token permissions.", error.message);
             }
         env:
           total_size: ${{ steps.bundle.outputs.total_size }}

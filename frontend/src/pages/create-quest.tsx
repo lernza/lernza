@@ -25,6 +25,11 @@ import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
+import { Visibility } from "@/lib/contract-types"
+import { questClient } from "@/lib/contracts/quest"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { milestoneClient } from "@/lib/contracts/milestone"
+import { scValToNative, xdr } from "@stellar/stellar-sdk"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -423,25 +428,106 @@ function Step3Review({
   onBack: () => void
   onComplete: () => void
 }) {
-  const { isSupportedNetwork } = useWallet()
+  const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
+
+  const [questId, setQuestId] = useState<number | null>(null)
+  const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
+  const [fundTxHash, setFundTxHash] = useState<string | null>(null)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
 
+  const parseQuestIdFromResultXdr = (resultXdr: string): number | null => {
+    try {
+      const scVal = xdr.ScVal.fromXDR(resultXdr, "base64")
+      const native = scValToNative(scVal)
+      if (typeof native === "number") return native
+      if (typeof native === "bigint") return Number(native)
+      if (typeof native === "string") {
+        const n = Number(native)
+        return Number.isFinite(n) ? n : null
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
   const handleFund = async () => {
+    if (!address) throw new Error("Connect wallet first")
+
     await fundingTx.run(async () => {
-      await new Promise(r => setTimeout(r, 1200))
-      return true
+      const category = "General"
+      const tags: string[] = []
+      const tokenAddr = import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || ""
+      if (!tokenAddr) {
+        throw new Error("Missing VITE_REWARDS_TOKEN_CONTRACT_ID env var")
+      }
+
+      const createResult = await questClient.createQuest(
+        address,
+        step1Data.name,
+        step1Data.description,
+        category,
+        tags,
+        tokenAddr,
+        Visibility.Public
+      )
+
+      if (createResult.status !== "SUCCESS" || !createResult.resultXdr) {
+        throw new Error(createResult.error ?? "Quest creation transaction failed")
+      }
+
+      const createdQuestId = parseQuestIdFromResultXdr(createResult.resultXdr)
+      if (createdQuestId === null) {
+        throw new Error("Quest was created but quest id could not be parsed from result")
+      }
+
+      setQuestId(createdQuestId)
+      setCreateQuestTxHash(createResult.txHash)
+
+      for (const m of step2Data.milestones) {
+        const msResult = await milestoneClient.createMilestone(
+          address,
+          createdQuestId,
+          m.title,
+          m.description,
+          BigInt(Math.round(m.rewardAmount))
+        )
+        if (msResult.status !== "SUCCESS") {
+          throw new Error(msResult.error ?? "Milestone creation transaction failed")
+        }
+      }
+
+      const fundAmount = BigInt(Math.round(totalReward))
+      const fundResult = await rewardsClient.fundQuest(address, createdQuestId, fundAmount)
+      if (fundResult.status !== "SUCCESS") {
+        throw new Error(fundResult.error ?? "Funding transaction failed")
+      }
+      setFundTxHash(fundResult.txHash)
+      return {
+        questId: createdQuestId,
+        createQuestTxHash: createResult.txHash,
+        fundTxHash: fundResult.txHash,
+      }
     })
   }
 
   const handleCreate = async () => {
     await createTx.run(async () => {
-      await new Promise(r => setTimeout(r, 1200))
+      if (questId === null) throw new Error("Quest id missing")
+      try {
+        localStorage.setItem(
+          "lernza:last-created-quest",
+          JSON.stringify({ questId, createQuestTxHash, fundTxHash, createdAt: Date.now() })
+        )
+      } catch {
+        // ignore
+      }
       return true
     })
     onComplete()
@@ -526,24 +612,24 @@ function Step3Review({
             )}
 
             {/* Fund button */}
-              <Button
-                onClick={handleFund}
-                disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
-                variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
-                className={cn(
-                  "shimmer-on-hover mb-3 w-full",
-                  (isFunded || createPending || createTx.isSuccess) && "border-success"
-                )}
-              >
-                {fundPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Funding reward pool...
-                  </>
-                ) : isFunded || createPending || createTx.isSuccess ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Reward pool funded
+            <Button
+              onClick={handleFund}
+              disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
+              variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
+              className={cn(
+                "shimmer-on-hover mb-3 w-full",
+                (isFunded || createPending || createTx.isSuccess) && "border-success"
+              )}
+            >
+              {fundPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Funding reward pool...
+                </>
+              ) : isFunded || createPending || createTx.isSuccess ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Reward pool funded
                 </>
               ) : (
                 <>
@@ -554,15 +640,15 @@ function Step3Review({
             </Button>
 
             {/* Create button */}
-              <Button
-                onClick={handleCreate}
-                disabled={!isFunded || createPending || !isSupportedNetwork}
-                className="shimmer-on-hover w-full"
-              >
-                {createPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating quest on-chain...
+            <Button
+              onClick={handleCreate}
+              disabled={!isFunded || createPending || !isSupportedNetwork}
+              className="shimmer-on-hover w-full"
+            >
+              {createPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
                 </>
               ) : (
                 <>
@@ -570,7 +656,28 @@ function Step3Review({
                   Confirm & Create Quest
                 </>
               )}
-              </Button>
+            </Button>
+
+            {isFunded && questId !== null && (
+              <div className="bg-secondary mt-3 border-[2px] border-black p-3 text-xs font-bold">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Quest ID</span>
+                  <span className="font-mono tabular-nums">{questId}</span>
+                </div>
+                {createQuestTxHash && (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Create tx</span>
+                    <span className="font-mono">{createQuestTxHash.slice(0, 8)}…</span>
+                  </div>
+                )}
+                {fundTxHash && (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Fund tx</span>
+                    <span className="font-mono">{fundTxHash.slice(0, 8)}…</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {fundingTx.isFailure && (
               <p className="text-destructive mt-2 text-center text-xs font-bold">

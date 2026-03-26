@@ -29,9 +29,6 @@ import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { milestoneClient } from "@/lib/contracts/milestone"
-import { questClient } from "@/lib/contracts/quest"
-import { rewardsClient } from "@/lib/contracts/rewards"
-import { milestoneClient } from "@/lib/contracts/milestone"
 import {
   MAX_QUEST_NAME_LEN,
   MAX_QUEST_DESCRIPTION_LEN,

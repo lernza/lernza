@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { X, CheckCircle2, AlertCircle, Info } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { X, CheckCircle2, AlertCircle, AlertTriangle, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Toast } from "@/hooks/use-toast"
 
@@ -38,12 +38,14 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   const icons = {
     success: <CheckCircle2 className="h-4 w-4 flex-shrink-0" />,
     error: <AlertCircle className="h-4 w-4 flex-shrink-0" />,
+    warning: <AlertTriangle className="h-4 w-4 flex-shrink-0" />,
     info: <Info className="h-4 w-4 flex-shrink-0" />,
   }
 
   const accents = {
     success: "bg-success border-border",
     error: "bg-destructive text-destructive-foreground border-border",
+    warning: "bg-warning text-warning-foreground border-border",
     info: "bg-primary border-border",
   }
 
@@ -57,8 +59,6 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         accents[type],
         visible && !leaving ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       )}
-      role="alert"
-      aria-live="polite"
     >
       {icons[type]}
       <p className="flex-1 text-sm leading-snug font-bold">{toast.message}</p>
@@ -79,18 +79,43 @@ interface ToastContainerProps {
 }
 
 export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
-  if (toasts.length === 0) return null
+  const politeRef = useRef<HTMLDivElement>(null)
+  const assertiveRef = useRef<HTMLDivElement>(null)
+  const announcedRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    const latest = toasts[toasts.length - 1]
+    if (!latest) return
+    if (announcedRef.current.has(latest.id)) return
+    announcedRef.current.add(latest.id)
+
+    const target = latest.type === "error" ? assertiveRef.current : politeRef.current
+    if (!target) return
+
+    // Clear first so ATs re-announce even when the message text is identical
+    target.textContent = ""
+    requestAnimationFrame(() => {
+      target.textContent = latest.message
+    })
+  }, [toasts])
 
   return (
-    <div
-      className="pointer-events-none fixed right-6 bottom-6 z-[100] flex flex-col items-end gap-3"
-      aria-label="Notifications"
-    >
-      {toasts.map(toast => (
-        <div key={toast.id} className="pointer-events-auto">
-          <ToastItem toast={toast} onRemove={onRemove} />
+    <>
+      {/* Persistent visually-hidden live regions — must exist before any toast fires */}
+      <div ref={politeRef} aria-live="polite" aria-atomic="true" className="sr-only" />
+      <div ref={assertiveRef} aria-live="assertive" aria-atomic="true" className="sr-only" />
+      {toasts.length > 0 && (
+        <div
+          className="pointer-events-none fixed right-6 bottom-6 z-[100] flex flex-col items-end gap-3"
+          aria-label="Notifications"
+        >
+          {toasts.map(toast => (
+            <div key={toast.id} className="pointer-events-auto">
+              <ToastItem toast={toast} onRemove={onRemove} />
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+    </>
   )
 }

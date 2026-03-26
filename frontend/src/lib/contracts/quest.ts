@@ -22,10 +22,25 @@ export interface QuestInfo {
 }
 
 export class QuestClient {
-  private contract: Contract
+  private contract: Contract | null
 
   constructor() {
-    this.contract = new Contract(CONTRACT_ID)
+    if (CONTRACT_ID) {
+      try {
+        this.contract = new Contract(CONTRACT_ID)
+      } catch {
+        this.contract = null
+        console.error(`[QuestClient] Invalid VITE_QUEST_CONTRACT_ID: "${CONTRACT_ID}"`)
+      }
+    } else {
+      this.contract = null
+    }
+  }
+
+  private getContract(): Contract {
+    if (!this.contract)
+      throw new Error("Quest contract not configured. Set VITE_QUEST_CONTRACT_ID.")
+    return this.contract
   }
 
   // --- Read Operations ---

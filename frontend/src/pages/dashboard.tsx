@@ -101,6 +101,7 @@ export function Dashboard() {
             enrolleeCount: stats.enrolleeCount,
             milestoneCount: stats.milestoneCount,
             poolBalance: stats.poolBalance,
+            totalMilestoneRewards: stats.totalMilestoneRewards,
           },
         ])
       )

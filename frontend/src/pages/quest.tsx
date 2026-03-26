@@ -212,14 +212,14 @@ export function QuestView() {
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  const totalReward = milestones.reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
+  const totalReward = milestones.reduce((sum, m) => sum + Number(m.rewardAmount ?? 0), 0)
   const completedMilestones = new Set(
     localCompletions.filter(c => c.completed).map(c => c.milestoneId)
   ).size
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
   const earnedReward = milestones
     .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
-    .reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
+    .reduce((sum, m) => sum + Number(m.rewardAmount ?? 0), 0)
 
   const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
@@ -365,7 +365,7 @@ export function QuestView() {
       milestones: milestones.map(ms => ({
         title: ms.title,
         description: ms.description,
-        rewardAmount: ms.reward_amount,
+        rewardAmount: ms.rewardAmount,
       })),
     }
 
@@ -895,7 +895,7 @@ export function QuestView() {
             </Card>
           ) : (
             milestones.map((ms, i) => {
-              const msReward = Number(ms.rewardAmount ?? ms.reward_amount ?? 0)
+              const msReward = Number(ms.rewardAmount ?? 0)
               const isCompleted = localCompletions.some(c => c.milestoneId === ms.id && c.completed)
               const completedBy = localCompletions
                 .filter(c => c.milestoneId === ms.id && c.completed)
@@ -1049,7 +1049,7 @@ export function QuestView() {
                     c => c.enrollee === addr && c.milestoneId === m.id && c.completed
                   )
                 )
-                .reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
+                .reduce((sum, m) => sum + Number(m.rewardAmount ?? 0), 0)
               const isAllDone = completed === milestones.length && milestones.length > 0
 
               return (

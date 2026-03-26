@@ -732,19 +732,21 @@ export function QuestView() {
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex flex-1 flex-col gap-4">
               <div>
-                <h1 className="text-2xl font-black sm:text-3xl">{ws.name}</h1>
-                <p className="text-muted-foreground mt-1 max-w-xl text-sm">{ws.description}</p>
+                <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
+                <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
               </div>
               {/* Progress section with ring */}
               {milestones.length > 0 && (
                 <div className="flex items-center gap-4">
-                  <ProgressRing 
-                    progress={Math.round((completedMilestones / milestones.length) * 100)} 
+                  <ProgressRing
+                    progress={Math.round((completedMilestones / milestones.length) * 100)}
                     size="lg"
                     animated
                   />
                   <div className="flex flex-col gap-1">
-                    <span className="text-sm font-black uppercase tracking-wider">Your Progress</span>
+                    <span className="text-sm font-black tracking-wider uppercase">
+                      Your Progress
+                    </span>
                     <span className="text-2xl font-black">
                       {completedMilestones} / {milestones.length} milestones
                     </span>
@@ -760,11 +762,11 @@ export function QuestView() {
               {isComplete && (
                 <div className="animate-fade-in-up bg-success/10 border-success/30 flex items-center justify-between gap-4 rounded-lg border-[2px] p-4">
                   <div className="flex items-center gap-3">
-                    <div className="bg-success border-success flex h-10 w-10 animate-pulse-slow items-center justify-center rounded-full border-[2px]">
+                    <div className="bg-success border-success animate-pulse-slow flex h-10 w-10 items-center justify-center rounded-full border-[2px]">
                       <Sparkles className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <span className="text-sm font-black text-success">100% Complete!</span>
+                      <span className="text-success text-sm font-black">100% Complete!</span>
                       <p className="text-muted-foreground text-xs font-bold">
                         Claim your certificate to celebrate your achievement
                       </p>
@@ -778,7 +780,7 @@ export function QuestView() {
               )}
             </div>
             <div className="flex flex-shrink-0 flex-wrap gap-3">
-              {isOwner && (
+              {isOwner ? (
                 <>
                   <Button
                     variant="outline"

@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
+import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
@@ -46,7 +47,6 @@ type Step2Values = z.infer<typeof step2Schema>
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FormStep = 1 | 2 | 3
-type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
 // ─── Draft persistence ────────────────────────────────────────────────────────
 
@@ -442,7 +442,8 @@ function Step3Review({
   onComplete: () => void
 }) {
   const { isSupportedNetwork } = useWallet()
-  const [txPhase, setTxPhase] = useState<TxPhase>("idle")
+  const fundingTx = useTransactionAction()
+  const createTx = useTransactionAction()
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -450,19 +451,23 @@ function Step3Review({
   )
 
   const handleFund = async () => {
-    setTxPhase("funding")
-    // Simulate funding transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("funded")
+    await fundingTx.run(async () => {
+      await new Promise(r => setTimeout(r, 1200))
+      return true
+    })
   }
 
   const handleCreate = async () => {
-    setTxPhase("creating")
-    // Simulate quest creation transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("done")
+    await createTx.run(async () => {
+      await new Promise(r => setTimeout(r, 1200))
+      return true
+    })
     onComplete()
   }
+
+  const isFunded = fundingTx.isSuccess
+  const fundPending = fundingTx.isPending
+  const createPending = createTx.isPending
 
   return (
     <div className="space-y-6">
@@ -539,29 +544,24 @@ function Step3Review({
             )}
 
             {/* Fund button */}
-            <Button
-              onClick={handleFund}
-              disabled={txPhase !== "idle" || !isSupportedNetwork}
-              variant={
-                txPhase === "funded" || txPhase === "creating" || txPhase === "done"
-                  ? "secondary"
-                  : "default"
-              }
-              className={cn(
-                "shimmer-on-hover mb-3 w-full",
-                (txPhase === "funded" || txPhase === "creating" || txPhase === "done") &&
-                  "border-success"
-              )}
-            >
-              {txPhase === "funding" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Funding reward pool...
-                </>
-              ) : txPhase === "funded" || txPhase === "creating" || txPhase === "done" ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  Reward pool funded
+              <Button
+                onClick={handleFund}
+                disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
+                variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
+                className={cn(
+                  "shimmer-on-hover mb-3 w-full",
+                  (isFunded || createPending || createTx.isSuccess) && "border-success"
+                )}
+              >
+                {fundPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Funding reward pool...
+                  </>
+                ) : isFunded || createPending || createTx.isSuccess ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Reward pool funded
                 </>
               ) : (
                 <>
@@ -572,15 +572,15 @@ function Step3Review({
             </Button>
 
             {/* Create button */}
-            <Button
-              onClick={handleCreate}
-              disabled={txPhase !== "funded" || !isSupportedNetwork}
-              className="shimmer-on-hover w-full"
-            >
-              {txPhase === "creating" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
+              <Button
+                onClick={handleCreate}
+                disabled={!isFunded || createPending || !isSupportedNetwork}
+                className="shimmer-on-hover w-full"
+              >
+                {createPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating quest on-chain...
                 </>
               ) : (
                 <>
@@ -588,14 +588,24 @@ function Step3Review({
                   Confirm & Create Quest
                 </>
               )}
-            </Button>
+              </Button>
 
-            {txPhase === "idle" && (
+            {fundingTx.isFailure && (
+              <p className="text-destructive mt-2 text-center text-xs font-bold">
+                {fundingTx.error ?? "Funding failed. Try again."}
+              </p>
+            )}
+            {createTx.isFailure && (
+              <p className="text-destructive mt-2 text-center text-xs font-bold">
+                {createTx.error ?? "Creation failed. Try again."}
+              </p>
+            )}
+            {!isFunded && !fundPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Fund the pool first, then confirm to create the quest on Stellar.
               </p>
             )}
-            {txPhase === "funded" && (
+            {isFunded && !createPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Pool funded! Sign the creation transaction to go live.
               </p>
@@ -609,7 +619,7 @@ function Step3Review({
           type="button"
           variant="outline"
           onClick={onBack}
-          disabled={txPhase === "funding" || txPhase === "creating"}
+          disabled={fundPending || createPending}
         >
           <ArrowLeft className="h-4 w-4" />
           Back

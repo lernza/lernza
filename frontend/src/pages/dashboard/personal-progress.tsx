@@ -1,6 +1,12 @@
 import { Activity } from "lucide-react"
-import type { UserStats as UserStatsType } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
+
+interface UserStatsType {
+  totalEarned: number
+  questsOwned: number
+  questsEnrolled: number
+  milestonesCompleted: number
+}
 
 interface PersonalProgressProps {
   stats: UserStatsType

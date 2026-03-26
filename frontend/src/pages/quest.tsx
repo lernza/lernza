@@ -1,5 +1,8 @@
 import { useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { z } from "zod"
 import {
   ArrowLeft,
   Plus,
@@ -14,12 +17,13 @@ import {
   ChevronUp,
   Loader2,
   X,
-  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { FieldError, FormLabel } from "@/components/ui/form-field"
+import { cn, formatTokens } from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
 import {
   MOCK_WORKSPACES,
@@ -28,7 +32,6 @@ import {
   MOCK_ENROLLEES,
   MOCK_COMPLETIONS,
 } from "@/lib/mock-data"
-import { formatTokens } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
@@ -37,6 +40,28 @@ import { questClient } from "@/lib/contracts/quest"
 import { MilestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+
+// ─── Zod schemas ─────────────────────────────────────────────────────────────
+
+const milestoneFormSchema = z.object({
+  title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
+  description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
+  rewardAmount: z
+    .string()
+    .min(1, "Reward amount is required")
+    .refine(v => Number.isFinite(Number(v)) && Number(v) >= 0, "Must be a non-negative number"),
+})
+type MilestoneFormValues = z.infer<typeof milestoneFormSchema>
+
+const enrolleeFormSchema = z.object({
+  address: z
+    .string()
+    .min(1, "Stellar address is required")
+    .regex(/^G[A-Z2-7]{55}$/, "Must be a valid Stellar public key (starts with G)"),
+})
+type EnrolleeFormValues = z.infer<typeof enrolleeFormSchema>
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 type Tab = "milestones" | "enrollees"
 
@@ -49,9 +74,7 @@ export function QuestView() {
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
   const [showAddEnrollee, setShowAddEnrollee] = useState(false)
-  const [enrolleeInput, setEnrolleeInput] = useState("")
   const [addPhase, setAddPhase] = useState<"idle" | "submitting" | "done" | "error">("idle")
-  const [addError, setAddError] = useState<string | null>(null)
 
   const ws = MOCK_WORKSPACES.find(w => w.id === questId)
   const stats = MOCK_WORKSPACE_STATS[questId]
@@ -65,74 +88,57 @@ export function QuestView() {
   const isOwner = !!address && address === ws?.owner
 
   const [showMilestoneForm, setShowMilestoneForm] = useState(false)
-  const [msTitle, setMsTitle] = useState("")
-  const [msDescription, setMsDescription] = useState("")
-  const [msReward, setMsReward] = useState("")
   const addEnrolleeTx = useTransactionAction()
   const createMilestoneTx = useTransactionAction()
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
   const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
 
+  const milestoneForm = useForm<MilestoneFormValues>({
+    resolver: zodResolver(milestoneFormSchema),
+    defaultValues: { title: "", description: "", rewardAmount: "" },
+  })
+
+  const enrolleeForm = useForm<EnrolleeFormValues>({
+    resolver: zodResolver(enrolleeFormSchema),
+    defaultValues: { address: "" },
+  })
+
   const resetMilestoneForm = useCallback(() => {
-    setMsTitle("")
-    setMsDescription("")
-    setMsReward("")
+    milestoneForm.reset()
     setShowMilestoneForm(false)
-  }, [])
+  }, [milestoneForm])
 
-  const handleCreateMilestone = useCallback(async () => {
-    if (!address) {
-      addToast("Connect your wallet first.", "error")
-      return
-    }
-    const title = msTitle.trim()
-    const description = msDescription.trim()
-    const reward = Number(msReward)
-
-    if (!title) {
-      addToast("Milestone title is required.", "error")
-      return
-    }
-    if (!description) {
-      addToast("Milestone description is required.", "error")
-      return
-    }
-    if (!Number.isFinite(reward) || reward < 0) {
-      addToast("Reward amount must be a non-negative number.", "error")
-      return
-    }
-
-    try {
-      await createMilestoneTx.run(async () => {
-        const result = await milestoneClient.createMilestone(
-          address,
-          questId,
-          title,
-          description,
-          BigInt(reward)
-        )
-        if (result.status !== "SUCCESS") {
-          throw new Error(result.error || "Transaction failed. Please try again.")
-        }
-        return result
-      })
-      addToast("Milestone created successfully!", "success")
-      resetMilestoneForm()
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unknown error"
-      addToast(`Failed to create milestone: ${message}`, "error")
-    }
-  }, [
-    address,
-    msTitle,
-    msDescription,
-    msReward,
-    questId,
-    addToast,
-    resetMilestoneForm,
-    createMilestoneTx,
-  ])
+  const handleCreateMilestone = useCallback(
+    async (values: MilestoneFormValues) => {
+      if (!address) {
+        addToast("Connect your wallet first.", "error")
+        return
+      }
+      const reward = Number(values.rewardAmount)
+      try {
+        await createMilestoneTx.run(async () => {
+          const result = await milestoneClient.createMilestone(
+            address,
+            questId,
+            values.title,
+            values.description,
+            BigInt(reward)
+          )
+          if (result.status !== "SUCCESS") {
+            throw new Error(result.error || "Transaction failed. Please try again.")
+          }
+          return result
+        })
+        addToast("Milestone created successfully!", "success")
+        resetMilestoneForm()
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error"
+        addToast(`Failed to create milestone: ${message}`, "error")
+      }
+    },
+    [address, questId, addToast, resetMilestoneForm, createMilestoneTx]
+  )
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
@@ -147,37 +153,37 @@ export function QuestView() {
     .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
     .reduce((sum, m) => sum + m.reward_amount, 0)
 
-  const closeAddEnrollee = () => {
+  const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
-    setEnrolleeInput("")
+    enrolleeForm.reset()
     addEnrolleeTx.reset()
     setAddPhase("idle")
-    setAddError(null)
-  }
+  }, [enrolleeForm, addEnrolleeTx])
 
-  const handleAddEnrollee = async () => {
-    const addr = enrolleeInput.trim()
-    if (!addr || !address) return
-    setAddPhase("submitting")
-    setAddError(null)
-    try {
-      await addEnrolleeTx.run(async () => {
-        const result = await questClient.addEnrollee(address, questId, addr)
-        if (result.status !== "SUCCESS") {
-          throw new Error(result.error ?? "Transaction failed. Please try again.")
-        }
-        return result
-      })
-      setLocalEnrollees(prev => [...prev, addr])
-      setAddPhase("done")
-      addToast("Enrollee added successfully", "success")
-      setTimeout(closeAddEnrollee, 1500)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
-      setAddPhase("error")
-      setAddError(message)
-    }
-  }
+  const handleAddEnrollee = useCallback(
+    async (values: EnrolleeFormValues) => {
+      if (!address) return
+      setAddPhase("submitting")
+      try {
+        await addEnrolleeTx.run(async () => {
+          const result = await questClient.addEnrollee(address, questId, values.address)
+          if (result.status !== "SUCCESS") {
+            throw new Error(result.error ?? "Transaction failed. Please try again.")
+          }
+          return result
+        })
+        setLocalEnrollees(prev => [...prev, values.address])
+        setAddPhase("done")
+        addToast("Enrollee added successfully", "success")
+        setTimeout(closeAddEnrollee, 1500)
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
+        setAddPhase("error")
+        enrolleeForm.setError("address", { message })
+      }
+    },
+    [address, questId, addToast, closeAddEnrollee, addEnrolleeTx, enrolleeForm]
+  )
 
   const handleVerifyAndPayout = async (milestoneId: number, rewardAmount: number) => {
     if (!address) {
@@ -335,13 +341,17 @@ export function QuestView() {
 
       {/* Add Enrollee inline panel */}
       {showAddEnrollee && (
-        <div className="animate-fade-in-up bg-background border-border mb-8 border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+        <form
+          onSubmit={enrolleeForm.handleSubmit(handleAddEnrollee)}
+          className="animate-fade-in-up bg-background border-border mb-8 border-[3px] shadow-[4px_4px_0_var(--color-border)]"
+        >
           <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-3">
             <div className="flex items-center gap-2">
               <UserPlus className="h-4 w-4" />
               <span className="text-sm font-black tracking-wider uppercase">Add Enrollee</span>
             </div>
             <button
+              type="button"
               onClick={closeAddEnrollee}
               disabled={addPhase === "submitting"}
               className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-[2px] disabled:cursor-not-allowed disabled:opacity-50"
@@ -351,21 +361,18 @@ export function QuestView() {
           </div>
           <div className="space-y-4 p-5">
             <div>
-              <label className="mb-1.5 block text-sm font-black">Stellar Address</label>
+              <FormLabel required>Stellar Address</FormLabel>
               <input
-                value={enrolleeInput}
-                onChange={e => setEnrolleeInput(e.target.value)}
+                {...enrolleeForm.register("address")}
                 placeholder="G..."
                 disabled={addPhase === "submitting" || addPhase === "done"}
-                className="border-border bg-background w-full border-[2px] px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50"
+                className={cn(
+                  "border-border bg-background w-full border-[2px] px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
+                  enrolleeForm.formState.errors.address && "border-destructive"
+                )}
               />
+              <FieldError message={enrolleeForm.formState.errors.address?.message} />
             </div>
-            {addError && (
-              <div className="bg-destructive/10 border-destructive flex items-start gap-2 border-[2px] p-3">
-                <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
-                <p className="text-destructive text-sm font-bold">{addError}</p>
-              </div>
-            )}
             {!isSupportedNetwork && (
               <p className="text-destructive text-xs font-bold">
                 Switch Freighter to Testnet to continue.
@@ -373,13 +380,8 @@ export function QuestView() {
             )}
             <div className="flex gap-2">
               <Button
-                onClick={handleAddEnrollee}
-                disabled={
-                  !enrolleeInput.trim() ||
-                  addEnrolleeTx.isPending ||
-                  addPhase === "done" ||
-                  !isSupportedNetwork
-                }
+                type="submit"
+                disabled={addEnrolleeTx.isPending || addPhase === "done" || !isSupportedNetwork}
                 className="shimmer-on-hover"
               >
                 {addEnrolleeTx.isPending ? (
@@ -400,6 +402,7 @@ export function QuestView() {
                 )}
               </Button>
               <Button
+                type="button"
                 variant="danger"
                 onClick={closeAddEnrollee}
                 disabled={addEnrolleeTx.isPending}
@@ -408,7 +411,7 @@ export function QuestView() {
               </Button>
             </div>
           </div>
-        </div>
+        </form>
       )}
 
       {/* Stats row */}
@@ -505,11 +508,15 @@ export function QuestView() {
 
       {/* Add Milestone form */}
       {showMilestoneForm && (
-        <div className="animate-fade-in-up mb-6">
+        <form
+          onSubmit={milestoneForm.handleSubmit(handleCreateMilestone)}
+          className="animate-fade-in-up mb-6"
+        >
           <Card>
             <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-2.5">
               <span className="text-xs font-black tracking-wider uppercase">New Milestone</span>
               <button
+                type="button"
                 onClick={resetMilestoneForm}
                 className="flex h-5 w-5 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
                 aria-label="Close form"
@@ -519,49 +526,55 @@ export function QuestView() {
             </div>
             <CardContent className="space-y-4 p-5">
               <div>
-                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
-                  Title
-                </label>
+                <FormLabel required>Title</FormLabel>
                 <input
+                  {...milestoneForm.register("title")}
                   type="text"
-                  value={msTitle}
-                  onChange={e => setMsTitle(e.target.value)}
                   placeholder="e.g. Complete Module 1"
-                  className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  maxLength={100}
+                  className={cn(
+                    "border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    milestoneForm.formState.errors.title && "border-destructive"
+                  )}
                   disabled={createMilestoneTx.isPending}
                 />
+                <FieldError message={milestoneForm.formState.errors.title?.message} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
-                  Description
-                </label>
+                <FormLabel required>Description</FormLabel>
                 <textarea
-                  value={msDescription}
-                  onChange={e => setMsDescription(e.target.value)}
+                  {...milestoneForm.register("description")}
                   placeholder="Describe what the learner needs to accomplish..."
                   rows={3}
-                  className="border-border bg-background w-full resize-none border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  maxLength={500}
+                  className={cn(
+                    "border-border bg-background w-full resize-none border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    milestoneForm.formState.errors.description && "border-destructive"
+                  )}
                   disabled={createMilestoneTx.isPending}
                 />
+                <FieldError message={milestoneForm.formState.errors.description?.message} />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
-                  Reward (tokens)
-                </label>
+                <FormLabel required>Reward (tokens)</FormLabel>
                 <input
+                  {...milestoneForm.register("rewardAmount")}
                   type="number"
                   min="0"
-                  value={msReward}
-                  onChange={e => setMsReward(e.target.value)}
+                  step="1"
                   placeholder="100"
-                  className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  className={cn(
+                    "border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    milestoneForm.formState.errors.rewardAmount && "border-destructive"
+                  )}
                   disabled={createMilestoneTx.isPending}
                 />
+                <FieldError message={milestoneForm.formState.errors.rewardAmount?.message} />
               </div>
               <div className="flex gap-3 pt-1">
                 <Button
+                  type="submit"
                   size="sm"
-                  onClick={handleCreateMilestone}
                   disabled={createMilestoneTx.isPending}
                   className="shimmer-on-hover"
                 >
@@ -578,6 +591,7 @@ export function QuestView() {
                   )}
                 </Button>
                 <Button
+                  type="button"
                   variant="danger"
                   size="sm"
                   onClick={resetMilestoneForm}
@@ -588,7 +602,7 @@ export function QuestView() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </form>
       )}
 
       {/* Milestones tab */}

@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
@@ -80,25 +81,6 @@ function clearDraft() {
 }
 
 // ─── Helper components ────────────────────────────────────────────────────────
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null
-  return (
-    <p className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold">
-      <AlertCircle className="h-3 w-3 flex-shrink-0" />
-      {message}
-    </p>
-  )
-}
-
-function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="mb-1.5 block text-sm font-black">
-      {children}
-      {required && <span className="text-destructive ml-0.5">*</span>}
-    </label>
-  )
-}
 
 function StepIndicator({ current }: { current: FormStep }) {
   const steps = [

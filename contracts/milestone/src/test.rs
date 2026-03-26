@@ -247,6 +247,26 @@ fn test_zero_reward_milestone() {
 // --- distribution mode tests ---
 
 #[test]
+fn test_get_distribution_mode_defaults_to_custom() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(client.get_flat_reward(&q_id), None);
+}
+
+#[test]
+fn test_get_distribution_mode_and_flat_reward_after_set() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
+    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Flat);
+    assert_eq!(client.get_flat_reward(&q_id), Some(50));
+}
+
+#[test]
 fn test_custom_mode_uses_per_milestone_amounts() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

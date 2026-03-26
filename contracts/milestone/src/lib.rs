@@ -333,6 +333,20 @@ impl MilestoneContract {
         Ok(())
     }
 
+    /// Get the reward distribution mode for a quest.
+    /// Defaults to Custom if unset.
+    pub fn get_distribution_mode(env: Env, quest_id: u32) -> DistributionMode {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom)
+    }
+
+    /// Get the configured flat reward for a quest (if set).
+    pub fn get_flat_reward(env: Env, quest_id: u32) -> Option<i128> {
+        env.storage().persistent().get(&DataKey::FlatReward(quest_id))
+    }
+
     /// Verify an enrollee's completion of a milestone. Owner only.
     /// Returns the reward_amount so the frontend can trigger token distribution.
     pub fn verify_completion(

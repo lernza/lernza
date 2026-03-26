@@ -16,7 +16,16 @@ export class RewardsClient {
   private contract: Contract | null
 
   constructor() {
-    this.contract = CONTRACT_ID ? new Contract(CONTRACT_ID) : null
+    if (CONTRACT_ID) {
+      try {
+        this.contract = new Contract(CONTRACT_ID)
+      } catch {
+        this.contract = null
+        console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+      }
+    } else {
+      this.contract = null
+    }
   }
 
   private getContract(): Contract {

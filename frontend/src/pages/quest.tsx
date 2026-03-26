@@ -676,7 +676,7 @@ export function QuestView() {
         <div className="bg-destructive/10 border-destructive mx-auto mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-destructive)]">
           <X className="text-destructive h-8 w-8" />
         </div>
-        <h2 className="mb-2 text-2xl font-black">{error || "Quest not found"}</h2>
+        <h2 className="mb-2 text-2xl font-black">{loadError || "Quest not found"}</h2>
         <p className="text-muted-foreground mb-8 font-bold">
           We couldn't resolve the quest details.
         </p>

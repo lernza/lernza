@@ -13,6 +13,7 @@ export interface WorkspaceInfo {
   created_at: number
   visibility: Visibility
   max_enrollees?: number
+  verified: boolean
 }
 
 export interface MilestoneInfo {

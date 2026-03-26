@@ -781,6 +781,43 @@ fn test_archive_quest_twice_is_idempotent() {
 }
 
 #[test]
+fn test_admin_verification() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    // Initialize admin
+    client.initialize(&admin);
+
+    // Verify creator
+    client.verify_creator(&admin, &creator);
+    assert!(client.is_creator_verified(&creator));
+
+    // Non-admin cannot verify
+    let non_admin = Address::generate(&env);
+    let result = client.try_verify_creator(&non_admin, &Address::generate(&env));
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_verified_creator_quest() {
+    let (env, client, owner, token) = setup();
+    let admin = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &owner);
+
+    let id = create_quest_helper(&env, &client, &owner, &token);
+    let quest = client.get_quest(&id);
+    assert!(quest.verified);
+
+    let unverified_owner = Address::generate(&env);
+    let id2 = create_quest_helper(&env, &client, &unverified_owner, &token);
+    let quest2 = client.get_quest(&id2);
+    assert!(!quest2.verified);
+}
+
+#[test]
 fn test_pre_existing_enrollees_retained_after_archive() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);

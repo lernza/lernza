@@ -42,6 +42,14 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                     >
                       Trending
                     </Badge>
+                    {quest.verified && (
+                      <Badge
+                        variant="verified"
+                        className="border-border ml-2 border-[1px] px-1 text-[10px]"
+                      >
+                        Verified
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">

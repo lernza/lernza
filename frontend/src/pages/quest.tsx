@@ -10,6 +10,7 @@ import {
   ChevronUp,
   Circle,
   Coins,
+  Check,
   Loader2,
   Lock,
   Plus,
@@ -196,10 +197,10 @@ export function QuestView() {
             const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
             return completed
               ? ({
-                  milestoneId: milestone.id,
-                  enrollee,
-                  completed: true,
-                } satisfies CompletionRecord)
+                milestoneId: milestone.id,
+                enrollee,
+                completed: true,
+              } satisfies CompletionRecord)
               : null
           })
         )
@@ -245,8 +246,8 @@ export function QuestView() {
   const earnedReward = isOwner
     ? 0
     : milestones
-        .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
-        .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
+      .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
+      .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
 
   const totalReward = milestones.reduce(
     (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
@@ -730,7 +731,14 @@ export function QuestView() {
           <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
+                {quest.verified && (
+                  <Badge variant="verified" className="gap-1 border-black">
+                    <Check className="h-3 w-3" />
+                  </Badge>
+                )}
+              </div>
               <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
             </div>
             <div className="flex flex-shrink-0 flex-wrap gap-3">
@@ -978,11 +986,10 @@ export function QuestView() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
-              activeTab === tab
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"
-            }`}
+              }`}
           >
             {tab}
             <span className="ml-2 text-xs opacity-60">
@@ -1172,16 +1179,14 @@ export function QuestView() {
                     className="focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <Card
-                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
-                        isCompleted ? "border-success" : ""
-                      }`}
+                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${isCompleted ? "border-success" : ""
+                        }`}
                     >
                       <CardContent className="p-5">
                         <div className="flex items-start gap-4">
                           <div
-                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
-                              isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
-                            }`}
+                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
+                              }`}
                           >
                             {isCompleted ? (
                               <CheckCircle2 className="h-4 w-4" />

@@ -38,6 +38,7 @@ export interface QuestInfo {
   status: QuestStatus
   deadline: number
   maxEnrollees?: number
+  verified: boolean
 }
 
 export class QuestClient {
@@ -137,6 +138,21 @@ export class QuestClient {
   async isExpired(questId: number): Promise<boolean> {
     const result = await this.invokeRead("is_expired", [nativeToScVal(questId, { type: "u32" })])
     return !!result
+  }
+
+  async isCreatorVerified(creator: string): Promise<boolean> {
+    const result = await this.invokeRead("is_creator_verified", [
+      new Address(creator).toScVal(),
+    ])
+    return !!result
+  }
+
+  async verifyCreator(admin: string, creator: string) {
+    const tx = await this.buildTx(admin, "verify_creator", [
+      new Address(admin).toScVal(),
+      new Address(creator).toScVal(),
+    ])
+    return signAndSubmit(tx)
   }
 
   // --- Write Operations ---
@@ -313,6 +329,7 @@ export class QuestClient {
       status: Number(r.status) as QuestStatus,
       deadline: Number(r.deadline),
       maxEnrollees: r.max_enrollees ? Number(r.max_enrollees) : undefined,
+      verified: !!r.verified,
     }
   }
 

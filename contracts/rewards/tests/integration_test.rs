@@ -68,10 +68,16 @@ impl QuestSystemTest {
         let rewards_id = env.register(RewardsContract, ());
 
         let admin = Address::generate(&env);
-        MilestoneContractClient::new(&env, &milestone_id)
-            .initialize(&admin, &quest_id, &certificate_id);
-        RewardsContractClient::new(&env, &rewards_id)
-            .initialize(&token_addr, &quest_id, &milestone_id);
+        MilestoneContractClient::new(&env, &milestone_id).initialize(
+            &admin,
+            &quest_id,
+            &certificate_id,
+        );
+        RewardsContractClient::new(&env, &rewards_id).initialize(
+            &token_addr,
+            &quest_id,
+            &milestone_id,
+        );
 
         Self {
             env,
@@ -156,8 +162,10 @@ fn test_happy_path_full_lifecycle() {
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
 
     let ms_id = ctx.create_milestone(&owner, q_id, "First Milestone", 500);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
 
     assert_eq!(ctx.token_balance(&enrollee), 500);
     assert_eq!(ctx.rewards().get_pool_balance(&q_id), 4_500);
@@ -187,14 +195,18 @@ fn test_completing_all_milestones_mints_certificate() {
     let ms2_id = ctx.create_milestone(&owner, q_id, "Milestone 2", 300);
 
     // First milestone complete — no certificate yet (1 of 2 done)
-    ctx.milestone().verify_completion(&owner, &q_id, &ms1_id, &enrollee);
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms1_id, &enrollee, &200);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms1_id, &enrollee);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms1_id, &enrollee, &200);
     assert!(!ctx.certificate().has_quest_certificate(&q_id, &enrollee));
 
     // Second (final) milestone complete — certificate is auto-minted by the
     // milestone contract via its cross-contract call into the certificate contract
-    ctx.milestone().verify_completion(&owner, &q_id, &ms2_id, &enrollee);
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms2_id, &enrollee, &300);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms2_id, &enrollee);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms2_id, &enrollee, &300);
     assert!(ctx.certificate().has_quest_certificate(&q_id, &enrollee));
 
     let progress = ctx.milestone().get_enrollee_progress(&q_id, &enrollee);
@@ -229,13 +241,19 @@ fn test_multiple_enrollees_share_single_milestone() {
     let ms_id = ctx.create_milestone(&owner, q_id, "Shared Milestone", 1_000);
 
     // All three verify and claim independently — order matches real-world concurrency
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &e1);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &e2);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &e3);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &e1);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &e2);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &e3);
 
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms_id, &e1, &1_000);
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms_id, &e2, &1_000);
-    ctx.rewards().distribute_reward(&owner, &q_id, &ms_id, &e3, &1_000);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &e1, &1_000);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &e2, &1_000);
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &e3, &1_000);
 
     assert_eq!(ctx.token_balance(&e1), 1_000);
     assert_eq!(ctx.token_balance(&e2), 1_000);
@@ -266,10 +284,13 @@ fn test_insufficient_pool_rejects_distribution() {
     ctx.rewards().fund_quest(&owner, &q_id, &100); // pool = 100
 
     let ms_id = ctx.create_milestone(&owner, q_id, "Expensive Milestone", 500);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
 
     // Requested 500 > pool 100
-    let result = ctx.rewards().try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
     assert_eq!(result, Err(Ok(RewardsError::InsufficientPool)));
 
     assert_eq!(ctx.token_balance(&enrollee), 0);
@@ -300,9 +321,9 @@ fn test_unenrolled_address_cannot_complete_milestone() {
     // Rewards also rejects — milestone.is_completed() returns false for stranger
     ctx.mint_tokens(&owner, &5_000);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
-    let result =
-        ctx.rewards()
-            .try_distribute_reward(&owner, &q_id, &ms_id, &stranger, &100);
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&owner, &q_id, &ms_id, &stranger, &100);
     assert_eq!(result, Err(Ok(RewardsError::MilestoneNotCompleted)));
 }
 
@@ -326,14 +347,15 @@ fn test_non_authority_distribute_unauthorized() {
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
 
     let ms_id = ctx.create_milestone(&owner, q_id, "Milestone", 100);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
 
     // mock_all_auths() grants imposter's require_auth(), but the stored
     // QuestAuthority is owner, not imposter → Error::Unauthorized from
     // the ownership check on line 230 of rewards/src/lib.rs
-    let result =
-        ctx.rewards()
-            .try_distribute_reward(&imposter, &q_id, &ms_id, &enrollee, &100);
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&imposter, &q_id, &ms_id, &enrollee, &100);
     assert_eq!(result, Err(Ok(RewardsError::Unauthorized)));
 
     // Pool and enrollee balance are unchanged
@@ -397,9 +419,9 @@ fn test_distribute_blocked_without_milestone_completion() {
     let ms_id = ctx.create_milestone(&owner, q_id, "Incomplete Milestone", 100);
     // Deliberately skip: ctx.milestone().verify_completion(...)
 
-    let result =
-        ctx.rewards()
-            .try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &100);
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &100);
     assert_eq!(result, Err(Ok(RewardsError::MilestoneNotCompleted)));
 
     assert_eq!(ctx.token_balance(&enrollee), 0);
@@ -424,7 +446,8 @@ fn test_distribute_reward_idempotent() {
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
 
     let ms_id = ctx.create_milestone(&owner, q_id, "Idempotent Milestone", 200);
-    ctx.milestone().verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
 
     // First payout succeeds
     ctx.rewards()

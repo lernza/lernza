@@ -17,6 +17,8 @@ import {
   ChevronUp,
   Loader2,
   X,
+  Download,
+  Upload,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -111,6 +113,14 @@ export function QuestView() {
     type: "add_enrollee" | "create_milestone" | "verify_payout"
     details: TransactionDetails
     execute: () => Promise<void>
+  } | null>(null)
+
+  // Import quest state
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importedData, setImportedData] = useState<{
+    name: string
+    description: string
+    milestones: Array<{ title: string; description: string; rewardAmount: number }>
   } | null>(null)
 
   const milestoneForm = useForm<MilestoneFormValues>({
@@ -321,6 +331,96 @@ export function QuestView() {
     }
   }
 
+  // Export quest functionality
+  const handleExportQuest = useCallback(() => {
+    if (!ws) return
+
+    const exportData = {
+      name: ws.name,
+      description: ws.description,
+      milestones: milestones.map(ms => ({
+        title: ms.title,
+        description: ms.description,
+        rewardAmount: ms.reward_amount,
+      })),
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${ws.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    addToast("Quest exported successfully!", "success")
+  }, [ws, milestones, addToast])
+
+  // Import quest functionality
+  const handleImportFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (!file) return
+
+      try {
+        const text = await file.text()
+        const data = JSON.parse(text)
+
+        // Validate schema using Zod
+        const importSchema = z.object({
+          name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
+          description: z
+            .string()
+            .min(1, "Description is required")
+            .max(2000, "Max 2000 characters"),
+          milestones: z
+            .array(
+              z.object({
+                title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
+                description: z
+                  .string()
+                  .min(1, "Description is required")
+                  .max(500, "Max 500 characters"),
+                rewardAmount: z.number().positive("Must be greater than 0"),
+              })
+            )
+            .min(1, "At least one milestone is required"),
+        })
+
+        const validated = importSchema.parse(data)
+        setImportedData(validated)
+        setShowImportDialog(true)
+      } catch (err: unknown) {
+        if (err instanceof z.ZodError) {
+          const messages = err.issues.map(e => e.message).join(", ")
+          addToast(`Invalid JSON: ${messages}`, "error")
+        } else if (err instanceof SyntaxError) {
+          addToast("Invalid JSON format. Please check the file.", "error")
+        } else {
+          const message = err instanceof Error ? err.message : "Unknown error"
+          addToast(`Failed to import quest: ${message}`, "error")
+        }
+      } finally {
+        // Reset file input
+        event.target.value = ""
+      }
+    },
+    [addToast]
+  )
+
+  const handleConfirmImport = useCallback(() => {
+    if (!importedData) return
+
+    // Navigate to create-quest page with imported data in localStorage
+    localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
+    navigate("/create-quest")
+    setShowImportDialog(false)
+    setImportedData(null)
+    addToast("Quest data loaded. Complete the creation process.", "success")
+  }, [importedData, navigate, addToast])
+
   const enrolleesCount = useCountUp(localEnrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)
   const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
@@ -382,16 +482,49 @@ export function QuestView() {
             </div>
             <div className="flex flex-shrink-0 gap-3">
               {isOwner && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shimmer-on-hover"
-                  onClick={() => setShowAddEnrollee(!showAddEnrollee)}
-                >
-                  <UserPlus className="h-4 w-4" />
-                  Add Enrollee
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={handleExportQuest}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export Quest
+                  </Button>
+                  <label>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportFile}
+                      className="hidden"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shimmer-on-hover cursor-pointer"
+                      onClick={() => {
+                        const input = document.querySelector(
+                          'input[type="file"]'
+                        ) as HTMLInputElement
+                        input?.click()
+                      }}
+                    >
+                      <Upload className="h-4 w-4" />
+                      Import Quest
+                    </Button>
+                  </label>
+                </>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="shimmer-on-hover"
+                onClick={() => setShowAddEnrollee(!showAddEnrollee)}
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Enrollee
+              </Button>
               <Button
                 size="sm"
                 className="shimmer-on-hover"
@@ -931,6 +1064,85 @@ export function QuestView() {
           addEnrolleeTx.isPending || createMilestoneTx.isPending || verifyPayoutTx.isPending
         }
       />
+
+      {/* Import Quest Dialog */}
+      {showImportDialog && importedData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              setShowImportDialog(false)
+              setImportedData(null)
+            }}
+          />
+          <div className="animate-fade-in-up relative z-10 w-full max-w-md px-4">
+            <Card className="border-border overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+              <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-4">
+                <div className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  <span className="text-sm font-black tracking-wider uppercase">Import Quest</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowImportDialog(false)
+                    setImportedData(null)
+                  }}
+                  className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-[2px]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <CardContent className="space-y-4 p-6">
+                <div>
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                    Quest Name
+                  </p>
+                  <p className="mt-1 text-lg font-black">{importedData.name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                    Description
+                  </p>
+                  <p className="mt-1 text-sm">{importedData.description}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                    Milestones
+                  </p>
+                  <div className="mt-1 space-y-2">
+                    {importedData.milestones.map((ms, i) => (
+                      <div key={i} className="bg-muted/50 rounded-md p-2">
+                        <p className="text-sm font-bold">{ms.title}</p>
+                        <p className="text-muted-foreground text-xs">{ms.description}</p>
+                        <p className="text-primary mt-1 text-xs font-black">
+                          {formatTokens(ms.rewardAmount)} USDC
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowImportDialog(false)
+                      setImportedData(null)
+                    }}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleConfirmImport} className="shimmer-on-hover flex-1">
+                    <Upload className="h-4 w-4" />
+                    Import & Create Quest
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

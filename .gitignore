@@ -26,3 +26,6 @@ issue.md
 
 # Generated contract bindings (regenerated from WASM via pnpm generate:bindings)
 frontend/src/lib/contracts/generated/
+
+
+contracts/quest/test_snapshots/test/*

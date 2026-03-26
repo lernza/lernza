@@ -21,9 +21,12 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
+import { questClient } from "@/lib/contracts/quest"
+import { milestoneClient } from "@/lib/contracts/milestone"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -80,25 +83,6 @@ function clearDraft() {
 }
 
 // ─── Helper components ────────────────────────────────────────────────────────
-
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null
-  return (
-    <p className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold">
-      <AlertCircle className="h-3 w-3 flex-shrink-0" />
-      {message}
-    </p>
-  )
-}
-
-function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
-  return (
-    <label className="mb-1.5 block text-sm font-black">
-      {children}
-      {required && <span className="text-destructive ml-0.5">*</span>}
-    </label>
-  )
-}
 
 function StepIndicator({ current }: { current: FormStep }) {
   const steps = [
@@ -266,7 +250,7 @@ function Step2Form({
   const milestones = watch("milestones")
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
-    return sum + (isNaN(n) ? 0 : n)
+    return sum + (Number.isNaN(n) ? 0 : n)
   }, 0)
 
   return (
@@ -441,7 +425,7 @@ function Step3Review({
   onBack: () => void
   onComplete: () => void
 }) {
-  const { isSupportedNetwork } = useWallet()
+  const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
 
@@ -458,10 +442,113 @@ function Step3Review({
   }
 
   const handleCreate = async () => {
+    if (!address) {
+      throw new Error("Wallet not connected")
+    }
+
     await createTx.run(async () => {
-      await new Promise(r => setTimeout(r, 1200))
-      return true
+      try {
+        // Step 1: Create the quest on-chain
+        // TODO: Add VITE_USDC_TOKEN_ADDRESS to environment variables
+        const tokenAddress =
+          import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
+          "CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG"
+        if (!tokenAddress) {
+          throw new Error("USDC token address not configured")
+        }
+
+        const questResult = await questClient.createQuest(
+          address,
+          step1Data.name,
+          step1Data.description,
+          tokenAddress
+        )
+
+        if (questResult.status !== "SUCCESS") {
+          throw new Error(`Quest creation failed: ${questResult.error}`)
+        }
+
+        // Extract quest ID from the result (this may need adjustment based on actual contract response)
+        // For now, we'll assume we can get the quest ID from the result or need to query it
+        let questId: number
+        try {
+          // Try to get the latest quest ID (assuming the new quest is the last one)
+          const questCount = await questClient.getQuestCount()
+          questId = questCount - 1 // New quest should be at index count-1
+        } catch (error) {
+          console.error("Failed to get quest ID:", error)
+          throw new Error("Failed to retrieve created quest ID")
+        }
+
+        // Step 2: Create milestones for the quest
+        const milestoneResults = []
+        const failedMilestones = []
+
+        for (let i = 0; i < step2Data.milestones.length; i++) {
+          const milestone = step2Data.milestones[i]
+          try {
+            const result = await milestoneClient.createMilestone(
+              address,
+              questId,
+              milestone.title,
+              milestone.description,
+              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)) // Convert to USDC smallest unit (6 decimals)
+            )
+
+            if (result.status !== "SUCCESS") {
+              failedMilestones.push({
+                index: i,
+                title: milestone.title,
+                error: result.error || "Unknown transaction error",
+              })
+              milestoneResults.push({ index: i, status: "FAILED", result })
+            } else {
+              milestoneResults.push({ index: i, status: "SUCCESS", result })
+            }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : "Unknown error"
+            failedMilestones.push({
+              index: i,
+              title: milestone.title,
+              error: errorMessage,
+            })
+            milestoneResults.push({
+              index: i,
+              status: "FAILED",
+              error: errorMessage,
+            })
+          }
+        }
+
+        // Handle partial failure cases
+        if (failedMilestones.length > 0) {
+          const successCount = step2Data.milestones.length - failedMilestones.length
+          const errorMessages = failedMilestones
+            .map(f => `Milestone ${f.index + 1} ("${f.title}"): ${f.error}`)
+            .join("; ")
+
+          if (successCount === 0) {
+            // All milestones failed - treat as complete failure
+            throw new Error(
+              `Quest created successfully, but all milestone creations failed: ${errorMessages}`
+            )
+          } else {
+            // Some milestones failed - partial success with detailed error
+            throw new Error(
+              `Quest created successfully with ${successCount}/${step2Data.milestones.length} milestones. ` +
+                `Failed milestones: ${errorMessages}. ` +
+                `You may need to manually create the remaining milestones.`
+            )
+          }
+        }
+
+        return true
+      } catch (error) {
+        console.error("Quest creation error:", error)
+        throw error
+      }
     })
+
     onComplete()
   }
 
@@ -544,24 +631,24 @@ function Step3Review({
             )}
 
             {/* Fund button */}
-              <Button
-                onClick={handleFund}
-                disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
-                variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
-                className={cn(
-                  "shimmer-on-hover mb-3 w-full",
-                  (isFunded || createPending || createTx.isSuccess) && "border-success"
-                )}
-              >
-                {fundPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Funding reward pool...
-                  </>
-                ) : isFunded || createPending || createTx.isSuccess ? (
-                  <>
-                    <Check className="h-4 w-4" />
-                    Reward pool funded
+            <Button
+              onClick={handleFund}
+              disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
+              variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
+              className={cn(
+                "shimmer-on-hover mb-3 w-full",
+                (isFunded || createPending || createTx.isSuccess) && "border-success"
+              )}
+            >
+              {fundPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Funding reward pool...
+                </>
+              ) : isFunded || createPending || createTx.isSuccess ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Reward pool funded
                 </>
               ) : (
                 <>
@@ -572,15 +659,15 @@ function Step3Review({
             </Button>
 
             {/* Create button */}
-              <Button
-                onClick={handleCreate}
-                disabled={!isFunded || createPending || !isSupportedNetwork}
-                className="shimmer-on-hover w-full"
-              >
-                {createPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating quest on-chain...
+            <Button
+              onClick={handleCreate}
+              disabled={!isFunded || createPending || !isSupportedNetwork}
+              className="shimmer-on-hover w-full"
+            >
+              {createPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
                 </>
               ) : (
                 <>
@@ -588,7 +675,7 @@ function Step3Review({
                   Confirm & Create Quest
                 </>
               )}
-              </Button>
+            </Button>
 
             {fundingTx.isFailure && (
               <p className="text-destructive mt-2 text-center text-xs font-bold">

@@ -1,175 +1,11 @@
-#[test]
-fn test_fund_quest_overflow() {
-    let (
-        env,
-        client,
-        _cid,
-        token_addr,
-        quest_client,
-        _quest_id,
-        _milestone_client,
-        _milestone_id,
-        _certificate_client,
-        _certificate_id,
-    ) = setup();
-    let owner = Address::generate(&env);
-    let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &i128::MAX);
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Programming"),
-        &soroban_sdk::Vec::<String>::new(&env),
-        &token_addr,
-        &Visibility::Public,
-    );
-    // Fund with max value
-    client.fund_quest(&owner, &q_id, &i128::MAX);
-    // Try to overflow
-    let result = client.try_fund_quest(&owner, &q_id, &1);
-    assert_eq!(result, Err(Ok(Error::ArithmeticOverflow)));
-}
+#![cfg(test)]
 
-#[test]
-fn test_distribute_reward_overflow() {
-    let (
-        env,
-        client,
-        _cid,
-        token_addr,
-        quest_client,
-        _quest_id,
-        milestone_client,
-        _milestone_id,
-        _certificate_client,
-        _certificate_id,
-    ) = setup();
-    let owner = Address::generate(&env);
-    let enrollee = Address::generate(&env);
-    let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &i128::MAX);
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Programming"),
-        &soroban_sdk::Vec::<String>::new(&env),
-        &token_addr,
-        &Visibility::Public,
-    );
-    client.fund_quest(&owner, &q_id, &i128::MAX);
-    let ms_id = milestone_client.create_milestone(
-        &owner,
-        &q_id,
-        &String::from_str(&env, "Big Milestone"),
-        &String::from_str(&env, "Desc"),
-        &1,
-    );
-    quest_client.add_enrollee(&q_id, &enrollee);
-    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute max value
-    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
-    // Try to distribute again — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
-    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
-}
-
-#[test]
-fn test_distribute_reward_earnings_overflow() {
-    let (
-        env,
-        client,
-        _cid,
-        token_addr,
-        quest_client,
-        _quest_id,
-        milestone_client,
-        _milestone_id,
-        _certificate_client,
-        _certificate_id,
-    ) = setup();
-    let owner = Address::generate(&env);
-    let enrollee = Address::generate(&env);
-    let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &i128::MAX);
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Programming"),
-        &soroban_sdk::Vec::<String>::new(&env),
-        &token_addr,
-        &Visibility::Public,
-    );
-    client.fund_quest(&owner, &q_id, &i128::MAX);
-    let ms_id = milestone_client.create_milestone(
-        &owner,
-        &q_id,
-        &String::from_str(&env, "Big Milestone"),
-        &String::from_str(&env, "Desc"),
-        &1,
-    );
-    quest_client.add_enrollee(&q_id, &enrollee);
-    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute max value
-    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
-    // Try to overflow earnings — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
-    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
-}
-
-#[test]
-fn test_zero_amount_edge_cases() {
-    let (
-        env,
-        client,
-        _cid,
-        token_addr,
-        quest_client,
-        _quest_id,
-        milestone_client,
-        _milestone_id,
-        _certificate_client,
-        _certificate_id,
-    ) = setup();
-    let owner = Address::generate(&env);
-    let enrollee = Address::generate(&env);
-    let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &100);
-    let q_id = quest_client.create_quest(
-        &owner,
-        &String::from_str(&env, "Test"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Programming"),
-        &soroban_sdk::Vec::<String>::new(&env),
-        &token_addr,
-        &Visibility::Public,
-    );
-    // Zero fund
-    let result = client.try_fund_quest(&owner, &q_id, &0);
-    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-    // Fund with positive
-    client.fund_quest(&owner, &q_id, &100);
-    let ms_id = milestone_client.create_milestone(
-        &owner,
-        &q_id,
-        &String::from_str(&env, "Zero Milestone"),
-        &String::from_str(&env, "Desc"),
-        &1,
-    );
-    quest_client.add_enrollee(&q_id, &enrollee);
-    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Zero distribute
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &0);
-    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-}
-
-#[cfg(test)]
 use super::*;
+
 use certificate::{CertificateContract, CertificateContractClient};
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient, Visibility};
+
 use soroban_sdk::{
     testutils::Address as _,
     token::{StellarAssetClient, TokenClient},
@@ -369,6 +205,173 @@ fn test_fund_invalid_amount() {
     );
 
     let result = client.try_fund_quest(&owner, &q_id, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_fund_quest_overflow() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &i128::MAX);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    // Fund with max value
+    client.fund_quest(&owner, &q_id, &i128::MAX);
+    // Try to overflow
+    let result = client.try_fund_quest(&owner, &q_id, &1);
+    assert_eq!(result, Err(Ok(Error::ArithmeticOverflow)));
+}
+
+#[test]
+fn test_distribute_reward_overflow() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &i128::MAX);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &i128::MAX);
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Big Milestone"),
+        &String::from_str(&env, "Desc"),
+        &1,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    // Distribute max value
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
+    // Try to distribute again — idempotency rejects the duplicate
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
+}
+
+#[test]
+fn test_distribute_reward_earnings_overflow() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &i128::MAX);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &i128::MAX);
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Big Milestone"),
+        &String::from_str(&env, "Desc"),
+        &1,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    // Distribute max value
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
+    // Try to overflow earnings — idempotency rejects the duplicate
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
+}
+
+#[test]
+fn test_zero_amount_edge_cases() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &100);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    // Zero fund
+    let result = client.try_fund_quest(&owner, &q_id, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+    // Fund with positive
+    client.fund_quest(&owner, &q_id, &100);
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Zero Milestone"),
+        &String::from_str(&env, "Desc"),
+        &1,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    // Zero distribute
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
@@ -975,4 +978,250 @@ fn test_distribute_reward_idempotent() {
     assert_eq!(token_client.balance(&enrollee), 100);
     assert_eq!(client.get_pool_balance(&q_id), 4_900);
     assert_eq!(client.get_total_distributed(), 100);
+}
+
+// ── explicit input-validation tests (amount > 0) ─────────────────────────────
+
+#[test]
+fn test_fund_quest_zero_amount_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    let result = client.try_fund_quest(&owner, &q_id, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_fund_quest_negative_amount_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    let result = client.try_fund_quest(&owner, &q_id, &-1);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_distribute_reward_zero_amount_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_distribute_reward_negative_amount_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &-1);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+/// Funding with a non-contract address stored as token_addr must be rejected
+/// before any storage writes (QuestAuthority / QuestPool) occur.
+///
+/// Setup: deploy quest & milestone contracts with a real SAC (needed for
+/// create_quest token validation), but initialize the rewards contract with a
+/// random Address that points to no deployed contract.
+#[test]
+fn test_fund_quest_invalid_token_address() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Real SAC — required so the quest contract accepts the token address.
+    let token_admin = Address::generate(&env);
+    let real_token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let real_token_addr = real_token_contract.address();
+
+    // Deploy quest & milestone contracts (standard path).
+    let quest_id = env.register(QuestContract, ());
+    let quest_client = QuestContractClient::new(&env, &quest_id);
+
+    let milestone_id = env.register(MilestoneContract, ());
+    let milestone_client = MilestoneContractClient::new(&env, &milestone_id);
+
+    let certificate_id = env.register(CertificateContract, (milestone_id.clone(),));
+    let admin = Address::generate(&env);
+    milestone_client.initialize(&admin, &quest_id, &certificate_id);
+
+    // Invalid token address — not backed by any contract.
+    let fake_token_addr = Address::generate(&env);
+
+    // Initialize rewards with the fake token.
+    let rewards_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &rewards_id);
+    client.initialize(&fake_token_addr, &quest_id, &milestone_id);
+
+    let owner = Address::generate(&env);
+
+    // Create quest using the real token (quest contract validates the addr).
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Token Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &real_token_addr,
+        &Visibility::Public,
+    );
+
+    // Attempt to fund — rewards contract will try_symbol() on the fake addr.
+    let result = client.try_fund_quest(&owner, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::InvalidToken)));
+
+    // Pool must remain zero — no storage write should have happened.
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+/// Explicit positive-path test: funding succeeds when the stored token_addr
+/// resolves to a live SAC contract (try_symbol() returns Ok).
+/// Logically equivalent to test_fund_quest, but named to document SAC
+/// validation pass-through for audit traceability.
+#[test]
+fn test_fund_quest_valid_sac() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Valid SAC Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+
+    // fund_quest must succeed — SAC validation passes.
+    client.fund_quest(&owner, &q_id, &5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+
+    // Token balance should reflect the transfer.
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&owner), 5_000);
 }

@@ -101,17 +101,17 @@ jobs:
           script: |
             const { total_size, assets_size } = process.env;
             const body = `## 📦 Bundle Size Report\n\n| Metric | Size |\n|--------|------|\n| Total dist | ${total_size} |\n| Assets | ${assets_size} |\n\n_This helps track frontend bundle size changes._`;
-            
+
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-            
+
             const botComment = comments.find(c => 
               c.user?.type === 'Bot' && c.body?.includes('Bundle Size Report')
             );
-            
+
             try {
               if (botComment) {
                 await github.rest.issues.updateComment({
@@ -166,6 +166,9 @@ jobs:
 
       - name: Format check
         run: cargo fmt --all -- --check
+
+      - name: Smoke-check test module syntax
+        run: cargo check --workspace --tests
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets

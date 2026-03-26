@@ -66,6 +66,8 @@ pub enum DataKey {
     UserEarnings(Address),
     // Global stats
     TotalDistributed,
+    // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
+    PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
 }
 
 #[contracterror]
@@ -82,6 +84,7 @@ pub enum Error {
     MilestoneNotCompleted = 8,
     MilestoneContractNotInitialized = 9,
     ArithmeticOverflow = 10,
+    AlreadyPaid = 11,
 }
 
 const BUMP: u32 = 518_400;
@@ -196,6 +199,7 @@ impl RewardsContract {
 
     /// Distribute reward tokens to an enrollee. Authority only.
     /// Requires milestone completion verification before payment.
+    /// Idempotent: a second call for the same (quest, milestone, enrollee) returns AlreadyPaid.
     pub fn distribute_reward(
         env: Env,
         authority: Address,
@@ -208,6 +212,12 @@ impl RewardsContract {
 
         if amount <= 0 {
             return Err(Error::InvalidAmount);
+        }
+
+        // Idempotency check: reject duplicate payouts for (quest, milestone, enrollee)
+        let payout_key = DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&payout_key) {
+            return Err(Error::AlreadyPaid);
         }
 
         // Verify authority
@@ -251,6 +261,12 @@ impl RewardsContract {
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Record payout for idempotency (prevents duplicate payouts on retry)
+        env.storage().persistent().set(&payout_key, &amount);
+        env.storage()
+            .persistent()
+            .extend_ttl(&payout_key, THRESHOLD, BUMP);
 
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());

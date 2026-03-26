@@ -62,7 +62,7 @@ git clone https://github.com/lernza/lernza.git
 cd lernza
 
 # Smart contracts
-cargo test --workspace      # 33 tests
+cargo test --workspace      # run the current contract workspace test suite
 stellar contract build      # Optimized WASM
 
 # Frontend
@@ -75,17 +75,25 @@ Install [Freighter](https://freighter.app), switch to **Testnet**, and connect.
 
 For contract deployment to Stellar testnet, see [docs/deploy-testnet.md](docs/deploy-testnet.md).
 
+### Current Delivery Stage
+
+Lernza is currently a **contract-first project with a partially wired frontend**.
+
+- The Soroban contracts are implemented and tested in the Rust workspace.
+- The frontend has working wallet flows and selected read paths, but several write flows are still simulated in the UI.
+- Profile earnings now read the aggregate on-chain total from the rewards contract, but detailed payout history is not indexable yet.
+
 <br />
 
 ## Roadmap
 
 | Milestone                     | Status      | Focus                                         |
 | :---------------------------- | :---------- | :-------------------------------------------- |
-| **M1** Quest Foundation       | In Progress | Rename workspace → quest, validation, tooling |
-| **M2** Quest Engine           | Upcoming    | Visibility, deadlines, funding models         |
-| **M3** Neo-Brutalism UI       | Upcoming    | Design system, component redesign, routing    |
-| **M4** Full Stack Integration | Upcoming    | Wire frontend to contracts                    |
-| **M5** Quality & Advanced     | Upcoming    | Security audit, docs, advanced features       |
+| **M1** Quest Foundation       | In Repo     | Core contract structure, validation, tooling  |
+| **M2** Quest Engine           | In Progress | Deadlines live, visibility is discovery-only, funding models still pending |
+| **M3** Neo-Brutalism UI       | In Repo     | Frontend screens and design system prototype  |
+| **M4** Full Stack Integration | Partial     | Wallet connected, some contract reads wired, several flows still mocked |
+| **M5** Quality & Advanced     | Planned     | Security audit, indexing, advanced features   |
 
 See the full [project board](https://github.com/orgs/lernza/projects/1) for all 64 issues.
 
@@ -142,12 +150,16 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 
 | Area                    | Status                  | Contract Method     |
 | :---------------------- | :---------------------- | :------------------ |
-| **Quest Creation**      | Mocked                  | `create_quest`      |
-| **Enrollment**          | Mocked                  | `add_enrollee`      |
-| **Milestone Track**     | Mocked                  | `create_milestone`  |
-| **Verification**        | Mocked                  | `verify_completion` |
-| **Reward Distribution** | Mocked                  | `distribute_reward` |
-| **Profile & Analytics** | Implemented (Mock Data) | `get_user_earnings` |
+| **Quest Creation**      | Frontend flow still simulated | `create_quest`      |
+| **Enrollment**          | Contract available, UI orchestration still incomplete | `add_enrollee`      |
+| **Milestone Track**     | Contract available, UI still partly mock-backed | `create_milestone`  |
+| **Verification**        | Contract available, not fully wired in UI | `verify_completion` |
+| **Reward Distribution** | Contract available, not fully wired in UI | `distribute_reward` |
+| **Profile & Analytics** | Aggregate earnings wired; detailed history still unavailable | `get_user_earnings` |
+
+**Privacy model**
+
+`Visibility::Private` is currently **not a confidentiality feature**. It only removes a quest from public discovery helpers such as `list_public_quests`. If a caller knows a quest id, on-chain reads like `get_quest`, `get_enrollees`, and `is_enrollee` remain queryable.
 
 </details>
 
@@ -177,10 +189,10 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 | `create_quest(owner, name, description, token_addr, visibility, category, tags, enrollment_cap)` | Create a new quest with a reward token |
 | `add_enrollee(quest_id, enrollee)`                                                               | Enroll a learner (owner only)          |
 | `remove_enrollee(quest_id, enrollee)`                                                            | Remove a learner (owner only)          |
-| `get_quest(quest_id)` / `get_enrollees(quest_id)`                                                | Query quest data                       |
+| `get_quest(quest_id)` / `get_enrollees(quest_id)`                                                | Query quest data by id (including quests marked `Private`) |
 | `is_enrollee(quest_id, user)`                                                                    | Check enrollment status                |
 | `archive_quest(quest_id)`                                                                        | Archive a quest (owner only)           |
-| `set_visibility(quest_id, visibility)`                                                           | Update quest visibility                |
+| `set_visibility(quest_id, visibility)`                                                           | Update public discovery visibility (not confidentiality) |
 | `list_public_quests(start, limit)`                                                               | List public quests with pagination     |
 
 **Milestone Contract** — `contracts/milestone/`

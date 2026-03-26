@@ -8,6 +8,7 @@ import {
   Account,
 } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
+import type { TransactionResult } from "./client"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 
 const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
@@ -53,6 +54,12 @@ export class QuestClient {
     } else {
       this.contract = null
     }
+  }
+
+  private getContract(): Contract {
+    if (!this.contract)
+      throw new Error("Quest contract not configured. Set VITE_QUEST_CONTRACT_ID.")
+    return this.contract
   }
 
   // --- Read Operations ---
@@ -155,7 +162,9 @@ export class QuestClient {
       nativeToScVal(tags, { type: "string_vec" }),
       new Address(tokenAddr).toScVal(),
       nativeToScVal(visibility, { type: "u32" }),
-      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
+      maxEnrollees !== undefined
+        ? nativeToScVal(maxEnrollees, { type: "u32" })
+        : nativeToScVal(null),
     ])
     return signAndSubmit(tx)
   }
@@ -177,11 +186,15 @@ export class QuestClient {
       nativeToScVal(questId, { type: "u32" }),
       new Address(owner).toScVal(),
       name !== undefined ? nativeToScVal(name, { type: "string" }) : nativeToScVal(null),
-      description !== undefined ? nativeToScVal(description, { type: "string" }) : nativeToScVal(null),
+      description !== undefined
+        ? nativeToScVal(description, { type: "string" })
+        : nativeToScVal(null),
       category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
       tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
       visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
-      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
+      maxEnrollees !== undefined
+        ? nativeToScVal(maxEnrollees, { type: "u32" })
+        : nativeToScVal(null),
     ])
     return signAndSubmit(tx)
   }
@@ -198,11 +211,27 @@ export class QuestClient {
   }
 
   /**
-   * Adds an enrollee to a quest.
-   * Note: This must be signed by the QUEST OWNER, not the enrollee.
-   * Will fail with QuestArchived if the quest has been archived.
+   * Adds an enrollee to a quest as the owner, or self-enrolls a learner into a public quest.
    */
-  async addEnrollee(owner: string, questId: number, enrollee: string) {
+  async addEnrollee(owner: string, questId: number, enrollee: string): Promise<TransactionResult>
+  async addEnrollee(questId: number, enrollee: string): Promise<TransactionResult>
+  async addEnrollee(
+    ownerOrQuestId: string | number,
+    questIdOrEnrollee: number | string,
+    maybeEnrollee?: string
+  ) {
+    if (typeof ownerOrQuestId === "number" && typeof questIdOrEnrollee === "string") {
+      return this.joinQuest(questIdOrEnrollee, ownerOrQuestId)
+    }
+
+    const owner = ownerOrQuestId as string
+    const questId = questIdOrEnrollee as number
+    const enrollee = maybeEnrollee
+
+    if (!enrollee) {
+      throw new Error("Missing enrollee address.")
+    }
+
     const tx = await this.buildTx(owner, "add_enrollee", [
       nativeToScVal(questId, { type: "u32" }),
       new Address(enrollee).toScVal(),
@@ -227,6 +256,17 @@ export class QuestClient {
    */
   async leaveQuest(enrollee: string, questId: number) {
     const tx = await this.buildTx(enrollee, "leave_quest", [
+      new Address(enrollee).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    return signAndSubmit(tx)
+  }
+
+  /**
+   * Allows a learner to enroll themselves in a public quest.
+   */
+  async joinQuest(enrollee: string, questId: number) {
+    const tx = await this.buildTx(enrollee, "join_quest", [
       new Address(enrollee).toScVal(),
       nativeToScVal(questId, { type: "u32" }),
     ])
@@ -285,7 +325,7 @@ export class QuestClient {
         fee: "100",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
-        .addOperation(this.contract!.call(method, ...args))
+        .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
@@ -307,7 +347,7 @@ export class QuestClient {
       fee: "100",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
-      .addOperation(this.contract!.call(method, ...args))
+      .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 

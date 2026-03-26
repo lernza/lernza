@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 
 export interface AsyncDataState<T> {
   data: T | null
@@ -26,12 +26,23 @@ export function useAsyncData<T>(
     isEmpty: !initialData,
   })
 
-  const execute = useCallback((): Promise<void> => {
-    if (!enabled) return Promise.resolve()
+  // Use a ref for the fetcher to avoid re-triggering the effect when the
+  // fetcher function identity changes (which happens every render since
+  // callers pass inline arrow functions).
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher
 
+  // Track whether a fetch is already in-flight to prevent overlapping calls.
+  const inflightRef = useRef(false)
+
+  const execute = useCallback((): Promise<void> => {
+    if (!enabled || inflightRef.current) return Promise.resolve()
+
+    inflightRef.current = true
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
-    return fetcher()
+    return fetcherRef
+      .current()
       .then(result => {
         setState({
           data: result,
@@ -48,21 +59,22 @@ export function useAsyncData<T>(
           error: message,
         }))
       })
-  }, [fetcher, enabled])
+      .finally(() => {
+        inflightRef.current = false
+      })
+  }, [enabled])
 
   const refetch = useCallback(() => execute(), [execute])
 
+  // Only re-run when `enabled` changes or when the caller's explicit
+  // `dependencies` array values change. The fetcher ref keeps us from
+  // needing `execute` in the dep array (which previously caused loops).
   useEffect(() => {
     if (enabled) {
-      const timeout = setTimeout(() => {
-        void execute()
-      }, 0)
-
-      return () => {
-        clearTimeout(timeout)
-      }
+      void execute()
     }
-  }, [enabled, execute, dependencies])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...dependencies])
 
   return {
     ...state,
@@ -70,7 +82,7 @@ export function useAsyncData<T>(
   }
 }
 
-// ─── Contract-specific hook ─────────────────────────────────────────────────────
+// --- Contract-specific hook ---
 
 export interface UseContractDataOptions<T> extends UseAsyncDataOptions<T> {
   contractUnavailableMessage?: string

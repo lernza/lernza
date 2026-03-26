@@ -92,6 +92,7 @@ pub struct MilestoneInfo {
     pub title: String,
     pub description: String,
     pub reward_amount: i128,
+    pub requires_previous: bool,
 }
 
 #[contracttype]
@@ -120,6 +121,7 @@ pub struct MilestoneInput {
     pub title: String,
     pub description: String,
     pub reward_amount: i128,
+    pub requires_previous: bool,
 }
 
 #[contracterror]
@@ -137,6 +139,7 @@ pub enum Error {
     AlreadyApproved = 11,
     NotEnrolled = 12,
     InvalidApprover = 13,
+    MilestoneNotUnlocked = 14,
     TitleTooLong = 15,
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
@@ -159,6 +162,7 @@ pub trait Certificate {
 pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
 pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 pub const MAX_BATCH_SIZE: u32 = 20;
+pub const MAX_MILESTONES: u32 = 50;
 
 #[contract]
 pub struct MilestoneContract;
@@ -199,6 +203,7 @@ impl MilestoneContract {
         title: String,
         description: String,
         reward_amount: i128,
+        requires_previous: bool,
     ) -> Result<u32, Error> {
         owner.require_auth();
 
@@ -223,12 +228,17 @@ impl MilestoneContract {
         let next_key = DataKey::NextMilestoneId(quest_id);
         let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
 
+        if id >= MAX_MILESTONES {
+            return Err(Error::InvalidInput);
+        }
+
         let milestone = MilestoneInfo {
             id,
             quest_id,
             title,
             description,
             reward_amount,
+            requires_previous: requires_previous && id > 0,
         };
 
         let ms_key = DataKey::Milestone(quest_id, id);
@@ -295,6 +305,7 @@ impl MilestoneContract {
                 title: ms.title,
                 description: ms.description,
                 reward_amount: ms.reward_amount,
+                requires_previous: ms.requires_previous && id > 0,
             };
 
             let ms_key = DataKey::Milestone(quest_id, id);
@@ -403,6 +414,20 @@ impl MilestoneContract {
         Ok(())
     }
 
+    /// Get the reward distribution mode for a quest.
+    /// Defaults to Custom if unset.
+    pub fn get_distribution_mode(env: Env, quest_id: u32) -> DistributionMode {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom)
+    }
+
+    /// Get the configured flat reward for a quest (if set).
+    pub fn get_flat_reward(env: Env, quest_id: u32) -> Option<i128> {
+        env.storage().persistent().get(&DataKey::FlatReward(quest_id))
+    }
+
     /// Verify an enrollee's completion of a milestone. Owner only.
     /// Returns the reward_amount so the frontend can trigger token distribution.
     pub fn verify_completion(
@@ -438,6 +463,8 @@ impl MilestoneContract {
             .persistent()
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
+
+        Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
 
         let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
         if env.storage().persistent().has(&comp_key) {
@@ -661,6 +688,8 @@ impl MilestoneContract {
 
         // Check if required approvals reached
         if new_approvals >= required_approvals {
+            Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
+
             // Auto-complete the milestone
             env.storage().persistent().set(&comp_key, &true);
             env.storage()
@@ -762,6 +791,11 @@ impl MilestoneContract {
             }
         }
         result
+    }
+
+    /// List all milestones for a quest.
+    pub fn list_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
+        Self::get_milestones(env, quest_id)
     }
 
     /// Get milestone count for a quest.
@@ -912,6 +946,25 @@ impl MilestoneContract {
         let enrolled = quest_client.is_enrollee(&quest_id, user);
 
         Ok(enrolled)
+    }
+
+    fn ensure_previous_completed(
+        env: &Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: &Address,
+        milestone: &MilestoneInfo,
+    ) -> Result<(), Error> {
+        if !milestone.requires_previous || milestone_id == 0 {
+            return Ok(());
+        }
+
+        let previous_key = DataKey::Completed(quest_id, milestone_id - 1, enrollee.clone());
+        if env.storage().persistent().has(&previous_key) {
+            Ok(())
+        } else {
+            Err(Error::MilestoneNotUnlocked)
+        }
     }
 
     /// Check if user has completed all milestones for a quest and mint certificate if so

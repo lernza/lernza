@@ -281,6 +281,7 @@ fn test_distribute_reward_overflow() {
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
         &1,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -326,6 +327,7 @@ fn test_distribute_reward_earnings_overflow() {
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
         &1,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -375,6 +377,7 @@ fn test_zero_amount_edge_cases() {
         &String::from_str(&env, "Zero Milestone"),
         &String::from_str(&env, "Desc"),
         &1,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -463,6 +466,7 @@ fn test_distribute_reward() {
         &String::from_str(&env, "Test Milestone"),
         &String::from_str(&env, "Description"),
         &100,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -522,6 +526,7 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Milestone 1"),
         &String::from_str(&env, "Description"),
         &100,
+        &false,
     );
     let ms2_id = milestone_client.create_milestone(
         &owner,
@@ -529,6 +534,7 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Milestone 2"),
         &String::from_str(&env, "Description"),
         &200,
+        &false,
     );
 
     quest_client.add_enrollee(&q_id, &e1);
@@ -716,6 +722,7 @@ fn test_authority_self_distribution() {
         &String::from_str(&env, "Self Milestone"),
         &String::from_str(&env, "Description"),
         &1000,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
@@ -818,6 +825,7 @@ fn test_distribute_reward_after_milestone_completion() {
         &String::from_str(&env, "Milestone 1"),
         &String::from_str(&env, "Complete task"),
         &100,
+        &false,
     );
 
     // Fund quest
@@ -979,6 +987,7 @@ fn test_distribute_reward_idempotent() {
         &String::from_str(&env, "MS1"),
         &String::from_str(&env, "Desc"),
         &100,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1096,6 +1105,7 @@ fn test_distribute_reward_zero_amount_rejected() {
         &String::from_str(&env, "MS1"),
         &String::from_str(&env, "Desc"),
         &100,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1142,6 +1152,7 @@ fn test_distribute_reward_negative_amount_rejected() {
         &String::from_str(&env, "MS1"),
         &String::from_str(&env, "Desc"),
         &100,
+        &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);

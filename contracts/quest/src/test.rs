@@ -213,6 +213,41 @@ fn test_add_enrollee_duplicate() {
 }
 
 #[test]
+fn test_join_public_quest() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let learner = Address::generate(&env);
+    client.join_quest(&learner, &0);
+
+    let enrollees = client.get_enrollees(&0);
+    assert_eq!(enrollees.len(), 1);
+    assert_eq!(enrollees.get(0).unwrap(), learner);
+    assert!(client.is_enrollee(&0, &learner));
+}
+
+#[test]
+fn test_join_private_quest_rejected() {
+    let (env, client, owner, token) = setup();
+    create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest(&learner, &0);
+    assert_eq!(result, Err(Ok(Error::InviteOnly)));
+}
+
+#[test]
+fn test_join_archived_quest_rejected() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.archive_quest(&0);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest(&learner, &0);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
 fn test_remove_enrollee() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);

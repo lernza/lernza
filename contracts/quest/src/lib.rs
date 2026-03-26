@@ -41,6 +41,7 @@ pub enum Error {
     QuestArchived = 8,
     NameTooLong = 9,
     DescriptionTooLong = 10,
+    InviteOnly = 11,
 }
 
 // TTL constants and address validation moved to common.
@@ -293,6 +294,45 @@ impl QuestContract {
         // Event data: (quest_id, enrollee_address)
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("add_enr")),
+            (quest_id, &enrollee),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Allow a learner to enroll themselves in a public quest.
+    pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
+        enrollee.require_auth();
+
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+        if quest.visibility == Visibility::Private {
+            return Err(Error::InviteOnly);
+        }
+
+        let enrollees = Self::load_enrollees(&env, quest_id);
+
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
+                return Err(Error::QuestFull);
+            }
+        }
+
+        if enrollees.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        let mut new_enrollees = enrollees;
+        new_enrollees.push_back(enrollee.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("join")),
             (quest_id, &enrollee),
         );
 

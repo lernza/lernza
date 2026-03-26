@@ -1,21 +1,22 @@
-import { useState, useCallback } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import { useCallback, useState, type ChangeEvent } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import {
   ArrowLeft,
-  Plus,
-  Users,
-  Target,
-  Coins,
   CheckCircle2,
-  Circle,
-  UserPlus,
-  Sparkles,
   ChevronDown,
   ChevronUp,
+  Circle,
+  Coins,
   Loader2,
+  Lock,
+  Plus,
+  Sparkles,
+  Target,
+  UserPlus,
+  Users,
   X,
   Download,
   Upload,
@@ -26,15 +27,9 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { ProgressRing } from "@/components/progress-ring"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
+import { LoadingState, ErrorState } from "@/components/ui/async-states"
 import { cn, formatTokens } from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
-import {
-  MOCK_WORKSPACES,
-  MOCK_WORKSPACE_STATS,
-  MOCK_MILESTONES,
-  MOCK_ENROLLEES,
-  MOCK_COMPLETIONS,
-} from "@/lib/mock-data"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
@@ -44,12 +39,11 @@ import {
   type TransactionDetails,
 } from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
-import { questClient } from "@/lib/contracts/quest"
-import { MilestoneClient } from "@/lib/contracts/milestone"
+import { useContractData } from "@/hooks/use-async-data"
+import { questClient, Visibility, type QuestInfo } from "@/lib/contracts/quest"
+import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
-
-// ─── Zod schemas ─────────────────────────────────────────────────────────────
 
 const milestoneFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
@@ -58,8 +52,10 @@ const milestoneFormSchema = z.object({
     .string()
     .min(1, "Reward amount is required")
     .refine(v => Number.isFinite(Number(v)) && Number(v) >= 0, "Must be a non-negative number"),
+  requiresPrevious: z.boolean().default(false),
 })
 type MilestoneFormValues = z.infer<typeof milestoneFormSchema>
+type MilestoneFormInput = z.input<typeof milestoneFormSchema>
 
 const enrolleeFormSchema = z.object({
   address: z
@@ -69,11 +65,51 @@ const enrolleeFormSchema = z.object({
 })
 type EnrolleeFormValues = z.infer<typeof enrolleeFormSchema>
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 type Tab = "milestones" | "enrollees"
 
-const milestoneClient = new MilestoneClient()
+interface CompletionRecord {
+  milestoneId: number
+  enrollee: string
+  completed: true
+}
+
+interface QuestViewData {
+  quest: QuestInfo
+  milestones: MilestoneInfo[]
+  enrollees: string[]
+  completions: CompletionRecord[]
+  poolBalance: bigint
+}
+
+const EMPTY_MILESTONES: MilestoneInfo[] = []
+const EMPTY_ENROLLEES: string[] = []
+const EMPTY_COMPLETIONS: CompletionRecord[] = []
+
+const QUEST_ERROR_MESSAGES: Record<number, string> = {
+  4: "You are already enrolled in this quest.",
+  7: "This quest is already full.",
+  8: "This quest is archived and no longer accepts new learners.",
+  11: "This quest is invite only.",
+}
+
+const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
+  12: "This learner is not enrolled in the quest.",
+  14: "Complete previous milestone first.",
+}
+
+function getContractErrorCode(message: string): number | null {
+  const match = message.match(/Error\(Contract, #(\d+)\)/)
+  return match ? Number(match[1]) : null
+}
+
+function mapContractError(message: string, knownMessages: Record<number, string>): string {
+  const code = getContractErrorCode(message)
+  return code && knownMessages[code] ? knownMessages[code] : message
+}
+
+function toSafeNumber(value: bigint): number {
+  return value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value)
+}
 
 // Helper function to truncate addresses
 const truncateAddress = (address: string) => {
@@ -89,24 +125,17 @@ export function QuestView() {
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
   const [showAddEnrollee, setShowAddEnrollee] = useState(false)
   const [addPhase, setAddPhase] = useState<"idle" | "submitting" | "done" | "error">("idle")
+  const [showMilestoneForm, setShowMilestoneForm] = useState(false)
+  const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
 
-  const ws = MOCK_WORKSPACES.find(w => w.id === questId)
-  const stats = MOCK_WORKSPACE_STATS[questId]
-  const milestones = MOCK_MILESTONES[questId] || []
-  const enrollees = MOCK_ENROLLEES[questId] || []
   const { toasts, addToast, removeToast } = useToast()
   const { address, isSupportedNetwork } = useWallet()
 
-  const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
-  const [localCompletions, setLocalCompletions] = useState(MOCK_COMPLETIONS[questId] || [])
-  const isOwner = !!address && address === ws?.owner
-
-  const [showMilestoneForm, setShowMilestoneForm] = useState(false)
   const addEnrolleeTx = useTransactionAction()
+  const enrollTx = useTransactionAction()
   const createMilestoneTx = useTransactionAction()
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
-  const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
 
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -121,12 +150,17 @@ export function QuestView() {
   const [importedData, setImportedData] = useState<{
     name: string
     description: string
-    milestones: Array<{ title: string; description: string; rewardAmount: number }>
+    milestones: Array<{
+      title: string
+      description: string
+      rewardAmount: number
+      requiresPrevious: boolean
+    }>
   } | null>(null)
 
-  const milestoneForm = useForm<MilestoneFormValues>({
+  const milestoneForm = useForm<MilestoneFormInput, undefined, MilestoneFormValues>({
     resolver: zodResolver(milestoneFormSchema),
-    defaultValues: { title: "", description: "", rewardAmount: "" },
+    defaultValues: { title: "", description: "", rewardAmount: "", requiresPrevious: false },
   })
 
   const enrolleeForm = useForm<EnrolleeFormValues>({
@@ -134,10 +168,151 @@ export function QuestView() {
     defaultValues: { address: "" },
   })
 
+  const {
+    data,
+    isLoading,
+    error: loadError,
+    refetch,
+  } = useContractData<QuestViewData>(
+    "quest",
+    async () => {
+      if (!Number.isInteger(questId) || questId < 0) {
+        throw new Error("Invalid quest id")
+      }
+
+      const quest = await questClient.getQuest(questId)
+      if (!quest) {
+        throw new Error("Quest not found")
+      }
+
+      const [milestones, enrollees, poolBalance] = await Promise.all([
+        milestoneClient.listMilestones(questId),
+        questClient.getEnrollees(questId),
+        rewardsClient.getPoolBalance(questId),
+      ])
+
+      const completionEntries = await Promise.all(
+        enrollees.flatMap(enrollee =>
+          milestones.map(async milestone => {
+            const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
+            return completed
+              ? ({
+                  milestoneId: milestone.id,
+                  enrollee,
+                  completed: true,
+                } satisfies CompletionRecord)
+              : null
+          })
+        )
+      )
+
+      const completions = completionEntries.filter(
+        (entry): entry is CompletionRecord => entry !== null
+      )
+
+      return {
+        quest,
+        milestones,
+        enrollees,
+        completions,
+        poolBalance,
+      }
+    },
+    {
+      enabled: Number.isInteger(questId) && questId >= 0,
+      dependencies: [questId],
+      contractUnavailableMessage:
+        "On-chain quest data is unavailable until the quest and milestone contracts are configured.",
+    }
+  )
+
+  const quest = data?.quest ?? null
+  const milestones = data?.milestones ?? EMPTY_MILESTONES
+  const enrollees = data?.enrollees ?? EMPTY_ENROLLEES
+  const completions = data?.completions ?? EMPTY_COMPLETIONS
+  const poolBalance = data?.poolBalance ?? 0n
+
+  const isOwner = !!address && quest?.owner === address
+  const isEnrolled = !!address && enrollees.includes(address)
+
+  const viewerCompletedMilestoneIds = new Set(
+    completions
+      .filter(completion => completion.enrollee === address)
+      .map(completion => completion.milestoneId)
+  )
+  const completedMilestones = isOwner
+    ? new Set(completions.map(completion => completion.milestoneId)).size
+    : viewerCompletedMilestoneIds.size
+  const earnedReward = isOwner
+    ? 0
+    : milestones
+        .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
+        .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
+
+  const totalReward = milestones.reduce(
+    (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
+    0
+  )
+  const isComplete = completedMilestones === milestones.length && milestones.length > 0
+
+  const [statsRef, statsInView] = useInView()
+  const [contentRef, contentInView] = useInView()
+
+  const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
+  const milestonesCount = useCountUp(milestones.length, 400, statsInView)
+  const poolBalanceCount = useCountUp(toSafeNumber(poolBalance), 800, statsInView)
+  const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+
   const resetMilestoneForm = useCallback(() => {
     milestoneForm.reset()
     setShowMilestoneForm(false)
   }, [milestoneForm])
+
+  const closeAddEnrollee = useCallback(() => {
+    setShowAddEnrollee(false)
+    enrolleeForm.reset()
+    addEnrolleeTx.reset()
+    setAddPhase("idle")
+  }, [addEnrolleeTx, enrolleeForm])
+
+  const isMilestoneCompletedBy = useCallback(
+    (milestoneId: number, enrollee: string) =>
+      completions.some(
+        completion =>
+          completion.completed &&
+          completion.milestoneId === milestoneId &&
+          completion.enrollee === enrollee
+      ),
+    [completions]
+  )
+
+  const isMilestoneUnlockedForEnrollee = useCallback(
+    (milestone: MilestoneInfo, enrollee: string) =>
+      !milestone.requiresPrevious ||
+      milestone.id === 0 ||
+      isMilestoneCompletedBy(milestone.id - 1, enrollee),
+    [isMilestoneCompletedBy]
+  )
+
+  const getEligibleEnrollees = useCallback(
+    (milestone: MilestoneInfo) =>
+      enrollees.filter(
+        enrollee =>
+          !isMilestoneCompletedBy(milestone.id, enrollee) &&
+          isMilestoneUnlockedForEnrollee(milestone, enrollee)
+      ),
+    [enrollees, isMilestoneCompletedBy, isMilestoneUnlockedForEnrollee]
+  )
+
+  const getQuestErrorMessage = useCallback(
+    (message: string) => mapContractError(message, QUEST_ERROR_MESSAGES),
+    []
+  )
+
+  const getMilestoneErrorMessage = useCallback(
+    (message: string) => mapContractError(message, MILESTONE_ERROR_MESSAGES),
+    []
+  )
 
   const handleCreateMilestone = useCallback(
     async (values: MilestoneFormValues) => {
@@ -145,9 +320,9 @@ export function QuestView() {
         addToast("Connect your wallet first.", "error")
         return
       }
+
       const reward = Number(values.rewardAmount)
 
-      // Show confirmation dialog instead of executing directly
       setPendingTransaction({
         type: "create_milestone",
         details: {
@@ -166,13 +341,18 @@ export function QuestView() {
                 questId,
                 values.title,
                 values.description,
-                BigInt(reward)
+                BigInt(reward),
+                values.requiresPrevious && milestones.length > 0
               )
               if (result.status !== "SUCCESS") {
-                throw new Error(result.error || "Transaction failed. Please try again.")
+                throw new Error(
+                  getMilestoneErrorMessage(result.error ?? "Transaction failed. Please try again.")
+                )
               }
               return result
             })
+
+            await refetch()
             addToast("Milestone created successfully!", "success")
             resetMilestoneForm()
           } catch (err: unknown) {
@@ -183,193 +363,246 @@ export function QuestView() {
       })
       setShowConfirmDialog(true)
     },
-    [address, questId, addToast, resetMilestoneForm, createMilestoneTx]
+    [
+      address,
+      addToast,
+      createMilestoneTx,
+      getMilestoneErrorMessage,
+      milestones.length,
+      questId,
+      refetch,
+      resetMilestoneForm,
+    ]
   )
-
-  const [statsRef, statsInView] = useInView()
-  const [contentRef, contentInView] = useInView()
-
-  const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
-  const completedMilestones = new Set(
-    localCompletions.filter(c => c.completed).map(c => c.milestoneId)
-  ).size
-  const isComplete = completedMilestones === milestones.length && milestones.length > 0
-  const earnedReward = milestones
-    .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
-    .reduce((sum, m) => sum + m.reward_amount, 0)
-
-  const closeAddEnrollee = useCallback(() => {
-    setShowAddEnrollee(false)
-    enrolleeForm.reset()
-    addEnrolleeTx.reset()
-    setAddPhase("idle")
-  }, [enrolleeForm, addEnrolleeTx])
 
   const handleAddEnrollee = useCallback(
     async (values: EnrolleeFormValues) => {
-      if (!address) return
+      if (!address) {
+        addToast("Connect your wallet first.", "error")
+        return
+      }
 
-      // Show confirmation dialog instead of executing directly
-      setPendingTransaction({
-        type: "add_enrollee",
-        details: {
-          actionName: "Add Enrollee",
-          fromAddress: address,
-          toAddress: values.address,
-          estimatedFee: "0.001",
-          description: `Add ${truncateAddress(values.address)} as an enrollee to this quest.`,
-        },
-        execute: async () => {
-          setAddPhase("submitting")
-          try {
-            await addEnrolleeTx.run(async () => {
-              const result = await questClient.addEnrollee(address, questId, values.address)
-              if (result.status !== "SUCCESS") {
-                throw new Error(result.error ?? "Transaction failed. Please try again.")
-              }
-              return result
-            })
-            setLocalEnrollees(prev => [...prev, values.address])
-            setAddPhase("done")
-            addToast("Enrollee added successfully", "success")
-            setTimeout(closeAddEnrollee, 1500)
-          } catch (err: unknown) {
-            const message =
-              err instanceof Error ? err.message : "Transaction failed. Please try again."
-            setAddPhase("error")
-            enrolleeForm.setError("address", { message })
+      setAddPhase("submitting")
+      try {
+        await addEnrolleeTx.run(async () => {
+          const result = await questClient.addEnrollee(address, questId, values.address)
+          if (result.status !== "SUCCESS") {
+            throw new Error(
+              getQuestErrorMessage(result.error ?? "Transaction failed. Please try again.")
+            )
           }
-        },
-      })
-      setShowConfirmDialog(true)
+          return result
+        })
+
+        await refetch()
+        setAddPhase("done")
+        addToast("Enrollee added successfully.", "success")
+        setTimeout(closeAddEnrollee, 1500)
+      } catch (err: unknown) {
+        setAddPhase("error")
+        const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
+        enrolleeForm.setError("address", { message })
+      }
     },
-    [address, questId, addToast, closeAddEnrollee, addEnrolleeTx, enrolleeForm]
+    [
+      address,
+      addEnrolleeTx,
+      addToast,
+      closeAddEnrollee,
+      enrolleeForm,
+      getQuestErrorMessage,
+      questId,
+      refetch,
+    ]
   )
 
-  const handleVerifyAndPayout = async (milestoneId: number, rewardAmount: number) => {
+  const handleEnroll = useCallback(async () => {
     if (!address) {
       addToast("Connect your wallet first.", "error")
       return
     }
 
-    const target = localEnrollees.find(
-      enrollee =>
-        !localCompletions.some(
-          completion =>
-            completion.enrollee === enrollee &&
-            completion.milestoneId === milestoneId &&
-            completion.completed
-        )
-    )
+    try {
+      await enrollTx.run(async () => {
+        const result = await questClient.addEnrollee(questId, address)
+        if (result.status !== "SUCCESS") {
+          throw new Error(getQuestErrorMessage(result.error ?? "Enrollment failed."))
+        }
+        return result
+      })
 
-    if (!target) {
-      addToast("All enrollees are already verified for this milestone.", "info")
+      await refetch()
+      addToast("Enrollment confirmed.", "success")
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? getQuestErrorMessage(err.message)
+          : "Enrollment failed. Please try again."
+      addToast(message, quest?.visibility === Visibility.Private ? "info" : "error")
+    }
+  }, [address, addToast, enrollTx, getQuestErrorMessage, quest?.visibility, questId, refetch])
+
+  const handleVerifyAndPayout = useCallback(
+    async (milestone: MilestoneInfo) => {
+      if (!address) {
+        addToast("Connect your wallet first.", "error")
+        return
+      }
+
+      const eligibleEnrollees = getEligibleEnrollees(milestone)
+      const blockedBySequence =
+        milestone.requiresPrevious &&
+        enrollees.some(
+          enrollee =>
+            !isMilestoneCompletedBy(milestone.id, enrollee) &&
+            !isMilestoneUnlockedForEnrollee(milestone, enrollee)
+        )
+
+      if (eligibleEnrollees.length === 0) {
+        addToast(
+          blockedBySequence
+            ? "Complete previous milestone first."
+            : "All eligible learners are already verified for this milestone.",
+          "info"
+        )
+        return
+      }
+
+      const target = eligibleEnrollees[0]
+      setPendingTransaction({
+        type: "verify_payout",
+        details: {
+          actionName: "Verify & Payout",
+          fromAddress: address,
+          toAddress: target,
+          estimatedFee: "0.003",
+          tokenAmount: milestone.rewardAmount,
+          tokenSymbol: "USDC",
+          description: `Verify completion and distribute ${formatTokens(toSafeNumber(milestone.rewardAmount))} USDC to ${truncateAddress(target)}.`,
+        },
+        execute: async () => {
+          setActiveMilestoneTxId(milestone.id)
+          try {
+            await verifyPayoutTx.run(async () => {
+              const verifyResult = await milestoneClient.verifyCompletion(
+                address,
+                questId,
+                milestone.id,
+                target
+              )
+              if (verifyResult.status !== "SUCCESS") {
+                throw new Error(
+                  getMilestoneErrorMessage(verifyResult.error ?? "Milestone verification failed.")
+                )
+              }
+
+              const payoutAmount = verifyResult.rewardAmount ?? milestone.rewardAmount
+              const payoutResult = await rewardsClient.distributeReward(
+                address,
+                questId,
+                milestone.id,
+                target,
+                payoutAmount
+              )
+              if (payoutResult.status !== "SUCCESS") {
+                throw new Error(payoutResult.error ?? "Reward distribution failed.")
+              }
+
+              return payoutResult
+            })
+
+            await refetch()
+            addToast("Completion verified and reward paid out.", "success")
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Verification failed."
+            addToast(message, "error")
+          } finally {
+            setActiveMilestoneTxId(null)
+          }
+        },
+      })
+      setShowConfirmDialog(true)
+    },
+    [
+      address,
+      addToast,
+      enrollees,
+      getEligibleEnrollees,
+      getMilestoneErrorMessage,
+      isMilestoneCompletedBy,
+      isMilestoneUnlockedForEnrollee,
+      questId,
+      refetch,
+      verifyPayoutTx,
+    ]
+  )
+
+  const handleRemoveEnrollee = useCallback(
+    async (enrollee: string) => {
+      if (!address) {
+        addToast("Connect your wallet first.", "error")
+        return
+      }
+
+      try {
+        await removeEnrolleeTx.run(async () => {
+          const result = await questClient.removeEnrollee(address, questId, enrollee)
+          if (result.status !== "SUCCESS") {
+            throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
+          }
+          return result
+        })
+
+        await refetch()
+        addToast("Enrollee removed successfully.", "success")
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Could not remove enrollee."
+        addToast(message, "error")
+      }
+    },
+    [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
+  )
+
+  const handleExportQuest = useCallback(() => {
+    if (!quest) {
       return
     }
 
-    // Show confirmation dialog instead of executing directly
-    setPendingTransaction({
-      type: "verify_payout",
-      details: {
-        actionName: "Verify & Payout",
-        fromAddress: address,
-        toAddress: target,
-        estimatedFee: "0.003",
-        tokenAmount: BigInt(rewardAmount),
-        tokenSymbol: "USDC",
-        description: `Verify completion and distribute ${rewardAmount} USDC to ${truncateAddress(target)}.`,
-      },
-      execute: async () => {
-        setActiveMilestoneTxId(milestoneId)
-        try {
-          await verifyPayoutTx.run(async () => {
-            const verifyResult = await milestoneClient.verifyCompletion(
-              address,
-              questId,
-              milestoneId,
-              target
-            )
-            if (verifyResult.status !== "SUCCESS") {
-              throw new Error(verifyResult.error ?? "Milestone verification failed.")
-            }
-
-            const payoutResult = await rewardsClient.distributeReward(
-              address,
-              questId,
-              milestoneId,
-              target,
-              BigInt(rewardAmount)
-            )
-            if (payoutResult.status !== "SUCCESS") {
-              throw new Error(payoutResult.error ?? "Reward distribution failed.")
-            }
-
-            return payoutResult
-          })
-
-          setLocalCompletions(prev => [...prev, { milestoneId, enrollee: target, completed: true }])
-          addToast("Completion verified and reward paid out.", "success")
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : "Verification failed"
-          addToast(message, "error")
-        } finally {
-          setActiveMilestoneTxId(null)
-        }
-      },
-    })
-    setShowConfirmDialog(true)
-  }
-
-  const handleRemoveEnrollee = async (enrollee: string) => {
-    try {
-      await removeEnrolleeTx.run(async () => {
-        await new Promise(resolve => setTimeout(resolve, 250))
-      })
-      setLocalEnrollees(prev => prev.filter(value => value !== enrollee))
-      addToast("Enrollee removed from local view.", "info")
-    } catch {
-      addToast("Could not remove enrollee.", "error")
-    }
-  }
-
-  // Export quest functionality
-  const handleExportQuest = useCallback(() => {
-    if (!ws) return
-
     const exportData = {
-      name: ws.name,
-      description: ws.description,
-      milestones: milestones.map(ms => ({
-        title: ms.title,
-        description: ms.description,
-        rewardAmount: ms.reward_amount,
+      name: quest.name,
+      description: quest.description,
+      milestones: milestones.map(milestone => ({
+        title: milestone.title,
+        description: milestone.description,
+        rewardAmount: toSafeNumber(milestone.rewardAmount),
+        requiresPrevious: milestone.requiresPrevious,
       })),
     }
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
+
     link.href = url
-    link.download = `${ws.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
+    link.download = `${quest.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
 
     addToast("Quest exported successfully!", "success")
-  }, [ws, milestones, addToast])
+  }, [addToast, milestones, quest])
 
-  // Import quest functionality
   const handleImportFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
-      if (!file) return
+      if (!file) {
+        return
+      }
 
       try {
         const text = await file.text()
         const data = JSON.parse(text)
-
-        // Validate schema using Zod
         const importSchema = z.object({
           name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
           description: z
@@ -385,17 +618,17 @@ export function QuestView() {
                   .min(1, "Description is required")
                   .max(500, "Max 500 characters"),
                 rewardAmount: z.number().positive("Must be greater than 0"),
+                requiresPrevious: z.boolean().default(false),
               })
             )
             .min(1, "At least one milestone is required"),
         })
 
-        const validated = importSchema.parse(data)
-        setImportedData(validated)
+        setImportedData(importSchema.parse(data))
         setShowImportDialog(true)
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
-          const messages = err.issues.map(e => e.message).join(", ")
+          const messages = err.issues.map(issue => issue.message).join(", ")
           addToast(`Invalid JSON: ${messages}`, "error")
         } else if (err instanceof SyntaxError) {
           addToast("Invalid JSON format. Please check the file.", "error")
@@ -404,7 +637,6 @@ export function QuestView() {
           addToast(`Failed to import quest: ${message}`, "error")
         }
       } finally {
-        // Reset file input
         event.target.value = ""
       }
     },
@@ -412,25 +644,43 @@ export function QuestView() {
   )
 
   const handleConfirmImport = useCallback(() => {
-    if (!importedData) return
+    if (!importedData) {
+      return
+    }
 
-    // Navigate to create-quest page with imported data in localStorage
     localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
     navigate("/create-quest")
     setShowImportDialog(false)
     setImportedData(null)
     addToast("Quest data loaded. Complete the creation process.", "success")
-  }, [importedData, navigate, addToast])
+  }, [addToast, importedData, navigate])
 
-  const enrolleesCount = useCountUp(localEnrollees.length, 400, statsInView)
-  const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
-  const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <LoadingState message="Loading quest" />
+      </div>
+    )
+  }
 
-  if (!ws) {
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <ErrorState message={loadError} onRetry={() => void refetch()} />
+      </div>
+    )
+  }
+
+  if (!quest) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <h2 className="mb-4 text-2xl font-black">Quest not found</h2>
+        <div className="bg-destructive/10 border-destructive mx-auto mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-destructive)]">
+          <X className="text-destructive h-8 w-8" />
+        </div>
+        <h2 className="mb-2 text-2xl font-black">{loadError || "Quest not found"}</h2>
+        <p className="text-muted-foreground mb-8 font-bold">
+          We couldn't resolve the quest details.
+        </p>
         <Button variant="outline" onClick={() => navigate("/dashboard")}>
           Go back
         </Button>
@@ -440,11 +690,13 @@ export function QuestView() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <QuestMetadata questId={questId} questName={ws.name} questDescription={ws.description} />
-      {/* Background */}
+      <QuestMetadata
+        questId={questId}
+        questName={quest.name}
+        questDescription={quest.description}
+      />
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
-      {/* Back button */}
       <button
         onClick={() => navigate("/dashboard")}
         className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
@@ -455,9 +707,7 @@ export function QuestView() {
         Back to Dashboard
       </button>
 
-      {/* Quest header card */}
       <div className="bg-background border-border animate-fade-in-up relative mb-8 overflow-hidden border-[3px] shadow-[6px_6px_0_var(--color-border)]">
-        {/* Header bar */}
         <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
           <div className="flex items-center gap-3">
             <span className="text-xs font-black tracking-wider uppercase">Quest Details</span>
@@ -467,6 +717,9 @@ export function QuestView() {
                 Complete
               </Badge>
             )}
+            <Badge variant={quest.visibility === Visibility.Public ? "default" : "outline"}>
+              {quest.visibility === Visibility.Public ? "Public" : "Invite Only"}
+            </Badge>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="bg-success border-border h-2.5 w-2.5 border" />
@@ -534,57 +787,91 @@ export function QuestView() {
                     onClick={handleExportQuest}
                   >
                     <Download className="h-4 w-4" />
-                    Export Quest
+                    Export Template
                   </Button>
-                  <label>
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportFile}
-                      className="hidden"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shimmer-on-hover cursor-pointer"
-                      onClick={() => {
-                        const input = document.querySelector(
-                          'input[type="file"]'
-                        ) as HTMLInputElement
-                        input?.click()
-                      }}
-                    >
-                      <Upload className="h-4 w-4" />
-                      Import Quest
-                    </Button>
-                  </label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => document.getElementById("quest-import-file-input")?.click()}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Import Template
+                  </Button>
+                  <input
+                    id="quest-import-file-input"
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={event => void handleImportFile(event)}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => setShowAddEnrollee(current => !current)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Add Enrollee
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => setShowMilestoneForm(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Milestone
+                  </Button>
                 </>
+              ) : (
+                <Button
+                  size="sm"
+                  className="shimmer-on-hover"
+                  onClick={() => void handleEnroll()}
+                  disabled={enrollTx.isPending || isEnrolled || !isSupportedNetwork || !address}
+                  title={
+                    !isSupportedNetwork
+                      ? "Switch Freighter to Testnet to continue."
+                      : quest.visibility === Visibility.Private && !isEnrolled
+                        ? "Invite only"
+                        : undefined
+                  }
+                >
+                  {enrollTx.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Awaiting Signature...
+                    </>
+                  ) : isEnrolled ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      Already Enrolled
+                    </>
+                  ) : quest.visibility === Visibility.Private ? (
+                    <>
+                      <Lock className="h-4 w-4" />
+                      Invite Only
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Enroll
+                    </>
+                  )}
+                </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="shimmer-on-hover"
-                onClick={() => setShowAddEnrollee(!showAddEnrollee)}
-              >
-                <UserPlus className="h-4 w-4" />
-                Add Enrollee
-              </Button>
-              <Button
-                size="sm"
-                className="shimmer-on-hover"
-                onClick={() => setShowMilestoneForm(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Milestone
-              </Button>
-              <ShareButton questId={questId} questName={ws.name} onToast={addToast} />
+              <ShareButton questId={questId} questName={quest.name} onToast={addToast} />
             </div>
           </div>
+          {!isOwner && quest.visibility === Visibility.Private && !isEnrolled && (
+            <p className="text-muted-foreground relative mt-4 text-xs font-bold">
+              This quest is invite only. If you try to enroll, the contract will reject it.
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Add Enrollee inline panel */}
-      {showAddEnrollee && (
+      {showAddEnrollee && isOwner && (
         <form
           onSubmit={enrolleeForm.handleSubmit(handleAddEnrollee)}
           className="animate-fade-in-up bg-background border-border mb-8 border-[3px] shadow-[4px_4px_0_var(--color-border)]"
@@ -658,7 +945,6 @@ export function QuestView() {
         </form>
       )}
 
-      {/* Stats row */}
       <div ref={statsRef} className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           {
@@ -676,7 +962,7 @@ export function QuestView() {
           {
             icon: Coins,
             label: "Pool Balance",
-            value: formatTokens(poolBalance),
+            value: formatTokens(poolBalanceCount),
             bg: "bg-primary",
           },
           {
@@ -685,11 +971,11 @@ export function QuestView() {
             value: formatTokens(totalRewardCount),
             bg: "bg-success",
           },
-        ].map((stat, i) => (
+        ].map((stat, index) => (
           <div
             key={stat.label}
             className={`reveal-up ${statsInView ? "in-view" : ""}`}
-            style={{ transitionDelay: `${i * 100}ms` }}
+            style={{ transitionDelay: `${index * 100}ms` }}
           >
             <Card className="neo-lift hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
               <CardContent className="flex items-center gap-3 p-4">
@@ -708,14 +994,15 @@ export function QuestView() {
         ))}
       </div>
 
-      {/* Progress section */}
       {milestones.length > 0 && (
         <div className="animate-fade-in-up stagger-3 mb-8">
           <div className="bg-background border-border border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-black">Overall Progress</span>
+              <span className="text-sm font-black">
+                {isOwner ? "Quest Progress" : "Your Progress"}
+              </span>
               <div className="flex items-center gap-3">
-                {earnedReward > 0 && (
+                {earnedReward > 0 && !isOwner && (
                   <span className="text-xs font-bold text-green-700">
                     +{formatTokens(earnedReward)} USDC earned
                   </span>
@@ -730,13 +1017,12 @@ export function QuestView() {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="border-border mb-6 flex gap-0 border-b-[3px]" ref={contentRef}>
         {(["milestones", "enrollees"] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider capitalize uppercase transition-all ${
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
               activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"
@@ -744,14 +1030,13 @@ export function QuestView() {
           >
             {tab}
             <span className="ml-2 text-xs opacity-60">
-              ({tab === "milestones" ? milestones.length : localEnrollees.length})
+              ({tab === "milestones" ? milestones.length : enrollees.length})
             </span>
           </button>
         ))}
       </div>
 
-      {/* Add Milestone form */}
-      {showMilestoneForm && (
+      {showMilestoneForm && isOwner && (
         <form
           onSubmit={milestoneForm.handleSubmit(handleCreateMilestone)}
           className="animate-fade-in-up mb-6"
@@ -815,6 +1100,22 @@ export function QuestView() {
                 />
                 <FieldError message={milestoneForm.formState.errors.rewardAmount?.message} />
               </div>
+              <label className="flex items-start gap-3 text-sm font-bold">
+                <input
+                  {...milestoneForm.register("requiresPrevious")}
+                  type="checkbox"
+                  disabled={createMilestoneTx.isPending || milestones.length === 0}
+                  className="mt-1 h-4 w-4 accent-black"
+                />
+                <span>
+                  Require previous milestone first
+                  <span className="text-muted-foreground block text-xs font-medium">
+                    {milestones.length === 0
+                      ? "The first milestone is always unlocked."
+                      : "Learners must complete the previous milestone before this one can be verified."}
+                  </span>
+                </span>
+              </label>
               <div className="flex gap-3 pt-1">
                 <Button
                   type="submit"
@@ -825,7 +1126,7 @@ export function QuestView() {
                   {createMilestoneTx.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Submitting…
+                      Submitting...
                     </>
                   ) : (
                     <>
@@ -849,7 +1150,6 @@ export function QuestView() {
         </form>
       )}
 
-      {/* Milestones tab */}
       {activeTab === "milestones" && (
         <div className="space-y-4">
           {milestones.length === 0 ? (
@@ -862,35 +1162,57 @@ export function QuestView() {
                 <p className="text-muted-foreground mb-4 text-sm">
                   Add milestones to define learning goals.
                 </p>
-                <Button
-                  size="sm"
-                  className="shimmer-on-hover"
-                  onClick={() => setShowMilestoneForm(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Milestone
-                </Button>
+                {isOwner && (
+                  <Button
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => setShowMilestoneForm(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Milestone
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
-            milestones.map((ms, i) => {
-              const isCompleted = localCompletions.some(c => c.milestoneId === ms.id && c.completed)
-              const completedBy = localCompletions
-                .filter(c => c.milestoneId === ms.id && c.completed)
-                .map(c => c.enrollee)
-              const isExpanded = expandedMilestone === ms.id
-              const isVerifying = verifyPayoutTx.isPending && activeMilestoneTxId === ms.id
+            milestones.map((milestone, index) => {
+              const completedBy = completions
+                .filter(
+                  completion => completion.milestoneId === milestone.id && completion.completed
+                )
+                .map(completion => completion.enrollee)
+              const isCompleted = completedBy.length > 0
+              const isExpanded = expandedMilestone === milestone.id
+              const isVerifying = verifyPayoutTx.isPending && activeMilestoneTxId === milestone.id
+              const eligibleEnrollees = getEligibleEnrollees(milestone)
+              const lockedForViewer =
+                !isOwner &&
+                !!address &&
+                milestone.requiresPrevious &&
+                milestone.id > 0 &&
+                !viewerCompletedMilestoneIds.has(milestone.id) &&
+                !viewerCompletedMilestoneIds.has(milestone.id - 1)
+              const lockedForOwner =
+                isOwner &&
+                milestone.requiresPrevious &&
+                eligibleEnrollees.length === 0 &&
+                enrollees.some(
+                  enrollee =>
+                    !isMilestoneCompletedBy(milestone.id, enrollee) &&
+                    !isMilestoneUnlockedForEnrollee(milestone, enrollee)
+                )
+              const isLocked = lockedForViewer || lockedForOwner
 
               return (
                 <div
-                  key={ms.id}
+                  key={milestone.id}
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
-                  style={{ transitionDelay: `${i * 100}ms` }}
+                  style={{ transitionDelay: `${index * 100}ms` }}
                 >
                   <button
                     type="button"
-                    aria-label={`${isExpanded ? "Collapse" : "Expand"} milestone ${ms.title}`}
-                    onClick={() => setExpandedMilestone(isExpanded ? null : ms.id)}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} milestone ${milestone.title}`}
+                    onClick={() => setExpandedMilestone(isExpanded ? null : milestone.id)}
                     className="focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <Card
@@ -913,14 +1235,36 @@ export function QuestView() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-3">
-                              <h3
-                                className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
-                              >
-                                {ms.title}
-                              </h3>
+                              <div>
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                  <span className="text-muted-foreground text-xs font-bold">
+                                    Milestone {milestone.id + 1}
+                                  </span>
+                                  {milestone.requiresPrevious && (
+                                    <Badge variant="outline" className="gap-1">
+                                      Sequential
+                                    </Badge>
+                                  )}
+                                  {isLocked && (
+                                    <Badge
+                                      variant="outline"
+                                      className="gap-1"
+                                      title="Complete previous milestone first"
+                                    >
+                                      <Lock className="h-3 w-3" />
+                                      Locked
+                                    </Badge>
+                                  )}
+                                </div>
+                                <h3
+                                  className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
+                                >
+                                  {milestone.title}
+                                </h3>
+                              </div>
                               <div className="flex flex-shrink-0 items-center gap-2">
                                 <Badge variant={isCompleted ? "success" : "default"}>
-                                  {ms.reward_amount} USDC
+                                  {formatTokens(toSafeNumber(milestone.rewardAmount))} USDC
                                 </Badge>
                                 {isExpanded ? (
                                   <ChevronUp className="text-muted-foreground h-4 w-4" />
@@ -930,11 +1274,10 @@ export function QuestView() {
                               </div>
                             </div>
 
-                            {/* Expanded content */}
                             {isExpanded && (
                               <div className="animate-fade-in-up mt-3">
                                 <p className="text-muted-foreground mb-3 text-sm">
-                                  {ms.description}
+                                  {milestone.description}
                                 </p>
                                 {completedBy.length > 0 && (
                                   <div className="mb-3">
@@ -942,26 +1285,43 @@ export function QuestView() {
                                       Completed by:
                                     </p>
                                     <div className="flex flex-wrap gap-2">
-                                      {completedBy.map(addr => (
+                                      {completedBy.map(enrollee => (
                                         <span
-                                          key={addr}
+                                          key={enrollee}
                                           className="bg-success/10 border-border border-[1.5px] px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_var(--color-border)]"
                                         >
-                                          {addr}
+                                          {enrollee}
                                         </span>
                                       ))}
                                     </div>
                                   </div>
                                 )}
-                                {!isCompleted && localEnrollees.length > 0 && (
+                                {isLocked && (
+                                  <p
+                                    className="text-muted-foreground mb-3 text-xs font-bold"
+                                    title="Complete previous milestone first"
+                                  >
+                                    Complete previous milestone first.
+                                  </p>
+                                )}
+                                {isOwner && enrollees.length > 0 && (
                                   <Button
                                     variant={verifyPayoutTx.isFailure ? "danger" : "outline"}
                                     size="sm"
                                     className="shimmer-on-hover"
-                                    disabled={isVerifying || !isOwner || !isSupportedNetwork}
-                                    onClick={e => {
-                                      e.stopPropagation()
-                                      void handleVerifyAndPayout(ms.id, ms.reward_amount)
+                                    disabled={
+                                      isVerifying ||
+                                      !isSupportedNetwork ||
+                                      eligibleEnrollees.length === 0
+                                    }
+                                    title={
+                                      eligibleEnrollees.length === 0 && milestone.requiresPrevious
+                                        ? "Complete previous milestone first"
+                                        : undefined
+                                    }
+                                    onClick={event => {
+                                      event.stopPropagation()
+                                      void handleVerifyAndPayout(milestone)
                                     }}
                                   >
                                     {isVerifying ? (
@@ -991,18 +1351,21 @@ export function QuestView() {
         </div>
       )}
 
-      {/* Enrollees tab */}
       {activeTab === "enrollees" && (
         <div className="space-y-4">
-          {localEnrollees.length === 0 ? (
+          {enrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                   <Users className="h-6 w-6" />
                 </div>
                 <h3 className="mb-2 font-black">No enrollees yet</h3>
-                <p className="text-muted-foreground mb-4 text-sm">Add learners to this quest.</p>
-                {isOwner && (
+                <p className="text-muted-foreground mb-4 text-sm">
+                  {isOwner
+                    ? "Add learners to this quest."
+                    : "Be the first learner to join this quest."}
+                </p>
+                {isOwner ? (
                   <Button
                     size="sm"
                     className="shimmer-on-hover"
@@ -1011,39 +1374,45 @@ export function QuestView() {
                     <UserPlus className="h-4 w-4" />
                     Add Enrollee
                   </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => void handleEnroll()}
+                    disabled={enrollTx.isPending || isEnrolled || !isSupportedNetwork || !address}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    {isEnrolled ? "Already Enrolled" : "Enroll"}
+                  </Button>
                 )}
               </CardContent>
             </Card>
           ) : (
-            localEnrollees.map((addr, i) => {
-              const completed = localCompletions.filter(
-                c => c.enrollee === addr && c.completed
+            enrollees.map((enrollee, index) => {
+              const completed = completions.filter(
+                completion => completion.enrollee === enrollee && completion.completed
               ).length
               const earned = milestones
-                .filter(m =>
-                  localCompletions.some(
-                    c => c.enrollee === addr && c.milestoneId === m.id && c.completed
-                  )
-                )
-                .reduce((sum, m) => sum + m.reward_amount, 0)
+                .filter(milestone => isMilestoneCompletedBy(milestone.id, enrollee))
+                .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
               const isAllDone = completed === milestones.length && milestones.length > 0
 
               return (
                 <div
-                  key={addr}
+                  key={enrollee}
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
-                  style={{ transitionDelay: `${i * 100}ms` }}
+                  style={{ transitionDelay: `${index * 100}ms` }}
                 >
                   <Card className="neo-lift group hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-[2px] font-mono text-sm font-black shadow-[2px_2px_0_var(--color-border)] transition-shadow group-hover:shadow-[3px_3px_0_var(--color-border)]">
-                            {addr.slice(0, 2)}
+                            {enrollee.slice(0, 2)}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="font-mono text-sm font-bold">{addr}</p>
+                              <p className="font-mono text-sm font-bold">{enrollee}</p>
                               {isAllDone && <Sparkles className="text-primary h-3.5 w-3.5" />}
                             </div>
                             <p className="text-muted-foreground text-xs font-bold">
@@ -1064,7 +1433,7 @@ export function QuestView() {
                             variant="danger"
                             size="sm"
                             disabled={removeEnrolleeTx.isPending}
-                            onClick={() => void handleRemoveEnrollee(addr)}
+                            onClick={() => void handleRemoveEnrollee(enrollee)}
                           >
                             {removeEnrolleeTx.isPending ? (
                               <>
@@ -1088,6 +1457,7 @@ export function QuestView() {
           )}
         </div>
       )}
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Transaction Confirmation Dialog */}
@@ -1095,9 +1465,11 @@ export function QuestView() {
         isOpen={showConfirmDialog}
         details={pendingTransaction?.details ?? null}
         onConfirm={() => {
+          const transaction = pendingTransaction
           setShowConfirmDialog(false)
-          if (pendingTransaction) {
-            pendingTransaction.execute()
+          setPendingTransaction(null)
+          if (transaction) {
+            void transaction.execute()
           }
         }}
         onCancel={() => {
@@ -1157,11 +1529,18 @@ export function QuestView() {
                   <div className="mt-1 space-y-2">
                     {importedData.milestones.map((ms, i) => (
                       <div key={i} className="bg-muted/50 rounded-md p-2">
-                        <p className="text-sm font-bold">{ms.title}</p>
-                        <p className="text-muted-foreground text-xs">{ms.description}</p>
-                        <p className="text-primary mt-1 text-xs font-black">
-                          {formatTokens(ms.rewardAmount)} USDC
-                        </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold">{ms.title}</p>
+                            <p className="text-muted-foreground text-xs">{ms.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ms.requiresPrevious && i > 0 && (
+                              <Badge variant="outline">Sequential</Badge>
+                            )}
+                            <Badge>{formatTokens(ms.rewardAmount)} USDC</Badge>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

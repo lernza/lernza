@@ -1,21 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
-
-type Theme = "light" | "dark"
-
-interface ThemeContextValue {
-  theme: Theme
-  toggleTheme: () => void
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
-  toggleTheme: () => {},
-})
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
+import { ThemeContext, type Theme } from "./theme"
 
 function getInitialTheme(): Theme {
   try {
@@ -44,8 +29,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [theme])
 
   const toggleTheme = useCallback(() => {
-    setTheme(t => (t === "light" ? "dark" : "light"))
+    setTheme((t: Theme) => (t === "light" ? "dark" : "light"))
   }, [])
 
   return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>
 }
+

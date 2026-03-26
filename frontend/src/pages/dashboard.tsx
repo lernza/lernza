@@ -24,7 +24,6 @@ import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
-import { PlatformStats } from "./dashboard/platform-stats"
 import { PersonalProgress } from "./dashboard/personal-progress"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
@@ -95,14 +94,19 @@ export function Dashboard() {
       )
 
       let questCompletions: Record<number, number> = {}
+      let userEarnings = 0n
       if (address) {
-        const completionEntries = await Promise.all(
-          normalized.map(async q => {
-            const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
-            return [q.id, completed] as const
-          })
-        )
+        const [completionEntries, earnings] = await Promise.all([
+          Promise.all(
+            normalized.map(async q => {
+              const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
+              return [q.id, completed] as const
+            })
+          ),
+          rewardsClient.getUserEarnings(address),
+        ])
         questCompletions = Object.fromEntries(completionEntries)
+        userEarnings = earnings
       }
 
       return {
@@ -110,6 +114,7 @@ export function Dashboard() {
         questStats,
         questMilestones,
         questCompletions,
+        userEarnings,
       }
     },
     {
@@ -122,8 +127,8 @@ export function Dashboard() {
   const {
     quests = [],
     questStats = {},
-    questMilestones = {},
     questCompletions = {},
+    userEarnings = 0n,
   } = dashboardData || {}
 
   const filteredWorkspaces = quests.filter(ws => {
@@ -132,28 +137,15 @@ export function Dashboard() {
     return true
   })
 
-  const ownedCount = quests.filter(q => !!address && q.owner === address).length
+  const ownedCount = quests.filter((q: WorkspaceInfo) => !!address && q.owner === address).length
   const enrolledCount = Math.max(0, quests.length - ownedCount)
-  const milestonesCompleted = Object.values(questCompletions).reduce((sum, count) => sum + count, 0)
-  const totalEarned = filteredWorkspaces.reduce((sum, ws) => {
-    const totalMilestones = questMilestones[ws.id] || 0
-    const completed = questCompletions[ws.id] || 0
-    const pool = questStats[ws.id]?.poolBalance || 0
-    if (totalMilestones === 0) return sum
-    return sum + (pool * completed) / totalMilestones
-  }, 0)
-
-  const allStats = Object.values(questStats)
-  const totalTokensDistributed = allStats.reduce((sum, s) => sum + s.poolBalance, 0)
-
-  const platformStats = {
-    totalQuests: quests.length,
-    activeUsers: ownedCount + enrolledCount,
-    tokensDistributed: totalTokensDistributed,
-  }
+  const milestonesCompleted = (Object.values(questCompletions) as number[]).reduce(
+    (sum: number, count: number) => sum + count,
+    0
+  )
 
   const personalStats = {
-    totalEarned,
+    totalEarned: Number(userEarnings),
     questsOwned: ownedCount,
     questsEnrolled: enrolledCount,
     milestonesCompleted,
@@ -177,9 +169,9 @@ export function Dashboard() {
 
   const earningsHistory = [
     { date: "Jan", amount: 0 },
-    { date: "Feb", amount: Math.round(totalEarned * 0.25) },
-    { date: "Mar", amount: Math.round(totalEarned * 0.6) },
-    { date: "Apr", amount: Math.round(totalEarned) },
+    { date: "Feb", amount: Math.round(Number(userEarnings) * 0.25) },
+    { date: "Mar", amount: Math.round(Number(userEarnings) * 0.6) },
+    { date: "Apr", amount: Math.round(Number(userEarnings)) },
   ]
 
   if (!connected) {
@@ -292,8 +284,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Platform Stats Overview */}
-      <PlatformStats stats={platformStats} />
+      {/* Platform Stats Overview removed as requested */}
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column (Personal Stats, Chart, Quests) */}

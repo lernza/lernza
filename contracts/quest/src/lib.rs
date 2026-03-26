@@ -370,10 +370,8 @@ impl QuestContract {
 
             if visibility == Visibility::Public {
                 public_ids.push_back(quest_id);
-            } else {
-                if let Some(index) = public_ids.first_index_of(quest_id) {
-                    public_ids.remove(index);
-                }
+            } else if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
             }
             env.storage()
                 .instance()

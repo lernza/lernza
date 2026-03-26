@@ -1,6 +1,8 @@
 #![no_std]
+#![allow(deprecated)]
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, Address, Env, String, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
+    Env, String, Vec,
 };
 
 // Quest contract error type (must match the quest contract)
@@ -18,7 +20,8 @@ pub enum QuestError {
 // Quest contract interface for cross-contract calls
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
-    fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, QuestError>;
+    fn get_quest(env: Env, quest_id: u32) -> QuestInfo;
+    fn is_enrollee(env: Env, quest_id: u32, user: Address) -> bool;
 }
 
 #[contracttype]
@@ -29,15 +32,26 @@ pub enum Visibility {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestStatus {
+    Active = 0,
+    Archived = 1,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
     pub owner: Address,
     pub name: String,
     pub description: String,
+    pub category: String,
+    pub tags: Vec<String>,
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub status: QuestStatus,
+    pub deadline: u64,
 }
 
 // Milestone contract: define milestones per quest, track completions.
@@ -52,6 +66,8 @@ pub struct QuestInfo {
 pub enum DataKey {
     // Quest contract address for cross-contract validation
     QuestContract,
+    // Certificate contract address for minting completion certificates
+    CertificateContract,
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Milestone data
@@ -140,10 +156,27 @@ pub enum Error {
     AlreadyApproved = 9,
     NotEnrolled = 10,
     InvalidApprover = 11,
+    TitleTooLong = 12,
+    DescriptionTooLong = 13,
+    InvalidInput = 14,
+}
+
+// Certificate client interface for cross-contract calls
+#[contractclient(name = "CertificateClient")]
+pub trait Certificate {
+    fn mint_quest_certificate(
+        env: Env,
+        quest_id: u32,
+        quest_name: String,
+        quest_category: String,
+        recipient: Address,
+    ) -> u32;
 }
 
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
+pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
+pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 
 #[contract]
 pub struct MilestoneContract;
@@ -152,7 +185,12 @@ pub struct MilestoneContract;
 impl MilestoneContract {
     /// Initialize the milestone contract with the quest contract address.
     /// Must be called once before any milestones can be created.
-    pub fn initialize(env: Env, admin: Address, quest_contract: Address) -> Result<(), Error> {
+    pub fn initialize(
+        env: Env,
+        admin: Address,
+        quest_contract: Address,
+        certificate_contract: Address,
+    ) -> Result<(), Error> {
         admin.require_auth();
 
         // Prevent re-initialization
@@ -163,6 +201,9 @@ impl MilestoneContract {
         env.storage()
             .instance()
             .set(&DataKey::QuestContract, &quest_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::CertificateContract, &certificate_contract);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         Ok(())
     }
@@ -179,7 +220,20 @@ impl MilestoneContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
-        if reward_amount < 0 {
+        // Input validation — happens at the top, before any storage reads
+        if title.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if title.len() > MAX_MILESTONE_TITLE_LEN {
+            return Err(Error::TitleTooLong);
+        }
+        if description.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if description.len() > MAX_MILESTONE_DESCRIPTION_LEN {
+            return Err(Error::DescriptionTooLong);
+        }
+        if reward_amount <= 0 {
             return Err(Error::InvalidAmount);
         }
 
@@ -194,7 +248,11 @@ impl MilestoneContract {
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
 
-        // If quest doesn't exist, this will fail with NotFound from quest contract
+        // If it exists, verify the caller is the owner
+        if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
+        }
+
         // If it exists, verify the caller is the owner
         if quest_info.owner != owner {
             return Err(Error::OwnerMismatch);
@@ -214,6 +272,14 @@ impl MilestoneContract {
         let ms_key = DataKey::Milestone(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
         env.storage().persistent().set(&next_key, &(id + 1));
+
+        // Emit milestone creation event
+        // Event topics: (milestone, created)
+        // Event data: (milestone_id, quest_id, reward_amount)
+        env.events().publish(
+            (symbol_short!("milestone"), symbol_short!("new")),
+            (id, quest_id, milestone.reward_amount),
+        );
 
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &next_key);
@@ -246,25 +312,36 @@ impl MilestoneContract {
     pub fn set_distribution_mode(
         env: Env,
         owner: Address,
-        workspace_id: u32,
+        quest_id: u32,
         mode: DistributionMode,
         flat_reward: i128,
     ) -> Result<(), Error> {
         owner.require_auth();
-        Self::require_owner(&env, workspace_id, &owner)?;
+
+        // Cross-contract validation: verify caller is the actual quest owner
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
+        }
 
         if matches!(mode, DistributionMode::Flat) && flat_reward <= 0 {
             return Err(Error::InvalidAmount);
         }
 
-        let mode_key = DataKey::Mode(workspace_id);
+        let mode_key = DataKey::Mode(quest_id);
         env.storage().persistent().set(&mode_key, &mode);
         env.storage()
             .persistent()
             .extend_ttl(&mode_key, THRESHOLD, BUMP);
 
         if matches!(mode, DistributionMode::Flat) {
-            let flat_key = DataKey::FlatReward(workspace_id);
+            let flat_key = DataKey::FlatReward(quest_id);
             env.storage().persistent().set(&flat_key, &flat_reward);
             env.storage()
                 .persistent()
@@ -294,9 +371,13 @@ impl MilestoneContract {
 
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
-
         if quest_info.owner != owner {
             return Err(Error::Unauthorized);
+        }
+
+        // Verify enrollee is enrolled in the quest (Issue #162)
+        if !Self::is_enrolled(&env, quest_id, &enrollee)? {
+            return Err(Error::NotEnrolled);
         }
 
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
@@ -340,38 +421,51 @@ impl MilestoneContract {
             }
         };
 
-    // Mark completed
-    env.storage().persistent().set(&comp_key, &true);
-    env.storage()
-        .persistent()
-        .extend_ttl(&comp_key, THRESHOLD, BUMP);
+        // Mark completed
+        env.storage().persistent().set(&comp_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&comp_key, THRESHOLD, BUMP);
 
-    // Store completion timestamp
-    let time_key = DataKey::CompletionTime(quest_id, milestone_id, enrollee.clone());
-    env.storage().persistent().set(&time_key, &env.ledger().timestamp());
-    env.storage()
-        .persistent()
-        .extend_ttl(&time_key, THRESHOLD, BUMP);
+        // Store completion timestamp
+        let time_key = DataKey::CompletionTime(quest_id, milestone_id, enrollee.clone());
+        env.storage()
+            .persistent()
+            .set(&time_key, &env.ledger().timestamp());
+        env.storage()
+            .persistent()
+            .extend_ttl(&time_key, THRESHOLD, BUMP);
 
-    // Increment enrollee's completion count for this quest
-    let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
-    let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-    env.storage().persistent().set(&count_key, &(count + 1));
-    env.storage()
-        .persistent()
-        .extend_ttl(&count_key, THRESHOLD, BUMP);
+        // Increment enrollee's completion count for this quest
+        let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
+        let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        env.storage().persistent().set(&count_key, &(count + 1));
+        env.storage()
+            .persistent()
+            .extend_ttl(&count_key, THRESHOLD, BUMP);
 
-    // Update total earnings for enrollee
-    let earnings_key = DataKey::EnrolleeEarnings(quest_id, enrollee.clone());
-    let total_earned: i128 = env.storage().persistent().get(&earnings_key).unwrap_or(0);
-    env.storage()
-        .persistent()
-        .set(&earnings_key, &(total_earned + reward));
-    env.storage()
-        .persistent()
-        .extend_ttl(&earnings_key, THRESHOLD, BUMP);
+        // Update total earnings for enrollee
+        let earnings_key = DataKey::EnrolleeEarnings(quest_id, enrollee.clone());
+        let total_earned: i128 = env.storage().persistent().get(&earnings_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&earnings_key, &(total_earned + reward));
+        env.storage()
+            .persistent()
+            .extend_ttl(&earnings_key, THRESHOLD, BUMP);
 
-    Ok(reward)
+        // Emit milestone completion event
+        // Event topics: (milestone, completed)
+        // Event data: (milestone_id, quest_id, enrollee, reward_amount)
+        env.events().publish(
+            (symbol_short!("milestone"), symbol_short!("done")),
+            (milestone_id, quest_id, enrollee.clone(), reward),
+        );
+
+        // Check if this completes the quest and mint certificate if so
+        Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
+
+        Ok(reward)
     }
 
     /// Submit a milestone completion for peer review.
@@ -414,6 +508,11 @@ impl MilestoneContract {
         // Only allow submission if quest uses peer review
         if !matches!(verification_mode, VerificationMode::PeerReview(_)) {
             return Err(Error::Unauthorized);
+        }
+
+        // Verify enrollee is enrolled in the quest
+        if !Self::is_enrolled(&env, quest_id, &enrollee)? {
+            return Err(Error::NotEnrolled);
         }
 
         // Mark as submitted for review
@@ -562,6 +661,17 @@ impl MilestoneContract {
                 }
             };
 
+            // Emit peer approval completion event
+            // Event topics: (milestone, peer_approved)
+            // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount)
+            env.events().publish(
+                (symbol_short!("milestone"), symbol_short!("peer_ok")),
+                (milestone_id, quest_id, enrollee.clone(), peer, reward),
+            );
+
+            // Check if this completes the quest and mint certificate if so
+            Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
+
             Ok(Some(reward))
         } else {
             Ok(None) // More approvals needed
@@ -626,11 +736,7 @@ impl MilestoneContract {
     }
 
     /// Get full progress details for an enrollee in a quest.
-    pub fn get_enrollee_progress(
-        env: Env,
-        quest_id: u32,
-        enrollee: Address,
-    ) -> EnrolleeProgress {
+    pub fn get_enrollee_progress(env: Env, quest_id: u32, enrollee: Address) -> EnrolleeProgress {
         let completions: u32 = env
             .storage()
             .persistent()
@@ -649,7 +755,11 @@ impl MilestoneContract {
 
         let mut completion_details = Vec::new(&env);
         for i in 0..total_milestones {
-            if env.storage().persistent().has(&DataKey::Completed(quest_id, i, enrollee.clone())) {
+            if env
+                .storage()
+                .persistent()
+                .has(&DataKey::Completed(quest_id, i, enrollee.clone()))
+            {
                 if let Some(ts) = env
                     .storage()
                     .persistent()
@@ -676,11 +786,7 @@ impl MilestoneContract {
     }
 
     /// Get quest completion rate (% of enrollees who completed all milestones).
-    pub fn get_quest_completion_rate(
-        env: Env,
-        quest_id: u32,
-        total_enrollees: u32,
-    ) -> i128 {
+    pub fn get_quest_completion_rate(env: Env, quest_id: u32, total_enrollees: u32) -> i128 {
         if total_enrollees == 0 {
             return 0;
         }
@@ -695,8 +801,8 @@ impl MilestoneContract {
             return 0;
         }
 
-        let mut fully_completed = 0u32;
-        for i in 0..total_milestones {
+        let fully_completed = 0u32;
+        for _ in 0..total_milestones {
             // Count enrollees who completed this milestone
             // This is a simplified approach - in production we'd need to iterate over enrollees
             // For now, return a placeholder based on available data
@@ -720,13 +826,6 @@ impl MilestoneContract {
         env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
     }
 
-    fn require_owner(_env: &Env, _workspace_id: u32, _owner: &Address) -> Result<(), Error> {
-        // This is a placeholder implementation
-        // In a real implementation, you'd check workspace ownership
-        // For now, we'll assume the caller is authorized if they have the address
-        Ok(())
-    }
-
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {
         // Get quest contract address
         let quest_contract_addr: Address = env
@@ -739,7 +838,6 @@ impl MilestoneContract {
         let quest_client = QuestClient::new(env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
 
-        // If quest doesn't exist, this will fail with NotFound from quest contract
         // If it exists, verify the caller is the owner
         if quest_info.owner != *owner {
             return Err(Error::OwnerMismatch);
@@ -748,23 +846,88 @@ impl MilestoneContract {
         Ok(())
     }
 
-    fn is_enrolled(_env: &Env, _quest_id: u32, _user: &Address) -> Result<bool, Error> {
+    fn is_enrolled(env: &Env, quest_id: u32, user: &Address) -> Result<bool, Error> {
         // Get quest contract address
-        let quest_contract_addr: Address = _env
+        let quest_contract_addr: Address = env
             .storage()
             .instance()
             .get(&DataKey::QuestContract)
             .ok_or(Error::NotInitialized)?;
 
         // Cross-contract call to check enrollment
-        let _quest_client = QuestClient::new(_env, &quest_contract_addr);
+        let quest_client = QuestClient::new(env, &quest_contract_addr);
 
-        // For now, we'll assume a function exists to check enrollment
-        // In a real implementation, you'd call quest_client.is_enrolled(quest_id, user)
-        // For this example, we'll return true (meaning the user is enrolled)
-        // This should be implemented based on the actual quest contract interface
-        Ok(true)
+        let enrolled = quest_client.is_enrollee(&quest_id, user);
+
+        Ok(enrolled)
+    }
+
+    /// Check if user has completed all milestones for a quest and mint certificate if so
+    fn check_and_mint_certificate(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        // Get total number of milestones for this quest
+        let total_milestones = Self::get_quest_milestone_count(env.clone(), quest_id)?;
+
+        // Get number of completed milestones for this user
+        let completed_count =
+            Self::get_enrollee_completions(env.clone(), quest_id, enrollee.clone());
+
+        // If user has completed all milestones, mint certificate
+        if completed_count >= total_milestones {
+            // Get quest info
+            let quest_contract_addr: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestContract)
+                .ok_or(Error::NotInitialized)?;
+
+            let quest_client = QuestClient::new(&env, &quest_contract_addr);
+            let quest_info = quest_client.get_quest(&quest_id);
+
+            // Get certificate contract address
+            let certificate_contract_addr: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::CertificateContract)
+                .ok_or(Error::NotInitialized)?;
+
+            // Create certificate client
+            let certificate_client = CertificateClient::new(&env, &certificate_contract_addr);
+
+            // Mint certificate
+            certificate_client.mint_quest_certificate(
+                &quest_id,
+                &quest_info.name,
+                &quest_info.category,
+                &enrollee,
+            );
+
+            // Emit certificate minted event
+            env.events().publish(
+                (symbol_short!("milestone"), symbol_short!("cert")),
+                (quest_id, enrollee),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Get total number of milestones for a quest
+    fn get_quest_milestone_count(env: Env, quest_id: u32) -> Result<u32, Error> {
+        let mut count = 0;
+        let mut current_id = 0;
+
+        loop {
+            let key = DataKey::Milestone(quest_id, current_id);
+            if !env.storage().persistent().has(&key) {
+                break;
+            }
+            count += 1;
+            current_id += 1;
+        }
+
+        Ok(count)
     }
 }
 
+#[cfg(test)]
 mod test;

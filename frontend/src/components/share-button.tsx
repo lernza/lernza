@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Share2, Link, X as XClose, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getQuestUrl } from "@/lib/app-url"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -37,7 +38,7 @@ interface DropdownPosition {
 interface ShareButtonProps {
   questId: number
   questName: string
-  onToast: (message: string, type?: "success" | "error" | "info") => void
+  onToast: (message: string, type?: "success" | "error" | "info" | "warning") => void
   compact?: boolean
 }
 
@@ -48,8 +49,9 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   const [discordCopied, setDiscordCopied] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  const questUrl = `${window.location.origin}/quest/${questId}`
+  const questUrl = getQuestUrl(questId)
   // Spec: em dash (—) between quest name and URL
   const xText = `Check out this quest on @lernza: ${questName} — ${questUrl}`
   const discordText = `**Check out this quest on Lernza!**\n📚 **${questName}**\n🔗 ${questUrl}`
@@ -65,8 +67,11 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }, [])
 
   const handleOpen = () => {
+    if (!open) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+    }
     updatePos()
-    setOpen((v) => !v)
+    setOpen(v => !v)
   }
 
   // Reposition on scroll/resize while open
@@ -87,7 +92,8 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       if (
         panelRef.current?.contains(e.target as Node) ||
         triggerRef.current?.contains(e.target as Node)
-      ) return
+      )
+        return
       setOpen(false)
     }
     document.addEventListener("mousedown", handler)
@@ -104,6 +110,83 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     return () => document.removeEventListener("keydown", handler)
   }, [open])
 
+  // Focus return on close
+  useEffect(() => {
+    if (!open && previousFocusRef.current) {
+      previousFocusRef.current.focus()
+    }
+  }, [open])
+
+  // Focus trap and initial focus
+  useEffect(() => {
+    if (open && panelRef.current) {
+      const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      requestAnimationFrame(() => {
+        firstElement?.focus()
+      })
+
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key === "Tab") {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              lastElement?.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              firstElement?.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      document.addEventListener("keydown", handleTabKey)
+      return () => document.removeEventListener("keydown", handleTabKey)
+    }
+  }, [open])
+
+  /**
+   * Fallback copy using a temporary textarea when the Clipboard API
+   * is unavailable or permission is denied.
+   */
+  const fallbackCopyText = (text: string): boolean => {
+    const textarea = document.createElement("textarea")
+    textarea.value = text
+    textarea.setAttribute("readonly", "")
+    textarea.style.position = "fixed"
+    textarea.style.left = "-9999px"
+    document.body.appendChild(textarea)
+    textarea.select()
+    let ok = false
+    try {
+      ok = document.execCommand("copy")
+    } catch {
+      ok = false
+    }
+    document.body.removeChild(textarea)
+    return ok
+  }
+
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    // Try Clipboard API first
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        // Permission denied or API rejected — fall through to fallback
+      }
+    }
+    // Manual fallback via textarea + execCommand
+    return fallbackCopyText(text)
+  }
+
   // Web Share API — mobile native sheet
   const handleNativeShare = async () => {
     try {
@@ -112,19 +195,32 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         text: `Check out this quest on Lernza: ${questName}`,
         url: questUrl,
       })
-    } catch {
-      // User cancelled or share interrupted — no action needed
+    } catch (err: unknown) {
+      // If user cancelled, ignore. Otherwise fall through to copy.
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes("AbortError") || message.includes("cancel")) return
+      // Native share denied/failed — fall back to copy
+      const ok = await copyToClipboard(questUrl)
+      onToast(
+        ok
+          ? "Link copied to clipboard instead!"
+          : "Could not share. Please copy the link manually from the address bar.",
+        ok ? "success" : "error"
+      )
     }
   }
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(questUrl)
+    const ok = await copyToClipboard(questUrl)
+    if (ok) {
       setCopied(true)
       onToast("Link copied to clipboard!", "success")
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy link", "error")
+    } else {
+      onToast(
+        "Clipboard access denied. Please copy the link manually from the address bar.",
+        "error"
+      )
     }
   }
 
@@ -137,13 +233,13 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }
 
   const handleCopyDiscord = async () => {
-    try {
-      await navigator.clipboard.writeText(discordText)
+    const ok = await copyToClipboard(discordText)
+    if (ok) {
       setDiscordCopied(true)
       onToast("Discord message copied!", "success")
       setTimeout(() => setDiscordCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy", "error")
+    } else {
+      onToast("Clipboard access denied. Please try again or copy manually.", "error")
     }
   }
 
@@ -160,18 +256,19 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         zIndex: 9999,
       }}
       className={cn(
-        "bg-card text-card-foreground border-[3px] border-border shadow-[6px_6px_0_var(--color-border)]",
-        "w-72 overflow-hidden animate-fade-in-down"
+        "bg-card text-card-foreground border-border border-[3px] shadow-[6px_6px_0_var(--color-border)]",
+        "animate-fade-in-down w-72 overflow-hidden"
       )}
       role="dialog"
+      aria-modal="true"
       aria-label="Share options"
     >
       {/* Panel header */}
-      <div className="bg-primary border-b-[3px] border-border px-4 py-2.5 flex items-center justify-between">
-        <span className="text-xs font-black uppercase tracking-wider">Share this quest</span>
+      <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-4 py-2.5">
+        <span className="text-xs font-black tracking-wider uppercase">Share this quest</span>
         <button
           onClick={() => setOpen(false)}
-          className="w-5 h-5 flex items-center justify-center hover:opacity-70 transition-opacity cursor-pointer"
+          className="flex h-5 w-5 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
           aria-label="Close share menu"
         >
           <XClose className="h-3.5 w-3.5" />
@@ -179,13 +276,15 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       </div>
 
       {/* Quest name preview */}
-      <div className="px-4 py-3 border-b-[2px] border-border bg-secondary">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Quest</p>
-        <p className="text-sm font-black truncate">{questName}</p>
+      <div className="border-border bg-secondary border-b-[2px] px-4 py-3">
+        <p className="text-muted-foreground mb-0.5 text-xs font-bold tracking-wider uppercase">
+          Quest
+        </p>
+        <p className="truncate text-sm font-black">{questName}</p>
       </div>
 
       {/* Share options */}
-      <div className="p-3 flex flex-col gap-2">
+      <div className="flex flex-col gap-2 p-3">
         <ShareOption
           icon={copied ? <Check className="h-4 w-4" /> : <Link className="h-4 w-4" />}
           label={copied ? "Copied!" : "Copy Link"}
@@ -196,7 +295,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         <ShareOption
           icon={<XIcon className="h-4 w-4" />}
           label="Share on X"
-          sublabel={`"...${questName} — ${window.location.host}/..."`}
+          sublabel={`"...${questName} — ${new URL(questUrl).host}/..."`}
           onClick={handleShareX}
         />
         <ShareOption
@@ -209,11 +308,11 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       </div>
 
       {/* URL bar */}
-      <div className="mx-3 mb-3 border-[2px] border-border bg-secondary px-3 py-2 flex items-center gap-2">
-        <p className="flex-1 text-xs font-mono text-muted-foreground truncate">{questUrl}</p>
+      <div className="border-border bg-secondary mx-3 mb-3 flex items-center gap-2 border-[2px] px-3 py-2">
+        <p className="text-muted-foreground flex-1 truncate font-mono text-xs">{questUrl}</p>
         <button
           onClick={handleCopyLink}
-          className="shrink-0 w-6 h-6 border-[1.5px] border-border bg-card flex items-center justify-center neo-press hover:bg-primary transition-colors cursor-pointer"
+          className="border-border bg-card neo-press hover:bg-primary flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-[1.5px] transition-colors"
           aria-label="Copy URL"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -236,11 +335,12 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         aria-label="Share quest"
         aria-expanded={open}
         className={cn(
-          "flex items-center gap-2 border-[2px] border-border font-bold text-sm",
+          "border-border flex items-center gap-2 border-[2px] text-sm font-bold",
           "bg-card text-card-foreground shadow-[3px_3px_0_var(--color-border)]",
-          "neo-press hover:bg-primary transition-colors cursor-pointer",
-          open && "bg-primary shadow-[1px_1px_0_var(--color-border)] translate-x-0.5 translate-y-0.5",
-          compact ? "w-9 h-9 justify-center" : "px-4 py-2"
+          "neo-press hover:bg-primary cursor-pointer transition-colors",
+          open &&
+            "bg-primary translate-x-0.5 translate-y-0.5 shadow-[1px_1px_0_var(--color-border)]",
+          compact ? "h-9 w-9 justify-center" : "px-4 py-2"
         )}
       >
         <Share2 className="h-4 w-4 shrink-0" />
@@ -268,16 +368,16 @@ function ShareOption({ icon, label, sublabel, onClick, active }: ShareOptionProp
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 px-3 py-2.5 border-[2px] border-border",
-        "text-left transition-all cursor-pointer neo-press",
+        "border-border flex w-full items-center gap-3 border-[2px] px-3 py-2.5",
+        "neo-press cursor-pointer text-left transition-all",
         "shadow-[2px_2px_0_var(--color-border)] hover:shadow-[3px_3px_0_var(--color-border)]",
         active ? "bg-success" : "bg-card hover:bg-primary"
       )}
     >
       <div className="shrink-0">{icon}</div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-black leading-none mb-0.5">{label}</p>
-        <p className="text-xs text-muted-foreground truncate leading-none">{sublabel}</p>
+      <div className="min-w-0 flex-1">
+        <p className="mb-0.5 text-sm leading-none font-black">{label}</p>
+        <p className="text-muted-foreground truncate text-xs leading-none">{sublabel}</p>
       </div>
     </button>
   )

@@ -1,12 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from "react"
-import { Analytics } from "@vercel/analytics/react"
-import { SpeedInsights } from "@vercel/speed-insights/react"
-import { Navbar } from "@/components/navbar"
-import { Landing } from "@/pages/landing"
-import { Dashboard } from "@/pages/dashboard"
-import { WorkspaceView } from "@/pages/workspace"
-import { Profile } from "@/pages/profile"
-import { NotFound } from "@/pages/not-found"
+import { BrowserRouter } from "react-router-dom"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { CreateQuest } from "@/pages/create-quest"
 import { QuestsPage } from "@/pages/questpage"
@@ -132,18 +124,13 @@ function App() {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeProvider>
       <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
-        <div className="bg-background text-foreground min-h-screen">
-          <Navbar activePage={state.page} onNavigate={handleNavigate} />
-          <ErrorBoundary key={`${state.page}-${state.workspaceId ?? ""}`}>
-            <main>{renderPage()}</main>
-          </ErrorBoundary>
-          <Analytics />
-          <SpeedInsights />
-        </div>
+        <BrowserRouter>
+          <AppShell />
+        </BrowserRouter>
       </ErrorBoundary>
-    </ThemeContext.Provider>
+    </ThemeProvider>
   )
 }
 

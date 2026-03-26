@@ -2,15 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link id="favicon" rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens." />
+    <meta
+      name="description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
     <meta name="theme-color" content="#FACC15" />
+
+    <script>
+      ;(function () {
+        const favicon = document.getElementById("favicon")
+        if (!(favicon instanceof HTMLLinkElement) || !favicon.href) return
+
+        const fallbackSvg =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#FACC15"/><path d="M20 14v36h24V40H30V14z" fill="#000" stroke="#000" stroke-width="2"/></svg>'
+        const fallbackHref = "data:image/svg+xml," + encodeURIComponent(fallbackSvg)
+
+        fetch(favicon.href, { cache: "no-store" })
+          .then(res => {
+            if (res.status >= 400) throw new Error("favicon request failed")
+          })
+          .catch(() => {
+            favicon.href = fallbackHref
+          })
+      })()
+    </script>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Lernza — Learn. Earn. On-chain." />
-    <meta property="og:description" content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens." />
+    <meta
+      property="og:description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
+    <meta property="og:image" content="%BASE_URL%og-image.png" />
     <meta property="og:image" content="https://lernza.com/og-image.png" />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="640" />
@@ -20,8 +46,12 @@
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Lernza — Learn. Earn. On-chain." />
-    <meta name="twitter:description" content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens." />
-    <meta name="twitter:image" content="https://lernza.com/og-image.png" />
+    <meta
+      name="twitter:description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
+    <meta name="twitter:image" content="%BASE_URL%og-image.png" />
+    <meta name="twitter:image:src" content="https://lernza.com/og-image.png" />
 
     <title>Lernza — Learn. Earn. On-chain.</title>
   </head>

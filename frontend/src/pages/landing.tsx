@@ -149,7 +149,7 @@ function AnimatedQuestCard() {
               <span className="flex items-center justify-center gap-2 text-sm font-black">
                 <Sparkles className="h-4 w-4" />
                 Quest Complete!
-                <Sparkles className="h-4 w-4" />
+                <Sparkles className="h-4 w-4" aria-hidden="true" />
               </span>
             </div>
           )}
@@ -323,7 +323,10 @@ export function Landing({ onNavigate }: LandingProps) {
                   onClick={() => onNavigate("dashboard")}
                 >
                   Launch App
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight
+                    className="h-4 w-4 transition-transform group-hover:translate-x-1"
+                    aria-hidden="true"
+                  />
                 </Button>
                 <Button
                   variant="secondary"
@@ -336,7 +339,7 @@ export function Landing({ onNavigate }: LandingProps) {
                   }}
                 >
                   How it works
-                  <ChevronDown className="h-4 w-4" />
+                  <ChevronDown className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
 
@@ -512,7 +515,7 @@ export function Landing({ onNavigate }: LandingProps) {
                 <div
                   className={`h-14 w-14 ${feature.accent} mb-6 flex items-center justify-center border-[2px] border-black shadow-[3px_3px_0_#000] transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[5px_5px_0_#000]`}
                 >
-                  <feature.icon className="h-6 w-6" />
+                  <feature.icon className="h-6 w-6" aria-hidden="true" />
                 </div>
                 <h3 className={`mb-3 font-black ${feature.large ? "text-2xl" : "text-lg"}`}>
                   {feature.title}
@@ -583,7 +586,10 @@ export function Landing({ onNavigate }: LandingProps) {
             onClick={() => onNavigate("dashboard")}
           >
             Launch App
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            <ArrowRight
+              className="h-4 w-4 transition-transform group-hover:translate-x-1"
+              aria-hidden="true"
+            />
           </Button>
         </div>
       </section>

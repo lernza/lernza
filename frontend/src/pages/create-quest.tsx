@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -20,8 +21,15 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
+import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
+import { Visibility } from "@/lib/contract-types"
+import { questClient } from "@/lib/contracts/quest"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { milestoneClient } from "@/lib/contracts/milestone"
+import { scValToNative, xdr } from "@stellar/stellar-sdk"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -45,13 +53,25 @@ type Step2Values = z.infer<typeof step2Schema>
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FormStep = 1 | 2 | 3
-type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
-interface CreateQuestProps {
-  onBack: () => void
+// ─── Draft persistence ────────────────────────────────────────────────────────
+
+const DRAFT_KEY = "lernza:quest-draft"
+
+type QuestDraft = {
+  step: FormStep
+  step1Data: Step1Values
+  step2Data: Step2Values
 }
 
-// ─── Helper components ────────────────────────────────────────────────────────
+function loadDraft(): QuestDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as QuestDraft) : null
+  } catch {
+    return null
+  }
+}
 
 function FieldError({ message }: { message?: string }) {
   if (!message) return null
@@ -71,6 +91,8 @@ function FormLabel({ children, required }: { children: React.ReactNode; required
     </label>
   )
 }
+
+// ─── Helper components ────────────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: FormStep }) {
   const steps = [
@@ -238,7 +260,7 @@ function Step2Form({
   const milestones = watch("milestones")
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
-    return sum + (isNaN(n) ? 0 : n)
+    return sum + (Number.isNaN(n) ? 0 : n)
   }, 0)
 
   return (
@@ -413,12 +435,34 @@ function Step3Review({
   onBack: () => void
   onComplete: () => void
 }) {
-  const [txPhase, setTxPhase] = useState<TxPhase>("idle")
+  const { isSupportedNetwork, address } = useWallet()
+  const fundingTx = useTransactionAction()
+  const createTx = useTransactionAction()
+
+  const [questId, setQuestId] = useState<number | null>(null)
+  const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
+  const [fundTxHash, setFundTxHash] = useState<string | null>(null)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
+
+  const parseQuestIdFromResultXdr = (resultXdr: string): number | null => {
+    try {
+      const scVal = xdr.ScVal.fromXDR(resultXdr, "base64")
+      const native = scValToNative(scVal)
+      if (typeof native === "number") return native
+      if (typeof native === "bigint") return Number(native)
+      if (typeof native === "string") {
+        const n = Number(native)
+        return Number.isFinite(n) ? n : null
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
 
   const handleFund = async () => {
     setTxPhase("funding")
@@ -434,6 +478,10 @@ function Step3Review({
     setTxPhase("done")
     onComplete()
   }
+
+  const isFunded = fundingTx.isSuccess
+  const fundPending = fundingTx.isPending
+  const createPending = createTx.isPending
 
   return (
     <div className="space-y-6">
@@ -499,6 +547,16 @@ function Step3Review({
               </span>
             </div>
 
+            {/* Network Warning */}
+            {!isSupportedNetwork && (
+              <div className="bg-destructive/10 border-destructive mb-4 border-[2px] p-4 text-center">
+                <AlertCircle className="text-destructive mx-auto mb-2 h-5 w-5" />
+                <p className="text-destructive text-sm font-bold">
+                  Please switch your Freighter wallet to Testnet to continue.
+                </p>
+              </div>
+            )}
+
             {/* Fund button */}
             <Button
               onClick={handleFund}
@@ -514,12 +572,12 @@ function Step3Review({
                   "border-success"
               )}
             >
-              {txPhase === "funding" ? (
+              {fundPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Funding reward pool...
                 </>
-              ) : txPhase === "funded" || txPhase === "creating" || txPhase === "done" ? (
+              ) : isFunded || createPending || createTx.isSuccess ? (
                 <>
                   <Check className="h-4 w-4" />
                   Reward pool funded
@@ -538,7 +596,7 @@ function Step3Review({
               disabled={txPhase !== "funded"}
               className="shimmer-on-hover w-full"
             >
-              {txPhase === "creating" ? (
+              {createPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Creating quest on-chain...
@@ -570,7 +628,7 @@ function Step3Review({
           type="button"
           variant="outline"
           onClick={onBack}
-          disabled={txPhase === "funding" || txPhase === "creating"}
+          disabled={fundPending || createPending}
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -582,17 +640,26 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function CreateQuest({ onBack }: CreateQuestProps) {
-  const { connected, connect, loading } = useWallet()
-  const [step, setStep] = useState<FormStep>(1)
+const DEFAULT_STEP1: Step1Values = { name: "", description: "" }
+const DEFAULT_STEP2: Step2Values = {
+  milestones: [{ title: "", description: "", rewardAmount: 0 }],
+}
 
-  const [step1Data, setStep1Data] = useState<Step1Values>({
-    name: "",
-    description: "",
-  })
-  const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0 }],
-  })
+export function CreateQuest() {
+  const navigate = useNavigate()
+  const { connected, connect, loading } = useWallet()
+
+  const [step, setStep] = useState<FormStep>(() => loadDraft()?.step ?? 1)
+  const [step1Data, setStep1Data] = useState<Step1Values>(
+    () => loadDraft()?.step1Data ?? DEFAULT_STEP1
+  )
+  const [step2Data, setStep2Data] = useState<Step2Values>(
+    () => loadDraft()?.step2Data ?? DEFAULT_STEP2
+  )
+
+  useEffect(() => {
+    saveDraft({ step, step1Data, step2Data })
+  }, [step, step1Data, step2Data])
 
   // Wallet not connected guard
   if (!connected) {
@@ -661,6 +728,10 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
         <p className="text-muted-foreground mt-1 text-sm">
           Set up milestones and fund the reward pool to incentivize learners.
         </p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-xs font-bold">
+          Note: quest visibility on Stellar is discovery-only. Even quests marked private remain
+          readable on-chain by quest id, so do not put confidential data in quest metadata.
+        </p>
       </div>
 
       {/* Step indicator */}
@@ -704,7 +775,10 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={onBack}
+            onComplete={() => {
+              clearDraft()
+              navigate("/dashboard")
+            }}
           />
         )}
       </div>

@@ -1,7 +1,12 @@
 import { Target, Users, Coins } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatTokens } from "@/lib/utils"
-import type { PlatformStats as PlatformStatsType } from "@/lib/mock-data"
+
+interface PlatformStatsType {
+  totalQuests: number
+  activeUsers: number
+  tokensDistributed: number
+}
 
 interface PlatformStatsProps {
   stats: PlatformStatsType

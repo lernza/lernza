@@ -11,6 +11,8 @@ export const buttonVariants = cva(
           "bg-white text-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
         destructive:
           "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
+        danger:
+          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:bg-destructive/90 hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
         outline:
           "bg-transparent text-foreground border-[3px] border-black shadow-[4px_4px_0_#000] hover:shadow-[6px_6px_0_#000] active:shadow-[1px_1px_0_#000] neo-press",
         ghost:

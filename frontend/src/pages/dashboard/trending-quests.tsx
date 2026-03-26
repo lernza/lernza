@@ -3,14 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import type { WorkspaceInfo } from "@/lib/contract-types"
-import { MOCK_WORKSPACE_STATS } from "@/lib/mock-data"
+
+interface QuestStats {
+  enrolleeCount: number
+  poolBalance: number
+}
 
 interface TrendingQuestsProps {
   quests: WorkspaceInfo[]
+  statsByQuest: Record<number, QuestStats>
   onSelectQuest: (id: number) => void
 }
 
-export function TrendingQuests({ quests, onSelectQuest }: TrendingQuestsProps) {
+export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: TrendingQuestsProps) {
   return (
     <div>
       <h2 className="mb-4 flex items-center gap-2 text-xl font-black">
@@ -18,7 +23,7 @@ export function TrendingQuests({ quests, onSelectQuest }: TrendingQuestsProps) {
       </h2>
       <div className="space-y-4">
         {quests.map(quest => {
-          const stats = MOCK_WORKSPACE_STATS[quest.id] || { enrolleeCount: 0, poolBalance: 0 }
+          const stats = statsByQuest[quest.id] || { enrolleeCount: 0, poolBalance: 0 }
           return (
             <Card
               key={quest.id}

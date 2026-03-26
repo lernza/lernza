@@ -62,7 +62,7 @@ git clone https://github.com/lernza/lernza.git
 cd lernza
 
 # Smart contracts
-cargo test --workspace      # 33 tests
+cargo test --workspace      # run the current contract workspace test suite
 stellar contract build      # Optimized WASM
 
 # Frontend
@@ -75,17 +75,25 @@ Install [Freighter](https://freighter.app), switch to **Testnet**, and connect.
 
 For contract deployment to Stellar testnet, see [docs/deploy-testnet.md](docs/deploy-testnet.md).
 
+### Current Delivery Stage
+
+Lernza is currently a **contract-first project with a partially wired frontend**.
+
+- The Soroban contracts are implemented and tested in the Rust workspace.
+- The frontend has working wallet flows and selected read paths, but several write flows are still simulated in the UI.
+- Profile earnings now read the aggregate on-chain total from the rewards contract, but detailed payout history is not indexable yet.
+
 <br />
 
 ## Roadmap
 
-| Milestone | Status | Focus |
-|:----------|:-------|:------|
-| **M1** Quest Foundation | In Progress | Rename workspace → quest, validation, tooling |
-| **M2** Quest Engine | Upcoming | Visibility, deadlines, funding models |
-| **M3** Neo-Brutalism UI | Upcoming | Design system, component redesign, routing |
-| **M4** Full Stack Integration | Upcoming | Wire frontend to contracts |
-| **M5** Quality & Advanced | Upcoming | Security audit, docs, advanced features |
+| Milestone                     | Status      | Focus                                         |
+| :---------------------------- | :---------- | :-------------------------------------------- |
+| **M1** Quest Foundation       | In Repo     | Core contract structure, validation, tooling  |
+| **M2** Quest Engine           | In Progress | Deadlines live, visibility is discovery-only, funding models still pending |
+| **M3** Neo-Brutalism UI       | In Repo     | Frontend screens and design system prototype  |
+| **M4** Full Stack Integration | Partial     | Wallet connected, some contract reads wired, several flows still mocked |
+| **M5** Quality & Advanced     | Planned     | Security audit, indexing, advanced features   |
 
 See the full [project board](https://github.com/orgs/lernza/projects/1) for all 64 issues.
 
@@ -110,11 +118,11 @@ sequenceDiagram
     Note over Admin, Quest: Phase 1: Setup
     Admin->>Quest: create_quest(owner, name, ...)
     Admin->>Rewards: fund_quest(funder, quest_id, amount)
-    
+
     Note over Admin, Milestone: Phase 2: Engagement
     Admin->>Quest: add_enrollee(quest_id, lerner_addr)
     Admin->>Milestone: create_milestone(owner, quest_id, title, ...)
-    
+
     Note over Admin, Lerner: Phase 3: Completion
     Lerner->>Admin: Proves completion (external)
     Admin->>Milestone: verify_completion(owner, quest_id, ms_id, lerner_addr)
@@ -129,6 +137,7 @@ sequenceDiagram
 Need the transaction-by-transaction flow? See the [contract interaction diagrams](docs/contract-interaction-diagrams.md) for quest creation, enrollment, funding, and reward distribution sequences rendered with GitHub-native Mermaid.
 
 **Why three contracts?**
+
 - **Separation of concerns** — each contract has a single responsibility
 - **Independent upgradability** — update rewards logic without touching quest management
 - **Smaller WASM binaries** — each stays well under Soroban's 256KB limit
@@ -139,14 +148,18 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 
 **Integration Status**
 
-| Area | Status | Contract Method |
-|:-----|:-------|:----------------|
-| **Quest Creation** | Mocked | `create_quest` |
-| **Enrollment** | Mocked | `add_enrollee` |
-| **Milestone Track** | Mocked | `create_milestone` |
-| **Verification** | Mocked | `verify_completion` |
-| **Reward Distribution**| Mocked | `distribute_reward` |
-| **Profile & Analytics** | Implemented (Mock Data) | `get_user_earnings` |
+| Area                    | Status                  | Contract Method     |
+| :---------------------- | :---------------------- | :------------------ |
+| **Quest Creation**      | Frontend flow still simulated | `create_quest`      |
+| **Enrollment**          | Contract available, UI orchestration still incomplete | `add_enrollee`      |
+| **Milestone Track**     | Contract available, UI still partly mock-backed | `create_milestone`  |
+| **Verification**        | Contract available, not fully wired in UI | `verify_completion` |
+| **Reward Distribution** | Contract available, not fully wired in UI | `distribute_reward` |
+| **Profile & Analytics** | Aggregate earnings wired; detailed history still unavailable | `get_user_earnings` |
+
+**Privacy model**
+
+`Visibility::Private` is currently **not a confidentiality feature**. It only removes a quest from public discovery helpers such as `list_public_quests`. If a caller knows a quest id, on-chain reads like `get_quest`, `get_enrollees`, and `is_enrollee` remain queryable.
 
 </details>
 
@@ -154,14 +167,14 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 <summary><strong>Tech Stack</strong></summary>
 <br/>
 
-| Layer | Technology |
-|:------|:-----------|
-| **Smart Contracts** | Rust + Soroban SDK — 3 contracts compiled to WASM |
-| **Frontend** | React 19 + TypeScript 5.9 + Vite 8 |
-| **UI** | shadcn/ui + Tailwind CSS v4 — neo-brutalist design system |
-| **Wallet** | Freighter — Stellar browser wallet |
-| **Network** | Stellar Testnet (Soroban-enabled) |
-| **CI** | GitHub Actions — lint, test, build on every PR |
+| Layer               | Technology                                                |
+| :------------------ | :-------------------------------------------------------- |
+| **Smart Contracts** | Rust + Soroban SDK — 3 contracts compiled to WASM         |
+| **Frontend**        | React 19 + TypeScript 5.9 + Vite 8                        |
+| **UI**              | shadcn/ui + Tailwind CSS v4 — neo-brutalist design system |
+| **Wallet**          | Freighter — Stellar browser wallet                        |
+| **Network**         | Stellar Testnet (Soroban-enabled)                         |
+| **CI**              | GitHub Actions — lint, test, build on every PR            |
 
 </details>
 
@@ -171,33 +184,44 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 
 **Quest Contract** — `contracts/quest/`
 
-| Function | Description |
-|:---------|:------------|
-| `create_quest(owner, name, description, token_addr)` | Create a new quest with a reward token |
-| `add_enrollee(quest_id, enrollee)` | Enroll a learner (owner only) |
-| `remove_enrollee(quest_id, enrollee)` | Remove a learner (owner only) |
-| `get_quest(quest_id)` / `get_enrollees(quest_id)` | Query quest data |
-| `is_enrollee(quest_id, user)` | Check enrollment status |
+| Function                                                                                         | Description                            |
+| :----------------------------------------------------------------------------------------------- | :------------------------------------- |
+| `create_quest(owner, name, description, token_addr, visibility, category, tags, enrollment_cap)` | Create a new quest with a reward token |
+| `add_enrollee(quest_id, enrollee)`                                                               | Enroll a learner (owner only)          |
+| `remove_enrollee(quest_id, enrollee)`                                                            | Remove a learner (owner only)          |
+| `get_quest(quest_id)` / `get_enrollees(quest_id)`                                                | Query quest data by id (including quests marked `Private`) |
+| `is_enrollee(quest_id, user)`                                                                    | Check enrollment status                |
+| `archive_quest(quest_id)`                                                                        | Archive a quest (owner only)           |
+| `set_visibility(quest_id, visibility)`                                                           | Update public discovery visibility (not confidentiality) |
+| `list_public_quests(start, limit)`                                                               | List public quests with pagination     |
 
 **Milestone Contract** — `contracts/milestone/`
 
-| Function | Description |
-|:---------|:------------|
-| `create_milestone(owner, quest_id, title, desc, reward_amount)` | Add a milestone to a quest |
-| `verify_completion(owner, quest_id, ms_id, enrollee)` | Verify a learner completed a milestone |
-| `get_milestones(quest_id)` | List all milestones in a quest |
-| `is_completed(quest_id, ms_id, enrollee)` | Check completion status |
+| Function                                                         | Description                                                   |
+| :--------------------------------------------------------------- | :------------------------------------------------------------ |
+| `initialize(admin, quest_contract, certificate_contract)`        | Initialize milestone contract (one-time)                      |
+| `create_milestone(owner, quest_id, title, desc, reward_amount)`  | Add a milestone to a quest                                    |
+| `verify_completion(owner, quest_id, milestone_id, enrollee)`     | Verify a learner completed a milestone                        |
+| `submit_for_review(enrollee, quest_id, milestone_id, proof_url)` | Submit milestone for review                                   |
+| `approve_completion(owner, quest_id, milestone_id, enrollee)`    | Approve a submitted milestone                                 |
+| `get_milestones(quest_id)`                                       | List all milestones in a quest                                |
+| `is_completed(quest_id, milestone_id, enrollee)`                 | Check completion status                                       |
+| `set_verification_mode(owner, quest_id, mode)`                   | Set verification mode (OwnerOnly/SelfVerify/SubmitAndApprove) |
+| `set_distribution_mode(owner, quest_id, milestone_id, mode)`     | Set reward distribution mode (Flat/Competitive/Custom)        |
 
 **Rewards Contract** — `contracts/rewards/`
 
-| Function | Description |
-|:---------|:------------|
-| `initialize(token_addr)` | Set the reward token (one-time) |
-| `fund_quest(funder, quest_id, amount)` | Deposit tokens into a quest's pool |
-| `distribute_reward(authority, quest_id, enrollee, amount)` | Send reward to a learner |
-| `get_pool_balance(quest_id)` / `get_user_earnings(user)` | Query balances |
+| Function                                                            | Description                                            |
+| :------------------------------------------------------------------ | :----------------------------------------------------- |
+| `initialize(admin, token_addr, quest_contract, milestone_contract)` | Set the reward token and contract addresses (one-time) |
+| `fund_quest(funder, quest_id, amount)`                              | Deposit tokens into a quest's pool                     |
+| `distribute_reward(authority, quest_id, enrollee, amount)`          | Send reward to a learner                               |
+| `get_pool_balance(quest_id)`                                        | Get quest pool balance                                 |
+| `get_user_earnings(user)`                                           | Get total earnings for a user                          |
+| `get_total_distributed()`                                           | Get total rewards distributed across all quests        |
 
 **Patterns:**
+
 - **Auth:** `address.require_auth()` + storage-based ownership checks
 - **Storage:** Instance (counters), Persistent (entities/auth), Temporary (cooldowns)
 - **TTL:** Bump 518,400 ledgers (~30 days), Threshold 120,960 (~7 days)
@@ -212,9 +236,10 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 ```
 lernza/
 ├── contracts/
-│   ├── quest/              # Quest creation + enrollment (10 tests)
-│   ├── milestone/          # Milestone definition + completion (12 tests)
-│   └── rewards/            # Token pools + reward distribution (11 tests)
+│   ├── quest/              # Quest creation + enrollment
+│   ├── milestone/          # Milestone definition + completion
+│   ├── rewards/            # Token pools + reward distribution
+│   └── certificate/        # NFT certificates for quest completion
 ├── frontend/
 │   ├── src/
 │   │   ├── components/     # shadcn/ui + Navbar
@@ -237,12 +262,12 @@ lernza/
 <summary><strong>Prerequisites</strong></summary>
 <br/>
 
-| Tool | Install |
-|:-----|:--------|
-| **Rust** + WASM target | [rustup.rs](https://rustup.rs) → `rustup target add wasm32-unknown-unknown` |
-| **Stellar CLI** 25.x | `brew install stellar-cli` or [docs](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) |
-| **Node.js** 22+ | [nodejs.org](https://nodejs.org) |
-| **Freighter** wallet | [freighter.app](https://freighter.app) (browser extension) |
+| Tool                   | Install                                                                                                         |
+| :--------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| **Rust** + WASM target | [rustup.rs](https://rustup.rs) → `rustup target add wasm32-unknown-unknown`                                     |
+| **Stellar CLI** 25.x   | `brew install stellar-cli` or [docs](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) |
+| **Node.js** 22+        | [nodejs.org](https://nodejs.org)                                                                                |
+| **Freighter** wallet   | [freighter.app](https://freighter.app) (browser extension)                                                      |
 
 </details>
 

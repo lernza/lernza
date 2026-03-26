@@ -24,7 +24,16 @@ export class MilestoneClient {
   private contract: Contract | null
 
   constructor() {
-    this.contract = CONTRACT_ID ? new Contract(CONTRACT_ID) : null
+    if (CONTRACT_ID) {
+      try {
+        this.contract = new Contract(CONTRACT_ID)
+      } catch {
+        this.contract = null
+        console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
+      }
+    } else {
+      this.contract = null
+    }
   }
 
   private getContract(): Contract {

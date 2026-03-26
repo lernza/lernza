@@ -26,6 +26,8 @@ function ToastViewport() {
   return <div id="toast-viewport" />
 }
 
+const enableAnalytics = import.meta.env.VITE_ENABLE_ANALYTICS === "true"
+
 /**
  * App shell component that provides the main layout structure,
  * navigation, analytics, and routing.
@@ -40,8 +42,8 @@ export function AppShell() {
           <AppRouter />
         </main>
       </ErrorBoundary>
-      <Analytics />
-      <SpeedInsights />
+      {enableAnalytics && <Analytics />}
+      {enableAnalytics && <SpeedInsights />}
       <ToastViewport />
     </div>
   )

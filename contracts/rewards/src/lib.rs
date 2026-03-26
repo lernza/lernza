@@ -85,6 +85,7 @@ pub enum Error {
     MilestoneContractNotInitialized = 9,
     ArithmeticOverflow = 10,
     AlreadyPaid = 11,
+    InvalidToken = 12,
 }
 
 const BUMP: u32 = 518_400;
@@ -154,6 +155,14 @@ impl RewardsContract {
 
         let token_addr = Self::get_token(&env)?;
 
+        // Validate that token_addr points to a live SAC contract.
+        // A non-contract address or an address without a token interface
+        // will cause try_symbol() to fail, rejecting the funding early.
+        let token_client = token::Client::new(&env, &token_addr);
+        if token_client.try_symbol().is_err() {
+            return Err(Error::InvalidToken);
+        }
+
         // If quest already has an authority, only they can add more funds
         let auth_key = DataKey::QuestAuthority(quest_id);
         if let Some(existing) = env
@@ -172,8 +181,7 @@ impl RewardsContract {
         }
 
         // Transfer tokens from funder to this contract
-        let client = token::Client::new(&env, &token_addr);
-        client.transfer(&funder, &env.current_contract_address(), &amount);
+        token_client.transfer(&funder, &env.current_contract_address(), &amount);
 
         // Credit the quest pool
         let pool_key = DataKey::QuestPool(quest_id);

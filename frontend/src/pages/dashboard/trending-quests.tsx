@@ -25,33 +25,37 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
         {quests.map(quest => {
           const stats = statsByQuest[quest.id] || { enrolleeCount: 0, poolBalance: 0 }
           return (
-            <Card
+            <button
               key={quest.id}
-              className="card-tilt border-border cursor-pointer border-[2px] shadow-[4px_4px_0_var(--color-border)]"
+              type="button"
               onClick={() => onSelectQuest(quest.id)}
+              aria-label={`Open quest ${quest.name}`}
+              className="card-tilt border-border focus-visible:ring-ring cursor-pointer border-[2px] text-left shadow-[4px_4px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none"
             >
-              <CardHeader className="p-4 pb-2">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
-                  <Badge
-                    variant="default"
-                    className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
-                  >
-                    Trending
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 font-bold">
-                    <Users className="h-3 w-3" /> {stats.enrolleeCount}
-                  </span>
-                  <span className="flex items-center gap-1 font-bold">
-                    <Coins className="h-3 w-3" /> {formatTokens(stats.poolBalance)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
+              <Card className="border-0 shadow-none">
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
+                    <Badge
+                      variant="default"
+                      className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
+                    >
+                      Trending
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1 font-bold">
+                      <Users className="h-3 w-3" /> {stats.enrolleeCount}
+                    </span>
+                    <span className="flex items-center gap-1 font-bold">
+                      <Coins className="h-3 w-3" /> {formatTokens(stats.poolBalance)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
           )
         })}
       </div>

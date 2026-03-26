@@ -9,11 +9,12 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
+import { useContractData } from "@/hooks/use-async-data"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
 
@@ -39,55 +40,27 @@ function WalletAvatar({ address }: { address: string }) {
 export function Profile() {
   const { connected, connect, address } = useWallet()
   const [copied, setCopied] = useState(false)
-  const [totalEarned, setTotalEarned] = useState<bigint | null>(0n)
-  const [earningsLoading, setEarningsLoading] = useState(false)
-  const [earningsError, setEarningsError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadEarnings() {
-      if (!connected || !address) {
-        setTotalEarned(0n)
-        setEarningsLoading(false)
-        setEarningsError(null)
-        return
+  // Use the new async hook for earnings data
+  const {
+    data: totalEarned,
+    isLoading: earningsLoading,
+    error: earningsError,
+  } = useContractData(
+    "rewards",
+    async () => {
+      if (!address) throw new Error("No wallet address")
+      const earnings = await rewardsClient.getUserEarnings(address)
+      if (earnings === null) {
+        throw new Error("not configured") // Special error for contract unavailability
       }
-
-      setEarningsLoading(true)
-      setEarningsError(null)
-
-      try {
-        const earnings = await rewardsClient.getUserEarnings(address)
-        if (cancelled) return
-
-        if (earnings === null) {
-          setTotalEarned(null)
-          setEarningsError(
-            "On-chain earnings are unavailable until the rewards contract is configured."
-          )
-        } else {
-          setTotalEarned(earnings)
-        }
-      } catch (error) {
-        if (cancelled) return
-        setTotalEarned(null)
-        setEarningsError(
-          error instanceof Error ? error.message : "Failed to load on-chain earnings."
-        )
-      } finally {
-        if (!cancelled) {
-          setEarningsLoading(false)
-        }
-      }
+      return earnings
+    },
+    {
+      enabled: connected && !!address,
+      dependencies: [connected, address],
     }
-
-    void loadEarnings()
-
-    return () => {
-      cancelled = true
-    }
-  }, [address, connected])
+  )
 
   const handleCopy = () => {
     if (address) {

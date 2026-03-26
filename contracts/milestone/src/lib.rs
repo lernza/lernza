@@ -156,6 +156,9 @@ pub enum Error {
     AlreadyApproved = 9,
     NotEnrolled = 10,
     InvalidApprover = 11,
+    TitleTooLong = 12,
+    DescriptionTooLong = 13,
+    InvalidInput = 14,
 }
 
 // Certificate client interface for cross-contract calls
@@ -172,6 +175,8 @@ pub trait Certificate {
 
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
+pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
+pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 
 #[contract]
 pub struct MilestoneContract;
@@ -215,7 +220,20 @@ impl MilestoneContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
-        if reward_amount < 0 {
+        // Input validation — happens at the top, before any storage reads
+        if title.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if title.len() > MAX_MILESTONE_TITLE_LEN {
+            return Err(Error::TitleTooLong);
+        }
+        if description.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if description.len() > MAX_MILESTONE_DESCRIPTION_LEN {
+            return Err(Error::DescriptionTooLong);
+        }
+        if reward_amount <= 0 {
             return Err(Error::InvalidAmount);
         }
 
@@ -911,4 +929,5 @@ impl MilestoneContract {
     }
 }
 
+#[cfg(test)]
 mod test;

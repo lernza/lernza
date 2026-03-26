@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
@@ -34,8 +34,11 @@ import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
+import { MilestoneClient } from "@/lib/contracts/milestone"
 
 type Tab = "milestones" | "enrollees"
+
+const milestoneClient = new MilestoneClient()
 
 export function QuestView() {
   const { id } = useParams()
@@ -58,6 +61,64 @@ export function QuestView() {
 
   const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
   const isOwner = !!address && address === ws?.owner
+
+  const [showMilestoneForm, setShowMilestoneForm] = useState(false)
+  const [msTitle, setMsTitle] = useState("")
+  const [msDescription, setMsDescription] = useState("")
+  const [msReward, setMsReward] = useState("")
+  const [msSubmitting, setMsSubmitting] = useState(false)
+
+  const resetMilestoneForm = useCallback(() => {
+    setMsTitle("")
+    setMsDescription("")
+    setMsReward("")
+    setShowMilestoneForm(false)
+  }, [])
+
+  const handleCreateMilestone = useCallback(async () => {
+    if (!address) {
+      addToast("Connect your wallet first.", "error")
+      return
+    }
+    const title = msTitle.trim()
+    const description = msDescription.trim()
+    const reward = Number(msReward)
+
+    if (!title) {
+      addToast("Milestone title is required.", "error")
+      return
+    }
+    if (!description) {
+      addToast("Milestone description is required.", "error")
+      return
+    }
+    if (!Number.isFinite(reward) || reward < 0) {
+      addToast("Reward amount must be a non-negative number.", "error")
+      return
+    }
+
+    setMsSubmitting(true)
+    try {
+      const result = await milestoneClient.createMilestone(
+        address,
+        questId,
+        title,
+        description,
+        BigInt(reward)
+      )
+      if (result.status === "SUCCESS") {
+        addToast("Milestone created successfully!", "success")
+        resetMilestoneForm()
+      } else {
+        addToast(result.error || "Transaction failed. Please try again.", "error")
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      addToast(`Failed to create milestone: ${message}`, "error")
+    } finally {
+      setMsSubmitting(false)
+    }
+  }, [address, msTitle, msDescription, msReward, questId, addToast, resetMilestoneForm])
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
@@ -164,7 +225,11 @@ export function QuestView() {
                   Add Enrollee
                 </Button>
               )}
-              <Button size="sm" className="shimmer-on-hover">
+              <Button
+                size="sm"
+                className="shimmer-on-hover"
+                onClick={() => setShowMilestoneForm(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Add Milestone
               </Button>
@@ -344,6 +409,94 @@ export function QuestView() {
         ))}
       </div>
 
+      {/* Add Milestone form */}
+      {showMilestoneForm && (
+        <div className="animate-fade-in-up mb-6">
+          <Card>
+            <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-2.5">
+              <span className="text-xs font-black tracking-wider uppercase">New Milestone</span>
+              <button
+                onClick={resetMilestoneForm}
+                className="flex h-5 w-5 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
+                aria-label="Close form"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <CardContent className="space-y-4 p-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={msTitle}
+                  onChange={e => setMsTitle(e.target.value)}
+                  placeholder="e.g. Complete Module 1"
+                  className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  disabled={msSubmitting}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
+                  Description
+                </label>
+                <textarea
+                  value={msDescription}
+                  onChange={e => setMsDescription(e.target.value)}
+                  placeholder="Describe what the learner needs to accomplish..."
+                  rows={3}
+                  className="border-border bg-background w-full resize-none border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  disabled={msSubmitting}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-black tracking-wider uppercase">
+                  Reward (tokens)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={msReward}
+                  onChange={e => setMsReward(e.target.value)}
+                  placeholder="100"
+                  className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
+                  disabled={msSubmitting}
+                />
+              </div>
+              <div className="flex gap-3 pt-1">
+                <Button
+                  size="sm"
+                  onClick={handleCreateMilestone}
+                  disabled={msSubmitting}
+                  className="shimmer-on-hover"
+                >
+                  {msSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" />
+                      Create Milestone
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetMilestoneForm}
+                  disabled={msSubmitting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Milestones tab */}
       {activeTab === "milestones" && (
         <div className="space-y-4">
@@ -357,7 +510,11 @@ export function QuestView() {
                 <p className="text-muted-foreground mb-4 text-sm">
                   Add milestones to define learning goals.
                 </p>
-                <Button size="sm" className="shimmer-on-hover">
+                <Button
+                  size="sm"
+                  className="shimmer-on-hover"
+                  onClick={() => setShowMilestoneForm(true)}
+                >
                   <Plus className="h-4 w-4" />
                   Add Milestone
                 </Button>

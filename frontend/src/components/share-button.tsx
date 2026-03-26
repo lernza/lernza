@@ -150,6 +150,42 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     }
   }, [open])
 
+  /**
+   * Fallback copy using a temporary textarea when the Clipboard API
+   * is unavailable or permission is denied.
+   */
+  const fallbackCopyText = (text: string): boolean => {
+    const textarea = document.createElement("textarea")
+    textarea.value = text
+    textarea.setAttribute("readonly", "")
+    textarea.style.position = "fixed"
+    textarea.style.left = "-9999px"
+    document.body.appendChild(textarea)
+    textarea.select()
+    let ok = false
+    try {
+      ok = document.execCommand("copy")
+    } catch {
+      ok = false
+    }
+    document.body.removeChild(textarea)
+    return ok
+  }
+
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    // Try Clipboard API first
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        // Permission denied or API rejected — fall through to fallback
+      }
+    }
+    // Manual fallback via textarea + execCommand
+    return fallbackCopyText(text)
+  }
+
   // Web Share API — mobile native sheet
   const handleNativeShare = async () => {
     try {
@@ -158,19 +194,32 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         text: `Check out this quest on Lernza: ${questName}`,
         url: questUrl,
       })
-    } catch {
-      // User cancelled or share interrupted — no action needed
+    } catch (err: unknown) {
+      // If user cancelled, ignore. Otherwise fall through to copy.
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes("AbortError") || message.includes("cancel")) return
+      // Native share denied/failed — fall back to copy
+      const ok = await copyToClipboard(questUrl)
+      onToast(
+        ok
+          ? "Link copied to clipboard instead!"
+          : "Could not share. Please copy the link manually from the address bar.",
+        ok ? "success" : "error"
+      )
     }
   }
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(questUrl)
+    const ok = await copyToClipboard(questUrl)
+    if (ok) {
       setCopied(true)
       onToast("Link copied to clipboard!", "success")
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy link", "error")
+    } else {
+      onToast(
+        "Clipboard access denied. Please copy the link manually from the address bar.",
+        "error"
+      )
     }
   }
 
@@ -183,13 +232,13 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }
 
   const handleCopyDiscord = async () => {
-    try {
-      await navigator.clipboard.writeText(discordText)
+    const ok = await copyToClipboard(discordText)
+    if (ok) {
       setDiscordCopied(true)
       onToast("Discord message copied!", "success")
       setTimeout(() => setDiscordCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy", "error")
+    } else {
+      onToast("Clipboard access denied. Please try again or copy manually.", "error")
     }
   }
 

@@ -70,9 +70,9 @@ fn test_distribute_reward_overflow() {
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
     // Distribute max value
     client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
-    // Try to distribute again (would underflow pool)
+    // Try to distribute again — idempotency rejects the duplicate
     let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
-    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
 #[test]
@@ -114,9 +114,9 @@ fn test_distribute_reward_earnings_overflow() {
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
     // Distribute max value
     client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
-    // Try to overflow earnings (should fail due to insufficient pool, not overflow)
+    // Try to overflow earnings — idempotency rejects the duplicate
     let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
-    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
 #[test]
@@ -522,10 +522,12 @@ fn test_distribute_multiple_rewards() {
 
     milestone_client.verify_completion(&owner, &q_id, &ms1_id, &e1);
     milestone_client.verify_completion(&owner, &q_id, &ms2_id, &e2);
+    milestone_client.verify_completion(&owner, &q_id, &ms2_id, &e1);
 
     client.distribute_reward(&owner, &q_id, &ms1_id, &e1, &100);
     client.distribute_reward(&owner, &q_id, &ms2_id, &e2, &200);
-    client.distribute_reward(&owner, &q_id, &ms1_id, &e1, &50); // e1 gets more from same milestone
+    // e1 gets reward from a different milestone (ms2), not a duplicate
+    client.distribute_reward(&owner, &q_id, &ms2_id, &e1, &50);
 
     let token_client = TokenClient::new(&env, &token_addr);
     assert_eq!(token_client.balance(&e1), 150);
@@ -916,4 +918,61 @@ fn test_fund_quest_not_owner_fails() {
     // Legitimate owner can still fund their own quest
     client.fund_quest(&legitimate_owner, &q_id, &5_000);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+/// fix(#184): duplicate payout for the same (quest, milestone, enrollee) is rejected
+#[test]
+fn test_distribute_reward_idempotent() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Idempotent Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+    );
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    // First payout succeeds
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &100);
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&enrollee), 100);
+
+    // Retry of the exact same payout is rejected with AlreadyPaid
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &100);
+    assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
+
+    // Balance unchanged — no double payout
+    assert_eq!(token_client.balance(&enrollee), 100);
+    assert_eq!(client.get_pool_balance(&q_id), 4_900);
+    assert_eq!(client.get_total_distributed(), 100);
 }

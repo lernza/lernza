@@ -28,12 +28,9 @@ export class RewardsClient {
     return result ? BigInt(result) : 0n
   }
 
-  async getUserEarnings(user: string): Promise<bigint | null> {
-    if (!CONTRACT_ID) {
-      return null
-    }
+  async getUserEarnings(user: string): Promise<bigint> {
     const result = await this.invokeRead("get_user_earnings", [new Address(user).toScVal()])
-    return result === null ? null : BigInt(result)
+    return result ? BigInt(result) : 0n
   }
 
   async getTotalDistributed(): Promise<bigint> {
@@ -57,10 +54,17 @@ export class RewardsClient {
     return signAndSubmit(tx)
   }
 
-  async distributeReward(authority: string, questId: number, enrollee: string, amount: bigint) {
+  async distributeReward(
+    authority: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    amount: bigint
+  ) {
     const tx = await this.buildTx(authority, "distribute_reward", [
       new Address(authority).toScVal(),
       nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
       nativeToScVal(amount, { type: "i128" }),
     ])

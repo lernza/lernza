@@ -23,7 +23,8 @@
 
 use certificate::{CertificateContract, CertificateContractClient};
 use milestone::{Error as MilestoneError, MilestoneContract, MilestoneContractClient};
-use quest::{QuestContract, QuestContractClient, Visibility};
+use common::Visibility;
+use quest::{QuestContract, QuestContractClient};
 use rewards::{Error as RewardsError, RewardsContract, RewardsContractClient};
 use soroban_sdk::{
     testutils::Address as _,
@@ -128,6 +129,7 @@ impl QuestSystemTest {
             &Vec::<String>::new(&self.env),
             &self.token_addr,
             &Visibility::Public,
+            &None,
         )
     }
 

@@ -7,7 +7,8 @@ use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 extern crate certificate;
 extern crate quest;
 use certificate::CertificateContract;
-use quest::{QuestContract, QuestContractClient, Visibility};
+use common::Visibility;
+use quest::{QuestContract, QuestContractClient};
 
 fn setup() -> (
     Env,
@@ -50,6 +51,7 @@ fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Address) 
         &Vec::<String>::new(env),
         &Address::generate(env),
         &Visibility::Public,
+        &None,
     )
 }
 
@@ -759,4 +761,76 @@ fn test_create_milestone_max_length_description_succeeds() {
         &100,
     );
     assert_eq!(id, 0);
+}
+
+#[test]
+fn test_create_milestones_batch_success() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 200,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(ids.len(), 2);
+    assert_eq!(ids.get(0).unwrap(), 0);
+    assert_eq!(ids.get(1).unwrap(), 1);
+
+    // Verify independent creation
+    let m1 = client.get_milestone(&q_id, &0);
+    assert_eq!(m1.title, String::from_str(&env, "M1"));
+    let m2 = client.get_milestone(&q_id, &1);
+    assert_eq!(m2.title, String::from_str(&env, "M2"));
+}
+
+#[test]
+fn test_create_milestones_batch_oversized_rejection() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    for _ in 0..21 { // 21 is > limit of 20
+        milestones.push_back(MilestoneInput {
+            title: String::from_str(&env, "M"),
+            description: String::from_str(&env, "D"),
+            reward_amount: 100,
+        });
+    }
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(result, Err(Ok(Error::BatchTooLarge)));
+}
+
+#[test]
+fn test_create_milestones_batch_atomic_validation() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "Valid"),
+        description: String::from_str(&env, "Valid"),
+        reward_amount: 100,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, ""), // INVALID
+        description: String::from_str(&env, "Valid"),
+        reward_amount: 100,
+    });
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+
+    // Verify NO milestones were created (atomic)
+    let milestones_list = client.get_milestones(&q_id);
+    assert_eq!(milestones_list.len(), 0);
 }

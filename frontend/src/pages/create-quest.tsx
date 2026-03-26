@@ -33,6 +33,7 @@ import { milestoneClient } from "@/lib/contracts/milestone"
 const step1Schema = z.object({
   name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
   description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
+  maxEnrollees: z.number().int().min(1, "Must be at least 1").optional().or(z.literal("")),
 })
 type Step1Values = z.infer<typeof step1Schema>
 
@@ -206,6 +207,27 @@ function Step1Form({
                 {descValue.length}/2000
               </span>
             </div>
+          </div>
+
+          {/* Max Enrollees (Optional) */}
+          <div>
+            <FormLabel>Enrollment Capacity (Optional)</FormLabel>
+            <input
+              {...register("maxEnrollees", {
+                setValueAs: v => (v === "" ? undefined : parseInt(v, 10)),
+              })}
+              type="number"
+              min="1"
+              placeholder="Unlimited"
+              className={cn(
+                "border-border bg-background w-full border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
+                errors.maxEnrollees && "border-destructive"
+              )}
+            />
+            <p className="mt-1 text-xs font-bold text-muted-foreground">
+              Leave empty for unlimited spots. Once set, only this many users can enroll.
+            </p>
+            <FieldError message={errors.maxEnrollees?.message} />
           </div>
         </div>
       </div>
@@ -461,7 +483,11 @@ function Step3Review({
           address,
           step1Data.name,
           step1Data.description,
-          tokenAddress
+          "Education", // Default category
+          [], // Default tags
+          tokenAddress,
+          0, // Public visibility
+          typeof step1Data.maxEnrollees === "number" ? step1Data.maxEnrollees : undefined
         )
 
         if (questResult.status !== "SUCCESS") {
@@ -718,7 +744,7 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const DEFAULT_STEP1: Step1Values = { name: "", description: "" }
+const DEFAULT_STEP1: Step1Values = { name: "", description: "", maxEnrollees: "" }
 const DEFAULT_STEP2: Step2Values = {
   milestones: [{ title: "", description: "", rewardAmount: 0 }],
 }

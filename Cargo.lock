@@ -246,6 +246,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.0.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -799,6 +806,7 @@ name = "milestone"
 version = "0.0.0"
 dependencies = [
  "certificate",
+ "common",
  "quest",
  "soroban-sdk",
 ]
@@ -929,6 +937,7 @@ dependencies = [
 name = "quest"
 version = "0.0.0"
 dependencies = [
+ "common",
  "soroban-sdk",
 ]
 
@@ -996,6 +1005,7 @@ name = "rewards"
 version = "0.0.0"
 dependencies = [
  "certificate",
+ "common",
  "milestone",
  "quest",
  "soroban-sdk",

@@ -27,6 +27,7 @@ fn create_quest_helper(
         &Vec::<String>::new(env),
         token,
         &Visibility::Public,
+        &None,
     )
 }
 
@@ -45,6 +46,7 @@ fn create_quest_with_visibility(
         &Vec::<String>::new(env),
         token,
         &visibility,
+        &None,
     )
 }
 
@@ -65,6 +67,7 @@ fn create_quest_with_category_and_tags(
         &tags,
         token,
         &visibility,
+        &None,
     )
 }
 
@@ -91,6 +94,7 @@ fn test_create_quest_empty_name_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -106,6 +110,7 @@ fn test_create_quest_whitespace_name_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -121,6 +126,7 @@ fn test_create_quest_empty_description_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -138,6 +144,7 @@ fn test_create_quest_oversized_name_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::NameTooLong)));
 }
@@ -155,6 +162,7 @@ fn test_create_quest_oversized_description_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
 }
@@ -312,6 +320,7 @@ fn test_create_quest_rejects_too_many_tags() {
         &tags,
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -333,6 +342,7 @@ fn test_create_quest_rejects_tag_too_long() {
         &tags,
         &token,
         &Visibility::Public,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -585,11 +595,13 @@ fn test_update_quest() {
     create_quest_helper(&env, &client, &owner, &token);
     client.update_quest(
         &0,
-        &String::from_str(&env, "Updated Name"),
-        &String::from_str(&env, "Updated description"),
-        &String::from_str(&env, "Design"),
-        &Vec::<String>::new(&env),
-        &Visibility::Private,
+        &owner,
+        &Some(String::from_str(&env, "Updated Name")),
+        &Some(String::from_str(&env, "Updated description")),
+        &Some(String::from_str(&env, "Design")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Private),
+        &None,
     );
     let quest = client.get_quest(&0);
     assert_eq!(quest.name, String::from_str(&env, "Updated Name"));
@@ -611,11 +623,13 @@ fn test_update_quest_with_tags() {
     new_tags.push_back(String::from_str(&env, "stellar"));
     client.update_quest(
         &0,
-        &String::from_str(&env, "My Quest"),
-        &String::from_str(&env, "desc"),
-        &String::from_str(&env, "Programming"),
-        &new_tags,
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "My Quest")),
+        &Some(String::from_str(&env, "desc")),
+        &Some(String::from_str(&env, "Programming")),
+        &Some(new_tags),
+        &Some(Visibility::Public),
+        &None,
     );
     let quest = client.get_quest(&0);
     assert_eq!(quest.tags.len(), 2);
@@ -631,25 +645,29 @@ fn test_update_quest_rejects_too_many_tags() {
     }
     let result = client.try_update_quest(
         &0,
-        &String::from_str(&env, "Name"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Cat"),
-        &tags,
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "Name")),
+        &Some(String::from_str(&env, "Desc")),
+        &Some(String::from_str(&env, "Cat")),
+        &Some(tags),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
 
 #[test]
 fn test_update_quest_not_found() {
-    let (env, client, _owner, _token) = setup();
+    let (env, client, owner, _token) = setup();
     let result = client.try_update_quest(
         &999,
-        &String::from_str(&env, "Name"),
-        &String::from_str(&env, "Desc"),
-        &String::from_str(&env, "Cat"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "Name")),
+        &Some(String::from_str(&env, "Desc")),
+        &Some(String::from_str(&env, "Cat")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::NotFound)));
 }
@@ -706,11 +724,13 @@ fn test_archived_quest_rejects_update() {
     client.archive_quest(&0);
     let result = client.try_update_quest(
         &0,
-        &String::from_str(&env, "New Name"),
-        &String::from_str(&env, "New desc"),
-        &String::from_str(&env, "Cat"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "New Name")),
+        &Some(String::from_str(&env, "New desc")),
+        &Some(String::from_str(&env, "Cat")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::QuestArchived)));
 }
@@ -746,11 +766,13 @@ fn test_update_quest_empty_name_fails() {
     create_quest_helper(&env, &client, &owner, &token);
     let result = client.try_update_quest(
         &0,
-        &String::from_str(&env, ""),
-        &String::from_str(&env, "Valid description"),
-        &String::from_str(&env, "Programming"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "")),
+        &Some(String::from_str(&env, "Valid description")),
+        &Some(String::from_str(&env, "Programming")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -763,11 +785,13 @@ fn test_update_quest_oversized_name_fails() {
     let long_name = String::from_bytes(&env, &bytes);
     let result = client.try_update_quest(
         &0,
-        &long_name,
-        &String::from_str(&env, "Valid description"),
-        &String::from_str(&env, "Programming"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(long_name),
+        &Some(String::from_str(&env, "Valid description")),
+        &Some(String::from_str(&env, "Programming")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::NameTooLong)));
 }
@@ -778,11 +802,13 @@ fn test_update_quest_empty_description_fails() {
     create_quest_helper(&env, &client, &owner, &token);
     let result = client.try_update_quest(
         &0,
-        &String::from_str(&env, "Valid Name"),
-        &String::from_str(&env, ""),
-        &String::from_str(&env, "Programming"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "Valid Name")),
+        &Some(String::from_str(&env, "")),
+        &Some(String::from_str(&env, "Programming")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -795,11 +821,100 @@ fn test_update_quest_oversized_description_fails() {
     let long_desc = String::from_bytes(&env, &bytes);
     let result = client.try_update_quest(
         &0,
-        &String::from_str(&env, "Valid Name"),
-        &long_desc,
-        &String::from_str(&env, "Programming"),
-        &Vec::<String>::new(&env),
-        &Visibility::Public,
+        &owner,
+        &Some(String::from_str(&env, "Valid Name")),
+        &Some(long_desc),
+        &Some(String::from_str(&env, "Programming")),
+        &Some(Vec::<String>::new(&env)),
+        &Some(Visibility::Public),
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
+}
+
+#[test]
+fn test_update_quest_partial() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    // Update only name
+    client.update_quest(
+        &0,
+        &owner,
+        &Some(String::from_str(&env, "New Name")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.name, String::from_str(&env, "New Name"));
+    assert_eq!(
+        quest.description,
+        String::from_str(&env, "Teaching my brother to code")
+    ); // original
+}
+
+#[test]
+fn test_update_quest_unauthorized() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let wrong_owner = Address::generate(&env);
+
+    let result = client.try_update_quest(
+        &0,
+        &wrong_owner,
+        &Some(String::from_str(&env, "Hack")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_update_quest_visibility_merge() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.visibility, Visibility::Public);
+
+    client.update_quest(&0, &owner, &None, &None, &None, &None, &Some(Visibility::Private), &None);
+
+    let updated = client.get_quest(&0);
+    assert_eq!(updated.visibility, Visibility::Private);
+
+    // Verify it's removed from public list
+    let public_quests = client.list_public_quests(&0, &10);
+    assert_eq!(public_quests.len(), 0);
+}
+
+#[test]
+fn test_enrollee_cap() {
+    let (env, client, owner, token) = setup();
+    let id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Cap Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Cat"),
+        &Vec::new(&env),
+        &token,
+        &Visibility::Public,
+        &Some(2),
+    );
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.add_enrollee(&id, &e1);
+    client.add_enrollee(&id, &e2);
+    let result = client.try_add_enrollee(&id, &e3);
+
+    assert_eq!(result, Err(Ok(Error::QuestFull)));
 }

@@ -4,6 +4,10 @@ use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
     Env, String, Vec,
 };
+use common::{
+    extend_instance_ttl, BUMP, ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRESHOLD,
+    QuestInfo, QuestStatus, Visibility,
+};
 
 // Quest contract error type (must match the quest contract)
 #[contracterror]
@@ -12,9 +16,9 @@ use soroban_sdk::{
 pub enum QuestError {
     NotFound = 1,
     Unauthorized = 2,
-    AlreadyEnrolled = 3,
-    NotEnrolled = 4,
-    InvalidInput = 5,
+    AlreadyEnrolled = 4,
+    NotEnrolled = 6,
+    InvalidInput = 3,
 }
 
 // Quest contract interface for cross-contract calls
@@ -24,35 +28,7 @@ pub trait QuestContractTrait {
     fn is_enrollee(env: Env, quest_id: u32, user: Address) -> bool;
 }
 
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub enum Visibility {
-    Public = 0,
-    Private = 1,
-}
-
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuestStatus {
-    Active = 0,
-    Archived = 1,
-}
-
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct QuestInfo {
-    pub id: u32,
-    pub owner: Address,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub tags: Vec<String>,
-    pub token_addr: Address,
-    pub created_at: u64,
-    pub visibility: Visibility,
-    pub status: QuestStatus,
-    pub deadline: u64,
-}
+// Visibility, QuestStatus, and QuestInfo moved to common.
 
 // Milestone contract: define milestones per quest, track completions.
 // Owner-approved verification for MVP. When owner verifies a completion,
@@ -141,24 +117,33 @@ pub struct EnrolleeProgress {
     pub completion_details: Vec<CompletionInfo>,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct MilestoneInput {
+    pub title: String,
+    pub description: String,
+    pub reward_amount: i128,
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
     NotFound = 1,
     Unauthorized = 2,
-    AlreadyCompleted = 3,
-    InvalidAmount = 4,
-    OwnerMismatch = 5,
-    NotInitialized = 6,
-    AlreadySubmitted = 7,
-    NotSubmitted = 8,
-    AlreadyApproved = 9,
-    NotEnrolled = 10,
-    InvalidApprover = 11,
-    TitleTooLong = 12,
-    DescriptionTooLong = 13,
-    InvalidInput = 14,
+    AlreadyCompleted = 4,
+    InvalidAmount = 6,
+    OwnerMismatch = 7,
+    NotInitialized = 8,
+    AlreadySubmitted = 9,
+    NotSubmitted = 10,
+    AlreadyApproved = 11,
+    NotEnrolled = 12,
+    InvalidApprover = 13,
+    TitleTooLong = 15,
+    DescriptionTooLong = 16,
+    BatchTooLarge = 17,
+    InvalidInput = 3,
 }
 
 // Certificate client interface for cross-contract calls
@@ -173,10 +158,10 @@ pub trait Certificate {
     ) -> u32;
 }
 
-const BUMP: u32 = 518_400;
-const THRESHOLD: u32 = 120_960;
+// TTL constants moved to common.
 pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
 pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
+pub const MAX_BATCH_SIZE: u32 = 20;
 
 #[contract]
 pub struct MilestoneContract;
@@ -204,7 +189,7 @@ impl MilestoneContract {
         env.storage()
             .instance()
             .set(&DataKey::CertificateContract, &certificate_contract);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         Ok(())
     }
 
@@ -220,22 +205,7 @@ impl MilestoneContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
-        // Input validation — happens at the top, before any storage reads
-        if title.is_empty() {
-            return Err(Error::InvalidInput);
-        }
-        if title.len() > MAX_MILESTONE_TITLE_LEN {
-            return Err(Error::TitleTooLong);
-        }
-        if description.is_empty() {
-            return Err(Error::InvalidInput);
-        }
-        if description.len() > MAX_MILESTONE_DESCRIPTION_LEN {
-            return Err(Error::DescriptionTooLong);
-        }
-        if reward_amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
+        Self::validate_ms_input(&title, &description, reward_amount)?;
 
         // Get quest contract address
         let quest_contract_addr: Address = env
@@ -247,11 +217,6 @@ impl MilestoneContract {
         // Cross-contract validation: verify caller is the actual quest owner
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
-
-        // If it exists, verify the caller is the owner
-        if quest_info.owner != owner {
-            return Err(Error::OwnerMismatch);
-        }
 
         // If it exists, verify the caller is the owner
         if quest_info.owner != owner {
@@ -283,8 +248,98 @@ impl MilestoneContract {
 
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &next_key);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         Ok(id)
+    }
+
+    /// Batch create multiple milestones for a quest. Owner auth required.
+    /// Ensures atomicity: all milestones are created or none are.
+    pub fn create_milestones_batch(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        milestones: Vec<MilestoneInput>,
+    ) -> Result<Vec<u32>, Error> {
+        owner.require_auth();
+
+        if milestones.len() > MAX_BATCH_SIZE {
+            return Err(Error::BatchTooLarge);
+        }
+
+        // Get quest contract address
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        // Cross-contract validation: verify caller is the actual quest owner
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+
+        if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
+        }
+
+        // Step 1: Validate all inputs before any state changes to ensure atomicity
+        for ms in milestones.iter() {
+            Self::validate_ms_input(&ms.title, &ms.description, ms.reward_amount)?;
+        }
+
+        // Step 2: Create milestones
+        let mut ids = Vec::new(&env);
+        for ms in milestones {
+            let next_key = DataKey::NextMilestoneId(quest_id);
+            let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+
+            let ms_info = MilestoneInfo {
+                id,
+                quest_id,
+                title: ms.title,
+                description: ms.description,
+                reward_amount: ms.reward_amount,
+            };
+
+            let ms_key = DataKey::Milestone(quest_id, id);
+            env.storage().persistent().set(&ms_key, &ms_info);
+            env.storage().persistent().set(&next_key, &(id + 1));
+
+            // Emit milestone creation event
+            env.events().publish(
+                (symbol_short!("milestone"), symbol_short!("new")),
+                (id, quest_id, ms_info.reward_amount),
+            );
+
+            Self::bump_ms(&env, &ms_key);
+            Self::bump_ms(&env, &next_key);
+            ids.push_back(id);
+        }
+
+        extend_instance_ttl(&env);
+        Ok(ids)
+    }
+
+    fn validate_ms_input(
+        title: &String,
+        description: &String,
+        reward_amount: i128,
+    ) -> Result<(), Error> {
+        if title.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if title.len() > MAX_MILESTONE_TITLE_LEN {
+            return Err(Error::TitleTooLong);
+        }
+        if description.is_empty() {
+            return Err(Error::InvalidInput);
+        }
+        if description.len() > MAX_MILESTONE_DESCRIPTION_LEN {
+            return Err(Error::DescriptionTooLong);
+        }
+        if reward_amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        Ok(())
     }
 
     /// Set the verification mode for a quest. Owner only.
@@ -823,7 +878,7 @@ impl MilestoneContract {
     // --- internals ---
 
     fn bump_ms(env: &Env, key: &DataKey) {
-        env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
+        common::extend_persistent_ttl(env, key);
     }
 
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {

@@ -17,8 +17,12 @@ export interface QuestInfo {
   owner: string
   name: string
   description: string
+  category: string
+  tags: string[]
   tokenAddr: string
   createdAt: number
+  visibility: number
+  maxEnrollees?: number
 }
 
 export class QuestClient {
@@ -54,8 +58,12 @@ export class QuestClient {
       owner: result.owner.toString(),
       name: result.name.toString(),
       description: result.description.toString(),
+      category: result.category.toString(),
+      tags: result.tags.map((t: any) => t.toString()),
       tokenAddr: result.token_addr.toString(),
       createdAt: Number(result.created_at),
+      visibility: Number(result.visibility),
+      maxEnrollees: result.max_enrollees ? Number(result.max_enrollees) : undefined,
     }
   }
 
@@ -89,12 +97,48 @@ export class QuestClient {
 
   // --- Write Operations ---
 
-  async createQuest(owner: string, name: string, description: string, tokenAddr: string) {
+  async createQuest(
+    owner: string,
+    name: string,
+    description: string,
+    category: string,
+    tags: string[],
+    tokenAddr: string,
+    visibility: number,
+    maxEnrollees?: number
+  ) {
     const tx = await this.buildTx(owner, "create_quest", [
       new Address(owner).toScVal(),
       nativeToScVal(name, { type: "string" }),
       nativeToScVal(description, { type: "string" }),
+      nativeToScVal(category, { type: "string" }),
+      nativeToScVal(tags, { type: "string_vec" }), // Assumes helper for string vec
       new Address(tokenAddr).toScVal(),
+      nativeToScVal(visibility, { type: "u32" }), // enum is u32 in XDR
+      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
+    ])
+    return signAndSubmit(tx)
+  }
+
+  async updateQuest(
+    owner: string,
+    questId: number,
+    name?: string,
+    description?: string,
+    category?: string,
+    tags?: string[],
+    visibility?: number,
+    maxEnrollees?: number
+  ) {
+    const tx = await this.buildTx(owner, "update_quest", [
+      nativeToScVal(questId, { type: "u32" }),
+      new Address(owner).toScVal(),
+      name !== undefined ? nativeToScVal(name, { type: "string" }) : nativeToScVal(null),
+      description !== undefined ? nativeToScVal(description, { type: "string" }) : nativeToScVal(null),
+      category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
+      tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
+      visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
+      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
     ])
     return signAndSubmit(tx)
   }

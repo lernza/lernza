@@ -4,36 +4,12 @@ use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
     Address, Env, String,
 };
+use common::{
+    extend_instance_ttl, BUMP, ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRESHOLD, QuestInfo,
+    QuestStatus, Visibility,
+};
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Visibility {
-    Public = 0,
-    Private = 1,
-}
-
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuestStatus {
-    Active = 0,
-    Archived = 1,
-}
-
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct QuestInfo {
-    pub id: u32,
-    pub owner: Address,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub tags: soroban_sdk::Vec<String>,
-    pub token_addr: Address,
-    pub created_at: u64,
-    pub visibility: Visibility,
-    pub status: QuestStatus,
-    pub deadline: u64,
-}
+// Visibility, QuestStatus, and QuestInfo moved to common.
 
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
@@ -88,8 +64,7 @@ pub enum Error {
     InvalidToken = 12,
 }
 
-const BUMP: u32 = 518_400;
-const THRESHOLD: u32 = 120_960;
+// TTL constants moved to common.
 
 #[contract]
 pub struct RewardsContract;
@@ -120,7 +95,7 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         Ok(())
     }
 
@@ -175,9 +150,7 @@ impl RewardsContract {
             }
         } else {
             env.storage().persistent().set(&auth_key, &funder);
-            env.storage()
-                .persistent()
-                .extend_ttl(&auth_key, THRESHOLD, BUMP);
+            common::extend_persistent_ttl(&env, &auth_key);
         }
 
         // Transfer tokens from funder to this contract
@@ -272,9 +245,7 @@ impl RewardsContract {
 
         // Record payout for idempotency (prevents duplicate payouts on retry)
         env.storage().persistent().set(&payout_key, &amount);
-        env.storage()
-            .persistent()
-            .extend_ttl(&payout_key, THRESHOLD, BUMP);
+        common::extend_persistent_ttl(&env, &payout_key);
 
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());
@@ -283,9 +254,7 @@ impl RewardsContract {
             .checked_add(amount)
             .ok_or(Error::ArithmeticOverflow)?;
         env.storage().persistent().set(&earn_key, &new_earned);
-        env.storage()
-            .persistent()
-            .extend_ttl(&earn_key, THRESHOLD, BUMP);
+        common::extend_persistent_ttl(&env, &earn_key);
 
         // Update global total
         let total: i128 = env
@@ -297,7 +266,7 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &new_total);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
 
         // Emit reward distribution event
         // Event topics: (reward, distributed)

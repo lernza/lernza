@@ -35,6 +35,8 @@ import { ShareButton } from "@/components/share-button"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { MilestoneClient } from "@/lib/contracts/milestone"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { useTransactionAction } from "@/hooks/use-transaction-action"
 
 type Tab = "milestones" | "enrollees"
 
@@ -55,18 +57,22 @@ export function QuestView() {
   const stats = MOCK_WORKSPACE_STATS[questId]
   const milestones = MOCK_MILESTONES[questId] || []
   const enrollees = MOCK_ENROLLEES[questId] || []
-  const completions = MOCK_COMPLETIONS[questId] || []
   const { toasts, addToast, removeToast } = useToast()
   const { address, isSupportedNetwork } = useWallet()
 
   const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
+  const [localCompletions, setLocalCompletions] = useState(MOCK_COMPLETIONS[questId] || [])
   const isOwner = !!address && address === ws?.owner
 
   const [showMilestoneForm, setShowMilestoneForm] = useState(false)
   const [msTitle, setMsTitle] = useState("")
   const [msDescription, setMsDescription] = useState("")
   const [msReward, setMsReward] = useState("")
-  const [msSubmitting, setMsSubmitting] = useState(false)
+  const addEnrolleeTx = useTransactionAction()
+  const createMilestoneTx = useTransactionAction()
+  const verifyPayoutTx = useTransactionAction()
+  const removeEnrolleeTx = useTransactionAction()
+  const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
 
   const resetMilestoneForm = useCallback(() => {
     setMsTitle("")
@@ -97,43 +103,54 @@ export function QuestView() {
       return
     }
 
-    setMsSubmitting(true)
     try {
-      const result = await milestoneClient.createMilestone(
-        address,
-        questId,
-        title,
-        description,
-        BigInt(reward)
-      )
-      if (result.status === "SUCCESS") {
-        addToast("Milestone created successfully!", "success")
-        resetMilestoneForm()
-      } else {
-        addToast(result.error || "Transaction failed. Please try again.", "error")
-      }
+      await createMilestoneTx.run(async () => {
+        const result = await milestoneClient.createMilestone(
+          address,
+          questId,
+          title,
+          description,
+          BigInt(reward)
+        )
+        if (result.status !== "SUCCESS") {
+          throw new Error(result.error || "Transaction failed. Please try again.")
+        }
+        return result
+      })
+      addToast("Milestone created successfully!", "success")
+      resetMilestoneForm()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error"
       addToast(`Failed to create milestone: ${message}`, "error")
-    } finally {
-      setMsSubmitting(false)
     }
-  }, [address, msTitle, msDescription, msReward, questId, addToast, resetMilestoneForm])
+  }, [
+    address,
+    msTitle,
+    msDescription,
+    msReward,
+    questId,
+    addToast,
+    resetMilestoneForm,
+    createMilestoneTx,
+  ])
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
   const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
-  const completedMilestones = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
+  const completedMilestones = new Set(
+    localCompletions.filter(c => c.completed).map(c => c.milestoneId)
+  )
     .size
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
   const earnedReward = milestones
-    .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
+    .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
     .reduce((sum, m) => sum + m.reward_amount, 0)
 
   const closeAddEnrollee = () => {
     setShowAddEnrollee(false)
     setEnrolleeInput("")
+    addEnrolleeTx.reset()
     setAddPhase("idle")
     setAddError(null)
   }
@@ -143,15 +160,92 @@ export function QuestView() {
     if (!addr || !address) return
     setAddPhase("submitting")
     setAddError(null)
-    const result = await questClient.addEnrollee(address, questId, addr)
-    if (result.status === "SUCCESS") {
+    try {
+      await addEnrolleeTx.run(async () => {
+        const result = await questClient.addEnrollee(address, questId, addr)
+        if (result.status !== "SUCCESS") {
+          throw new Error(result.error ?? "Transaction failed. Please try again.")
+        }
+        return result
+      })
       setLocalEnrollees(prev => [...prev, addr])
       setAddPhase("done")
       addToast("Enrollee added successfully", "success")
       setTimeout(closeAddEnrollee, 1500)
-    } else {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
       setAddPhase("error")
-      setAddError(result.error ?? "Transaction failed. Please try again.")
+      setAddError(message)
+    }
+  }
+
+  const handleVerifyAndPayout = async (milestoneId: number, rewardAmount: number) => {
+    if (!address) {
+      addToast("Connect your wallet first.", "error")
+      return
+    }
+
+    const target = localEnrollees.find(
+      enrollee =>
+        !localCompletions.some(
+          completion =>
+            completion.enrollee === enrollee &&
+            completion.milestoneId === milestoneId &&
+            completion.completed
+        )
+    )
+
+    if (!target) {
+      addToast("All enrollees are already verified for this milestone.", "info")
+      return
+    }
+
+    setActiveMilestoneTxId(milestoneId)
+    try {
+      await verifyPayoutTx.run(async () => {
+        const verifyResult = await milestoneClient.verifyCompletion(
+          address,
+          questId,
+          milestoneId,
+          target
+        )
+        if (verifyResult.status !== "SUCCESS") {
+          throw new Error(verifyResult.error ?? "Milestone verification failed.")
+        }
+
+        const payoutResult = await rewardsClient.distributeReward(
+          address,
+          questId,
+          milestoneId,
+          target,
+          BigInt(rewardAmount)
+        )
+        if (payoutResult.status !== "SUCCESS") {
+          throw new Error(payoutResult.error ?? "Reward distribution failed.")
+        }
+
+        return payoutResult
+      })
+
+      setLocalCompletions(prev => [...prev, { milestoneId, enrollee: target, completed: true }])
+      addToast("Completion verified and reward paid out.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Verification failed"
+      addToast(message, "error")
+    } finally {
+      setActiveMilestoneTxId(null)
+    }
+  }
+
+  const handleRemoveEnrollee = async (enrollee: string) => {
+    try {
+      await removeEnrolleeTx.run(async () => {
+        await new Promise(resolve => setTimeout(resolve, 250))
+      })
+      setLocalEnrollees(prev => prev.filter(value => value !== enrollee))
+      addToast("Enrollee removed from local view.", "info")
+    } catch {
+      addToast("Could not remove enrollee.", "error")
     }
   }
 
@@ -282,13 +376,13 @@ export function QuestView() {
                 onClick={handleAddEnrollee}
                 disabled={
                   !enrolleeInput.trim() ||
-                  addPhase === "submitting" ||
+                  addEnrolleeTx.isPending ||
                   addPhase === "done" ||
                   !isSupportedNetwork
                 }
                 className="shimmer-on-hover"
               >
-                {addPhase === "submitting" ? (
+                {addEnrolleeTx.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Adding...
@@ -306,9 +400,9 @@ export function QuestView() {
                 )}
               </Button>
               <Button
-                variant="outline"
+                variant="danger"
                 onClick={closeAddEnrollee}
-                disabled={addPhase === "submitting"}
+                disabled={addEnrolleeTx.isPending}
               >
                 Cancel
               </Button>
@@ -434,7 +528,7 @@ export function QuestView() {
                   onChange={e => setMsTitle(e.target.value)}
                   placeholder="e.g. Complete Module 1"
                   className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
-                  disabled={msSubmitting}
+                  disabled={createMilestoneTx.isPending}
                 />
               </div>
               <div>
@@ -447,7 +541,7 @@ export function QuestView() {
                   placeholder="Describe what the learner needs to accomplish..."
                   rows={3}
                   className="border-border bg-background w-full resize-none border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
-                  disabled={msSubmitting}
+                  disabled={createMilestoneTx.isPending}
                 />
               </div>
               <div>
@@ -461,17 +555,17 @@ export function QuestView() {
                   onChange={e => setMsReward(e.target.value)}
                   placeholder="100"
                   className="border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]"
-                  disabled={msSubmitting}
+                  disabled={createMilestoneTx.isPending}
                 />
               </div>
               <div className="flex gap-3 pt-1">
                 <Button
                   size="sm"
                   onClick={handleCreateMilestone}
-                  disabled={msSubmitting}
+                  disabled={createMilestoneTx.isPending}
                   className="shimmer-on-hover"
                 >
-                  {msSubmitting ? (
+                  {createMilestoneTx.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Submitting…
@@ -484,10 +578,10 @@ export function QuestView() {
                   )}
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="danger"
                   size="sm"
                   onClick={resetMilestoneForm}
-                  disabled={msSubmitting}
+                  disabled={createMilestoneTx.isPending}
                 >
                   Cancel
                 </Button>
@@ -522,11 +616,12 @@ export function QuestView() {
             </Card>
           ) : (
             milestones.map((ms, i) => {
-              const isCompleted = completions.some(c => c.milestoneId === ms.id && c.completed)
-              const completedBy = completions
+              const isCompleted = localCompletions.some(c => c.milestoneId === ms.id && c.completed)
+              const completedBy = localCompletions
                 .filter(c => c.milestoneId === ms.id && c.completed)
                 .map(c => c.enrollee)
               const isExpanded = expandedMilestone === ms.id
+              const isVerifying = verifyPayoutTx.isPending && activeMilestoneTxId === ms.id
 
               return (
                 <div
@@ -595,13 +690,26 @@ export function QuestView() {
                               )}
                               {!isCompleted && localEnrollees.length > 0 && (
                                 <Button
-                                  variant="outline"
+                                  variant={verifyPayoutTx.isFailure ? "danger" : "outline"}
                                   size="sm"
                                   className="shimmer-on-hover"
-                                  onClick={e => e.stopPropagation()}
+                                  disabled={isVerifying || !isOwner || !isSupportedNetwork}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    void handleVerifyAndPayout(ms.id, ms.reward_amount)
+                                  }}
                                 >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  Verify Completion
+                                  {isVerifying ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Verifying & Paying...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-3.5 w-3.5" />
+                                      Verify & Payout
+                                    </>
+                                  )}
                                 </Button>
                               )}
                             </div>
@@ -642,10 +750,10 @@ export function QuestView() {
             </Card>
           ) : (
             localEnrollees.map((addr, i) => {
-              const completed = completions.filter(c => c.enrollee === addr && c.completed).length
+              const completed = localCompletions.filter(c => c.enrollee === addr && c.completed).length
               const earned = milestones
                 .filter(m =>
-                  completions.some(
+                  localCompletions.some(
                     c => c.enrollee === addr && c.milestoneId === m.id && c.completed
                   )
                 )
@@ -682,6 +790,25 @@ export function QuestView() {
                           <p className="text-muted-foreground mt-1 text-xs font-bold">earned</p>
                         </div>
                       </div>
+                      {isOwner && (
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            disabled={removeEnrolleeTx.isPending}
+                            onClick={() => void handleRemoveEnrollee(addr)}
+                          >
+                            {removeEnrolleeTx.isPending ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Removing...
+                              </>
+                            ) : (
+                              "Remove"
+                            )}
+                          </Button>
+                        </div>
+                      )}
                       {milestones.length > 0 && (
                         <Progress value={completed} max={milestones.length} className="mt-4" />
                       )}

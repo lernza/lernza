@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Share2, Link, X as XClose, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getQuestUrl } from "@/lib/app-url"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -50,7 +51,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   const panelRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  const questUrl = `${window.location.origin}/quest/${questId}`
+  const questUrl = getQuestUrl(questId)
   // Spec: em dash (—) between quest name and URL
   const xText = `Check out this quest on @lernza: ${questName} — ${questUrl}`
   const discordText = `**Check out this quest on Lernza!**\n📚 **${questName}**\n🔗 ${questUrl}`
@@ -294,7 +295,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         <ShareOption
           icon={<XIcon className="h-4 w-4" />}
           label="Share on X"
-          sublabel={`"...${questName} — ${window.location.host}/..."`}
+          sublabel={`"...${questName} — ${new URL(questUrl).host}/..."`}
           onClick={handleShareX}
         />
         <ShareOption

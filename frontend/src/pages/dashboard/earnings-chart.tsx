@@ -1,7 +1,11 @@
 import { useState } from "react"
 import { TrendingUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { EarningsDataPoint } from "@/lib/mock-data"
+
+interface EarningsDataPoint {
+  date: string
+  amount: number
+}
 
 interface EarningsChartProps {
   data: EarningsDataPoint[]

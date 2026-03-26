@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
+import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
@@ -46,8 +47,37 @@ type Step2Values = z.infer<typeof step2Schema>
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type FormStep = 1 | 2 | 3
-type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
+// ─── Draft persistence ────────────────────────────────────────────────────────
+
+const DRAFT_KEY = "lernza:quest-draft"
+
+type QuestDraft = {
+  step: FormStep
+  step1Data: Step1Values
+  step2Data: Step2Values
+}
+
+function loadDraft(): QuestDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as QuestDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(draft: QuestDraft) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // storage unavailable — fail silently
+  }
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY)
+}
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
@@ -411,7 +441,9 @@ function Step3Review({
   onBack: () => void
   onComplete: () => void
 }) {
-  const [txPhase, setTxPhase] = useState<TxPhase>("idle")
+  const { isSupportedNetwork } = useWallet()
+  const fundingTx = useTransactionAction()
+  const createTx = useTransactionAction()
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -419,19 +451,23 @@ function Step3Review({
   )
 
   const handleFund = async () => {
-    setTxPhase("funding")
-    // Simulate funding transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("funded")
+    await fundingTx.run(async () => {
+      await new Promise(r => setTimeout(r, 1200))
+      return true
+    })
   }
 
   const handleCreate = async () => {
-    setTxPhase("creating")
-    // Simulate quest creation transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("done")
+    await createTx.run(async () => {
+      await new Promise(r => setTimeout(r, 1200))
+      return true
+    })
     onComplete()
   }
+
+  const isFunded = fundingTx.isSuccess
+  const fundPending = fundingTx.isPending
+  const createPending = createTx.isPending
 
   return (
     <div className="space-y-6">
@@ -497,30 +533,35 @@ function Step3Review({
               </span>
             </div>
 
+            {/* Network Warning */}
+            {!isSupportedNetwork && (
+              <div className="bg-destructive/10 border-destructive mb-4 border-[2px] p-4 text-center">
+                <AlertCircle className="text-destructive mx-auto mb-2 h-5 w-5" />
+                <p className="text-destructive text-sm font-bold">
+                  Please switch your Freighter wallet to Testnet to continue.
+                </p>
+              </div>
+            )}
+
             {/* Fund button */}
-            <Button
-              onClick={handleFund}
-              disabled={txPhase !== "idle"}
-              variant={
-                txPhase === "funded" || txPhase === "creating" || txPhase === "done"
-                  ? "secondary"
-                  : "default"
-              }
-              className={cn(
-                "shimmer-on-hover mb-3 w-full",
-                (txPhase === "funded" || txPhase === "creating" || txPhase === "done") &&
-                  "border-success"
-              )}
-            >
-              {txPhase === "funding" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Funding reward pool...
-                </>
-              ) : txPhase === "funded" || txPhase === "creating" || txPhase === "done" ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  Reward pool funded
+              <Button
+                onClick={handleFund}
+                disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
+                variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
+                className={cn(
+                  "shimmer-on-hover mb-3 w-full",
+                  (isFunded || createPending || createTx.isSuccess) && "border-success"
+                )}
+              >
+                {fundPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Funding reward pool...
+                  </>
+                ) : isFunded || createPending || createTx.isSuccess ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Reward pool funded
                 </>
               ) : (
                 <>
@@ -531,15 +572,15 @@ function Step3Review({
             </Button>
 
             {/* Create button */}
-            <Button
-              onClick={handleCreate}
-              disabled={txPhase !== "funded"}
-              className="shimmer-on-hover w-full"
-            >
-              {txPhase === "creating" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
+              <Button
+                onClick={handleCreate}
+                disabled={!isFunded || createPending || !isSupportedNetwork}
+                className="shimmer-on-hover w-full"
+              >
+                {createPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating quest on-chain...
                 </>
               ) : (
                 <>
@@ -547,14 +588,24 @@ function Step3Review({
                   Confirm & Create Quest
                 </>
               )}
-            </Button>
+              </Button>
 
-            {txPhase === "idle" && (
+            {fundingTx.isFailure && (
+              <p className="text-destructive mt-2 text-center text-xs font-bold">
+                {fundingTx.error ?? "Funding failed. Try again."}
+              </p>
+            )}
+            {createTx.isFailure && (
+              <p className="text-destructive mt-2 text-center text-xs font-bold">
+                {createTx.error ?? "Creation failed. Try again."}
+              </p>
+            )}
+            {!isFunded && !fundPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Fund the pool first, then confirm to create the quest on Stellar.
               </p>
             )}
-            {txPhase === "funded" && (
+            {isFunded && !createPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Pool funded! Sign the creation transaction to go live.
               </p>
@@ -568,7 +619,7 @@ function Step3Review({
           type="button"
           variant="outline"
           onClick={onBack}
-          disabled={txPhase === "funding" || txPhase === "creating"}
+          disabled={fundPending || createPending}
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -580,18 +631,26 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+const DEFAULT_STEP1: Step1Values = { name: "", description: "" }
+const DEFAULT_STEP2: Step2Values = {
+  milestones: [{ title: "", description: "", rewardAmount: 0 }],
+}
+
 export function CreateQuest() {
   const navigate = useNavigate()
   const { connected, connect, loading } = useWallet()
-  const [step, setStep] = useState<FormStep>(1)
 
-  const [step1Data, setStep1Data] = useState<Step1Values>({
-    name: "",
-    description: "",
-  })
-  const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0 }],
-  })
+  const [step, setStep] = useState<FormStep>(() => loadDraft()?.step ?? 1)
+  const [step1Data, setStep1Data] = useState<Step1Values>(
+    () => loadDraft()?.step1Data ?? DEFAULT_STEP1
+  )
+  const [step2Data, setStep2Data] = useState<Step2Values>(
+    () => loadDraft()?.step2Data ?? DEFAULT_STEP2
+  )
+
+  useEffect(() => {
+    saveDraft({ step, step1Data, step2Data })
+  }, [step, step1Data, step2Data])
 
   // Wallet not connected guard
   if (!connected) {
@@ -660,6 +719,10 @@ export function CreateQuest() {
         <p className="text-muted-foreground mt-1 text-sm">
           Set up milestones and fund the reward pool to incentivize learners.
         </p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-xs font-bold">
+          Note: quest visibility on Stellar is discovery-only. Even quests marked private remain
+          readable on-chain by quest id, so do not put confidential data in quest metadata.
+        </p>
       </div>
 
       {/* Step indicator */}
@@ -703,7 +766,10 @@ export function CreateQuest() {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={() => navigate("/dashboard")}
+            onComplete={() => {
+              clearDraft()
+              navigate("/dashboard")
+            }}
           />
         )}
       </div>

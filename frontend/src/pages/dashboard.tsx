@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from "react"
+import React, { useEffect, useState, Suspense } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   Plus,
@@ -16,17 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useWallet } from "@/hooks/use-wallet"
-import {
-  MOCK_WORKSPACES,
-  MOCK_WORKSPACE_STATS,
-  MOCK_MILESTONES,
-  MOCK_COMPLETIONS,
-  MOCK_PLATFORM_STATS,
-  MOCK_TRENDING_QUESTS,
-  MOCK_USER_STATS,
-  MOCK_RECENT_ACTIVITY,
-  MOCK_EARNINGS_HISTORY,
-} from "@/lib/mock-data"
+import { questClient } from "@/lib/contracts/quest"
+import { milestoneClient } from "@/lib/contracts/milestone"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
@@ -38,13 +31,160 @@ import { RecentActivity } from "./dashboard/recent-activity"
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 
-// The first two quests share the same owner — treat them as "owned"
-const MOCK_OWNER = "GBXR...K2YQ"
+interface QuestStats {
+  enrolleeCount: number
+  milestoneCount: number
+  poolBalance: number
+}
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const { connected, connect, shortAddress } = useWallet()
+  const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
+  const [quests, setQuests] = useState<WorkspaceInfo[]>([])
+  const [questStats, setQuestStats] = useState<Record<number, QuestStats>>({})
+  const [questMilestones, setQuestMilestones] = useState<Record<number, number>>({})
+  const [questCompletions, setQuestCompletions] = useState<Record<number, number>>({})
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!connected) return
+
+    let cancelled = false
+
+    const load = async () => {
+      setIsLoading(true)
+      setLoadError(null)
+
+      try {
+        const questInfos = await questClient.getQuests()
+        if (cancelled) return
+
+        const normalized: WorkspaceInfo[] = questInfos.map(q => ({
+          id: q.id,
+          owner: q.owner,
+          name: q.name,
+          description: q.description,
+          token_addr: q.tokenAddr,
+          created_at: q.createdAt,
+          visibility: Visibility.Public,
+        }))
+        setQuests(normalized)
+
+        const statsEntries = await Promise.all(
+          normalized.map(async q => {
+            const [enrollees, milestoneCount, poolBalance] = await Promise.all([
+              questClient.getEnrollees(q.id),
+              milestoneClient.getMilestoneCount(q.id),
+              rewardsClient.getPoolBalance(q.id),
+            ])
+
+            return [
+              q.id,
+              {
+                enrolleeCount: enrollees.length,
+                milestoneCount,
+                poolBalance:
+                  poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
+                    ? Number.MAX_SAFE_INTEGER
+                    : Number(poolBalance),
+              },
+            ] as const
+          })
+        )
+
+        if (cancelled) return
+        setQuestStats(Object.fromEntries(statsEntries))
+        setQuestMilestones(
+          Object.fromEntries(statsEntries.map(([id, stats]) => [id, stats.milestoneCount]))
+        )
+
+        if (address) {
+          const completionEntries = await Promise.all(
+            normalized.map(async q => {
+              const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
+              return [q.id, completed] as const
+            })
+          )
+          if (cancelled) return
+          setQuestCompletions(Object.fromEntries(completionEntries))
+        } else {
+          setQuestCompletions({})
+        }
+      } catch (err: unknown) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : "Failed to load quests"
+        setLoadError(message)
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [connected, address])
+
+  const filteredWorkspaces = quests.filter(ws => {
+    if (filter === "owned") return !!address && ws.owner === address
+    if (filter === "enrolled") return !address || ws.owner !== address
+    return true
+  })
+
+  const ownedCount = quests.filter(q => !!address && q.owner === address).length
+  const enrolledCount = Math.max(0, quests.length - ownedCount)
+  const milestonesCompleted = Object.values(questCompletions).reduce((sum, count) => sum + count, 0)
+  const totalEarned = filteredWorkspaces.reduce((sum, ws) => {
+    const totalMilestones = questMilestones[ws.id] || 0
+    const completed = questCompletions[ws.id] || 0
+    const pool = questStats[ws.id]?.poolBalance || 0
+    if (totalMilestones === 0) return sum
+    return sum + (pool * completed) / totalMilestones
+  }, 0)
+
+  const allStats = Object.values(questStats)
+  const totalTokensDistributed = allStats.reduce((sum, s) => sum + s.poolBalance, 0)
+
+  const platformStats = {
+    totalQuests: quests.length,
+    activeUsers: ownedCount + enrolledCount,
+    tokensDistributed: totalTokensDistributed,
+  }
+
+  const personalStats = {
+    totalEarned,
+    questsOwned: ownedCount,
+    questsEnrolled: enrolledCount,
+    milestonesCompleted,
+  }
+
+  const trendingQuests = [...quests]
+    .sort((a, b) => (questStats[b.id]?.enrolleeCount || 0) - (questStats[a.id]?.enrolleeCount || 0))
+    .slice(0, 2)
+
+  const recentActivity = quests
+    .slice()
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 5)
+    .map(ws => ({
+      id: `created-${ws.id}`,
+      user: ws.owner,
+      action: "created" as const,
+      questName: ws.name,
+      timestamp: ws.created_at * 1000,
+    }))
+
+  const earningsHistory = [
+    { date: "Jan", amount: 0 },
+    { date: "Feb", amount: Math.round(totalEarned * 0.25) },
+    { date: "Mar", amount: Math.round(totalEarned * 0.6) },
+    { date: "Apr", amount: Math.round(totalEarned) },
+  ]
 
   if (!connected) {
     return (
@@ -128,13 +268,6 @@ export function Dashboard() {
     )
   }
 
-  // Apply filter
-  const filteredWorkspaces = MOCK_WORKSPACES.filter(ws => {
-    if (filter === "owned") return ws.owner === MOCK_OWNER
-    if (filter === "enrolled") return ws.owner !== MOCK_OWNER
-    return true
-  })
-
   // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -149,7 +282,7 @@ export function Dashboard() {
             </div>
             <h1 className="text-3xl font-black sm:text-4xl">{shortAddress}</h1>
             <p className="mt-1 text-sm font-bold opacity-70">
-              You have {MOCK_USER_STATS.questsEnrolled} active quests
+              You have {personalStats.questsEnrolled} active quests
             </p>
           </div>
           <Button
@@ -164,13 +297,13 @@ export function Dashboard() {
       </div>
 
       {/* Platform Stats Overview */}
-      <PlatformStats stats={MOCK_PLATFORM_STATS} />
+      <PlatformStats stats={platformStats} />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
           {/* Personal Stats */}
-          <PersonalProgress stats={MOCK_USER_STATS} />
+          <PersonalProgress stats={personalStats} />
 
           {/* Earnings Chart (Lazy Loaded) */}
           <Suspense
@@ -178,7 +311,7 @@ export function Dashboard() {
               <div className="bg-muted border-border h-[250px] animate-pulse border-[3px] shadow-[6px_6px_0_var(--color-border)]" />
             }
           >
-            <EarningsChart data={MOCK_EARNINGS_HISTORY} />
+            <EarningsChart data={earningsHistory} />
           </Suspense>
 
           {/* Your Quests Section */}
@@ -202,20 +335,31 @@ export function Dashboard() {
               </div>
             </div>
 
+            {loadError && (
+              <Card className="mb-5 border-destructive">
+                <CardContent className="py-4 text-sm font-bold text-red-700">
+                  Failed to load dashboard data: {loadError}
+                </CardContent>
+              </Card>
+            )}
+
+            {isLoading && (
+              <Card className="mb-5">
+                <CardContent className="py-8 text-center text-sm font-bold">
+                  Loading on-chain dashboard data...
+                </CardContent>
+              </Card>
+            )}
+
             <div className="relative grid gap-5">
               {filteredWorkspaces.map((ws, i) => {
-                const stats = MOCK_WORKSPACE_STATS[ws.id] || { enrolleeCount: 0, milestoneCount: 0, poolBalance: 0 }
-                const milestones = MOCK_MILESTONES[ws.id] || []
-                const completions = MOCK_COMPLETIONS[ws.id] || []
-                const totalMilestones = milestones.length
-                const completedCount = new Set(
-                  completions.filter(c => c.completed).map(c => c.milestoneId)
-                ).size
-                const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
-                const earnedReward = milestones
-                  .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
-                  .reduce((sum, m) => sum + m.reward_amount, 0)
-                const isOwned = ws.owner === MOCK_OWNER
+                const stats = questStats[ws.id] || { enrolleeCount: 0, milestoneCount: 0, poolBalance: 0 }
+                const totalMilestones = stats.milestoneCount
+                const completedCount = questCompletions[ws.id] || 0
+                const totalReward = stats.poolBalance
+                const earnedReward =
+                  totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
+                const isOwned = !!address && ws.owner === address
 
                 return (
                   <Card
@@ -328,8 +472,12 @@ export function Dashboard() {
 
         {/* Right Column (Trending & Recent Activity) */}
         <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={id => navigate(`/quest/${id}`)} />
-          <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
+          <TrendingQuests
+            quests={trendingQuests}
+            statsByQuest={questStats}
+            onSelectQuest={id => navigate(`/quest/${id}`)}
+          />
+          <RecentActivity activities={recentActivity} />
         </div>
       </div>
     </div>

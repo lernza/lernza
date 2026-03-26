@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Share2, Link, X as XClose, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getQuestUrl } from "@/lib/app-url"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -48,8 +49,9 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   const [discordCopied, setDiscordCopied] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  const questUrl = `${window.location.origin}/quest/${questId}`
+  const questUrl = getQuestUrl(questId)
   // Spec: em dash (—) between quest name and URL
   const xText = `Check out this quest on @lernza: ${questName} — ${questUrl}`
   const discordText = `**Check out this quest on Lernza!**\n📚 **${questName}**\n🔗 ${questUrl}`
@@ -65,6 +67,9 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }, [])
 
   const handleOpen = () => {
+    if (!open) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+    }
     updatePos()
     setOpen(v => !v)
   }
@@ -105,6 +110,83 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     return () => document.removeEventListener("keydown", handler)
   }, [open])
 
+  // Focus return on close
+  useEffect(() => {
+    if (!open && previousFocusRef.current) {
+      previousFocusRef.current.focus()
+    }
+  }, [open])
+
+  // Focus trap and initial focus
+  useEffect(() => {
+    if (open && panelRef.current) {
+      const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      requestAnimationFrame(() => {
+        firstElement?.focus()
+      })
+
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key === "Tab") {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              lastElement?.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              firstElement?.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      document.addEventListener("keydown", handleTabKey)
+      return () => document.removeEventListener("keydown", handleTabKey)
+    }
+  }, [open])
+
+  /**
+   * Fallback copy using a temporary textarea when the Clipboard API
+   * is unavailable or permission is denied.
+   */
+  const fallbackCopyText = (text: string): boolean => {
+    const textarea = document.createElement("textarea")
+    textarea.value = text
+    textarea.setAttribute("readonly", "")
+    textarea.style.position = "fixed"
+    textarea.style.left = "-9999px"
+    document.body.appendChild(textarea)
+    textarea.select()
+    let ok = false
+    try {
+      ok = document.execCommand("copy")
+    } catch {
+      ok = false
+    }
+    document.body.removeChild(textarea)
+    return ok
+  }
+
+  const copyToClipboard = async (text: string): Promise<boolean> => {
+    // Try Clipboard API first
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        // Permission denied or API rejected — fall through to fallback
+      }
+    }
+    // Manual fallback via textarea + execCommand
+    return fallbackCopyText(text)
+  }
+
   // Web Share API — mobile native sheet
   const handleNativeShare = async () => {
     try {
@@ -113,19 +195,32 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         text: `Check out this quest on Lernza: ${questName}`,
         url: questUrl,
       })
-    } catch {
-      // User cancelled or share interrupted — no action needed
+    } catch (err: unknown) {
+      // If user cancelled, ignore. Otherwise fall through to copy.
+      const message = err instanceof Error ? err.message : String(err)
+      if (message.includes("AbortError") || message.includes("cancel")) return
+      // Native share denied/failed — fall back to copy
+      const ok = await copyToClipboard(questUrl)
+      onToast(
+        ok
+          ? "Link copied to clipboard instead!"
+          : "Could not share. Please copy the link manually from the address bar.",
+        ok ? "success" : "error"
+      )
     }
   }
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(questUrl)
+    const ok = await copyToClipboard(questUrl)
+    if (ok) {
       setCopied(true)
       onToast("Link copied to clipboard!", "success")
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy link", "error")
+    } else {
+      onToast(
+        "Clipboard access denied. Please copy the link manually from the address bar.",
+        "error"
+      )
     }
   }
 
@@ -138,13 +233,13 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }
 
   const handleCopyDiscord = async () => {
-    try {
-      await navigator.clipboard.writeText(discordText)
+    const ok = await copyToClipboard(discordText)
+    if (ok) {
       setDiscordCopied(true)
       onToast("Discord message copied!", "success")
       setTimeout(() => setDiscordCopied(false), 2000)
-    } catch {
-      onToast("Failed to copy", "error")
+    } else {
+      onToast("Clipboard access denied. Please try again or copy manually.", "error")
     }
   }
 
@@ -165,6 +260,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         "animate-fade-in-down w-72 overflow-hidden"
       )}
       role="dialog"
+      aria-modal="true"
       aria-label="Share options"
     >
       {/* Panel header */}
@@ -199,7 +295,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         <ShareOption
           icon={<XIcon className="h-4 w-4" />}
           label="Share on X"
-          sublabel={`"...${questName} — ${window.location.host}/..."`}
+          sublabel={`"...${questName} — ${new URL(questUrl).host}/..."`}
           onClick={handleShareX}
         />
         <ShareOption

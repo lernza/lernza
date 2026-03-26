@@ -1,8 +1,7 @@
 #![no_std]
 #![allow(deprecated)]
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, String,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -13,7 +12,19 @@ use soroban_sdk::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Visibility {
     Public = 0,
+    /// Discovery-only flag.
+    ///
+    /// `Private` quests are omitted from public listing helpers, but the quest
+    /// record and enrollee data remain queryable by quest id because Soroban
+    /// contract storage is publicly readable.
     Private = 1,
+}
+
+#[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestStatus {
+    Active = 0,
+    Archived = 1,
 }
 
 #[contracttype]
@@ -38,6 +49,7 @@ pub struct QuestInfo {
     pub token_addr: Address,
     pub created_at: u64,
     pub visibility: Visibility,
+    pub status: QuestStatus,
     pub deadline: u64, // Unix timestamp; 0 = no deadline
 }
 
@@ -51,6 +63,7 @@ pub enum Error {
     NotEnrolled = 4,
     InvalidInput = 5,
     QuestFull = 6,
+    QuestArchived = 7,
 }
 
 const BUMP: u32 = 518_400;
@@ -132,13 +145,14 @@ impl QuestContract {
             token_addr,
             created_at: env.ledger().timestamp(),
             visibility,
+            status: QuestStatus::Active,
             deadline: 0,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(id), &Map::<Address, ()>::new(&env));
+            .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
 
         if visibility == Visibility::Public {
@@ -164,10 +178,77 @@ impl QuestContract {
         Ok(id)
     }
 
+    /// Update quest details. Owner only. Quest must be active.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_quest(
+        env: Env,
+        quest_id: u32,
+        name: String,
+        description: String,
+        category: String,
+        tags: Vec<String>,
+        visibility: Visibility,
+    ) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        Self::validate_tags(&tags)?;
+
+        quest.name = name;
+        quest.description = description;
+        quest.category = category;
+        quest.tags = tags;
+        quest.visibility = visibility;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest updated event
+        // Event topics: (quest, updated)
+        // Event data: (quest_id)
+        env.events()
+            .publish((symbol_short!("quest"), symbol_short!("updated")), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Archive a quest. Owner only. Archived quests do not accept new enrollments.
+    pub fn archive_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        quest.status = QuestStatus::Archived;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest archived event
+        // Event topics: (quest, archived)
+        // Event data: (quest_id)
+        env.events().publish(
+            (symbol_short!("quest"), symbol_short!("archived")),
+            quest_id,
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Add an enrollee to a quest. Owner only.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
@@ -182,13 +263,13 @@ impl QuestContract {
             }
         }
 
-        // Check not already enrolled (O(1) with Map)
-        if enrollees.contains_key(enrollee.clone()) {
+        // Check not already enrolled
+        if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
         }
 
         let mut new_enrollees = enrollees;
-        new_enrollees.set(enrollee.clone(), ());
+        new_enrollees.push_back(enrollee.clone());
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
@@ -210,16 +291,7 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let mut enrollees = Self::load_enrollees(&env, quest_id);
-
-        if !enrollees.contains_key(enrollee.clone()) {
-            return Err(Error::NotEnrolled);
-        }
-
-        enrollees.remove(enrollee.clone());
-        env.storage()
-            .persistent()
-            .set(&DataKey::Enrollees(quest_id), &enrollees);
+        Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
 
         // Emit enrollee removed event
         // Event topics: (quest, enrollee_removed)
@@ -233,7 +305,18 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
+    pub fn leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
+        enrollee.require_auth();
+        Self::load_quest(&env, quest_id)?;
+        Self::internal_remove_enrollee(&env, quest_id, enrollee)
+    }
+
     /// Get quest info by ID.
+    ///
+    /// Visibility does not gate direct reads. Even quests marked `Private`
+    /// remain queryable by id; the flag only affects discovery helpers such as
+    /// `list_public_quests` and `get_quests_by_category`.
     pub fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, Error> {
         let quest = Self::load_quest(&env, quest_id)?;
         Self::bump(&env, quest_id);
@@ -241,18 +324,24 @@ impl QuestContract {
     }
 
     /// Get all enrollees for a quest.
+    ///
+    /// Like `get_quest`, this is readable for any existing quest id regardless
+    /// of visibility. `Private` means unlisted, not confidential.
     pub fn get_enrollees(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
         Self::load_quest(&env, quest_id)?; // verify exists
         let enrollees = Self::load_enrollees(&env, quest_id);
         Self::bump(&env, quest_id);
-        Ok(enrollees.keys())
+        Ok(enrollees)
     }
 
     /// Check if a user is enrolled in a quest.
+    ///
+    /// Visibility does not restrict this check; callers that know the quest id
+    /// can query enrollment state directly.
     pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
-        Ok(enrollees.contains_key(user))
+        Ok(enrollees.contains(&user))
     }
 
     /// Update or clear the deadline for a quest. Owner only.
@@ -283,6 +372,9 @@ impl QuestContract {
     }
 
     /// Set visibility of a quest. Owner only.
+    ///
+    /// This only controls whether the quest appears in public discovery lists.
+    /// It does not provide on-chain confidentiality.
     pub fn set_visibility(env: Env, quest_id: u32, visibility: Visibility) -> Result<(), Error> {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
@@ -296,10 +388,8 @@ impl QuestContract {
 
             if visibility == Visibility::Public {
                 public_ids.push_back(quest_id);
-            } else {
-                if let Some(index) = public_ids.first_index_of(quest_id) {
-                    public_ids.remove(index);
-                }
+            } else if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
             }
             env.storage()
                 .instance()
@@ -379,11 +469,35 @@ impl QuestContract {
             .ok_or(Error::NotFound)
     }
 
-    fn load_enrollees(env: &Env, id: u32) -> Map<Address, ()> {
+    fn load_enrollees(env: &Env, id: u32) -> Vec<Address> {
         env.storage()
             .persistent()
             .get(&DataKey::Enrollees(id))
-            .unwrap_or(Map::new(env))
+            .unwrap_or(Vec::new(env))
+    }
+
+    fn internal_remove_enrollee(env: &Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        let enrollees = Self::load_enrollees(env, quest_id);
+        let mut found = false;
+        let mut new_list = Vec::new(env);
+
+        for i in 0..enrollees.len() {
+            let addr = enrollees.get(i).unwrap();
+            if addr == enrollee {
+                found = true;
+            } else {
+                new_list.push_back(addr);
+            }
+        }
+
+        if !found {
+            return Err(Error::NotEnrolled);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Enrollees(quest_id), &new_list);
+        Ok(())
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {

@@ -138,7 +138,7 @@ impl QuestContract {
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
         env.storage()
             .persistent()
-             .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
+            .set(&DataKey::Enrollees(id), &Map::<Address, ()>::new(&env));
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
 
         if visibility == Visibility::Public {
@@ -233,7 +233,7 @@ impl QuestContract {
         Ok(())
     }
 
-        /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
+    /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
     pub fn leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::load_quest(&env, quest_id)?;
@@ -241,26 +241,17 @@ impl QuestContract {
     }
 
     fn internal_remove_enrollee(env: &Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
-        let enrollees = Self::load_enrollees(env, quest_id);
-        let mut found = false;
-        let mut new_list = Vec::new(env);
+        let mut enrollees = Self::load_enrollees(env, quest_id);
 
-        for i in 0..enrollees.len() {
-            let addr = enrollees.get(i).unwrap();
-            if addr == enrollee {
-                found = true;
-            } else {
-                new_list.push_back(addr);
-            }
-        }
-
-        if !found {
+        if !enrollees.contains_key(enrollee.clone()) {
             return Err(Error::NotEnrolled);
         }
 
+        enrollees.remove(enrollee);
+
         env.storage()
             .persistent()
-            .set(&DataKey::Enrollees(quest_id), &new_list);
+            .set(&DataKey::Enrollees(quest_id), &enrollees);
         Self::bump(env, quest_id);
         Ok(())
     }
@@ -411,11 +402,11 @@ impl QuestContract {
             .ok_or(Error::NotFound)
     }
 
-      fn load_enrollees(env: &Env, id: u32) -> Vec<Address> {
+    fn load_enrollees(env: &Env, id: u32) -> Map<Address, ()> {
         env.storage()
             .persistent()
             .get(&DataKey::Enrollees(id))
-             .unwrap_or(Vec::new(env))
+            .unwrap_or(Map::new(env))
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {

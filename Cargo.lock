@@ -995,6 +995,8 @@ dependencies = [
 name = "rewards"
 version = "0.0.0"
 dependencies = [
+ "certificate",
+ "milestone",
  "quest",
  "soroban-sdk",
 ]

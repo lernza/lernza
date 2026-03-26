@@ -336,7 +336,7 @@ export function Dashboard() {
             </div>
 
             {loadError && (
-              <Card className="mb-5 border-destructive">
+              <Card className="border-destructive mb-5">
                 <CardContent className="py-4 text-sm font-bold text-red-700">
                   Failed to load dashboard data: {loadError}
                 </CardContent>
@@ -353,7 +353,11 @@ export function Dashboard() {
 
             <div className="relative grid gap-5">
               {filteredWorkspaces.map((ws, i) => {
-                const stats = questStats[ws.id] || { enrolleeCount: 0, milestoneCount: 0, poolBalance: 0 }
+                const stats = questStats[ws.id] || {
+                  enrolleeCount: 0,
+                  milestoneCount: 0,
+                  poolBalance: 0,
+                }
                 const totalMilestones = stats.milestoneCount
                 const completedCount = questCompletions[ws.id] || 0
                 const totalReward = stats.poolBalance
@@ -362,82 +366,86 @@ export function Dashboard() {
                 const isOwned = !!address && ws.owner === address
 
                 return (
-                  <Card
+                  <button
                     key={ws.id}
-                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1}`}
+                    type="button"
                     onClick={() => navigate(`/quest/${ws.id}`)}
+                    aria-label={`Open quest ${ws.name}`}
+                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
                   >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="mb-1 flex items-center gap-3">
-                            <CardTitle className="group-hover:text-primary text-base transition-colors">
-                              {ws.name}
-                            </CardTitle>
-                            {completedCount === totalMilestones && totalMilestones > 0 && (
-                              <Badge variant="success" className="gap-1">
-                                <Sparkles className="h-3 w-3" />
-                                Complete
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="mb-1 flex items-center gap-3">
+                              <CardTitle className="group-hover:text-primary text-base transition-colors">
+                                {ws.name}
+                              </CardTitle>
+                              {completedCount === totalMilestones && totalMilestones > 0 && (
+                                <Badge variant="success" className="gap-1">
+                                  <Sparkles className="h-3 w-3" />
+                                  Complete
+                                </Badge>
+                              )}
+                              <Badge
+                                variant={isOwned ? "default" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {isOwned ? "Owner" : "Enrolled"}
                               </Badge>
-                            )}
-                            <Badge
-                              variant={isOwned ? "default" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {isOwned ? "Owner" : "Enrolled"}
-                            </Badge>
+                            </div>
+                            <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                              {ws.description}
+                            </p>
                           </div>
-                          <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
-                            {ws.description}
-                          </p>
+                          <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
+                            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                          </div>
                         </div>
-                        <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
-                          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                          <Badge variant="secondary" className="gap-1">
+                            <Users className="h-3 w-3" />
+                            {stats.enrolleeCount} enrolled
+                          </Badge>
+                          <Badge variant="secondary" className="gap-1">
+                            <Target className="h-3 w-3" />
+                            {stats.milestoneCount} milestones
+                          </Badge>
+                          <Badge variant="default" className="gap-1">
+                            <Coins className="h-3 w-3" />
+                            {formatTokens(stats.poolBalance)} USDC
+                          </Badge>
                         </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-                        <Badge variant="secondary" className="gap-1">
-                          <Users className="h-3 w-3" />
-                          {stats.enrolleeCount} enrolled
-                        </Badge>
-                        <Badge variant="secondary" className="gap-1">
-                          <Target className="h-3 w-3" />
-                          {stats.milestoneCount} milestones
-                        </Badge>
-                        <Badge variant="default" className="gap-1">
-                          <Coins className="h-3 w-3" />
-                          {formatTokens(stats.poolBalance)} USDC
-                        </Badge>
-                      </div>
 
-                      {totalMilestones > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-3">
-                            <Progress
-                              value={completedCount}
-                              max={totalMilestones}
-                              className="flex-1"
-                            />
-                            <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                              {completedCount}/{totalMilestones}
-                            </span>
-                          </div>
-                          {earnedReward > 0 && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground text-xs font-bold">
-                                Earned so far
-                              </span>
-                              <span className="text-xs font-black text-green-700">
-                                +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
+                        {totalMilestones > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <Progress
+                                value={completedCount}
+                                max={totalMilestones}
+                                className="flex-1"
+                              />
+                              <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
+                                {completedCount}/{totalMilestones}
                               </span>
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                            {earnedReward > 0 && (
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground text-xs font-bold">
+                                  Earned so far
+                                </span>
+                                <span className="text-xs font-black text-green-700">
+                                  +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </button>
                 )
               })}
             </div>

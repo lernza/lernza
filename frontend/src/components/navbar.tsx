@@ -44,6 +44,7 @@ function ThemeToggle() {
       className={cn(
         "border-border h-9 w-9 border-[2px] shadow-[2px_2px_0_var(--color-border)]",
         "neo-press flex cursor-pointer items-center justify-center",
+        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
         "transition-colors duration-300",
         isDark
           ? "bg-primary text-black hover:bg-yellow-300"
@@ -85,7 +86,7 @@ export function Navbar() {
         {/* Logo */}
         <button
           onClick={() => handleNavigate("/")}
-          className="group flex cursor-pointer items-center gap-2"
+          className="group focus-visible:ring-ring flex cursor-pointer items-center gap-2 focus-visible:ring-2 focus-visible:outline-none"
         >
           <LogoMark className="h-8 w-8 transition-transform group-hover:scale-110" />
           <span className="text-xl font-black tracking-tight">Lernza</span>
@@ -98,7 +99,7 @@ export function Navbar() {
               key={item.key}
               onClick={() => handleNavigate(item.path)}
               className={cn(
-                "animated-underline cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all",
+                "animated-underline focus-visible:ring-ring cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
                 activePage === item.key
                   ? "bg-primary border-border active shadow-[2px_2px_0_var(--color-border)]"
                   : "hover:border-border hover:bg-secondary border-transparent"
@@ -147,7 +148,7 @@ export function Navbar() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="border-border bg-background neo-press flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:hidden"
+            className="border-border bg-background neo-press focus-visible:ring-ring flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none sm:hidden"
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -172,7 +173,7 @@ export function Navbar() {
                 key={item.key}
                 onClick={() => handleNavigate(item.path)}
                 className={cn(
-                  "w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all",
+                  "focus-visible:ring-ring w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
                   activePage === item.key
                     ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
                     : "hover:border-border hover:bg-secondary border-transparent"

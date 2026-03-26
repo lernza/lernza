@@ -9,13 +9,16 @@ import {
   Wallet,
   Sparkles,
   LayoutDashboard,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useContractData } from "@/hooks/use-async-data"
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/async-states"
+import { ErrorState, EmptyState } from "@/components/ui/async-states"
+import { SkeletonQuestList, SkeletonStatsRow, SkeletonWelcomeBanner } from "@/components/ui/skeleton"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
@@ -59,21 +62,31 @@ export function Dashboard() {
 
       const statsEntries = await Promise.all(
         normalized.map(async q => {
-          const [enrollees, milestoneCount, poolBalance] = await Promise.all([
+          const [enrollees, milestones, poolBalance] = await Promise.all([
             questClient.getEnrollees(q.id),
-            milestoneClient.getMilestoneCount(q.id),
+            milestoneClient.getMilestones(q.id),
             rewardsClient.getPoolBalance(q.id),
           ])
+
+          const totalMilestoneRewards = milestones.reduce(
+            (sum, m) =>
+              sum +
+              (m.rewardAmount > BigInt(Number.MAX_SAFE_INTEGER)
+                ? Number.MAX_SAFE_INTEGER
+                : Number(m.rewardAmount)),
+            0
+          )
 
           return [
             q.id,
             {
               enrolleeCount: enrollees.length,
-              milestoneCount,
+              milestoneCount: milestones.length,
               poolBalance:
                 poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
                   ? Number.MAX_SAFE_INTEGER
                   : Number(poolBalance),
+              totalMilestoneRewards,
             },
           ] as const
         })
@@ -335,11 +348,7 @@ export function Dashboard() {
               </div>
             )}
 
-            {isLoading && (
-              <div className="mb-5">
-                <LoadingState message="Loading on-chain dashboard data..." variant="compact" />
-              </div>
-            )}
+            {isLoading && <SkeletonQuestList count={3} className="mb-5" />}
 
             <div className="relative grid gap-5">
               {filteredWorkspaces.map((ws, i) => {
@@ -407,7 +416,36 @@ export function Dashboard() {
                             <Coins className="h-3 w-3" />
                             {formatTokens(stats.poolBalance)} USDC
                           </Badge>
+                          {stats.totalMilestoneRewards > 0 &&
+                            (stats.poolBalance >= stats.totalMilestoneRewards ? (
+                              <Badge variant="success" className="gap-1">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Funded
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="gap-1 text-amber-700 border-amber-400 bg-amber-50 dark:bg-amber-950/30">
+                                <AlertTriangle className="h-3 w-3" />
+                                Underfunded
+                              </Badge>
+                            ))}
                         </div>
+
+                        {stats.totalMilestoneRewards > 0 && (
+                          <div className="mb-3 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground text-xs font-bold">
+                                Funding
+                              </span>
+                              <span className="text-xs font-black">
+                                {formatTokens(stats.poolBalance)} / {formatTokens(stats.totalMilestoneRewards)} USDC
+                              </span>
+                            </div>
+                            <Progress
+                              value={stats.poolBalance}
+                              max={stats.totalMilestoneRewards}
+                            />
+                          </div>
+                        )}
 
                         {totalMilestones > 0 && (
                           <div className="space-y-2">

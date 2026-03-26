@@ -8,9 +8,8 @@ import {
   Account,
 } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
-import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
-
-const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
+import { getServer, signAndSubmit } from "./client"
+import { getNetworkConfig } from "@/lib/network"
 
 export const Visibility = {
   Public: 0,
@@ -39,18 +38,13 @@ export interface QuestInfo {
 }
 
 export class QuestClient {
-  private contract: Contract | null
-
-  constructor() {
-    if (CONTRACT_ID) {
-      try {
-        this.contract = new Contract(CONTRACT_ID)
-      } catch {
-        this.contract = null
-        console.error(`[QuestClient] Invalid VITE_QUEST_CONTRACT_ID: "${CONTRACT_ID}"`)
-      }
-    } else {
-      this.contract = null
+  private getContract(): Contract {
+    const id = getNetworkConfig().questContractId
+    if (!id) throw new Error("Quest contract not configured. Set VITE_QUEST_CONTRACT_ID.")
+    try {
+      return new Contract(id)
+    } catch {
+      throw new Error(`Invalid quest contract ID: "${id}"`)
     }
   }
 
@@ -271,16 +265,17 @@ export class QuestClient {
     try {
       const randomKP = Keypair.random()
       const account = new Account(randomKP.publicKey(), "0")
+      const { passphrase } = getNetworkConfig()
 
       const tx = new TransactionBuilder(account, {
         fee: "100",
-        networkPassphrase: NETWORK_PASSPHRASE,
+        networkPassphrase: passphrase,
       })
-        .addOperation(this.contract!.call(method, ...args))
+        .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
-      const response = await server.simulateTransaction(tx)
+      const response = await getServer().simulateTransaction(tx)
 
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
@@ -292,17 +287,19 @@ export class QuestClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await server.getAccount(source)
+    const srv = getServer()
+    const { passphrase } = getNetworkConfig()
+    const account = await srv.getAccount(source)
 
     const tx = new TransactionBuilder(account, {
       fee: "100",
-      networkPassphrase: NETWORK_PASSPHRASE,
+      networkPassphrase: passphrase,
     })
-      .addOperation(this.contract!.call(method, ...args))
+      .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 
-    return await server.prepareTransaction(tx)
+    return await srv.prepareTransaction(tx)
   }
 }
 

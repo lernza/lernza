@@ -8,30 +8,18 @@ import {
   Keypair,
   Account,
 } from "@stellar/stellar-sdk"
-import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
-
-const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
+import { getServer, signAndSubmit } from "./client"
+import { getNetworkConfig } from "@/lib/network"
 
 export class RewardsClient {
-  private contract: Contract | null
-
-  constructor() {
-    if (CONTRACT_ID) {
-      try {
-        this.contract = new Contract(CONTRACT_ID)
-      } catch {
-        this.contract = null
-        console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
-      }
-    } else {
-      this.contract = null
-    }
-  }
-
   private getContract(): Contract {
-    if (!this.contract)
-      throw new Error("Rewards contract not configured. Set VITE_REWARDS_CONTRACT_ID.")
-    return this.contract
+    const id = getNetworkConfig().rewardsContractId
+    if (!id) throw new Error("Rewards contract not configured. Set VITE_REWARDS_CONTRACT_ID.")
+    try {
+      return new Contract(id)
+    } catch {
+      throw new Error(`Invalid rewards contract ID: "${id}"`)
+    }
   }
 
   // --- Read Operations ---
@@ -92,16 +80,17 @@ export class RewardsClient {
     try {
       const randomKP = Keypair.random()
       const account = new Account(randomKP.publicKey(), "0")
+      const { passphrase } = getNetworkConfig()
 
       const tx = new TransactionBuilder(account, {
         fee: "100",
-        networkPassphrase: NETWORK_PASSPHRASE,
+        networkPassphrase: passphrase,
       })
         .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
-      const response = await server.simulateTransaction(tx)
+      const response = await getServer().simulateTransaction(tx)
 
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
@@ -113,17 +102,19 @@ export class RewardsClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await server.getAccount(source)
+    const srv = getServer()
+    const { passphrase } = getNetworkConfig()
+    const account = await srv.getAccount(source)
 
     const tx = new TransactionBuilder(account, {
       fee: "100",
-      networkPassphrase: NETWORK_PASSPHRASE,
+      networkPassphrase: passphrase,
     })
       .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 
-    return await server.prepareTransaction(tx)
+    return await srv.prepareTransaction(tx)
   }
 }
 

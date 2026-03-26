@@ -1,12 +1,20 @@
 import { rpc, Transaction } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails } from "@stellar/freighter-api"
+import { getNetworkConfig } from "@/lib/network"
 
+// Legacy constants kept for backward compatibility — always testnet defaults.
 export const SOROBAN_RPC_URL =
   import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
 export const NETWORK_PASSPHRASE =
   import.meta.env.VITE_SOROBAN_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015"
 
+// Legacy singleton — contract clients should use getServer() for network-aware calls.
 export const server = new rpc.Server(SOROBAN_RPC_URL)
+
+/** Returns an RPC server for the currently selected network. */
+export function getServer(): rpc.Server {
+  return new rpc.Server(getNetworkConfig().rpcUrl)
+}
 
 export interface TransactionResult {
   status: "SUCCESS" | "FAILED" | "PENDING"
@@ -21,12 +29,13 @@ export interface TransactionResult {
 export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransactionResponse> {
   const MAX_POLLS = 30
   let attempts = 0
-  let response = await server.getTransaction(txHash)
+  const srv = getServer()
+  let response = await srv.getTransaction(txHash)
 
   while (response.status === "NOT_FOUND") {
     if (++attempts >= MAX_POLLS) throw new Error("Transaction not found after 30s")
     await new Promise(resolve => setTimeout(resolve, 1000))
-    response = await server.getTransaction(txHash)
+    response = await srv.getTransaction(txHash)
   }
 
   return response
@@ -37,24 +46,24 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
  */
 export async function signAndSubmit(tx: Transaction): Promise<TransactionResult> {
   try {
+    const config = getNetworkConfig()
     const net = await getNetworkDetails()
-    if (net.networkPassphrase && net.networkPassphrase !== NETWORK_PASSPHRASE) {
-      throw new Error(`Freighter is on the wrong network. Expected: Testnet.`)
+    if (net.networkPassphrase && net.networkPassphrase !== config.passphrase) {
+      const expected = config.network === "mainnet" ? "Mainnet" : "Testnet"
+      throw new Error(`Freighter is on the wrong network. Expected: ${expected}.`)
     }
 
     const result = await signTransaction(tx.toXDR(), {
-      networkPassphrase: NETWORK_PASSPHRASE,
+      networkPassphrase: config.passphrase,
     })
 
     if (typeof result === "object" && result !== null && "signedTxXdr" in result) {
       const { signedTxXdr } = result
-      // Convert to Transaction Envelope XDR string for safety
-      const submitResponse = await server.sendTransaction(
-        new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
+      const srv = getServer()
+      const submitResponse = await srv.sendTransaction(
+        new Transaction(signedTxXdr as string, config.passphrase)
       )
 
-      // The sendTransaction status was wrongly check for SUCCESS previously.
-      // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
       if (submitResponse.status === "PENDING") {
         const pollResponse = await pollTransaction(submitResponse.hash)
 

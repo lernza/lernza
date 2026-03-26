@@ -17,6 +17,7 @@ import {
   ChevronUp,
   Loader2,
   X,
+  AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,14 +25,9 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { cn, formatTokens } from "@/lib/utils"
+import { SkeletonMilestoneList, SkeletonStatsRow, SkeletonEnrolleeList } from "@/components/ui/skeleton"
 import { useInView, useCountUp } from "@/hooks/use-animations"
-import {
-  MOCK_WORKSPACES,
-  MOCK_WORKSPACE_STATS,
-  MOCK_MILESTONES,
-  MOCK_ENROLLEES,
-  MOCK_COMPLETIONS,
-} from "@/lib/mock-data"
+import { useContractData } from "@/hooks/use-async-data"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
@@ -77,15 +73,43 @@ export function QuestView() {
   const [showAddEnrollee, setShowAddEnrollee] = useState(false)
   const [addPhase, setAddPhase] = useState<"idle" | "submitting" | "done" | "error">("idle")
 
-  const ws = MOCK_WORKSPACES.find(w => w.id === questId)
-  const stats = MOCK_WORKSPACE_STATS[questId]
-  const milestones = MOCK_MILESTONES[questId] || []
-  const enrollees = MOCK_ENROLLEES[questId] || []
   const { toasts, addToast, removeToast } = useToast()
   const { address, isSupportedNetwork } = useWallet()
 
-  const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
-  const [localCompletions, setLocalCompletions] = useState(MOCK_COMPLETIONS[questId] || [])
+  // Fetch quest data from contracts
+  const { data: questData, isLoading: questLoading } = useContractData(
+    `quest-${questId}`,
+    async () => {
+      const [quests, milestones, enrollees, poolBalance] = await Promise.all([
+        questClient.getQuests(),
+        milestoneClient.getMilestones(questId),
+        questClient.getEnrollees(questId),
+        rewardsClient.getPoolBalance(questId),
+      ])
+      const ws = quests.find(q => q.id === questId)
+      const poolNum =
+        poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
+          ? Number.MAX_SAFE_INTEGER
+          : Number(poolBalance)
+      return { ws, milestones, enrollees, poolBalance: poolNum }
+    },
+    { dependencies: [questId] }
+  )
+
+  const ws = questData?.ws
+  const milestones = questData?.milestones ?? []
+  const poolBalance = questData?.poolBalance ?? 0
+
+  const [localEnrollees, setLocalEnrollees] = useState<string[]>([])
+  const [localCompletions, setLocalCompletions] = useState<
+    { milestoneId: number; enrollee: string; completed: boolean }[]
+  >([])
+
+  // Sync enrollees from contract data
+  if (questData?.enrollees && localEnrollees.length === 0 && questData.enrollees.length > 0) {
+    setLocalEnrollees(questData.enrollees)
+  }
+
   const isOwner = !!address && address === ws?.owner
 
   const [showMilestoneForm, setShowMilestoneForm] = useState(false)
@@ -144,14 +168,14 @@ export function QuestView() {
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
+  const totalReward = milestones.reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
   const completedMilestones = new Set(
     localCompletions.filter(c => c.completed).map(c => c.milestoneId)
   ).size
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
   const earnedReward = milestones
     .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
-    .reduce((sum, m) => sum + m.reward_amount, 0)
+    .reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
 
   const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
@@ -257,8 +281,20 @@ export function QuestView() {
 
   const enrolleesCount = useCountUp(localEnrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
+  const poolBalanceCount = useCountUp(poolBalance, 800, statsInView)
   const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+
+  if (questLoading) {
+    return (
+      <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
+        <div className="mb-6 h-9 w-40 animate-pulse bg-muted border-[2px] border-black" />
+        <div className="mb-8 h-40 animate-pulse bg-muted border-[3px] border-black shadow-[6px_6px_0_#000]" />
+        <SkeletonStatsRow className="mb-8" />
+        <SkeletonMilestoneList count={3} />
+      </div>
+    )
+  }
 
   if (!ws) {
     return (
@@ -433,7 +469,7 @@ export function QuestView() {
           {
             icon: Coins,
             label: "Pool Balance",
-            value: formatTokens(poolBalance),
+            value: formatTokens(poolBalanceCount),
             bg: "bg-primary",
           },
           {
@@ -467,7 +503,8 @@ export function QuestView() {
 
       {/* Progress section */}
       {milestones.length > 0 && (
-        <div className="animate-fade-in-up stagger-3 mb-8">
+        <div className="animate-fade-in-up stagger-3 mb-8 space-y-3">
+          {/* Milestone completion progress */}
           <div className="bg-background border-border border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-sm font-black">Overall Progress</span>
@@ -484,6 +521,32 @@ export function QuestView() {
             </div>
             <Progress value={completedMilestones} max={milestones.length} />
           </div>
+
+          {/* Funding progress */}
+          {totalReward > 0 && (
+            <div className="bg-background border-border border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-sm font-black">Reward Pool Funding</span>
+                <div className="flex items-center gap-2">
+                  {poolBalance < totalReward ? (
+                    <span className="flex items-center gap-1 text-xs font-bold text-amber-700">
+                      <AlertTriangle className="h-3 w-3" />
+                      Underfunded
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs font-bold text-green-700">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Fully funded
+                    </span>
+                  )}
+                  <span className="text-sm font-black tabular-nums">
+                    {formatTokens(poolBalance)} / {formatTokens(totalReward)} USDC
+                  </span>
+                </div>
+              </div>
+              <Progress value={poolBalance} max={totalReward} />
+            </div>
+          )}
         </div>
       )}
 
@@ -609,7 +672,9 @@ export function QuestView() {
       {/* Milestones tab */}
       {activeTab === "milestones" && (
         <div className="space-y-4">
-          {milestones.length === 0 ? (
+          {questLoading ? (
+            <SkeletonMilestoneList count={3} />
+          ) : milestones.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
@@ -631,6 +696,7 @@ export function QuestView() {
             </Card>
           ) : (
             milestones.map((ms, i) => {
+              const msReward = Number(ms.rewardAmount ?? ms.reward_amount ?? 0)
               const isCompleted = localCompletions.some(c => c.milestoneId === ms.id && c.completed)
               const completedBy = localCompletions
                 .filter(c => c.milestoneId === ms.id && c.completed)
@@ -677,7 +743,7 @@ export function QuestView() {
                               </h3>
                               <div className="flex flex-shrink-0 items-center gap-2">
                                 <Badge variant={isCompleted ? "success" : "default"}>
-                                  {ms.reward_amount} USDC
+                                  {msReward} USDC
                                 </Badge>
                                 {isExpanded ? (
                                   <ChevronUp className="text-muted-foreground h-4 w-4" />
@@ -718,7 +784,7 @@ export function QuestView() {
                                     disabled={isVerifying || !isOwner || !isSupportedNetwork}
                                     onClick={e => {
                                       e.stopPropagation()
-                                      void handleVerifyAndPayout(ms.id, ms.reward_amount)
+                                      void handleVerifyAndPayout(ms.id, msReward)
                                     }}
                                   >
                                     {isVerifying ? (
@@ -751,7 +817,9 @@ export function QuestView() {
       {/* Enrollees tab */}
       {activeTab === "enrollees" && (
         <div className="space-y-4">
-          {localEnrollees.length === 0 ? (
+          {questLoading ? (
+            <SkeletonEnrolleeList count={3} />
+          ) : localEnrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
@@ -782,7 +850,7 @@ export function QuestView() {
                     c => c.enrollee === addr && c.milestoneId === m.id && c.completed
                   )
                 )
-                .reduce((sum, m) => sum + m.reward_amount, 0)
+                .reduce((sum, m) => sum + Number(m.rewardAmount ?? m.reward_amount ?? 0), 0)
               const isAllDone = completed === milestones.length && milestones.length > 0
 
               return (

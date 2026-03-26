@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTheme } from "@/contexts/theme-context"
+import { useNetwork } from "@/contexts/network-context"
 import { useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 
@@ -56,6 +57,29 @@ function ThemeToggle() {
   )
 }
 
+function NetworkToggle() {
+  const { network, switchNetwork } = useNetwork()
+  const isMainnet = network === "mainnet"
+
+  return (
+    <button
+      onClick={() => switchNetwork(isMainnet ? "testnet" : "mainnet")}
+      title={`Switch to ${isMainnet ? "testnet" : "mainnet"}`}
+      aria-label={`Switch to ${isMainnet ? "testnet" : "mainnet"}`}
+      className={cn(
+        "border-border neo-press focus-visible:ring-ring flex h-9 cursor-pointer items-center gap-1.5 border-[2px] px-2.5 text-xs font-black tracking-wide uppercase shadow-[2px_2px_0_var(--color-border)]",
+        "focus-visible:ring-2 focus-visible:outline-none transition-colors duration-200",
+        isMainnet
+          ? "bg-destructive/10 text-destructive border-destructive/40 hover:bg-destructive/20"
+          : "bg-background text-foreground hover:bg-secondary"
+      )}
+    >
+      <Globe className="h-3 w-3" />
+      {isMainnet ? "Mainnet" : "Testnet"}
+    </button>
+  )
+}
+
 export function Navbar() {
   const {
     connected,
@@ -69,6 +93,7 @@ export function Navbar() {
     wrongNetwork,
     expectedNetworkName,
   } = useWallet()
+  const { isMainnet } = useNetwork()
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -110,8 +135,9 @@ export function Navbar() {
           ))}
         </nav>
 
-        {/* Right side: theme toggle + wallet + mobile menu */}
+        {/* Right side: network toggle + theme toggle + wallet + mobile menu */}
         <div className="flex items-center gap-2">
+          <NetworkToggle />
           <ThemeToggle />
 
           {connected ? (
@@ -154,6 +180,17 @@ export function Navbar() {
           </button>
         </div>
       </div>
+
+      {isMainnet && (
+        <div className="border-border border-t-[2px] bg-destructive/10 px-4 py-2 text-destructive">
+          <div className="mx-auto flex max-w-7xl items-center gap-3">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <p className="text-xs font-black">
+              Mainnet mode — transactions use real funds. Switch to Testnet for development.
+            </p>
+          </div>
+        </div>
+      )}
 
       {connected && wrongNetwork ? (
         <div className="border-border border-t-[2px] bg-yellow-400 px-4 py-3 text-black dark:bg-yellow-500 dark:text-black">

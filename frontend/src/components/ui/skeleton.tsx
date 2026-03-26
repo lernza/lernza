@@ -182,6 +182,25 @@ function SkeletonQuestList({ count = 3, className }: { count?: number; className
   )
 }
 
+function SkeletonEnrolleeList({ count = 3, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cn("space-y-3", className)}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="bg-card border-[2px] border-black shadow-[3px_3px_0_#000] p-4 flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <Skeleton className="w-8 h-8 flex-shrink-0" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-7 w-16 flex-shrink-0" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export {
   Skeleton,
   SkeletonCard,
@@ -192,4 +211,5 @@ export {
   SkeletonEarningsList,
   SkeletonWelcomeBanner,
   SkeletonQuestList,
+  SkeletonEnrolleeList,
 }

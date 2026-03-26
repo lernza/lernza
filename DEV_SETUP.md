@@ -276,6 +276,113 @@ pnpm preview
 
 ---
 
+## Deploying Contracts to Testnet
+
+This section walks you through building the contracts from source and deploying them to Stellar Testnet so the frontend can connect to your own contract instances.
+
+### 1. Get a Testnet Keypair via Friendbot
+
+Generate a new keypair and fund it with testnet XLM using Friendbot:
+
+```bash
+# Generate a new keypair
+stellar keys generate --global deployer --network testnet
+
+# Fund it via Friendbot (gives 10,000 XLM on testnet)
+stellar keys fund deployer --network testnet
+
+# Confirm the balance
+stellar keys address deployer
+```
+
+### 2. Build the Contracts to WASM
+
+From the repo root, compile each contract to optimized WASM:
+
+```bash
+stellar contract build --manifest-path contracts/quest/Cargo.toml --release
+stellar contract build --manifest-path contracts/milestone/Cargo.toml --release
+stellar contract build --manifest-path contracts/rewards/Cargo.toml --release
+```
+
+The compiled `.wasm` files will be in `target/wasm32-unknown-unknown/release/`.
+
+### 3. Upload and Deploy Each Contract
+
+Deploy each contract to testnet and capture the contract IDs:
+
+```bash
+# Deploy quest contract
+QUEST_ID=$(stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/quest.wasm \
+  --source deployer \
+  --network testnet)
+echo "Quest contract: $QUEST_ID"
+
+# Deploy milestone contract
+MILESTONE_ID=$(stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/milestone.wasm \
+  --source deployer \
+  --network testnet)
+echo "Milestone contract: $MILESTONE_ID"
+
+# Deploy rewards contract
+REWARDS_ID=$(stellar contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/rewards.wasm \
+  --source deployer \
+  --network testnet)
+echo "Rewards contract: $REWARDS_ID"
+```
+
+### 4. Initialize the Contracts
+
+Each contract requires an `initialize` call with the admin address:
+
+```bash
+ADMIN=$(stellar keys address deployer)
+
+stellar contract invoke --id $QUEST_ID --source deployer --network testnet \
+  -- initialize --admin $ADMIN
+
+stellar contract invoke --id $MILESTONE_ID --source deployer --network testnet \
+  -- initialize --admin $ADMIN
+
+stellar contract invoke --id $REWARDS_ID --source deployer --network testnet \
+  -- initialize --admin $ADMIN
+```
+
+### 5. Create `frontend/.env.local` from the Example
+
+```bash
+cp frontend/.env.example frontend/.env.local
+```
+
+Then edit `frontend/.env.local` and fill in your deployed contract IDs:
+
+```env
+# Testnet RPC
+VITE_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+VITE_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+
+# Your deployed contract addresses
+VITE_QUEST_CONTRACT_ID=<your QUEST_ID>
+VITE_MILESTONE_CONTRACT_ID=<your MILESTONE_ID>
+VITE_REWARDS_CONTRACT_ID=<your REWARDS_ID>
+```
+
+> Never commit `.env.local` to Git — it is already in `.gitignore`.
+
+### 6. Start the Frontend
+
+```bash
+cd frontend
+pnpm dev
+```
+
+Open `http://localhost:5173`, connect Freighter (set to Testnet), and the app will use your deployed contracts.
+
+---
+
 ## Environment Variables
 
 The frontend supports optional environment variables for configuration. Create a `.env.local` file in the `frontend/` directory:

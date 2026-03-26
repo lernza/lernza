@@ -6,7 +6,6 @@ import {
   Sparkles,
   Copy,
   Check,
-  Loader2,
   AlertCircle,
 } from "lucide-react"
 import { useState } from "react"
@@ -17,6 +16,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useContractData } from "@/hooks/use-async-data"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
+import { SkeletonEarningsList, SkeletonStatsRow } from "@/components/ui/skeleton"
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -202,19 +202,17 @@ export function Profile() {
               </div>
 
               <div className="sm:mt-6">
-                <div className="bg-primary border-border border-2 px-5 py-3 shadow-[3px_3px_0_var(--color-border)]">
-                  <div className="flex items-center gap-2">
-                    {earningsLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
+                {earningsLoading ? (
+                  <SkeletonStatsRow className="grid-cols-1 sm:grid-cols-1 w-36" />
+                ) : (
+                  <div className="bg-primary border-border border-2 px-5 py-3 shadow-[3px_3px_0_var(--color-border)]">
+                    <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4" />
-                    )}
-                    <p className="text-2xl font-black tabular-nums">{formattedEarned}</p>
+                      <p className="text-2xl font-black tabular-nums">{formattedEarned}</p>
+                    </div>
+                    <p className="text-xs font-bold">USDC earned on-chain</p>
                   </div>
-                  <p className="text-xs font-bold">
-                    {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}
-                  </p>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -230,17 +228,7 @@ export function Profile() {
 
         <div className="space-y-4">
           {earningsLoading ? (
-            <Card className="animate-fade-in-up">
-              <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-                <h3 className="mb-2 font-black">Loading on-chain earnings</h3>
-                <p className="text-muted-foreground text-sm">
-                  Fetching your aggregate rewards from the rewards contract.
-                </p>
-              </CardContent>
-            </Card>
+            <SkeletonEarningsList count={3} />
           ) : earningsError ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">

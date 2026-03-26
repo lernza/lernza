@@ -40,9 +40,16 @@ interface ShareButtonProps {
   questName: string
   onToast: (message: string, type?: "success" | "error" | "info" | "warning") => void
   compact?: boolean
+  className?: string
 }
 
-export function ShareButton({ questId, questName, onToast, compact = false }: ShareButtonProps) {
+export function ShareButton({
+  questId,
+  questName,
+  onToast,
+  compact = false,
+  className,
+}: ShareButtonProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<DropdownPosition>({ top: 0, right: 0 })
   const [copied, setCopied] = useState(false)
@@ -63,6 +70,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     setPos({
       top: rect.bottom + window.scrollY + 8,
       right: window.innerWidth - rect.right,
+      left: rect.left,
     })
   }, [])
 
@@ -251,13 +259,15 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
       style={{
         position: "absolute",
         top: pos.top,
-        right: pos.right,
-        // Explicit fixed stacking context — renders above everything
-        zIndex: 9999,
+        // Use fixed width on desktop, but fill screen (with padding) on mobile
+        width: window.innerWidth < 640 ? "calc(100vw - 32px)" : "288px",
+        // Center on mobile, anchor to trigger on desktop
+        left: window.innerWidth < 640 ? "16px" : "auto",
+        right: window.innerWidth < 640 ? "16px" : pos.right,
       }}
       className={cn(
         "bg-card text-card-foreground border-border border-[3px] shadow-[6px_6px_0_var(--color-border)]",
-        "animate-fade-in-down w-72 overflow-hidden"
+        "animate-fade-in-down overflow-hidden"
       )}
       role="dialog"
       aria-modal="true"
@@ -340,12 +350,14 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
           "neo-press hover:bg-primary cursor-pointer transition-colors",
           open &&
             "bg-primary translate-x-0.5 translate-y-0.5 shadow-[1px_1px_0_var(--color-border)]",
-          compact ? "h-9 w-9 justify-center" : "px-4 py-2"
+          compact ? "h-9 w-9 justify-center" : "px-4 py-2",
+          className
         )}
       >
         <Share2 className="h-4 w-4 shrink-0" />
         {!compact && <span>Share</span>}
       </button>
+
 
       {/* Portal: renders at document.body, escapes all overflow/z-index parents */}
       {typeof document !== "undefined" && createPortal(dropdown, document.body)}

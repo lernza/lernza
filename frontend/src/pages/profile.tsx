@@ -185,20 +185,22 @@ export function Profile() {
                   </Badge>
                 </div>
                 <div className="mt-1 flex items-center gap-2">
-                  <p className="text-muted-foreground max-w-50 truncate font-mono text-sm font-bold sm:max-w-xs">
+                  <p className="text-muted-foreground max-w-[140px] truncate font-mono text-sm font-bold sm:max-w-xs">
                     {address}
                   </p>
                   <button
                     onClick={handleCopy}
-                    className="border-border bg-card neo-press hover:bg-secondary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]"
+                    className="border-border bg-card neo-press hover:bg-secondary flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]"
+                    aria-label="Copy address"
                   >
                     {copied ? (
-                      <Check className="text-success h-3 w-3" />
+                      <Check className="text-success h-4 w-4" />
                     ) : (
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-4 w-4" />
                     )}
                   </button>
                 </div>
+
               </div>
 
               <div className="sm:mt-6">

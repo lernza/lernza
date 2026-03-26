@@ -15,6 +15,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useInView, useTypewriter } from "@/hooks/use-animations"
+import { PlatformStats } from "./dashboard/platform-stats"
+import { MOCK_PLATFORM_STATS } from "@/lib/mock-data"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -411,6 +413,17 @@ export function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* PLATFORM STATS (Marketing) */}
+      <section className="bg-background relative border-t-[3px] border-border py-16 sm:py-24">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6">
+          <div className="mb-12 text-center">
+            <h2 className="text-2xl font-black sm:text-3xl">Platform at a glance</h2>
+            <p className="text-muted-foreground mt-2 font-bold">Real-time metrics from the Stellar network</p>
+          </div>
+          <PlatformStats stats={MOCK_PLATFORM_STATS} />
         </div>
       </section>
 

@@ -56,8 +56,9 @@ pub fn extend_instance_ttl(env: &Env) {
     env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 }
 
-pub fn extend_persistent_ttl<K>(env: &Env, key: &K) 
-where K: soroban_sdk::IntoVal<Env, soroban_sdk::Val> 
+pub fn extend_persistent_ttl<K>(env: &Env, key: &K)
+where
+    K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>,
 {
     env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
 }

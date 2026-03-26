@@ -884,7 +884,16 @@ fn test_update_quest_visibility_merge() {
     let quest = client.get_quest(&0);
     assert_eq!(quest.visibility, Visibility::Public);
 
-    client.update_quest(&0, &owner, &None, &None, &None, &None, &Some(Visibility::Private), &None);
+    client.update_quest(
+        &0,
+        &owner,
+        &None,
+        &None,
+        &None,
+        &None,
+        &Some(Visibility::Private),
+        &None,
+    );
 
     let updated = client.get_quest(&0);
     assert_eq!(updated.visibility, Visibility::Private);

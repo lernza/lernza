@@ -1,12 +1,9 @@
 #![no_std]
 #![allow(deprecated)]
+use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
-    Address, Env, String,
-};
-use common::{
-    extend_instance_ttl, BUMP, ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRESHOLD, QuestInfo,
-    QuestStatus, Visibility,
+    Address, Env,
 };
 
 // Visibility, QuestStatus, and QuestInfo moved to common.

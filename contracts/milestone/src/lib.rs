@@ -1,12 +1,9 @@
 #![no_std]
 #![allow(deprecated)]
+use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
     Env, String, Vec,
-};
-use common::{
-    extend_instance_ttl, BUMP, ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRESHOLD,
-    QuestInfo, QuestStatus, Visibility,
 };
 
 // Quest contract error type (must match the quest contract)

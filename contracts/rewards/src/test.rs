@@ -3,8 +3,8 @@
 use super::*;
 
 use certificate::{CertificateContract, CertificateContractClient};
-use milestone::{MilestoneContract, MilestoneContractClient};
 use common::Visibility;
+use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 
 use soroban_sdk::{

@@ -798,7 +798,8 @@ fn test_create_milestones_batch_oversized_rejection() {
     let q_id = create_quest(&env, &quest_client, &owner);
 
     let mut milestones = Vec::new(&env);
-    for _ in 0..21 { // 21 is > limit of 20
+    for _ in 0..21 {
+        // 21 is > limit of 20
         milestones.push_back(MilestoneInput {
             title: String::from_str(&env, "M"),
             description: String::from_str(&env, "D"),

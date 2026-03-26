@@ -559,7 +559,7 @@ function Step3Review({
           address,
           step1Data.name,
           step1Data.description,
-          "General", // Category
+          "Education", // Education category
           [], // Tags
           tokenAddress,
           Visibility.Public,

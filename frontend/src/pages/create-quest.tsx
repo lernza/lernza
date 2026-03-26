@@ -461,7 +461,10 @@ function Step3Review({
           address,
           step1Data.name,
           step1Data.description,
-          tokenAddress
+          "",
+          [],
+          tokenAddress,
+          0 // Visibility.Public
         )
 
         if (questResult.status !== "SUCCESS") {

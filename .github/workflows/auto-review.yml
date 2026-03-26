@@ -83,11 +83,11 @@ jobs:
             grep -oE '#[0-9]+' || echo "none")
           echo "issues=$LINKED_ISSUES" >> $GITHUB_OUTPUT
 
-      - name: Review with Claude
+      - name: Review with Groq
         if: steps.pr.outputs.skip != 'true'
         id: review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PR_TITLE: ${{ steps.diff.outputs.title }}
           PR_AUTHOR: ${{ steps.diff.outputs.author }}
           PR_FILES: ${{ steps.diff.outputs.files }}
@@ -97,9 +97,9 @@ jobs:
         run: |
           DIFF=$(cat /tmp/pr-diff-truncated.txt)
 
-          REVIEW_PROMPT=$(cat <<'PROMPT_EOF'
+          SYSTEM_PROMPT=$(cat <<'SYSTEM_EOF'
           You are a lenient but intelligent code reviewer for Lernza, a learn-to-earn
-          platform built with Soroban smart contracts and a React/TypeScript frontend.
+          platform built with Soroban smart contracts (Rust) and a React/TypeScript frontend.
 
           This is a fast-paced hackathon project with mostly intern contributors.
           Be encouraging and constructive. We care that the work is genuine and
@@ -116,45 +116,54 @@ jobs:
           - The PR has nothing to do with the linked issue (fraud)
           - There are security vulnerabilities (exposed secrets, XSS, SQL injection)
 
-          Keep your review short (under 200 words). Be friendly.
+          Your response MUST start with exactly one of these two lines:
+          DECISION: APPROVE
+          DECISION: REQUEST_CHANGES
 
-          Format your response exactly like this:
-          DECISION: APPROVE (or DECISION: REQUEST_CHANGES)
-
-          Then write your review on the following lines.
-          PROMPT_EOF
+          Then write a short friendly review (under 200 words) on the following lines.
+          SYSTEM_EOF
           )
 
+          USER_MSG="PR Title: ${PR_TITLE}
+          Author: ${PR_AUTHOR}
+          Files changed: ${PR_FILES}
+          Additions: ${PR_ADDS}
+          Deletions: ${PR_DELS}
+          Linked issues: ${PR_ISSUES}
+
+          Diff:
+          \`\`\`
+          ${DIFF}
+          \`\`\`"
+
           PAYLOAD=$(jq -n \
-            --arg prompt "$REVIEW_PROMPT" \
-            --arg title "$PR_TITLE" \
-            --arg author "$PR_AUTHOR" \
-            --arg files "$PR_FILES" \
-            --arg adds "$PR_ADDS" \
-            --arg dels "$PR_DELS" \
-            --arg issues "$PR_ISSUES" \
-            --arg diff "$DIFF" \
+            --arg system "$SYSTEM_PROMPT" \
+            --arg user "$USER_MSG" \
             '{
-              model: "claude-sonnet-4-20250514",
+              model: "llama-3.1-8b-instant",
+              messages: [
+                { role: "system", content: $system },
+                { role: "user", content: $user }
+              ],
               max_tokens: 1024,
-              messages: [{
-                role: "user",
-                content: ($prompt + "\n\nPR Title: " + $title + "\nAuthor: " + $author + "\nFiles changed: " + $files + "\nAdditions: " + $adds + "\nDeletions: " + $dels + "\nLinked issues: " + $issues + "\n\nDiff:\n```\n" + $diff + "\n```")
-              }]
+              temperature: 0.3
             }')
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "content-type: application/json" \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
+          RESPONSE=$(curl -s https://api.groq.com/openai/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
             -d "$PAYLOAD")
 
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // ""')
+          # Debug: log response structure (redacted)
+          echo "Response keys: $(echo "$RESPONSE" | jq -r 'keys | join(", ")')"
+
+          # Extract the review text
+          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // ""')
 
           # Check for API errors
           API_ERROR=$(echo "$RESPONSE" | jq -r '.error.message // ""')
-          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "" ]; then
-            echo "Claude API error: $API_ERROR"
+          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "" ] && [ "$API_ERROR" != "null" ]; then
+            echo "Groq API error: $API_ERROR"
             REVIEW_TEXT="Could not generate review: $API_ERROR"
             echo "action=COMMENT" >> $GITHUB_OUTPUT
             {
@@ -165,20 +174,22 @@ jobs:
             exit 0
           fi
 
-          if [ -z "$REVIEW_TEXT" ]; then
+          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
             REVIEW_TEXT="CI checks passed. Auto-review could not generate detailed feedback."
           fi
 
-          # Parse decision
-          if echo "$REVIEW_TEXT" | grep -qi "REQUEST_CHANGES"; then
+          echo "Review generated (${#REVIEW_TEXT} chars)"
+
+          # Parse decision from first line
+          if echo "$REVIEW_TEXT" | grep -qi "REQUEST.CHANGES"; then
             echo "action=REQUEST_CHANGES" >> $GITHUB_OUTPUT
           else
             echo "action=APPROVE" >> $GITHUB_OUTPUT
           fi
 
-          # Use full review text as body (strip the DECISION: line if present)
-          REVIEW_BODY=$(echo "$REVIEW_TEXT" | sed 's/^DECISION:.*$//' | sed '/^$/d')
-          if [ -z "$REVIEW_BODY" ]; then
+          # Strip the DECISION line and clean up for the review body
+          REVIEW_BODY=$(echo "$REVIEW_TEXT" | sed '/^DECISION:/d' | sed '/^$/N;/^\n$/d')
+          if [ -z "$REVIEW_BODY" ] || [ ${#REVIEW_BODY} -lt 5 ]; then
             REVIEW_BODY="Looks good. CI checks passed."
           fi
 
@@ -207,7 +218,7 @@ jobs:
 
           # GitHub does not allow approving your own PR
           if [ "$PR_AUTHOR" = "$PAT_USER" ]; then
-            echo "Skipping review: PR author ($PR_AUTHOR) is the reviewer ($PAT_USER)"
+            echo "Skipping formal review: PR author ($PR_AUTHOR) is the reviewer ($PAT_USER)"
             gh pr comment "$PR_NUM" --body "$BODY"
             exit 0
           fi

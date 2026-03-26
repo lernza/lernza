@@ -19,7 +19,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useContractData } from "@/hooks/use-async-data"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import { questClient, QuestInfo } from "@/lib/contracts/quest"
+import { questClient } from "@/lib/contracts/quest"
 
 /* ─── Generated Avatar from wallet address ─── */
 

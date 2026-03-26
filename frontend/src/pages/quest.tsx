@@ -389,7 +389,7 @@ export function QuestView() {
       milestones: milestones.map(ms => ({
         title: ms.title,
         description: ms.description,
-        rewardAmount: ms.reward_amount,
+        rewardAmount: ms.rewardAmount,
       })),
     }
 

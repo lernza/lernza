@@ -106,7 +106,7 @@ jobs:
             });
             
             const botComment = comments.find(c => 
-              c.user.type === 'Bot' && c.body.includes('Bundle Size Report')
+              c.user?.type === 'Bot' && c.body?.includes('Bundle Size Report')
             );
             
             if (botComment) {

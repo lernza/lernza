@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X, Sun, Moon } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTheme } from "@/App"
@@ -55,14 +55,23 @@ function ThemeToggle() {
 }
 
 export function Navbar() {
-  const { connected, shortAddress, connect, disconnect, loading } = useWallet()
+  const {
+    connected,
+    shortAddress,
+    connect,
+    disconnect,
+    loading,
+    installed,
+    installUrl,
+    networkName,
+    wrongNetwork,
+    expectedNetworkName,
+  } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
 
-  const activePage = location.pathname === "/" 
-    ? "landing" 
-    : location.pathname.split("/")[1]
+  const activePage = location.pathname === "/" ? "landing" : location.pathname.split("/")[1]
 
   const handleNavigate = (path: string) => {
     navigate(path)
@@ -107,12 +116,23 @@ export function Navbar() {
             <>
               <div className="border-border bg-secondary hidden items-center gap-2 border-[2px] px-3 py-1.5 shadow-[2px_2px_0_var(--color-border)] sm:flex">
                 <div className="bg-success border-border h-2.5 w-2.5 border" />
+                {networkName ? (
+                  <span className="border-border bg-background rounded-sm border px-1.5 py-0.5 text-[10px] font-black tracking-wide uppercase">
+                    {networkName}
+                  </span>
+                ) : null}
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
               <Button variant="ghost" size="icon" onClick={disconnect}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </>
+          ) : !installed ? (
+            <Button asChild size="sm" className="shimmer-on-hover">
+              <a href={installUrl} target="_blank" rel="noreferrer">
+                Install Freighter
+              </a>
+            </Button>
           ) : (
             <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />
@@ -129,6 +149,15 @@ export function Navbar() {
           </button>
         </div>
       </div>
+
+      {connected && wrongNetwork ? (
+        <div className="border-border bg-destructive/10 text-foreground border-t-[2px] px-4 py-2 text-xs font-bold">
+          <div className="mx-auto flex max-w-7xl items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Wrong network: connected to {networkName ?? "Unknown"}, expected {expectedNetworkName}.
+          </div>
+        </div>
+      ) : null}
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (

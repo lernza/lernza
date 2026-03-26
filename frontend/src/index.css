@@ -2,30 +2,31 @@
 
 @theme {
   /* ── Colors: Neo-brutalist palette ── */
-  --color-background: #FFFFFF;
+  --color-background: #ffffff;
   --color-foreground: #000000;
-  --color-primary: #FACC15;
+  --color-primary: #facc15;
   --color-primary-foreground: #000000;
-  --color-secondary: #F5F5F4;
-  --color-secondary-foreground: #1C1917;
-  --color-muted: #E7E5E4;
-  --color-muted-foreground: #78716C;
-  --color-card: #FFFFFF;
+  --color-secondary: #f5f5f4;
+  --color-secondary-foreground: #1c1917;
+  --color-muted: #e7e5e4;
+  --color-muted-foreground: #78716c;
+  --color-card: #ffffff;
   --color-card-foreground: #000000;
   --color-border: #000000;
   --color-input: #000000;
-  --color-ring: #FACC15;
-  --color-accent: #FACC15;
+  --color-ring: #facc15;
+  --color-accent: #facc15;
   --color-accent-foreground: #000000;
-  --color-destructive: #EF4444;
-  --color-destructive-foreground: #FFFFFF;
-  --color-success: #22C55E;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #22c55e;
   --color-success-foreground: #000000;
-  --color-warning: #F59E0B;
+  --color-warning: #f59e0b;
   --color-warning-foreground: #000000;
 
   /* ── Typography ── */
-  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
   /* ── Animations ── */
@@ -37,43 +38,149 @@
   --animate-scale-in: scale-in 0.4s ease-out both;
 }
 
+/* ── Dark mode token overrides ────────────────────────────────────────────── */
+/*
+  Neo-brutalist dark: cream borders/shadows on near-black bg.
+  --color-border: #F5F0E8 mirrors what black does in light mode — it's the
+  structural color that gives cards and buttons their sharp offset shadow depth.
+  Yellow stays as --color-primary and --color-accent only (brand/highlight).
+  --color-ring stays yellow so focus rings remain visually distinct.
+  Card bg is one step lighter than page bg so cards read as distinct surfaces.
+*/
+.dark {
+  --color-background: #111110;
+  --color-foreground: #f5f0e8;
+  --color-primary: #facc15;
+  --color-primary-foreground: #000000;
+  --color-secondary: #1c1917;
+  --color-secondary-foreground: #f5f0e8;
+  --color-muted: #292524;
+  --color-muted-foreground: #a8a29e;
+  --color-card: #1c1917;
+  --color-card-foreground: #f5f0e8;
+  --color-border: #f5f0e8;
+  --color-input: #f5f0e8;
+  --color-ring: #facc15;
+  --color-accent: #facc15;
+  --color-accent-foreground: #000000;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #22c55e;
+  --color-success-foreground: #000000;
+  --color-warning: #f59e0b;
+  --color-warning-foreground: #000000;
+}
+
+/* ── Smooth theme transition — scoped, not global * ──────────────────────── */
+/*
+  Targeting only the structural/surface elements that actually change color
+  on theme switch. Avoids the page-load flash and performance cost of
+  transitioning every single DOM node.
+*/
+body,
+header,
+footer,
+main,
+[class*="bg-background"],
+[class*="bg-card"],
+[class*="bg-secondary"],
+[class*="bg-muted"],
+[class*="text-foreground"],
+[class*="text-card-foreground"],
+[class*="text-muted-foreground"],
+[class*="border-border"],
+[class*="border-black"] {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 250ms;
+  transition-timing-function: ease;
+}
+
+/* Keep interactive and animation classes snappy */
+.neo-press,
+.neo-lift,
+.card-tilt,
+.shimmer-on-hover,
+.shimmer-on-hover::after,
+[class*="animate-"],
+[class*="reveal-"] {
+  transition-property: translate, transform, opacity, box-shadow;
+}
+
 /* ── Keyframes ── */
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fade-in-down {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slide-in-left {
-  from { opacity: 0; transform: translateX(-30px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes slide-in-right {
-  from { opacity: 0; transform: translateX(30px); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ── Marquee ── */
 
 @keyframes marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 .animate-marquee {
@@ -87,34 +194,83 @@
 /* ── Glitch effect for 404 ── */
 
 @keyframes glitch-shift {
-  0%, 100% { transform: translate(0); }
-  10% { transform: translate(-3px, 2px); }
-  20% { transform: translate(3px, -2px); }
-  30% { transform: translate(-2px, -3px); }
-  40% { transform: translate(2px, 3px); }
-  50% { transform: translate(-3px, -1px); }
-  60% { transform: translate(3px, 1px); }
-  70% { transform: translate(-1px, 3px); }
-  80% { transform: translate(1px, -3px); }
-  90% { transform: translate(-2px, 2px); }
+  0%,
+  100% {
+    transform: translate(0);
+  }
+  10% {
+    transform: translate(-3px, 2px);
+  }
+  20% {
+    transform: translate(3px, -2px);
+  }
+  30% {
+    transform: translate(-2px, -3px);
+  }
+  40% {
+    transform: translate(2px, 3px);
+  }
+  50% {
+    transform: translate(-3px, -1px);
+  }
+  60% {
+    transform: translate(3px, 1px);
+  }
+  70% {
+    transform: translate(-1px, 3px);
+  }
+  80% {
+    transform: translate(1px, -3px);
+  }
+  90% {
+    transform: translate(-2px, 2px);
+  }
 }
 
 @keyframes glitch-clip-1 {
-  0%, 100% { clip-path: inset(0 0 100% 0); }
-  5% { clip-path: inset(20% 0 60% 0); }
-  10% { clip-path: inset(80% 0 0% 0); }
-  15% { clip-path: inset(10% 0 75% 0); }
-  20% { clip-path: inset(45% 0 40% 0); }
-  25%, 100% { clip-path: inset(0 0 100% 0); }
+  0%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+  5% {
+    clip-path: inset(20% 0 60% 0);
+  }
+  10% {
+    clip-path: inset(80% 0 0% 0);
+  }
+  15% {
+    clip-path: inset(10% 0 75% 0);
+  }
+  20% {
+    clip-path: inset(45% 0 40% 0);
+  }
+  25%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
 }
 
 @keyframes glitch-clip-2 {
-  0%, 100% { clip-path: inset(0 0 100% 0); }
-  8% { clip-path: inset(60% 0 15% 0); }
-  13% { clip-path: inset(5% 0 80% 0); }
-  18% { clip-path: inset(35% 0 50% 0); }
-  23% { clip-path: inset(70% 0 10% 0); }
-  28%, 100% { clip-path: inset(0 0 100% 0); }
+  0%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+  8% {
+    clip-path: inset(60% 0 15% 0);
+  }
+  13% {
+    clip-path: inset(5% 0 80% 0);
+  }
+  18% {
+    clip-path: inset(35% 0 50% 0);
+  }
+  23% {
+    clip-path: inset(70% 0 10% 0);
+  }
+  28%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
 }
 
 .glitch-text {
@@ -132,22 +288,30 @@
 }
 
 .glitch-text::before {
-  color: #EF4444;
-  animation: glitch-clip-1 3s infinite linear, glitch-shift 0.3s infinite reverse;
+  color: #ef4444;
+  animation:
+    glitch-clip-1 3s infinite linear,
+    glitch-shift 0.3s infinite reverse;
   animation-delay: 0.1s;
 }
 
 .glitch-text::after {
-  color: #22C55E;
-  animation: glitch-clip-2 3s infinite linear, glitch-shift 0.3s infinite;
+  color: #22c55e;
+  animation:
+    glitch-clip-2 3s infinite linear,
+    glitch-shift 0.3s infinite;
   animation-delay: 0.2s;
 }
 
 /* ── Shimmer / shine sweep ── */
 
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .shimmer-on-hover {
@@ -159,7 +323,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
   transform: translateX(-100%);
   transition: none;
 }
@@ -171,8 +335,14 @@
 /* ── Pulse ring (for live indicators) ── */
 
 @keyframes pulse-ring {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(2.5); opacity: 0; }
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
 }
 
 .pulse-ring {
@@ -192,7 +362,9 @@
 .reveal-up {
   opacity: 0;
   transform: translateY(40px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
 
 .reveal-up.in-view {
@@ -203,7 +375,9 @@
 .reveal-left {
   opacity: 0;
   transform: translateX(-40px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
 
 .reveal-left.in-view {
@@ -214,7 +388,9 @@
 .reveal-right {
   opacity: 0;
   transform: translateX(40px);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
 
 .reveal-right.in-view {
@@ -225,7 +401,9 @@
 .reveal-scale {
   opacity: 0;
   transform: scale(0.85);
-  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
 }
 
 .reveal-scale.in-view {
@@ -240,6 +418,10 @@
   background-size: 28px 28px;
 }
 
+.dark .bg-grid-dots {
+  background-image: radial-gradient(circle, rgba(245, 240, 232, 0.06) 1px, transparent 1px);
+}
+
 .bg-diagonal-lines {
   background-image: repeating-linear-gradient(
     -45deg,
@@ -248,6 +430,27 @@
     rgba(0, 0, 0, 0.02) 8px,
     rgba(0, 0, 0, 0.02) 9px
   );
+}
+
+.dark .bg-diagonal-lines {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(245, 240, 232, 0.03) 8px,
+    rgba(245, 240, 232, 0.03) 9px
+  );
+}
+
+/* ── Pulse animation for skeleton ── */
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* ── Base ── */
@@ -272,7 +475,9 @@ body {
 /* ── Neo-brutalist interactive utilities ── */
 
 .neo-press {
-  transition: translate 100ms ease, box-shadow 100ms ease;
+  transition:
+    translate 100ms ease,
+    box-shadow 100ms ease;
 }
 .neo-press:hover {
   translate: -2px -2px;
@@ -282,7 +487,9 @@ body {
 }
 
 .neo-lift {
-  transition: translate 150ms ease, box-shadow 150ms ease;
+  transition:
+    translate 150ms ease,
+    box-shadow 150ms ease;
 }
 .neo-lift:hover {
   translate: -3px -3px;
@@ -294,42 +501,73 @@ body {
 /* ── Card 3D tilt on hover ── */
 
 .card-tilt {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
   transform-style: preserve-3d;
 }
 
 .card-tilt:hover {
   transform: perspective(800px) rotateX(2deg) rotateY(-3deg) translateY(-6px);
-  box-shadow: 10px 10px 0 #000;
+  box-shadow: 10px 10px 0 var(--color-border);
 }
 
 .card-tilt:active {
   transform: perspective(800px) rotateX(0) rotateY(0) translateY(0);
-  box-shadow: 3px 3px 0 #000;
+  box-shadow: 3px 3px 0 var(--color-border);
 }
 
 /* ── Stagger animation delays ── */
 
-.stagger-1 { animation-delay: 100ms; }
-.stagger-2 { animation-delay: 200ms; }
-.stagger-3 { animation-delay: 300ms; }
-.stagger-4 { animation-delay: 400ms; }
-.stagger-5 { animation-delay: 500ms; }
-.stagger-6 { animation-delay: 600ms; }
-.stagger-7 { animation-delay: 700ms; }
-.stagger-8 { animation-delay: 800ms; }
+.stagger-1 {
+  animation-delay: 100ms;
+}
+.stagger-2 {
+  animation-delay: 200ms;
+}
+.stagger-3 {
+  animation-delay: 300ms;
+}
+.stagger-4 {
+  animation-delay: 400ms;
+}
+.stagger-5 {
+  animation-delay: 500ms;
+}
+.stagger-6 {
+  animation-delay: 600ms;
+}
+.stagger-7 {
+  animation-delay: 700ms;
+}
+.stagger-8 {
+  animation-delay: 800ms;
+}
 
 /* Stagger for scroll-triggered reveals */
-.stagger-delay-1 { transition-delay: 100ms; }
-.stagger-delay-2 { transition-delay: 200ms; }
-.stagger-delay-3 { transition-delay: 300ms; }
-.stagger-delay-4 { transition-delay: 400ms; }
+.stagger-delay-1 {
+  transition-delay: 100ms;
+}
+.stagger-delay-2 {
+  transition-delay: 200ms;
+}
+.stagger-delay-3 {
+  transition-delay: 300ms;
+}
+.stagger-delay-4 {
+  transition-delay: 400ms;
+}
 
 /* ── Floating animation for background elements ── */
 
 @keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(var(--float-rotate, 0deg)); }
-  50% { transform: translateY(-20px) rotate(var(--float-rotate, 0deg)); }
+  0%,
+  100% {
+    transform: translateY(0px) rotate(var(--float-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-20px) rotate(var(--float-rotate, 0deg));
+  }
 }
 
 .animate-float {
@@ -339,8 +577,12 @@ body {
 /* ── Spin slow (for decorative elements) ── */
 
 @keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin-slow {
@@ -350,10 +592,20 @@ body {
 /* ── Bounce in for emphasis ── */
 
 @keyframes bounce-in {
-  0% { transform: scale(0); opacity: 0; }
-  50% { transform: scale(1.15); }
-  70% { transform: scale(0.95); }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  70% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .animate-bounce-in {
@@ -363,8 +615,13 @@ body {
 /* ── Typewriter cursor blink ── */
 
 @keyframes blink-cursor {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 .typewriter-cursor::after {
@@ -389,7 +646,7 @@ body {
   width: 0;
   height: 4px;
   background: var(--color-primary);
-  border: 1px solid black;
+  border: 1px solid var(--color-border);
   transition: width 0.4s ease-out;
 }
 
@@ -401,15 +658,19 @@ body {
 /* ── Step connector line ── */
 
 @keyframes draw-line {
-  from { width: 0; }
-  to { width: 100%; }
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
 }
 
 .step-line {
   height: 3px;
   background: var(--color-primary);
-  border-top: 1.5px solid black;
-  border-bottom: 1.5px solid black;
+  border-top: 1.5px solid var(--color-border);
+  border-bottom: 1.5px solid var(--color-border);
 }
 
 .step-line.in-view {

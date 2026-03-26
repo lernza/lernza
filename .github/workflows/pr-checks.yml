@@ -18,70 +18,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Auto-label ───────────────────────────────────────────────────
-  # 1. File paths → area labels (contracts, frontend, infrastructure, etc.)
-  # 2. PR title prefix → type labels (enhancement, bug, docs, etc.)
-  auto-label:
-    if: >-
-      github.event.pull_request.user.login != 'github-actions[bot]' &&
-      github.event.pull_request.user.login != 'release-please[bot]' &&
-      github.event.pull_request.user.login != 'dependabot[bot]' &&
-      github.event.action != 'labeled' &&
-      github.event.action != 'unlabeled'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Label by file paths
-        uses: actions/labeler@v6
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          configuration-path: .github/labeler.yml
-          sync-labels: false
-
-      - name: Label by PR title prefix
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          PR_NUM="${{ github.event.pull_request.number }}"
-          REPO="${{ github.repository }}"
-
-          PREFIX=$(echo "$TITLE" | grep -oP '^\w+' || echo "")
-
-          case "$PREFIX" in
-            feat)     LABEL="enhancement" ;;
-            fix)      LABEL="bug" ;;
-            docs)     LABEL="documentation" ;;
-            refactor) LABEL="refactor" ;;
-            test)     LABEL="tests" ;;
-            ci|build) LABEL="infrastructure" ;;
-            security) LABEL="security" ;;
-            perf)     LABEL="enhancement" ;;
-            *)        LABEL="" ;;
-          esac
-
-          if [ -n "$LABEL" ]; then
-            HAS=$(gh pr view "$PR_NUM" --repo "$REPO" --json labels \
-              -q "[.labels[].name] | any(. == \"$LABEL\")")
-            if [ "$HAS" != "true" ]; then
-              gh pr edit "$PR_NUM" --repo "$REPO" --add-label "$LABEL"
-              echo "Added: $LABEL"
-            fi
-          fi
-
   # ── PR quality checks ───────────────────────────────────────────
-  # Waits for auto-label so labels exist before we check them.
-  # !failure() lets this run when auto-label succeeds OR is skipped
-  # (skipped on labeled/unlabeled events), but blocks on failure.
+  # Labels are managed by the reviewer, not automated.
   pr-checks:
-    needs: auto-label
     if: >-
-      !failure() &&
       github.event.pull_request.user.login != 'github-actions[bot]' &&
       github.event.pull_request.user.login != 'release-please[bot]' &&
       github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # Checkout the PR branch
+
+      - name: Auto-label PR
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          sync-labels: true
+
       - name: Validate PR title
         uses: amannn/action-semantic-pull-request@v6
         env:
@@ -147,19 +103,3 @@ jobs:
 
           echo "::error::PR must link to an issue. Use 'Closes #N' in the description, or link via the Development sidebar. Add the 'no-issue' label for trivial changes."
           exit 1
-
-      - name: Check labels
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Re-fetch labels (auto-label may have just added some)
-          LABEL_COUNT=$(gh pr view ${{ github.event.pull_request.number }} \
-            --repo "${{ github.repository }}" --json labels \
-            -q '.labels | length')
-
-          if [ "$LABEL_COUNT" -eq 0 ]; then
-            echo "::error::PR must have at least one label. Labels are usually added automatically from the PR title and changed files. If auto-labeling didn't trigger, add a label manually."
-            exit 1
-          fi
-
-          echo "PR has $LABEL_COUNT label(s)"

@@ -11,5 +11,12 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 
+
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+quest = { path = "../quest" }
+milestone = { path = "../milestone" }
+certificate = { path = "../certificate" }
+
+[features]
+testutils = []

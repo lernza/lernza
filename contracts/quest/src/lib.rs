@@ -12,6 +12,11 @@ use soroban_sdk::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Visibility {
     Public = 0,
+    /// Discovery-only flag.
+    ///
+    /// `Private` quests are omitted from public listing helpers, but the quest
+    /// record and enrollee data remain queryable by quest id because Soroban
+    /// contract storage is publicly readable.
     Private = 1,
 }
 
@@ -308,6 +313,10 @@ impl QuestContract {
     }
 
     /// Get quest info by ID.
+    ///
+    /// Visibility does not gate direct reads. Even quests marked `Private`
+    /// remain queryable by id; the flag only affects discovery helpers such as
+    /// `list_public_quests` and `get_quests_by_category`.
     pub fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, Error> {
         let quest = Self::load_quest(&env, quest_id)?;
         Self::bump(&env, quest_id);
@@ -315,6 +324,9 @@ impl QuestContract {
     }
 
     /// Get all enrollees for a quest.
+    ///
+    /// Like `get_quest`, this is readable for any existing quest id regardless
+    /// of visibility. `Private` means unlisted, not confidential.
     pub fn get_enrollees(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
         Self::load_quest(&env, quest_id)?; // verify exists
         let enrollees = Self::load_enrollees(&env, quest_id);
@@ -323,6 +335,9 @@ impl QuestContract {
     }
 
     /// Check if a user is enrolled in a quest.
+    ///
+    /// Visibility does not restrict this check; callers that know the quest id
+    /// can query enrollment state directly.
     pub fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error> {
         Self::load_quest(&env, quest_id)?;
         let enrollees = Self::load_enrollees(&env, quest_id);
@@ -357,6 +372,9 @@ impl QuestContract {
     }
 
     /// Set visibility of a quest. Owner only.
+    ///
+    /// This only controls whether the quest appears in public discovery lists.
+    /// It does not provide on-chain confidentiality.
     pub fn set_visibility(env: Env, quest_id: u32, visibility: Visibility) -> Result<(), Error> {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();

@@ -709,6 +709,10 @@ export function CreateQuest() {
         <p className="text-muted-foreground mt-1 text-sm">
           Set up milestones and fund the reward pool to incentivize learners.
         </p>
+        <p className="text-muted-foreground mt-2 max-w-2xl text-xs font-bold">
+          Note: quest visibility on Stellar is discovery-only. Even quests marked private remain
+          readable on-chain by quest id, so do not put confidential data in quest metadata.
+        </p>
       </div>
 
       {/* Step indicator */}

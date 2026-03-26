@@ -469,6 +469,23 @@ fn test_private_quest_not_in_public_listings() {
     assert_eq!(ws.visibility, Visibility::Private);
 }
 
+#[test]
+fn test_private_quest_remains_directly_queryable_by_id() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    let enrollee = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &enrollee);
+
+    let quest = client.get_quest(&quest_id);
+    let enrollees = client.get_enrollees(&quest_id);
+
+    assert_eq!(quest.visibility, Visibility::Private);
+    assert_eq!(enrollees.len(), 1);
+    assert_eq!(enrollees.get(0).unwrap(), enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
 // --- Edge case tests ---
 
 #[test]

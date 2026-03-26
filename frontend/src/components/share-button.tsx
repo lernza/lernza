@@ -48,6 +48,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   const [discordCopied, setDiscordCopied] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   const questUrl = `${window.location.origin}/quest/${questId}`
   // Spec: em dash (—) between quest name and URL
@@ -65,6 +66,9 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
   }, [])
 
   const handleOpen = () => {
+    if (!open) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+    }
     updatePos()
     setOpen(v => !v)
   }
@@ -103,6 +107,47 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     }
     document.addEventListener("keydown", handler)
     return () => document.removeEventListener("keydown", handler)
+  }, [open])
+
+  // Focus return on close
+  useEffect(() => {
+    if (!open && previousFocusRef.current) {
+      previousFocusRef.current.focus()
+    }
+  }, [open])
+
+  // Focus trap and initial focus
+  useEffect(() => {
+    if (open && panelRef.current) {
+      const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements[focusableElements.length - 1]
+
+      requestAnimationFrame(() => {
+        firstElement?.focus()
+      })
+
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key === "Tab") {
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              lastElement?.focus()
+              e.preventDefault()
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              firstElement?.focus()
+              e.preventDefault()
+            }
+          }
+        }
+      }
+
+      document.addEventListener("keydown", handleTabKey)
+      return () => document.removeEventListener("keydown", handleTabKey)
+    }
   }, [open])
 
   // Web Share API — mobile native sheet
@@ -165,6 +210,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         "animate-fade-in-down w-72 overflow-hidden"
       )}
       role="dialog"
+      aria-modal="true"
       aria-label="Share options"
     >
       {/* Panel header */}

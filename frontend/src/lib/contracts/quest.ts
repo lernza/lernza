@@ -19,6 +19,7 @@ export interface QuestInfo {
   description: string
   tokenAddr: string
   createdAt: number
+  visibility: number
 }
 
 export class QuestClient {
@@ -56,6 +57,7 @@ export class QuestClient {
       description: result.description.toString(),
       tokenAddr: result.token_addr.toString(),
       createdAt: Number(result.created_at),
+      visibility: Number(result.visibility ?? 0),
     }
   }
 
@@ -101,10 +103,24 @@ export class QuestClient {
 
   /**
    * Adds an enrollee to a quest.
-   * Note: This must be signed by the QUEST OWNER, not the enrollee.
+   *
+   * Supported call signatures:
+   * - addEnrollee(signer, questId, enrollee): owner-invite flow
+   * - addEnrollee(questId, enrollee): self-enrollment flow
    */
-  async addEnrollee(owner: string, questId: number, enrollee: string) {
-    const tx = await this.buildTx(owner, "add_enrollee", [
+  async addEnrollee(arg1: string | number, arg2: number | string, arg3?: string) {
+    const ownerInviteFlow = typeof arg1 === "string" && typeof arg2 === "number" && !!arg3
+    const selfEnrollFlow = typeof arg1 === "number" && typeof arg2 === "string" && !arg3
+
+    if (!ownerInviteFlow && !selfEnrollFlow) {
+      throw new Error("Invalid addEnrollee arguments")
+    }
+
+    const signer = ownerInviteFlow ? arg1 : (arg2 as string)
+    const questId = ownerInviteFlow ? (arg2 as number) : (arg1 as number)
+    const enrollee = ownerInviteFlow ? (arg3 as string) : (arg2 as string)
+
+    const tx = await this.buildTx(signer, "add_enrollee", [
       nativeToScVal(questId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])

@@ -48,6 +48,12 @@
   Card bg is one step lighter than page bg so cards read as distinct surfaces.
 */
 .dark {
+  /*
+    Contrast checkpoints (WCAG AA, normal text):
+    - muted-foreground on background/card/muted: 7.49 / 6.93 / 6.01
+    - success on background/card: 8.29 / 7.68
+    - primary-foreground on primary: 13.71
+  */
   --color-background: #111110;
   --color-foreground: #f5f0e8;
   --color-primary: #facc15;
@@ -445,8 +451,13 @@ main,
 /* ── Pulse animation for skeleton ── */
 
 @keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-pulse {
@@ -463,6 +474,48 @@ main,
 
 html {
   scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .animate-marquee,
+  .animate-float,
+  .animate-spin-slow,
+  .animate-bounce-in,
+  .animate-scale-in,
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .reveal-up,
+  .reveal-left,
+  .reveal-right,
+  .reveal-scale,
+  .step-line.in-view,
+  .glitch-text::before,
+  .glitch-text::after,
+  .typewriter-cursor::after,
+  .pulse-ring::before,
+  .shimmer-on-hover:hover::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
 }
 
 body {

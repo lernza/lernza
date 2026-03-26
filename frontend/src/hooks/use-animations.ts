@@ -1,10 +1,25 @@
 import { useState, useEffect, useRef } from "react"
 
+export function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
+    const update = () => setPrefersReducedMotion(mediaQuery.matches)
+    update()
+    mediaQuery.addEventListener("change", update)
+    return () => mediaQuery.removeEventListener("change", update)
+  }, [])
+
+  return prefersReducedMotion
+}
+
 export function useInView<T extends HTMLElement = HTMLDivElement>(
   options?: IntersectionObserverInit
 ) {
   const ref = useRef<T>(null)
   const [inView, setInView] = useState(false)
+  const prefersReducedMotion = usePrefersReducedMotion()
 
   // Stabilize options to avoid re-running the effect
   const threshold = options?.threshold ?? 0.15
@@ -13,6 +28,7 @@ export function useInView<T extends HTMLElement = HTMLDivElement>(
   useEffect(() => {
     const el = ref.current
     if (!el) return
+    if (prefersReducedMotion) return
     const observer = new IntersectionObserver(
       ([entry]) => {
         setInView(entry.isIntersecting)
@@ -21,9 +37,9 @@ export function useInView<T extends HTMLElement = HTMLDivElement>(
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [threshold, rootMargin])
+  }, [threshold, rootMargin, prefersReducedMotion])
 
-  return [ref, inView] as const
+  return [ref, inView || prefersReducedMotion] as const
 }
 
 export function useCountUp(target: number, duration = 1200, active = true) {
@@ -43,7 +59,7 @@ export function useCountUp(target: number, duration = 1200, active = true) {
     return () => cancelAnimationFrame(raf)
   }, [target, duration, active])
 
-  return active ? value : 0
+  return active ? value : target
 }
 
 export function useTypewriter(text: string, speed = 35, active = true) {
@@ -64,5 +80,5 @@ export function useTypewriter(text: string, speed = 35, active = true) {
     return () => clearInterval(interval)
   }, [text, speed, active])
 
-  return active ? displayed : ""
+  return active ? displayed : text
 }

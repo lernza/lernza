@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -41,6 +41,7 @@ import { questClient } from "@/lib/contracts/quest"
 import { MilestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -86,14 +87,15 @@ export function QuestView() {
 
   const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
   const [localCompletions, setLocalCompletions] = useState(MOCK_COMPLETIONS[questId] || [])
-  const isOwner = !!address && address === ws?.owner
 
   const [showMilestoneForm, setShowMilestoneForm] = useState(false)
   const addEnrolleeTx = useTransactionAction()
+  const enrollSelfTx = useTransactionAction()
   const createMilestoneTx = useTransactionAction()
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
   const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
+  const [questInfo, setQuestInfo] = useState<WorkspaceInfo | null>(null)
 
   const milestoneForm = useForm<MilestoneFormValues>({
     resolver: zodResolver(milestoneFormSchema),
@@ -143,6 +145,10 @@ export function QuestView() {
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
+  const effectiveQuest = questInfo ?? ws
+  const isOwner = !!address && address === effectiveQuest?.owner
+  const isEnrolled = !!address && localEnrollees.includes(address)
+  const isPrivateQuest = effectiveQuest?.visibility === Visibility.Private
 
   const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
   const completedMilestones = new Set(
@@ -159,6 +165,17 @@ export function QuestView() {
     addEnrolleeTx.reset()
     setAddPhase("idle")
   }, [enrolleeForm, addEnrolleeTx])
+
+  const refreshEnrollees = useCallback(async () => {
+    try {
+      const enrolleesFromChain = await questClient.getEnrollees(questId)
+      if (enrolleesFromChain.length > 0) {
+        setLocalEnrollees(enrolleesFromChain)
+      }
+    } catch {
+      // Keep existing local state when on-chain read is unavailable.
+    }
+  }, [questId])
 
   const handleAddEnrollee = useCallback(
     async (values: EnrolleeFormValues) => {
@@ -184,6 +201,69 @@ export function QuestView() {
     },
     [address, questId, addToast, closeAddEnrollee, addEnrolleeTx, enrolleeForm]
   )
+
+  const handleEnrollSelf = useCallback(async () => {
+    if (!address) {
+      addToast("Connect your wallet first.", "error")
+      return
+    }
+    if (!isSupportedNetwork) {
+      addToast("Switch Freighter to Testnet to continue.", "error")
+      return
+    }
+    if (isPrivateQuest) {
+      addToast("This quest is invite only.", "warning")
+      return
+    }
+    if (isEnrolled) {
+      addToast("You are already enrolled.", "info")
+      return
+    }
+
+    try {
+      await enrollSelfTx.run(async () => {
+        const result = await questClient.addEnrollee(questId, address)
+        if (result.status !== "SUCCESS") {
+          throw new Error(result.error ?? "Enrollment failed.")
+        }
+        return result
+      })
+
+      await refreshEnrollees()
+      // Optimistic fallback if chain read is delayed.
+      setLocalEnrollees(prev => (prev.includes(address) ? prev : [...prev, address]))
+      addToast("Enrolled successfully! Check the Enrollees tab.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Enrollment failed."
+      const normalized = message.toLowerCase()
+
+      if (
+        normalized.includes("private") ||
+        normalized.includes("invite") ||
+        normalized.includes("unauthorized")
+      ) {
+        addToast("This quest is invite only.", "warning")
+        return
+      }
+
+      if (normalized.includes("already")) {
+        addToast("You are already enrolled.", "info")
+        await refreshEnrollees()
+        return
+      }
+
+      addToast(`Enrollment failed: ${message}`, "error")
+    }
+  }, [
+    address,
+    addToast,
+    enrollSelfTx,
+    isEnrolled,
+    isPrivateQuest,
+    isSupportedNetwork,
+    questId,
+    refreshEnrollees,
+  ])
 
   const handleVerifyAndPayout = async (milestoneId: number, rewardAmount: number) => {
     if (!address) {
@@ -260,6 +340,30 @@ export function QuestView() {
   const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
   const totalRewardCount = useCountUp(totalReward, 800, statsInView)
 
+  useEffect(() => {
+    const loadQuest = async () => {
+      try {
+        const onChainQuest = await questClient.getQuest(questId)
+        if (!onChainQuest) return
+        setQuestInfo({
+          id: onChainQuest.id,
+          owner: onChainQuest.owner,
+          name: onChainQuest.name,
+          description: onChainQuest.description,
+          token_addr: onChainQuest.tokenAddr,
+          created_at: onChainQuest.createdAt,
+          visibility:
+            onChainQuest.visibility === Visibility.Private ? Visibility.Private : Visibility.Public,
+        })
+      } catch {
+        // Fallback to mock data when quest contract reads are unavailable.
+      }
+    }
+
+    void loadQuest()
+    void refreshEnrollees()
+  }, [questId, refreshEnrollees])
+
   if (!ws) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
@@ -311,8 +415,10 @@ export function QuestView() {
           <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl font-black sm:text-3xl">{ws.name}</h1>
-              <p className="text-muted-foreground mt-1 max-w-xl text-sm">{ws.description}</p>
+              <h1 className="text-2xl font-black sm:text-3xl">{effectiveQuest?.name ?? ws.name}</h1>
+              <p className="text-muted-foreground mt-1 max-w-xl text-sm">
+                {effectiveQuest?.description ?? ws.description}
+              </p>
             </div>
             <div className="flex flex-shrink-0 gap-3">
               {isOwner && (
@@ -334,7 +440,34 @@ export function QuestView() {
                 <Plus className="h-4 w-4" />
                 Add Milestone
               </Button>
-              <ShareButton questId={questId} questName={ws.name} onToast={addToast} />
+              {!isOwner && address && (
+                <Button
+                  size="sm"
+                  variant={isPrivateQuest ? "secondary" : "default"}
+                  onClick={() => void handleEnrollSelf()}
+                  disabled={
+                    enrollSelfTx.isPending || isEnrolled || isPrivateQuest || !isSupportedNetwork
+                  }
+                >
+                  {enrollSelfTx.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Check Freighter...
+                    </>
+                  ) : isPrivateQuest ? (
+                    "Invite only"
+                  ) : isEnrolled ? (
+                    "Already enrolled"
+                  ) : (
+                    "Enroll"
+                  )}
+                </Button>
+              )}
+              <ShareButton
+                questId={questId}
+                questName={effectiveQuest?.name ?? ws.name}
+                onToast={addToast}
+              />
             </div>
           </div>
         </div>
@@ -473,7 +606,7 @@ export function QuestView() {
               <span className="text-sm font-black">Overall Progress</span>
               <div className="flex items-center gap-3">
                 {earnedReward > 0 && (
-                  <span className="text-xs font-bold text-green-700">
+                  <span className="text-success text-xs font-bold">
                     +{formatTokens(earnedReward)} USDC earned
                   </span>
                 )}
@@ -750,7 +883,9 @@ export function QuestView() {
                   <Users className="h-6 w-6" />
                 </div>
                 <h3 className="mb-2 font-black">No enrollees yet</h3>
-                <p className="text-muted-foreground mb-4 text-sm">Add learners to this quest.</p>
+                <p className="text-muted-foreground mb-4 text-sm">
+                  {isOwner ? "Add learners to this quest." : "No learners enrolled yet."}
+                </p>
                 {isOwner && (
                   <Button
                     size="sm"

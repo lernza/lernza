@@ -52,7 +52,7 @@ export function PlatformStats({ stats }: PlatformStatsProps) {
               <p className="text-muted-foreground text-sm font-bold tracking-wide uppercase">
                 Tokens Distributed
               </p>
-              <h3 className="mt-1 text-3xl font-black text-green-700">
+              <h3 className="text-success mt-1 text-3xl font-black">
                 {formatTokens(stats.tokensDistributed)} USDC
               </h3>
             </div>

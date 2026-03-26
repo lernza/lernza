@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
+import { copyTextWithFallback } from "@/lib/browser"
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -89,9 +90,10 @@ export function Profile() {
     }
   }, [address, connected])
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (address) {
-      navigator.clipboard.writeText(address)
+      const copiedOk = await copyTextWithFallback(address)
+      if (!copiedOk) return
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     }

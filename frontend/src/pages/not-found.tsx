@@ -2,11 +2,15 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Home, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { usePrefersReducedMotion } from "@/hooks/use-animations"
 
 function GlitchText({ text }: { text: string }) {
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [glitchActive, setGlitchActive] = useState(true)
+  const isGlitchActive = prefersReducedMotion ? false : glitchActive
 
   useEffect(() => {
+    if (prefersReducedMotion) return
     // Periodic glitch bursts
     const interval = setInterval(() => {
       setGlitchActive(true)
@@ -18,11 +22,11 @@ function GlitchText({ text }: { text: string }) {
       clearInterval(interval)
       clearTimeout(initialTimeout)
     }
-  }, [])
+  }, [prefersReducedMotion])
 
   return (
     <div
-      className={`glitch-text relative select-none ${glitchActive ? "" : "[&::before]:!animation-play-state-paused [&::after]:!animation-play-state-paused"}`}
+      className={`glitch-text relative select-none ${isGlitchActive ? "" : "[&::before]:!animation-play-state-paused [&::after]:!animation-play-state-paused"}`}
       data-text={text}
     >
       {text}

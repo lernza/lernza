@@ -336,8 +336,8 @@ export function Dashboard() {
             </div>
 
             {loadError && (
-              <Card className="mb-5 border-destructive">
-                <CardContent className="py-4 text-sm font-bold text-red-700">
+              <Card className="border-destructive mb-5">
+                <CardContent className="text-destructive py-4 text-sm font-bold">
                   Failed to load dashboard data: {loadError}
                 </CardContent>
               </Card>
@@ -353,7 +353,11 @@ export function Dashboard() {
 
             <div className="relative grid gap-5">
               {filteredWorkspaces.map((ws, i) => {
-                const stats = questStats[ws.id] || { enrolleeCount: 0, milestoneCount: 0, poolBalance: 0 }
+                const stats = questStats[ws.id] || {
+                  enrolleeCount: 0,
+                  milestoneCount: 0,
+                  poolBalance: 0,
+                }
                 const totalMilestones = stats.milestoneCount
                 const completedCount = questCompletions[ws.id] || 0
                 const totalReward = stats.poolBalance
@@ -429,7 +433,7 @@ export function Dashboard() {
                               <span className="text-muted-foreground text-xs font-bold">
                                 Earned so far
                               </span>
-                              <span className="text-xs font-black text-green-700">
+                              <span className="text-success text-xs font-black">
                                 +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
                               </span>
                             </div>

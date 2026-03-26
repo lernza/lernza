@@ -14,7 +14,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useInView, useTypewriter } from "@/hooks/use-animations"
+import { useInView, usePrefersReducedMotion, useTypewriter } from "@/hooks/use-animations"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -43,14 +43,16 @@ function DiscordIcon({ className }: { className?: string }) {
 /* ─── Animated Quest Card (Hero Illustration) ─── */
 
 function AnimatedQuestCard() {
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [step, setStep] = useState(0)
 
   useEffect(() => {
+    if (prefersReducedMotion) return
     const timer = setInterval(() => {
       setStep(s => (s + 1) % 6)
     }, 2200)
     return () => clearInterval(timer)
-  }, [])
+  }, [prefersReducedMotion])
 
   const milestones = [
     { label: "Set up Stellar CLI", reward: 100 },
@@ -58,7 +60,7 @@ function AnimatedQuestCard() {
     { label: "Deploy to Testnet", reward: 300 },
   ]
 
-  const completedCount = Math.min(step, 3)
+  const completedCount = prefersReducedMotion ? 3 : Math.min(step, 3)
   const progress = (completedCount / 3) * 100
   const totalEarned = milestones.slice(0, completedCount).reduce((s, m) => s + m.reward, 0)
   const isComplete = completedCount >= 3
@@ -218,9 +220,11 @@ function MarqueeBanner() {
 
 export function Landing() {
   const navigate = useNavigate()
+  const prefersReducedMotion = usePrefersReducedMotion()
   const subtitle = useTypewriter(
     "Create quests, set milestones, and reward learners with tokens. The first learn-to-earn platform on Stellar.",
-    25
+    25,
+    !prefersReducedMotion
   )
 
   const [howRef, howInView] = useInView()
@@ -309,7 +313,9 @@ export function Landing() {
                   size="lg"
                   className="text-base"
                   onClick={() => {
-                    document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })
+                    document
+                      .getElementById("how-it-works")
+                      ?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" })
                   }}
                 >
                   How it works

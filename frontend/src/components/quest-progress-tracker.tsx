@@ -106,7 +106,7 @@ export function QuestProgressTracker({
         <div className="mb-6 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Coins className="text-success h-4 w-4" />
-            <span className="font-bold text-green-700">+{earnedReward} USDC earned</span>
+            <span className="text-success font-bold">+{earnedReward} USDC earned</span>
           </div>
           {remainingReward > 0 && (
             <span className="text-muted-foreground font-bold">

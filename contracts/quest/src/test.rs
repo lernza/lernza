@@ -139,7 +139,7 @@ fn test_create_quest_oversized_name_fails() {
         &token,
         &Visibility::Public,
     );
-    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+    assert_eq!(result, Err(Ok(Error::NameTooLong)));
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn test_create_quest_oversized_description_fails() {
         &token,
         &Visibility::Public,
     );
-    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+    assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
 }
 
 #[test]
@@ -736,4 +736,70 @@ fn test_pre_existing_enrollees_retained_after_archive() {
     client.archive_quest(&0);
     let enrollees = client.get_enrollees(&0);
     assert_eq!(enrollees.len(), 2);
+}
+
+// ── update_quest input-validation tests ──────────────────────────────────────
+
+#[test]
+fn test_update_quest_empty_name_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let result = client.try_update_quest(
+        &0,
+        &String::from_str(&env, ""),
+        &String::from_str(&env, "Valid description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_update_quest_oversized_name_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let bytes = [b'a'; 65];
+    let long_name = String::from_bytes(&env, &bytes);
+    let result = client.try_update_quest(
+        &0,
+        &long_name,
+        &String::from_str(&env, "Valid description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::NameTooLong)));
+}
+
+#[test]
+fn test_update_quest_empty_description_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let result = client.try_update_quest(
+        &0,
+        &String::from_str(&env, "Valid Name"),
+        &String::from_str(&env, ""),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_update_quest_oversized_description_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let bytes = [b'a'; 2001];
+    let long_desc = String::from_bytes(&env, &bytes);
+    let result = client.try_update_quest(
+        &0,
+        &String::from_str(&env, "Valid Name"),
+        &long_desc,
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &Visibility::Public,
+    );
+    assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
 }

@@ -3,7 +3,7 @@ import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
-import { useTheme } from "@/App"
+import { useTheme } from "@/contexts/theme-context"
 import { useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 

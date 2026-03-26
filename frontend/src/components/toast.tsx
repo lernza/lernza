@@ -61,7 +61,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       )}
     >
       {icons[type]}
-      <p className="flex-1 text-sm leading-snug font-bold">{toast.message}</p>
+      <div className="flex-1 text-sm leading-snug font-bold">{toast.message}</div>
       <button
         onClick={handleRemove}
         className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"

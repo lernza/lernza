@@ -185,7 +185,7 @@ export function QuestView() {
       enrolleesData.refetch(),
       poolBalanceData.refetch(),
     ])
-  }, [questData.refetch, milestonesData.refetch, enrolleesData.refetch, poolBalanceData.refetch])
+  }, [questData, milestonesData, enrolleesData, poolBalanceData])
 
   // Get raw data
   const quest = questData.data
@@ -229,16 +229,7 @@ export function QuestView() {
     }
 
     fetchCompletions()
-  }, [
-    questId,
-    milestones,
-    enrollees,
-    milestoneClient,
-    questData,
-    milestonesData,
-    enrolleesData,
-    poolBalanceData,
-  ])
+  }, [questId, milestones, enrollees])
 
   const isOwner = !!address && quest?.owner === address
   const isEnrolled = !!address && enrollees.includes(address)

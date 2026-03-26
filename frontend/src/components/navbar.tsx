@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTheme } from "@/App"
 import { useLocation, useNavigate } from "react-router-dom"
@@ -128,11 +129,14 @@ export function Navbar() {
               </Button>
             </>
           ) : !installed ? (
-            <Button asChild size="sm" className="shimmer-on-hover">
-              <a href={installUrl} target="_blank" rel="noreferrer">
-                Install Freighter
-              </a>
-            </Button>
+            <a
+              href={installUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(buttonVariants({ size: "sm" }), "shimmer-on-hover")}
+            >
+              Install Freighter
+            </a>
           ) : (
             <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />

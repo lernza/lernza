@@ -1,4 +1,4 @@
-import { useCallback, useState, type ChangeEvent } from "react"
+import { useCallback, useState, useEffect, type ChangeEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -26,7 +26,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
-import { LoadingState, ErrorState } from "@/components/ui/async-states"
+import { ErrorState } from "@/components/ui/async-states"
+import { Skeleton, SkeletonMilestoneList, SkeletonStatsRow } from "@/components/ui/skeleton"
 import { cn, formatTokens } from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
 import { useToast } from "@/hooks/use-toast"
@@ -38,8 +39,8 @@ import {
   type TransactionDetails,
 } from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
-import { useContractData } from "@/hooks/use-async-data"
-import { questClient, Visibility, type QuestInfo } from "@/lib/contracts/quest"
+import { useQuest, useMilestones, useEnrollees, useRewardPool } from "@/hooks/use-quest-data"
+import { questClient, Visibility } from "@/lib/contracts/quest"
 import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
@@ -70,14 +71,6 @@ interface CompletionRecord {
   milestoneId: number
   enrollee: string
   completed: true
-}
-
-interface QuestViewData {
-  quest: QuestInfo
-  milestones: MilestoneInfo[]
-  enrollees: string[]
-  completions: CompletionRecord[]
-  poolBalance: bigint
 }
 
 const EMPTY_MILESTONES: MilestoneInfo[] = []
@@ -167,69 +160,85 @@ export function QuestView() {
     defaultValues: { address: "" },
   })
 
-  const {
-    data,
-    isLoading,
-    error: loadError,
-    refetch,
-  } = useContractData<QuestViewData>(
-    "quest",
-    async () => {
-      if (!Number.isInteger(questId) || questId < 0) {
-        throw new Error("Invalid quest id")
+  // Use individual hooks for quest data
+  const questData = useQuest(questId)
+  const milestonesData = useMilestones(questId)
+  const enrolleesData = useEnrollees(questId)
+  const poolBalanceData = useRewardPool(questId)
+
+  // Combined loading state
+  const isLoading =
+    questData.isLoading ||
+    milestonesData.isLoading ||
+    enrolleesData.isLoading ||
+    poolBalanceData.isLoading
+
+  // Use the first error that exists
+  const loadError =
+    questData.error || milestonesData.error || enrolleesData.error || poolBalanceData.error
+
+  // Refetch function that refreshes all data
+  const refetch = useCallback(async () => {
+    await Promise.all([
+      questData.refetch(),
+      milestonesData.refetch(),
+      enrolleesData.refetch(),
+      poolBalanceData.refetch(),
+    ])
+  }, [questData.refetch, milestonesData.refetch, enrolleesData.refetch, poolBalanceData.refetch])
+
+  // Get raw data
+  const quest = questData.data
+  const milestones = milestonesData.data ?? EMPTY_MILESTONES
+  const enrollees = enrolleesData.data ?? EMPTY_ENROLLEES
+  const poolBalance = poolBalanceData.data ?? BigInt(0)
+
+  // Completions data - needs to be fetched separately since it depends on both milestones and enrollees
+  const [completions, setCompletions] = useState<CompletionRecord[]>(EMPTY_COMPLETIONS)
+
+  // Fetch completions when milestones and enrollees are available
+  useEffect(() => {
+    const fetchCompletions = async () => {
+      if (milestones.length > 0 && enrollees.length > 0) {
+        try {
+          const completionEntries = await Promise.all(
+            enrollees.flatMap(enrollee =>
+              milestones.map(async milestone => {
+                const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
+                return completed
+                  ? ({
+                      milestoneId: milestone.id,
+                      enrollee,
+                      completed: true,
+                    } satisfies CompletionRecord)
+                  : null
+              })
+            )
+          )
+
+          const filteredCompletions = completionEntries.filter(
+            (entry): entry is CompletionRecord => entry !== null
+          )
+          setCompletions(filteredCompletions)
+        } catch (error) {
+          console.error("Failed to fetch completions:", error)
+        }
+      } else {
+        setCompletions(EMPTY_COMPLETIONS)
       }
-
-      const quest = await questClient.getQuest(questId)
-      if (!quest) {
-        throw new Error("Quest not found")
-      }
-
-      const [milestones, enrollees, poolBalance] = await Promise.all([
-        milestoneClient.listMilestones(questId),
-        questClient.getEnrollees(questId),
-        rewardsClient.getPoolBalance(questId),
-      ])
-
-      const completionEntries = await Promise.all(
-        enrollees.flatMap(enrollee =>
-          milestones.map(async milestone => {
-            const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
-            return completed
-              ? ({
-                  milestoneId: milestone.id,
-                  enrollee,
-                  completed: true,
-                } satisfies CompletionRecord)
-              : null
-          })
-        )
-      )
-
-      const completions = completionEntries.filter(
-        (entry): entry is CompletionRecord => entry !== null
-      )
-
-      return {
-        quest,
-        milestones,
-        enrollees,
-        completions,
-        poolBalance,
-      }
-    },
-    {
-      enabled: Number.isInteger(questId) && questId >= 0,
-      dependencies: [questId],
-      contractUnavailableMessage:
-        "On-chain quest data is unavailable until the quest and milestone contracts are configured.",
     }
-  )
 
-  const quest = data?.quest ?? null
-  const milestones = data?.milestones ?? EMPTY_MILESTONES
-  const enrollees = data?.enrollees ?? EMPTY_ENROLLEES
-  const completions = data?.completions ?? EMPTY_COMPLETIONS
-  const poolBalance = data?.poolBalance ?? 0n
+    fetchCompletions()
+  }, [
+    questId,
+    milestones,
+    enrollees,
+    milestoneClient,
+    questData,
+    milestonesData,
+    enrolleesData,
+    poolBalanceData,
+  ])
 
   const isOwner = !!address && quest?.owner === address
   const isEnrolled = !!address && enrollees.includes(address)
@@ -656,8 +665,23 @@ export function QuestView() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <LoadingState message="Loading quest" />
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+        <div className="mb-8">
+          <Skeleton className="mb-4 h-8 w-48" />
+          <Skeleton className="mb-6 h-12 w-96" />
+          <Skeleton className="h-4 w-full max-w-2xl" />
+        </div>
+
+        <SkeletonStatsRow className="mb-8" />
+
+        <div className="mb-8">
+          <Skeleton className="mb-4 h-6 w-32" />
+          <SkeletonMilestoneList count={3} />
+        </div>
+
+        <div className="flex justify-center">
+          <Skeleton className="h-10 w-32" />
+        </div>
       </div>
     )
   }

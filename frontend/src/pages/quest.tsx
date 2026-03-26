@@ -673,7 +673,13 @@ export function QuestView() {
   if (!quest) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <h2 className="mb-4 text-2xl font-black">Quest not found</h2>
+        <div className="bg-destructive/10 border-destructive mx-auto mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-destructive)]">
+          <X className="text-destructive h-8 w-8" />
+        </div>
+        <h2 className="mb-2 text-2xl font-black">{error || "Quest not found"}</h2>
+        <p className="text-muted-foreground mb-8 font-bold">
+          We couldn't resolve the quest details.
+        </p>
         <Button variant="outline" onClick={() => navigate("/dashboard")}>
           Go back
         </Button>
@@ -972,7 +978,7 @@ export function QuestView() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider capitalize uppercase transition-all ${
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
               activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"

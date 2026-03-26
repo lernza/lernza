@@ -29,8 +29,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [theme])
 
   const toggleTheme = useCallback(() => {
-    setTheme(t => (t === "light" ? "dark" : "light"))
+    setTheme((t: Theme) => (t === "light" ? "dark" : "light"))
   }, [])
 
   return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>
 }
+

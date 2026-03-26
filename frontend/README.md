@@ -20,6 +20,16 @@ Open [http://localhost:5173](http://localhost:5173)
 | `pnpm lint`    | Run ESLint                       |
 | `pnpm preview` | Preview production build locally |
 
+## Public Assets (Deployment)
+
+These files in `frontend/public/` are required for correct branding and link previews:
+
+- `favicon.svg` (browser tab icon; `frontend/index.html` includes a tiny inline fallback)
+- `og-image.png` (Open Graph + Twitter share image)
+- `logo.svg`, `robots.txt`, `sitemap.xml` (SEO/branding assets)
+
+Builds validate the required asset set via `pnpm run validate:assets` (runs automatically before `pnpm build`).
+
 ## Design System
 
 Neo-brutalist design with:

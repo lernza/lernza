@@ -35,6 +35,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
+import { QuestMetadata } from "@/components/quest-metadata"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { MilestoneClient } from "@/lib/contracts/milestone"
@@ -146,8 +147,7 @@ export function QuestView() {
   const totalReward = milestones.reduce((sum, m) => sum + m.reward_amount, 0)
   const completedMilestones = new Set(
     localCompletions.filter(c => c.completed).map(c => c.milestoneId)
-  )
-    .size
+  ).size
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
   const earnedReward = milestones
     .filter(m => localCompletions.some(c => c.milestoneId === m.id && c.completed))
@@ -273,6 +273,7 @@ export function QuestView() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <QuestMetadata questId={questId} questName={ws.name} questDescription={ws.description} />
       {/* Background */}
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
@@ -764,7 +765,9 @@ export function QuestView() {
             </Card>
           ) : (
             localEnrollees.map((addr, i) => {
-              const completed = localCompletions.filter(c => c.enrollee === addr && c.completed).length
+              const completed = localCompletions.filter(
+                c => c.enrollee === addr && c.completed
+              ).length
               const earned = milestones
                 .filter(m =>
                   localCompletions.some(

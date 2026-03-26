@@ -13,13 +13,13 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "create_workspace",
+              "function_name": "create_quest",
               "args": [
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "string": "My Workspace"
+                  "string": "My Quest"
                 },
                 {
                   "string": "Teaching my brother to code"
@@ -56,7 +56,6 @@
         }
       ]
     ],
-    [],
     []
   ],
   "ledger": {
@@ -110,7 +109,7 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "Workspace"
+                    "symbol": "Quest"
                   },
                   {
                     "u32": 0
@@ -149,7 +148,7 @@
                       "symbol": "name"
                     },
                     "val": {
-                      "string": "My Workspace"
+                      "string": "My Quest"
                     }
                   },
                   {

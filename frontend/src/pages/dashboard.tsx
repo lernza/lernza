@@ -55,6 +55,7 @@ export function Dashboard() {
         token_addr: q.tokenAddr,
         created_at: q.createdAt,
         visibility: Visibility.Public,
+        max_enrollees: q.maxEnrollees,
       }))
 
       const statsEntries = await Promise.all(
@@ -69,7 +70,7 @@ export function Dashboard() {
             q.id,
             {
               enrolleeCount: enrollees.length,
-              milestoneCount,
+              milestoneCount: milestoneCount,
               poolBalance:
                 poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
                   ? Number.MAX_SAFE_INTEGER
@@ -79,7 +80,16 @@ export function Dashboard() {
         })
       )
 
-      const questStats = Object.fromEntries(statsEntries)
+      const questStats = Object.fromEntries(
+        statsEntries.map(([id, stats]) => [
+          id,
+          {
+            enrolleeCount: stats.enrolleeCount,
+            milestoneCount: stats.milestoneCount,
+            poolBalance: stats.poolBalance,
+          },
+        ])
+      )
       const questMilestones = Object.fromEntries(
         statsEntries.map(([id, stats]) => [id, stats.milestoneCount])
       )
@@ -397,7 +407,14 @@ export function Dashboard() {
                         <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
                           <Badge variant="secondary" className="gap-1">
                             <Users className="h-3 w-3" />
-                            {stats.enrolleeCount} enrolled
+                            {ws.max_enrollees ? (
+                              <>
+                                {stats.enrolleeCount}/{ws.max_enrollees} enrolled (
+                                {Math.max(0, ws.max_enrollees - stats.enrolleeCount)} left)
+                              </>
+                            ) : (
+                              <>{stats.enrolleeCount} enrolled</>
+                            )}
                           </Badge>
                           <Badge variant="secondary" className="gap-1">
                             <Target className="h-3 w-3" />

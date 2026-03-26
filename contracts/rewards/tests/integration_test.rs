@@ -22,8 +22,9 @@
 //! | 9 | `test_broken_quest_linkage_propagates_error` | Cross-contract error propagation |
 
 use certificate::{CertificateContract, CertificateContractClient};
+use common::Visibility;
 use milestone::{Error as MilestoneError, MilestoneContract, MilestoneContractClient};
-use quest::{QuestContract, QuestContractClient, Visibility};
+use quest::{QuestContract, QuestContractClient};
 use rewards::{Error as RewardsError, RewardsContract, RewardsContractClient};
 use soroban_sdk::{
     testutils::Address as _,
@@ -128,6 +129,7 @@ impl QuestSystemTest {
             &Vec::<String>::new(&self.env),
             &self.token_addr,
             &Visibility::Public,
+            &None,
         )
     }
 

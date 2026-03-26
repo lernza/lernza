@@ -34,7 +34,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -71,7 +72,8 @@
                 },
                 {
                   "u32": 1
-                }
+                },
+                "void"
               ]
             }
           },
@@ -308,6 +310,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "name"
                       },
                       "val": {
@@ -439,6 +447,12 @@
                       "val": {
                         "u32": 1
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {

@@ -34,6 +34,7 @@ fn extract_decl(source: &str, marker: &str) -> String {
     body[..end_index].to_string()
 }
 
+#[allow(dead_code)]
 fn normalize_decl(input: &str) -> String {
     input
         .replace("soroban_sdk::Vec<String>", "Vec<String>")
@@ -47,6 +48,7 @@ fn normalize_decl(input: &str) -> String {
         .collect()
 }
 
+#[allow(dead_code)]
 fn assert_same_decl(canonical_src: &str, other_src: &str, marker: &str, contract_name: &str) {
     let canonical = normalize_decl(&extract_decl(canonical_src, marker));
     let candidate = normalize_decl(&extract_decl(other_src, marker));

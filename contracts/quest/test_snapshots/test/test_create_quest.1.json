@@ -91,7 +91,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "map": []
+                  "vec": []
                 }
               }
             },
@@ -191,6 +191,14 @@
                       },
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "status"
+                      },
+                      "val": {
+                        "u32": 0
                       }
                     },
                     {

@@ -4,12 +4,20 @@ import { WalletRequiredRoute } from "@/components/wallet-required-route"
 import { PageSkeleton } from "@/components/page-skeleton"
 
 // Lazy load page components
-const Landing = lazy(() => import("@/pages/landing"))
-const Dashboard = lazy(() => import("@/pages/dashboard"))
-const QuestView = lazy(() => import("@/pages/quest"))
-const Profile = lazy(() => import("@/pages/profile"))
-const NotFound = lazy(() => import("@/pages/not-found"))
-const CreateQuest = lazy(() => import("@/pages/create-quest"))
+const Landing = lazy(() => import("@/pages/landing").then(module => ({ default: module.Landing })))
+const Dashboard = lazy(() =>
+  import("@/pages/dashboard").then(module => ({ default: module.Dashboard }))
+)
+const QuestView = lazy(() =>
+  import("@/pages/quest").then(module => ({ default: module.QuestView }))
+)
+const Profile = lazy(() => import("@/pages/profile").then(module => ({ default: module.Profile })))
+const NotFound = lazy(() =>
+  import("@/pages/not-found").then(module => ({ default: module.NotFound }))
+)
+const CreateQuest = lazy(() =>
+  import("@/pages/create-quest").then(module => ({ default: module.CreateQuest }))
+)
 
 export function AppRouter() {
   return (

@@ -877,13 +877,35 @@ export function CreateQuest() {
   const navigate = useNavigate()
   const { connected, connect, loading } = useWallet()
 
-  const [step, setStep] = useState<FormStep>(() => loadDraft()?.step ?? 1)
-  const [step1Data, setStep1Data] = useState<Step1Values>(
-    () => loadDraft()?.step1Data ?? DEFAULT_STEP1
-  )
-  const [step2Data, setStep2Data] = useState<Step2Values>(
-    () => loadDraft()?.step2Data ?? DEFAULT_STEP2
-  )
+  // Check for imported quest data on mount and initialize state
+  let initialStep1Data: Step1Values = loadDraft()?.step1Data ?? DEFAULT_STEP1
+  let initialStep2Data: Step2Values = loadDraft()?.step2Data ?? DEFAULT_STEP2
+  let initialStep: FormStep = loadDraft()?.step ?? 1
+
+  try {
+    const importedRaw = localStorage.getItem("lernza:imported-quest")
+    if (importedRaw) {
+      const imported = JSON.parse(importedRaw) as {
+        name: string
+        description: string
+        milestones: Array<{ title: string; description: string; rewardAmount: number }>
+      }
+
+      // Override with imported data
+      initialStep1Data = { name: imported.name, description: imported.description }
+      initialStep2Data = { milestones: imported.milestones }
+      initialStep = 1
+
+      // Clear the imported data so it doesn't persist
+      localStorage.removeItem("lernza:imported-quest")
+    }
+  } catch (err) {
+    console.error("Failed to load imported quest:", err)
+  }
+
+  const [step, setStep] = useState<FormStep>(initialStep)
+  const [step1Data, setStep1Data] = useState<Step1Values>(initialStep1Data)
+  const [step2Data, setStep2Data] = useState<Step2Values>(initialStep2Data)
 
   useEffect(() => {
     saveDraft({ step, step1Data, step2Data })

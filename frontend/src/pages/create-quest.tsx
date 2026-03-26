@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -47,6 +47,37 @@ type Step2Values = z.infer<typeof step2Schema>
 
 type FormStep = 1 | 2 | 3
 type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
+
+// ─── Draft persistence ────────────────────────────────────────────────────────
+
+const DRAFT_KEY = "lernza:quest-draft"
+
+type QuestDraft = {
+  step: FormStep
+  step1Data: Step1Values
+  step2Data: Step2Values
+}
+
+function loadDraft(): QuestDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    return raw ? (JSON.parse(raw) as QuestDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(draft: QuestDraft) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // storage unavailable — fail silently
+  }
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY)
+}
 
 // ─── Helper components ────────────────────────────────────────────────────────
 
@@ -590,18 +621,26 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+const DEFAULT_STEP1: Step1Values = { name: "", description: "" }
+const DEFAULT_STEP2: Step2Values = {
+  milestones: [{ title: "", description: "", rewardAmount: 0 }],
+}
+
 export function CreateQuest() {
   const navigate = useNavigate()
   const { connected, connect, loading } = useWallet()
-  const [step, setStep] = useState<FormStep>(1)
 
-  const [step1Data, setStep1Data] = useState<Step1Values>({
-    name: "",
-    description: "",
-  })
-  const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0 }],
-  })
+  const [step, setStep] = useState<FormStep>(() => loadDraft()?.step ?? 1)
+  const [step1Data, setStep1Data] = useState<Step1Values>(
+    () => loadDraft()?.step1Data ?? DEFAULT_STEP1
+  )
+  const [step2Data, setStep2Data] = useState<Step2Values>(
+    () => loadDraft()?.step2Data ?? DEFAULT_STEP2
+  )
+
+  useEffect(() => {
+    saveDraft({ step, step1Data, step2Data })
+  }, [step, step1Data, step2Data])
 
   // Wallet not connected guard
   if (!connected) {
@@ -713,7 +752,10 @@ export function CreateQuest() {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={() => navigate("/dashboard")}
+            onComplete={() => {
+              clearDraft()
+              navigate("/dashboard")
+            }}
           />
         )}
       </div>

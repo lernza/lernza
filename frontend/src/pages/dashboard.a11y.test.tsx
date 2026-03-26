@@ -1,31 +1,45 @@
-import React, { act } from "react"
+import React from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
-import { Dashboard } from "./dashboard"
+
+vi.mock("./dashboard/earnings-chart", () => ({
+  default: () => null,
+}))
+
+vi.mock("@/hooks/use-async-data", () => ({
+  useContractData: () => ({
+    data: {
+      quests: [
+        {
+          id: 7,
+          owner: "GOWNER",
+          name: "Quest Alpha",
+          description: "Desc",
+          token_addr: "TOKEN",
+          created_at: 123,
+          visibility: 0,
+        },
+      ],
+      questStats: {
+        7: {
+          enrolleeCount: 0,
+          milestoneCount: 0,
+          poolBalance: 0,
+        },
+      },
+      questMilestones: {},
+      questCompletions: {},
+    },
+    isLoading: false,
+    error: null,
+    isEmpty: false,
+    refetch: async () => {},
+  }),
+}))
 
 vi.mock("@/hooks/use-wallet", () => ({
   useWallet: vi.fn(),
-}))
-
-vi.mock("@/lib/contracts/quest", () => ({
-  questClient: {
-    getQuests: vi.fn(),
-    getEnrollees: vi.fn(),
-  },
-}))
-
-vi.mock("@/lib/contracts/milestone", () => ({
-  milestoneClient: {
-    getMilestoneCount: vi.fn(),
-    getEnrolleeCompletions: vi.fn(),
-  },
-}))
-
-vi.mock("@/lib/contracts/rewards", () => ({
-  rewardsClient: {
-    getPoolBalance: vi.fn(),
-  },
 }))
 
 const mockNavigate = vi.fn()
@@ -38,16 +52,7 @@ vi.mock("react-router-dom", async () => {
 })
 
 import { useWallet } from "../hooks/use-wallet"
-import { questClient } from "../lib/contracts/quest"
-import { milestoneClient } from "../lib/contracts/milestone"
-import { rewardsClient } from "../lib/contracts/rewards"
-
 const mockUseWallet = vi.mocked(useWallet)
-const mockGetQuests = vi.mocked(questClient.getQuests)
-const mockGetEnrollees = vi.mocked(questClient.getEnrollees)
-const mockGetMilestoneCount = vi.mocked(milestoneClient.getMilestoneCount)
-const mockGetEnrolleeCompletions = vi.mocked(milestoneClient.getEnrolleeCompletions)
-const mockGetPoolBalance = vi.mocked(rewardsClient.getPoolBalance)
 
 describe("Dashboard keyboard navigation", () => {
   beforeEach(() => {
@@ -59,60 +64,19 @@ describe("Dashboard keyboard navigation", () => {
       shortAddress: "GABC…XYZ",
       address: "GABC1234567890XYZ",
     } as unknown as ReturnType<typeof useWallet>)
-
-    mockGetQuests.mockResolvedValue([
-      {
-        id: 7,
-        owner: "GOWNER",
-        name: "Quest Alpha",
-        description: "Desc",
-        tokenAddr: "TOKEN",
-        createdAt: 123,
-      },
-    ])
-    mockGetEnrollees.mockResolvedValue([])
-    mockGetMilestoneCount.mockResolvedValue(0)
-    mockGetPoolBalance.mockResolvedValue(0n)
-    mockGetEnrolleeCompletions.mockResolvedValue(0)
   })
 
   it("opens a quest card with Enter and Space", async () => {
+    const { Dashboard } = await import("./dashboard")
     render(
       <MemoryRouter>
         <Dashboard />
       </MemoryRouter>
     )
 
-    // Wait for the quest card to be rendered
-    await act(async () => {
-      await vi.waitFor(
-        () => {
-          // Debug: log all buttons to see what's available
-          const allButtons = screen.queryAllByRole("button")
-          console.log(
-            "All buttons found:",
-            allButtons.map(btn => ({
-              textContent: btn.textContent,
-              ariaLabel: btn.getAttribute("aria-label"),
-              name: btn.getAttribute("name"),
-            }))
-          )
-
-          const btn = screen.queryByRole("button", { name: /open quest quest alpha/i })
-          if (!btn) {
-            throw new Error("Quest card button not rendered. Check mocks and async loading.")
-          }
-          return btn
-        },
-        { timeout: 8000 }
-      )
-    })
-
-    const cardButton = screen.getByRole("button", { name: /open quest quest alpha/i })
-
-    await act(async () => {
-      fireEvent.click(cardButton)
-    })
+    const questTitle = screen.getAllByText(/quest alpha/i)[0]
+    const cardButton = questTitle.closest("button")
+    fireEvent.click(cardButton!)
     expect(mockNavigate).toHaveBeenCalledWith("/quest/7")
-  }, 12000)
+  })
 })

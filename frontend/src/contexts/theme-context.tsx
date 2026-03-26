@@ -1,21 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import type { ReactNode } from "react"
-
-type Theme = "light" | "dark"
-
-interface ThemeContextValue {
-  theme: Theme
-  toggleTheme: () => void
-}
-
-const ThemeContext = createContext<ThemeContextValue>({
-  theme: "light",
-  toggleTheme: () => {},
-})
-
-export function useTheme() {
-  return useContext(ThemeContext)
-}
+import { ThemeContext, type Theme } from "./theme"
 
 function getInitialTheme(): Theme {
   try {

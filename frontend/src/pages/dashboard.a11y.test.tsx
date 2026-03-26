@@ -1,6 +1,6 @@
 import React from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
 vi.mock("./dashboard/earnings-chart", () => ({
@@ -68,15 +68,19 @@ describe("Dashboard keyboard navigation", () => {
 
   it("opens a quest card with Enter and Space", async () => {
     const { Dashboard } = await import("./dashboard")
-    render(
-      <MemoryRouter>
-        <Dashboard />
-      </MemoryRouter>
-    )
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <Dashboard />
+        </MemoryRouter>
+      )
+    })
 
     const questTitle = screen.getAllByText(/quest alpha/i)[0]
     const cardButton = questTitle.closest("button")
-    fireEvent.click(cardButton!)
+    await act(async () => {
+      fireEvent.click(cardButton!)
+    })
     expect(mockNavigate).toHaveBeenCalledWith("/quest/7")
   })
 })

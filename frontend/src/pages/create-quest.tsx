@@ -888,12 +888,22 @@ export function CreateQuest() {
       const imported = JSON.parse(importedRaw) as {
         name: string
         description: string
-        milestones: Array<{ title: string; description: string; rewardAmount: number }>
+        milestones: Array<{
+          title: string
+          description: string
+          rewardAmount: number
+          requiresPrevious?: boolean
+        }>
       }
 
       // Override with imported data
       initialStep1Data = { name: imported.name, description: imported.description }
-      initialStep2Data = { milestones: imported.milestones }
+      initialStep2Data = {
+        milestones: imported.milestones.map(milestone => ({
+          ...milestone,
+          requiresPrevious: milestone.requiresPrevious ?? false,
+        })),
+      }
       initialStep = 1
 
       // Clear the imported data so it doesn't persist

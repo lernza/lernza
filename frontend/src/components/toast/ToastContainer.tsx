@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { useToast } from "./ToastContext"
+import { useToast } from "./use-toast-context"
 import { motion, AnimatePresence } from "framer-motion"
 
 const variantStyles = {

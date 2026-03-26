@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useState, type ChangeEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -136,7 +136,6 @@ export function QuestView() {
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
 
-  const milestoneForm = useForm<MilestoneFormInput, undefined, MilestoneFormValues>({
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
@@ -150,10 +149,15 @@ export function QuestView() {
   const [importedData, setImportedData] = useState<{
     name: string
     description: string
-    milestones: Array<{ title: string; description: string; rewardAmount: number }>
+    milestones: Array<{
+      title: string
+      description: string
+      rewardAmount: number
+      requiresPrevious: boolean
+    }>
   } | null>(null)
 
-  const milestoneForm = useForm<MilestoneFormValues>({
+  const milestoneForm = useForm<MilestoneFormInput, undefined, MilestoneFormValues>({
     resolver: zodResolver(milestoneFormSchema),
     defaultValues: { title: "", description: "", rewardAmount: "", requiresPrevious: false },
   })
@@ -316,36 +320,8 @@ export function QuestView() {
         return
       }
 
-      try {
-        await createMilestoneTx.run(async () => {
-          const result = await milestoneClient.createMilestone(
-            address,
-            questId,
-            values.title,
-            values.description,
-            BigInt(Number(values.rewardAmount)),
-            values.requiresPrevious && milestones.length > 0
-          )
-
-          if (result.status !== "SUCCESS") {
-            throw new Error(
-              getMilestoneErrorMessage(result.error ?? "Transaction failed. Please try again.")
-            )
-          }
-
-          return result
-        })
-
-        await refetch()
-        addToast("Milestone created successfully!", "success")
-        resetMilestoneForm()
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Unknown error"
-        addToast(`Failed to create milestone: ${message}`, "error")
-      }
       const reward = Number(values.rewardAmount)
 
-      // Show confirmation dialog instead of executing directly
       setPendingTransaction({
         type: "create_milestone",
         details: {
@@ -364,13 +340,18 @@ export function QuestView() {
                 questId,
                 values.title,
                 values.description,
-                BigInt(reward)
+                BigInt(reward),
+                values.requiresPrevious && milestones.length > 0
               )
               if (result.status !== "SUCCESS") {
-                throw new Error(result.error || "Transaction failed. Please try again.")
+                throw new Error(
+                  getMilestoneErrorMessage(result.error ?? "Transaction failed. Please try again.")
+                )
               }
               return result
             })
+
+            await refetch()
             addToast("Milestone created successfully!", "success")
             resetMilestoneForm()
           } catch (err: unknown) {
@@ -487,97 +468,59 @@ export function QuestView() {
       }
 
       const target = eligibleEnrollees[0]
+      setPendingTransaction({
+        type: "verify_payout",
+        details: {
+          actionName: "Verify & Payout",
+          fromAddress: address,
+          toAddress: target,
+          estimatedFee: "0.003",
+          tokenAmount: milestone.rewardAmount,
+          tokenSymbol: "USDC",
+          description: `Verify completion and distribute ${formatTokens(toSafeNumber(milestone.rewardAmount))} USDC to ${truncateAddress(target)}.`,
+        },
+        execute: async () => {
+          setActiveMilestoneTxId(milestone.id)
+          try {
+            await verifyPayoutTx.run(async () => {
+              const verifyResult = await milestoneClient.verifyCompletion(
+                address,
+                questId,
+                milestone.id,
+                target
+              )
+              if (verifyResult.status !== "SUCCESS") {
+                throw new Error(
+                  getMilestoneErrorMessage(verifyResult.error ?? "Milestone verification failed.")
+                )
+              }
 
-      setActiveMilestoneTxId(milestone.id)
-      try {
-        await verifyPayoutTx.run(async () => {
-          const verifyResult = await milestoneClient.verifyCompletion(
-            address,
-            questId,
-            milestone.id,
-            target
-          )
-          if (verifyResult.status !== "SUCCESS") {
-            throw new Error(
-              getMilestoneErrorMessage(verifyResult.error ?? "Milestone verification failed.")
-            )
+              const payoutAmount = verifyResult.rewardAmount ?? milestone.rewardAmount
+              const payoutResult = await rewardsClient.distributeReward(
+                address,
+                questId,
+                milestone.id,
+                target,
+                payoutAmount
+              )
+              if (payoutResult.status !== "SUCCESS") {
+                throw new Error(payoutResult.error ?? "Reward distribution failed.")
+              }
+
+              return payoutResult
+            })
+
+            await refetch()
+            addToast("Completion verified and reward paid out.", "success")
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Verification failed."
+            addToast(message, "error")
+          } finally {
+            setActiveMilestoneTxId(null)
           }
-    // Show confirmation dialog instead of executing directly
-    setPendingTransaction({
-      type: "verify_payout",
-      details: {
-        actionName: "Verify & Payout",
-        fromAddress: address,
-        toAddress: target,
-        estimatedFee: "0.003",
-        tokenAmount: BigInt(rewardAmount),
-        tokenSymbol: "USDC",
-        description: `Verify completion and distribute ${rewardAmount} USDC to ${truncateAddress(target)}.`,
-      },
-      execute: async () => {
-        setActiveMilestoneTxId(milestoneId)
-        try {
-          await verifyPayoutTx.run(async () => {
-            const verifyResult = await milestoneClient.verifyCompletion(
-              address,
-              questId,
-              milestoneId,
-              target
-            )
-            if (verifyResult.status !== "SUCCESS") {
-              throw new Error(verifyResult.error ?? "Milestone verification failed.")
-            }
-
-            const payoutResult = await rewardsClient.distributeReward(
-              address,
-              questId,
-              milestoneId,
-              target,
-              BigInt(rewardAmount)
-            )
-            if (payoutResult.status !== "SUCCESS") {
-              throw new Error(payoutResult.error ?? "Reward distribution failed.")
-            }
-
-            return payoutResult
-          })
-
-          setLocalCompletions(prev => [...prev, { milestoneId, enrollee: target, completed: true }])
-          addToast("Completion verified and reward paid out.", "success")
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : "Verification failed"
-          addToast(message, "error")
-        } finally {
-          setActiveMilestoneTxId(null)
-        }
-      },
-    })
-    setShowConfirmDialog(true)
-  }
-
-          const payoutAmount = verifyResult.rewardAmount ?? milestone.rewardAmount
-          const payoutResult = await rewardsClient.distributeReward(
-            address,
-            questId,
-            milestone.id,
-            target,
-            payoutAmount
-          )
-          if (payoutResult.status !== "SUCCESS") {
-            throw new Error(payoutResult.error ?? "Reward distribution failed.")
-          }
-
-          return payoutResult
-        })
-
-        await refetch()
-        addToast("Completion verified and reward paid out.", "success")
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Verification failed."
-        addToast(message, "error")
-      } finally {
-        setActiveMilestoneTxId(null)
-      }
+        },
+      })
+      setShowConfirmDialog(true)
     },
     [
       address,
@@ -619,59 +562,46 @@ export function QuestView() {
     [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
   )
 
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <LoadingState message="Loading quest" />
-      </div>
-    )
-  }
-
-  if (loadError) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <ErrorState message={loadError} onRetry={() => void refetch()} />
-      </div>
-    )
-  }
-  // Export quest functionality
   const handleExportQuest = useCallback(() => {
-    if (!ws) return
+    if (!quest) {
+      return
+    }
 
     const exportData = {
-      name: ws.name,
-      description: ws.description,
-      milestones: milestones.map(ms => ({
-        title: ms.title,
-        description: ms.description,
-        rewardAmount: ms.reward_amount,
+      name: quest.name,
+      description: quest.description,
+      milestones: milestones.map(milestone => ({
+        title: milestone.title,
+        description: milestone.description,
+        rewardAmount: toSafeNumber(milestone.rewardAmount),
+        requiresPrevious: milestone.requiresPrevious,
       })),
     }
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
+
     link.href = url
-    link.download = `${ws.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
+    link.download = `${quest.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
 
     addToast("Quest exported successfully!", "success")
-  }, [ws, milestones, addToast])
+  }, [addToast, milestones, quest])
 
-  // Import quest functionality
   const handleImportFile = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
-      if (!file) return
+      if (!file) {
+        return
+      }
 
       try {
         const text = await file.text()
         const data = JSON.parse(text)
-
-        // Validate schema using Zod
         const importSchema = z.object({
           name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
           description: z
@@ -687,17 +617,17 @@ export function QuestView() {
                   .min(1, "Description is required")
                   .max(500, "Max 500 characters"),
                 rewardAmount: z.number().positive("Must be greater than 0"),
+                requiresPrevious: z.boolean().default(false),
               })
             )
             .min(1, "At least one milestone is required"),
         })
 
-        const validated = importSchema.parse(data)
-        setImportedData(validated)
+        setImportedData(importSchema.parse(data))
         setShowImportDialog(true)
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
-          const messages = err.issues.map(e => e.message).join(", ")
+          const messages = err.issues.map(issue => issue.message).join(", ")
           addToast(`Invalid JSON: ${messages}`, "error")
         } else if (err instanceof SyntaxError) {
           addToast("Invalid JSON format. Please check the file.", "error")
@@ -706,7 +636,6 @@ export function QuestView() {
           addToast(`Failed to import quest: ${message}`, "error")
         }
       } finally {
-        // Reset file input
         event.target.value = ""
       }
     },
@@ -714,20 +643,32 @@ export function QuestView() {
   )
 
   const handleConfirmImport = useCallback(() => {
-    if (!importedData) return
+    if (!importedData) {
+      return
+    }
 
-    // Navigate to create-quest page with imported data in localStorage
     localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
     navigate("/create-quest")
     setShowImportDialog(false)
     setImportedData(null)
     addToast("Quest data loaded. Complete the creation process.", "success")
-  }, [importedData, navigate, addToast])
+  }, [addToast, importedData, navigate])
 
-  const enrolleesCount = useCountUp(localEnrollees.length, 400, statsInView)
-  const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
-  const totalRewardCount = useCountUp(totalReward, 800, statsInView)
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <LoadingState message="Loading quest" />
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <ErrorState message={loadError} onRetry={() => void refetch()} />
+      </div>
+    )
+  }
 
   if (!quest) {
     return (
@@ -789,6 +730,31 @@ export function QuestView() {
             <div className="flex flex-shrink-0 flex-wrap gap-3">
               {isOwner ? (
                 <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={handleExportQuest}
+                  >
+                    <Download className="h-4 w-4" />
+                    Export Template
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => document.getElementById("quest-import-file-input")?.click()}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Import Template
+                  </Button>
+                  <input
+                    id="quest-import-file-input"
+                    type="file"
+                    accept="application/json"
+                    className="hidden"
+                    onChange={event => void handleImportFile(event)}
+                  />
                   <Button
                     variant="outline"
                     size="sm"
@@ -1449,9 +1415,11 @@ export function QuestView() {
         isOpen={showConfirmDialog}
         details={pendingTransaction?.details ?? null}
         onConfirm={() => {
+          const transaction = pendingTransaction
           setShowConfirmDialog(false)
-          if (pendingTransaction) {
-            pendingTransaction.execute()
+          setPendingTransaction(null)
+          if (transaction) {
+            void transaction.execute()
           }
         }}
         onCancel={() => {
@@ -1511,11 +1479,18 @@ export function QuestView() {
                   <div className="mt-1 space-y-2">
                     {importedData.milestones.map((ms, i) => (
                       <div key={i} className="bg-muted/50 rounded-md p-2">
-                        <p className="text-sm font-bold">{ms.title}</p>
-                        <p className="text-muted-foreground text-xs">{ms.description}</p>
-                        <p className="text-primary mt-1 text-xs font-black">
-                          {formatTokens(ms.rewardAmount)} USDC
-                        </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-bold">{ms.title}</p>
+                            <p className="text-muted-foreground text-xs">{ms.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ms.requiresPrevious && i > 0 && (
+                              <Badge variant="outline">Sequential</Badge>
+                            )}
+                            <Badge>{formatTokens(ms.rewardAmount)} USDC</Badge>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

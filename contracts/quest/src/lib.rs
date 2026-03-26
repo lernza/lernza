@@ -64,12 +64,14 @@ pub enum Error {
     InvalidInput = 5,
     QuestFull = 6,
     QuestArchived = 7,
+    NameTooLong = 8,
+    DescriptionTooLong = 9,
 }
 
 const BUMP: u32 = 518_400;
 const THRESHOLD: u32 = 120_960;
-const MAX_QUEST_NAME_LEN: u32 = 64;
-const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
+pub const MAX_QUEST_NAME_LEN: u32 = 64;
+pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
 
@@ -101,6 +103,28 @@ fn is_contract_address(addr: &Address) -> bool {
     buf[0] == b'C'
 }
 
+/// Validate name: not blank, not too long.
+fn validate_name(name: &String) -> Result<(), Error> {
+    if is_blank_ascii(name) {
+        return Err(Error::InvalidInput);
+    }
+    if name.len() > MAX_QUEST_NAME_LEN {
+        return Err(Error::NameTooLong);
+    }
+    Ok(())
+}
+
+/// Validate description: not blank, not too long.
+fn validate_description(description: &String) -> Result<(), Error> {
+    if is_blank_ascii(description) {
+        return Err(Error::InvalidInput);
+    }
+    if description.len() > MAX_QUEST_DESCRIPTION_LEN {
+        return Err(Error::DescriptionTooLong);
+    }
+    Ok(())
+}
+
 #[contract]
 pub struct QuestContract;
 
@@ -120,13 +144,9 @@ impl QuestContract {
     ) -> Result<u32, Error> {
         owner.require_auth();
 
-        if is_blank_ascii(&name) || name.len() > MAX_QUEST_NAME_LEN {
-            return Err(Error::InvalidInput);
-        }
-
-        if is_blank_ascii(&description) || description.len() > MAX_QUEST_DESCRIPTION_LEN {
-            return Err(Error::InvalidInput);
-        }
+        // Input validation — happens before any storage reads
+        validate_name(&name)?;
+        validate_description(&description)?;
 
         if !is_contract_address(&token_addr) {
             return Err(Error::InvalidInput);
@@ -196,6 +216,9 @@ impl QuestContract {
             return Err(Error::QuestArchived);
         }
 
+        // Input validation — happens before modifying state
+        validate_name(&name)?;
+        validate_description(&description)?;
         Self::validate_tags(&tags)?;
 
         quest.name = name;

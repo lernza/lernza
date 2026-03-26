@@ -33,6 +33,7 @@ function GlitchText({ text }: { text: string }) {
 export function NotFound() {
   const navigate = useNavigate()
   const [hovered, setHovered] = useState(false)
+  const canGoBack = window.history.length > 1
 
   return (
     <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
@@ -111,10 +112,12 @@ export function NotFound() {
               <Home className="h-4 w-4" />
               Back to Home
             </Button>
-            <Button variant="secondary" onClick={() => window.history.back()} className="group">
-              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-              Go Back
-            </Button>
+            {canGoBack && (
+              <Button variant="secondary" onClick={() => navigate(-1)} className="group">
+                <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                Go Back
+              </Button>
+            )}
           </div>
         </div>
 

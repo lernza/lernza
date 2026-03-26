@@ -38,7 +38,7 @@ interface DropdownPosition {
 interface ShareButtonProps {
   questId: number
   questName: string
-  onToast: (message: string, type?: "success" | "error" | "info") => void
+  onToast: (message: string, type?: "success" | "error" | "info" | "warning") => void
   compact?: boolean
 }
 

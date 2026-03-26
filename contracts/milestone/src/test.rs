@@ -232,16 +232,17 @@ fn test_not_completed_by_default() {
 
 #[test]
 fn test_zero_reward_milestone() {
+    // reward_amount must be > 0; zero reward is now rejected at creation time
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    let id = create_ms(&env, &client, &owner, q_id, "Free task", 0);
-    assert_eq!(id, 0);
-
-    let enrollee = Address::generate(&env);
-    quest_client.add_enrollee(&q_id, &enrollee);
-
-    let reward = client.verify_completion(&owner, &q_id, &0, &enrollee);
-    assert_eq!(reward, 0);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Free task"),
+        &String::from_str(&env, "Description"),
+        &0,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
 // --- distribution mode tests ---
@@ -636,4 +637,126 @@ fn test_peer_verification_with_different_distribution_modes() {
     let result = client.approve_completion(&peer, &q_id, &0, &enrollee);
     assert!(result.is_some());
     assert_eq!(result.unwrap(), 200); // Flat reward, not milestone reward
+}
+
+// ── create_milestone input-validation tests ───────────────────────────────────
+
+#[test]
+fn test_create_milestone_empty_title() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, ""),
+        &String::from_str(&env, "Valid description"),
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_milestone_empty_description() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &String::from_str(&env, ""),
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_milestone_very_long_title() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let bytes = [b'a'; 129]; // MAX_MILESTONE_TITLE_LEN is 128
+    let long_title = String::from_bytes(&env, &bytes);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &long_title,
+        &String::from_str(&env, "Valid description"),
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::TitleTooLong)));
+}
+
+#[test]
+fn test_create_milestone_very_long_description() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let bytes = [b'a'; 1001]; // MAX_MILESTONE_DESCRIPTION_LEN is 1000
+    let long_desc = String::from_bytes(&env, &bytes);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &long_desc,
+        &100,
+    );
+    assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
+}
+
+#[test]
+fn test_create_milestone_negative_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &String::from_str(&env, "Valid description"),
+        &-1,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_create_milestone_zero_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &String::from_str(&env, "Valid description"),
+        &0,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_create_milestone_max_length_title_succeeds() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let bytes = [b'a'; 128]; // exactly MAX_MILESTONE_TITLE_LEN — should succeed
+    let max_title = String::from_bytes(&env, &bytes);
+    let id = client.create_milestone(
+        &owner,
+        &q_id,
+        &max_title,
+        &String::from_str(&env, "Valid description"),
+        &100,
+    );
+    assert_eq!(id, 0);
+}
+
+#[test]
+fn test_create_milestone_max_length_description_succeeds() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let bytes = [b'a'; 1000]; // exactly MAX_MILESTONE_DESCRIPTION_LEN — should succeed
+    let max_desc = String::from_bytes(&env, &bytes);
+    let id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &max_desc,
+        &100,
+    );
+    assert_eq!(id, 0);
 }

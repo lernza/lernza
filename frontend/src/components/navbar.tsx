@@ -3,7 +3,7 @@ import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
-import { useTheme } from "@/App"
+import { useTheme } from "@/contexts/theme-context"
 import { useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 
@@ -155,10 +155,33 @@ export function Navbar() {
       </div>
 
       {connected && wrongNetwork ? (
-        <div className="border-border bg-destructive/10 text-foreground border-t-[2px] px-4 py-2 text-xs font-bold">
-          <div className="mx-auto flex max-w-7xl items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Wrong network: connected to {networkName ?? "Unknown"}, expected {expectedNetworkName}.
+        <div className="border-border border-t-[2px] bg-yellow-400 px-4 py-3 text-black dark:bg-yellow-500 dark:text-black">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="text-sm font-black">
+                  Wrong network - switch Freighter to {expectedNetworkName}
+                </p>
+                <p className="mt-0.5 text-xs font-semibold opacity-80">
+                  You are on <span className="font-black">{networkName ?? "Unknown"}</span>. Lernza
+                  runs on {expectedNetworkName}.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold">
+              <span className="border border-black/30 bg-black/10 px-2 py-1">
+                1. Open Freighter
+              </span>
+              <span className="opacity-60">→</span>
+              <span className="border border-black/30 bg-black/10 px-2 py-1">
+                2. Click network dropdown
+              </span>
+              <span className="opacity-60">→</span>
+              <span className="border border-black/30 bg-black/10 px-2 py-1">
+                3. Select {expectedNetworkName}
+              </span>
+            </div>
           </div>
         </div>
       ) : null}

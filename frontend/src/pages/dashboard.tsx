@@ -36,15 +36,16 @@ export function Dashboard() {
   const navigate = useNavigate()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
-  const [quests, setQuests] = useState<WorkspaceInfo[]>([])
-  const [questStats, setQuestStats] = useState<Record<number, QuestStats>>({})
-  const [questMilestones, setQuestMilestones] = useState<Record<number, number>>({})
-  const [questCompletions, setQuestCompletions] = useState<Record<number, number>>({})
-  const [isLoading, setIsLoading] = useState(false)
-  const [loadError, setLoadError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!connected) return
+  // Use the new async hook for dashboard data
+  const {
+    data: dashboardData,
+    isLoading,
+    error: loadError,
+  } = useContractData(
+    "dashboard",
+    async () => {
+      const questInfos = await questClient.getQuests()
 
       const normalized: WorkspaceInfo[] = questInfos.map(q => ({
         id: q.id,
@@ -57,20 +58,45 @@ export function Dashboard() {
         max_enrollees: q.maxEnrollees,
       }))
 
-    const load = async () => {
-      setIsLoading(true)
-      setLoadError(null)
+      const statsEntries = await Promise.all(
+        normalized.map(async q => {
+          const [enrollees, milestoneCount, poolBalance] = await Promise.all([
+            questClient.getEnrollees(q.id),
+            milestoneClient.getMilestoneCount(q.id),
+            rewardsClient.getPoolBalance(q.id),
+          ])
 
-      try {
-        const questInfos = await questClient.getQuests()
-        if (cancelled) return
+          return [
+            q.id,
+            {
+              enrolleeCount: enrollees.length,
+              milestoneCount: milestoneCount,
+              poolBalance:
+                poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
+                  ? Number.MAX_SAFE_INTEGER
+                  : Number(poolBalance),
+            },
+          ] as const
+        })
+      )
 
-      const questStats = Object.fromEntries(statsEntries)
+      const questStats = Object.fromEntries(
+        statsEntries.map(([id, stats]) => [
+          id,
+          {
+            enrolleeCount: stats.enrolleeCount,
+            milestoneCount: stats.milestoneCount,
+            poolBalance: stats.poolBalance,
+          },
+        ])
+      )
       const questMilestones = Object.fromEntries(
         statsEntries.map(([id, stats]) => [id, stats.milestoneCount])
       )
 
-        const statsEntries = await Promise.all(
+      let questCompletions: Record<number, number> = {}
+      if (address) {
+        const completionEntries = await Promise.all(
           normalized.map(async q => {
             const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
             return [q.id, completed] as const
@@ -399,7 +425,6 @@ export function Dashboard() {
                             {formatTokens(stats.poolBalance)} USDC
                           </Badge>
                         </div>
-
 
                         {totalMilestones > 0 && (
                           <div className="space-y-2">

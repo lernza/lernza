@@ -34,7 +34,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -71,7 +72,8 @@
                 },
                 {
                   "u32": 1
-                }
+                },
+                "void"
               ]
             }
           },
@@ -108,7 +110,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -342,6 +345,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "name"
                       },
                       "val": {
@@ -476,6 +485,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "name"
                       },
                       "val": {
@@ -607,6 +622,12 @@
                       "val": {
                         "u32": 2
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {

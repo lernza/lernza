@@ -34,6 +34,7 @@ fn extract_decl(source: &str, marker: &str) -> String {
     body[..end_index].to_string()
 }
 
+#[allow(dead_code)]
 fn normalize_decl(input: &str) -> String {
     input
         .replace("soroban_sdk::Vec<String>", "Vec<String>")
@@ -47,6 +48,7 @@ fn normalize_decl(input: &str) -> String {
         .collect()
 }
 
+#[allow(dead_code)]
 fn assert_same_decl(canonical_src: &str, other_src: &str, marker: &str, contract_name: &str) {
     let canonical = normalize_decl(&extract_decl(canonical_src, marker));
     let candidate = normalize_decl(&extract_decl(other_src, marker));
@@ -58,20 +60,14 @@ fn assert_same_decl(canonical_src: &str, other_src: &str, marker: &str, contract
 }
 
 #[test]
-fn quest_facing_types_match_quest_contract() {
-    let quest_src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../quest/src/lib.rs"));
-    let milestone_src = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../milestone/src/lib.rs"
-    ));
-    let rewards_src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+fn shared_types_exist_in_common() {
+    let common_src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../common/src/lib.rs"));
 
     for marker in [
         "pub enum Visibility",
         "pub enum QuestStatus",
         "pub struct QuestInfo",
     ] {
-        assert_same_decl(quest_src, milestone_src, marker, "milestone");
-        assert_same_decl(quest_src, rewards_src, marker, "rewards");
+        extract_decl(common_src, marker);
     }
 }

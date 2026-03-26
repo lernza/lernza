@@ -1,5 +1,9 @@
 #![no_std]
 #![allow(deprecated)]
+#![allow(clippy::too_many_arguments)]
+use common::{
+    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
+};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
 };
@@ -8,24 +12,9 @@ use soroban_sdk::{
 // An owner creates a quest, enrolls learners, configures a reward token.
 // Other contracts (milestone, rewards) reference quest IDs and owners.
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Visibility {
-    Public = 0,
-    /// Discovery-only flag.
-    ///
-    /// `Private` quests are omitted from public listing helpers, but the quest
-    /// record and enrollee data remain queryable by quest id because Soroban
-    /// contract storage is publicly readable.
-    Private = 1,
-}
+// Visibility moved to common.
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum QuestStatus {
-    Active = 0,
-    Archived = 1,
-}
+// QuestStatus moved to common.
 
 #[contracttype]
 #[derive(Clone)]
@@ -37,21 +26,7 @@ pub enum DataKey {
     PublicQuests,
 }
 
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct QuestInfo {
-    pub id: u32,
-    pub owner: Address,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub tags: Vec<String>,
-    pub token_addr: Address,
-    pub created_at: u64,
-    pub visibility: Visibility,
-    pub status: QuestStatus,
-    pub deadline: u64, // Unix timestamp; 0 = no deadline
-}
+// QuestInfo moved to common.
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -59,17 +34,16 @@ pub struct QuestInfo {
 pub enum Error {
     NotFound = 1,
     Unauthorized = 2,
-    AlreadyEnrolled = 3,
-    NotEnrolled = 4,
-    InvalidInput = 5,
-    QuestFull = 6,
-    QuestArchived = 7,
-    NameTooLong = 8,
-    DescriptionTooLong = 9,
+    InvalidInput = 3,
+    AlreadyEnrolled = 4,
+    NotEnrolled = 6,
+    QuestFull = 7,
+    QuestArchived = 8,
+    NameTooLong = 9,
+    DescriptionTooLong = 10,
 }
 
-const BUMP: u32 = 518_400;
-const THRESHOLD: u32 = 120_960;
+// TTL constants and address validation moved to common.
 pub const MAX_QUEST_NAME_LEN: u32 = 64;
 pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
@@ -93,15 +67,7 @@ fn is_blank_ascii(s: &String) -> bool {
     true
 }
 
-fn is_contract_address(addr: &Address) -> bool {
-    let s = addr.to_string();
-    if s.len() != 56 {
-        return false;
-    }
-    let mut buf = [0u8; 56];
-    s.copy_into_slice(&mut buf);
-    buf[0] == b'C'
-}
+// is_contract_address moved to common.
 
 /// Validate name: not blank, not too long.
 fn validate_name(name: &String) -> Result<(), Error> {
@@ -141,6 +107,7 @@ impl QuestContract {
         tags: Vec<String>,
         token_addr: Address,
         visibility: Visibility,
+        max_enrollees: Option<u32>,
     ) -> Result<u32, Error> {
         owner.require_auth();
 
@@ -167,6 +134,7 @@ impl QuestContract {
             visibility,
             status: QuestStatus::Active,
             deadline: 0,
+            max_enrollees,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -174,6 +142,7 @@ impl QuestContract {
             .persistent()
             .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
+        extend_instance_ttl(&env);
 
         if visibility == Visibility::Public {
             let mut public_ids: Vec<u32> = env
@@ -203,29 +172,55 @@ impl QuestContract {
     pub fn update_quest(
         env: Env,
         quest_id: u32,
-        name: String,
-        description: String,
-        category: String,
-        tags: Vec<String>,
-        visibility: Visibility,
+        owner: Address,
+        name: Option<String>,
+        description: Option<String>,
+        category: Option<String>,
+        tags: Option<Vec<String>>,
+        visibility: Option<Visibility>,
+        max_enrollees: Option<u32>,
     ) -> Result<(), Error> {
+        owner.require_auth();
         let mut quest = Self::load_quest(&env, quest_id)?;
-        quest.owner.require_auth();
+
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
 
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
         }
 
-        // Input validation — happens before modifying state
-        validate_name(&name)?;
-        validate_description(&description)?;
-        Self::validate_tags(&tags)?;
+        // Input validation & update
+        if let Some(n) = name {
+            validate_name(&n)?;
+            quest.name = n;
+        }
 
-        quest.name = name;
-        quest.description = description;
-        quest.category = category;
-        quest.tags = tags;
-        quest.visibility = visibility;
+        if let Some(d) = description {
+            validate_description(&d)?;
+            quest.description = d;
+        }
+
+        if let Some(c) = category {
+            if is_blank_ascii(&c) {
+                return Err(Error::InvalidInput);
+            }
+            quest.category = c;
+        }
+
+        if let Some(t) = tags {
+            Self::validate_tags(&t)?;
+            quest.tags = t;
+        }
+
+        if let Some(v) = visibility {
+            Self::internal_set_visibility(&env, quest_id, &mut quest, v);
+        }
+
+        if let Some(m) = max_enrollees {
+            quest.max_enrollees = Some(m);
+        }
 
         env.storage()
             .persistent()
@@ -275,13 +270,9 @@ impl QuestContract {
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
-        // Check enrollment cap
-        if let Some(cap) = env
-            .storage()
-            .persistent()
-            .get::<_, u32>(&DataKey::EnrollmentCap(quest_id))
-        {
-            if enrollees.len() >= cap {
+        // Check enrollment cap from quest record
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
                 return Err(Error::QuestFull);
             }
         }
@@ -402,24 +393,8 @@ impl QuestContract {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        if quest.visibility != visibility {
-            let mut public_ids: Vec<u32> = env
-                .storage()
-                .instance()
-                .get(&DataKey::PublicQuests)
-                .unwrap_or(Vec::new(&env));
+        Self::internal_set_visibility(&env, quest_id, &mut quest, visibility);
 
-            if visibility == Visibility::Public {
-                public_ids.push_back(quest_id);
-            } else if let Some(index) = public_ids.first_index_of(quest_id) {
-                public_ids.remove(index);
-            }
-            env.storage()
-                .instance()
-                .set(&DataKey::PublicQuests, &public_ids);
-        }
-
-        quest.visibility = visibility;
         env.storage()
             .persistent()
             .set(&DataKey::Quest(quest_id), &quest);
@@ -477,10 +452,8 @@ impl QuestContract {
 
     /// Get enrollment cap for a quest.
     pub fn get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32> {
-        Self::load_quest(&env, quest_id).ok()?;
-        env.storage()
-            .persistent()
-            .get(&DataKey::EnrollmentCap(quest_id))
+        let quest = Self::load_quest(&env, quest_id).ok()?;
+        quest.max_enrollees
     }
 
     // --- internals ---
@@ -497,6 +470,31 @@ impl QuestContract {
             .persistent()
             .get(&DataKey::Enrollees(id))
             .unwrap_or(Vec::new(env))
+    }
+
+    fn internal_set_visibility(
+        env: &Env,
+        quest_id: u32,
+        quest: &mut QuestInfo,
+        visibility: Visibility,
+    ) {
+        if quest.visibility != visibility {
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .instance()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(env));
+
+            if visibility == Visibility::Public {
+                public_ids.push_back(quest_id);
+            } else if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
+            }
+            env.storage()
+                .instance()
+                .set(&DataKey::PublicQuests, &public_ids);
+        }
+        quest.visibility = visibility;
     }
 
     fn internal_remove_enrollee(env: &Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
@@ -539,23 +537,15 @@ impl QuestContract {
     }
 
     fn bump(env: &Env, quest_id: u32) {
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Quest(quest_id), THRESHOLD, BUMP);
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Enrollees(quest_id), THRESHOLD, BUMP);
+        extend_instance_ttl(env);
+        common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
+        common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
         if env
             .storage()
             .persistent()
             .has(&DataKey::EnrollmentCap(quest_id))
         {
-            env.storage().persistent().extend_ttl(
-                &DataKey::EnrollmentCap(quest_id),
-                THRESHOLD,
-                BUMP,
-            );
+            common::extend_persistent_ttl(env, &DataKey::EnrollmentCap(quest_id));
         }
     }
 }

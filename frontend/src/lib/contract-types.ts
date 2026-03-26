@@ -12,6 +12,7 @@ export interface WorkspaceInfo {
   token_addr: string
   created_at: number
   visibility: Visibility
+  max_enrollees?: number
 }
 
 export interface MilestoneInfo {

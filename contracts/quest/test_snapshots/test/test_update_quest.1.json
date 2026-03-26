@@ -34,7 +34,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -55,6 +56,9 @@
                   "u32": 0
                 },
                 {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
                   "string": "Updated Name"
                 },
                 {
@@ -68,7 +72,8 @@
                 },
                 {
                   "u32": 1
-                }
+                },
+                "void"
               ]
             }
           },
@@ -212,6 +217,12 @@
                     },
                     {
                       "key": {
+                        "symbol": "max_enrollees"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
                         "symbol": "name"
                       },
                       "val": {
@@ -311,11 +322,7 @@
                           ]
                         },
                         "val": {
-                          "vec": [
-                            {
-                              "u32": 0
-                            }
-                          ]
+                          "vec": []
                         }
                       }
                     ]

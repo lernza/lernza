@@ -22,12 +22,11 @@ import {
 } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
 
-// The first two workspaces share the same owner — treat them as "owned"
-const MOCK_OWNER = "GBXR...K2YQ"
+
 
 export function Dashboard() {
   const navigate = useNavigate()
-  const { connected, connect, shortAddress } = useWallet()
+  const { address, connected, connect, shortAddress } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
 
   if (!connected) {
@@ -100,10 +99,10 @@ export function Dashboard() {
     )
   }
 
-  // Apply filter
+  // Apply filter using the real connected wallet address
   const filteredWorkspaces = MOCK_WORKSPACES.filter((ws) => {
-    if (filter === "owned") return ws.owner === MOCK_OWNER
-    if (filter === "enrolled") return ws.owner !== MOCK_OWNER
+    if (filter === "owned") return address !== null && ws.owner === address
+    if (filter === "enrolled") return address === null || ws.owner !== address
     return true
   })
 
@@ -176,7 +175,7 @@ export function Dashboard() {
               )
             )
             .reduce((sum, m) => sum + m.rewardAmount, 0)
-          const isOwned = ws.owner === MOCK_OWNER
+          const isOwned = address !== null && ws.owner === address
 
           return (
             <Card

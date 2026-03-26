@@ -36,6 +36,10 @@ import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
 import { QuestMetadata } from "@/components/quest-metadata"
+import {
+  TransactionConfirmDialog,
+  type TransactionDetails,
+} from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { MilestoneClient } from "@/lib/contracts/milestone"
@@ -68,6 +72,12 @@ type Tab = "milestones" | "enrollees"
 
 const milestoneClient = new MilestoneClient()
 
+// Helper function to truncate addresses
+const truncateAddress = (address: string) => {
+  if (!address) return ""
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
+}
+
 export function QuestView() {
   const { id } = useParams()
   const questId = Number(id)
@@ -95,6 +105,14 @@ export function QuestView() {
   const removeEnrolleeTx = useTransactionAction()
   const [activeMilestoneTxId, setActiveMilestoneTxId] = useState<number | null>(null)
 
+  // Transaction confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingTransaction, setPendingTransaction] = useState<{
+    type: "add_enrollee" | "create_milestone" | "verify_payout"
+    details: TransactionDetails
+    execute: () => Promise<void>
+  } | null>(null)
+
   const milestoneForm = useForm<MilestoneFormValues>({
     resolver: zodResolver(milestoneFormSchema),
     defaultValues: { title: "", description: "", rewardAmount: "" },
@@ -117,26 +135,42 @@ export function QuestView() {
         return
       }
       const reward = Number(values.rewardAmount)
-      try {
-        await createMilestoneTx.run(async () => {
-          const result = await milestoneClient.createMilestone(
-            address,
-            questId,
-            values.title,
-            values.description,
-            BigInt(reward)
-          )
-          if (result.status !== "SUCCESS") {
-            throw new Error(result.error || "Transaction failed. Please try again.")
+
+      // Show confirmation dialog instead of executing directly
+      setPendingTransaction({
+        type: "create_milestone",
+        details: {
+          actionName: "Create Milestone",
+          fromAddress: address,
+          estimatedFee: "0.002",
+          tokenAmount: BigInt(reward),
+          tokenSymbol: "USDC",
+          description: `Create milestone "${values.title}" with ${reward} USDC reward.`,
+        },
+        execute: async () => {
+          try {
+            await createMilestoneTx.run(async () => {
+              const result = await milestoneClient.createMilestone(
+                address,
+                questId,
+                values.title,
+                values.description,
+                BigInt(reward)
+              )
+              if (result.status !== "SUCCESS") {
+                throw new Error(result.error || "Transaction failed. Please try again.")
+              }
+              return result
+            })
+            addToast("Milestone created successfully!", "success")
+            resetMilestoneForm()
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Unknown error"
+            addToast(`Failed to create milestone: ${message}`, "error")
           }
-          return result
-        })
-        addToast("Milestone created successfully!", "success")
-        resetMilestoneForm()
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Unknown error"
-        addToast(`Failed to create milestone: ${message}`, "error")
-      }
+        },
+      })
+      setShowConfirmDialog(true)
     },
     [address, questId, addToast, resetMilestoneForm, createMilestoneTx]
   )
@@ -163,24 +197,40 @@ export function QuestView() {
   const handleAddEnrollee = useCallback(
     async (values: EnrolleeFormValues) => {
       if (!address) return
-      setAddPhase("submitting")
-      try {
-        await addEnrolleeTx.run(async () => {
-          const result = await questClient.addEnrollee(address, questId, values.address)
-          if (result.status !== "SUCCESS") {
-            throw new Error(result.error ?? "Transaction failed. Please try again.")
+
+      // Show confirmation dialog instead of executing directly
+      setPendingTransaction({
+        type: "add_enrollee",
+        details: {
+          actionName: "Add Enrollee",
+          fromAddress: address,
+          toAddress: values.address,
+          estimatedFee: "0.001",
+          description: `Add ${truncateAddress(values.address)} as an enrollee to this quest.`,
+        },
+        execute: async () => {
+          setAddPhase("submitting")
+          try {
+            await addEnrolleeTx.run(async () => {
+              const result = await questClient.addEnrollee(address, questId, values.address)
+              if (result.status !== "SUCCESS") {
+                throw new Error(result.error ?? "Transaction failed. Please try again.")
+              }
+              return result
+            })
+            setLocalEnrollees(prev => [...prev, values.address])
+            setAddPhase("done")
+            addToast("Enrollee added successfully", "success")
+            setTimeout(closeAddEnrollee, 1500)
+          } catch (err: unknown) {
+            const message =
+              err instanceof Error ? err.message : "Transaction failed. Please try again."
+            setAddPhase("error")
+            enrolleeForm.setError("address", { message })
           }
-          return result
-        })
-        setLocalEnrollees(prev => [...prev, values.address])
-        setAddPhase("done")
-        addToast("Enrollee added successfully", "success")
-        setTimeout(closeAddEnrollee, 1500)
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
-        setAddPhase("error")
-        enrolleeForm.setError("address", { message })
-      }
+        },
+      })
+      setShowConfirmDialog(true)
     },
     [address, questId, addToast, closeAddEnrollee, addEnrolleeTx, enrolleeForm]
   )
@@ -206,41 +256,57 @@ export function QuestView() {
       return
     }
 
-    setActiveMilestoneTxId(milestoneId)
-    try {
-      await verifyPayoutTx.run(async () => {
-        const verifyResult = await milestoneClient.verifyCompletion(
-          address,
-          questId,
-          milestoneId,
-          target
-        )
-        if (verifyResult.status !== "SUCCESS") {
-          throw new Error(verifyResult.error ?? "Milestone verification failed.")
+    // Show confirmation dialog instead of executing directly
+    setPendingTransaction({
+      type: "verify_payout",
+      details: {
+        actionName: "Verify & Payout",
+        fromAddress: address,
+        toAddress: target,
+        estimatedFee: "0.003",
+        tokenAmount: BigInt(rewardAmount),
+        tokenSymbol: "USDC",
+        description: `Verify completion and distribute ${rewardAmount} USDC to ${truncateAddress(target)}.`,
+      },
+      execute: async () => {
+        setActiveMilestoneTxId(milestoneId)
+        try {
+          await verifyPayoutTx.run(async () => {
+            const verifyResult = await milestoneClient.verifyCompletion(
+              address,
+              questId,
+              milestoneId,
+              target
+            )
+            if (verifyResult.status !== "SUCCESS") {
+              throw new Error(verifyResult.error ?? "Milestone verification failed.")
+            }
+
+            const payoutResult = await rewardsClient.distributeReward(
+              address,
+              questId,
+              milestoneId,
+              target,
+              BigInt(rewardAmount)
+            )
+            if (payoutResult.status !== "SUCCESS") {
+              throw new Error(payoutResult.error ?? "Reward distribution failed.")
+            }
+
+            return payoutResult
+          })
+
+          setLocalCompletions(prev => [...prev, { milestoneId, enrollee: target, completed: true }])
+          addToast("Completion verified and reward paid out.", "success")
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Verification failed"
+          addToast(message, "error")
+        } finally {
+          setActiveMilestoneTxId(null)
         }
-
-        const payoutResult = await rewardsClient.distributeReward(
-          address,
-          questId,
-          milestoneId,
-          target,
-          BigInt(rewardAmount)
-        )
-        if (payoutResult.status !== "SUCCESS") {
-          throw new Error(payoutResult.error ?? "Reward distribution failed.")
-        }
-
-        return payoutResult
-      })
-
-      setLocalCompletions(prev => [...prev, { milestoneId, enrollee: target, completed: true }])
-      addToast("Completion verified and reward paid out.", "success")
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Verification failed"
-      addToast(message, "error")
-    } finally {
-      setActiveMilestoneTxId(null)
-    }
+      },
+    })
+    setShowConfirmDialog(true)
   }
 
   const handleRemoveEnrollee = async (enrollee: string) => {
@@ -846,6 +912,25 @@ export function QuestView() {
         </div>
       )}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {/* Transaction Confirmation Dialog */}
+      <TransactionConfirmDialog
+        isOpen={showConfirmDialog}
+        details={pendingTransaction?.details ?? null}
+        onConfirm={() => {
+          setShowConfirmDialog(false)
+          if (pendingTransaction) {
+            pendingTransaction.execute()
+          }
+        }}
+        onCancel={() => {
+          setShowConfirmDialog(false)
+          setPendingTransaction(null)
+        }}
+        isPending={
+          addEnrolleeTx.isPending || createMilestoneTx.isPending || verifyPayoutTx.isPending
+        }
+      />
     </div>
   )
 }

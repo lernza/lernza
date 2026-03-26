@@ -644,95 +644,103 @@ export function QuestView() {
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
                   style={{ transitionDelay: `${i * 100}ms` }}
                 >
-                  <Card
-                    className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
-                      isCompleted ? "border-success" : ""
-                    }`}
+                  <button
+                    type="button"
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} milestone ${ms.title}`}
                     onClick={() => setExpandedMilestone(isExpanded ? null : ms.id)}
+                    className="focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none"
                   >
-                    <CardContent className="p-5">
-                      <div className="flex items-start gap-4">
-                        <div
-                          className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
-                            isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <CheckCircle2 className="h-4 w-4" />
-                          ) : (
-                            <Circle className="text-muted-foreground h-4 w-4" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
-                            <h3
-                              className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
-                            >
-                              {ms.title}
-                            </h3>
-                            <div className="flex flex-shrink-0 items-center gap-2">
-                              <Badge variant={isCompleted ? "success" : "default"}>
-                                {ms.reward_amount} USDC
-                              </Badge>
-                              {isExpanded ? (
-                                <ChevronUp className="text-muted-foreground h-4 w-4" />
-                              ) : (
-                                <ChevronDown className="text-muted-foreground h-4 w-4" />
-                              )}
-                            </div>
+                    <Card
+                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
+                        isCompleted ? "border-success" : ""
+                      }`}
+                    >
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
+                              isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <CheckCircle2 className="h-4 w-4" />
+                            ) : (
+                              <Circle className="text-muted-foreground h-4 w-4" />
+                            )}
                           </div>
-
-                          {/* Expanded content */}
-                          {isExpanded && (
-                            <div className="animate-fade-in-up mt-3">
-                              <p className="text-muted-foreground mb-3 text-sm">{ms.description}</p>
-                              {completedBy.length > 0 && (
-                                <div className="mb-3">
-                                  <p className="text-muted-foreground mb-2 text-xs font-bold">
-                                    Completed by:
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {completedBy.map(addr => (
-                                      <span
-                                        key={addr}
-                                        className="bg-success/10 border-border border-[1.5px] px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_var(--color-border)]"
-                                      >
-                                        {addr}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {!isCompleted && localEnrollees.length > 0 && (
-                                <Button
-                                  variant={verifyPayoutTx.isFailure ? "danger" : "outline"}
-                                  size="sm"
-                                  className="shimmer-on-hover"
-                                  disabled={isVerifying || !isOwner || !isSupportedNetwork}
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    void handleVerifyAndPayout(ms.id, ms.reward_amount)
-                                  }}
-                                >
-                                  {isVerifying ? (
-                                    <>
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      Verifying & Paying...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="h-3.5 w-3.5" />
-                                      Verify & Payout
-                                    </>
-                                  )}
-                                </Button>
-                              )}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <h3
+                                className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
+                              >
+                                {ms.title}
+                              </h3>
+                              <div className="flex flex-shrink-0 items-center gap-2">
+                                <Badge variant={isCompleted ? "success" : "default"}>
+                                  {ms.reward_amount} USDC
+                                </Badge>
+                                {isExpanded ? (
+                                  <ChevronUp className="text-muted-foreground h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="text-muted-foreground h-4 w-4" />
+                                )}
+                              </div>
                             </div>
-                          )}
+
+                            {/* Expanded content */}
+                            {isExpanded && (
+                              <div className="animate-fade-in-up mt-3">
+                                <p className="text-muted-foreground mb-3 text-sm">
+                                  {ms.description}
+                                </p>
+                                {completedBy.length > 0 && (
+                                  <div className="mb-3">
+                                    <p className="text-muted-foreground mb-2 text-xs font-bold">
+                                      Completed by:
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {completedBy.map(addr => (
+                                        <span
+                                          key={addr}
+                                          className="bg-success/10 border-border border-[1.5px] px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_var(--color-border)]"
+                                        >
+                                          {addr}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {!isCompleted && localEnrollees.length > 0 && (
+                                  <Button
+                                    variant={verifyPayoutTx.isFailure ? "danger" : "outline"}
+                                    size="sm"
+                                    className="shimmer-on-hover"
+                                    disabled={isVerifying || !isOwner || !isSupportedNetwork}
+                                    onClick={e => {
+                                      e.stopPropagation()
+                                      void handleVerifyAndPayout(ms.id, ms.reward_amount)
+                                    }}
+                                  >
+                                    {isVerifying ? (
+                                      <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        Verifying & Paying...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        Verify & Payout
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </button>
                 </div>
               )
             })

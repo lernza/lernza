@@ -36,6 +36,7 @@ export interface QuestInfo {
   visibility: Visibility
   status: QuestStatus
   deadline: number
+  maxEnrollees?: number
 }
 
 export class QuestClient {
@@ -143,16 +144,18 @@ export class QuestClient {
     category: string,
     tags: string[],
     tokenAddr: string,
-    visibility: Visibility
+    visibility: Visibility,
+    maxEnrollees?: number
   ) {
     const tx = await this.buildTx(owner, "create_quest", [
       new Address(owner).toScVal(),
       nativeToScVal(name, { type: "string" }),
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(category, { type: "string" }),
-      nativeToScVal(tags, { type: "array" }),
+      nativeToScVal(tags, { type: "string_vec" }),
       new Address(tokenAddr).toScVal(),
       nativeToScVal(visibility, { type: "u32" }),
+      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
     ])
     return signAndSubmit(tx)
   }
@@ -163,22 +166,27 @@ export class QuestClient {
   async updateQuest(
     owner: string,
     questId: number,
-    name: string,
-    description: string,
-    category: string,
-    tags: string[],
-    visibility: Visibility
+    name?: string,
+    description?: string,
+    category?: string,
+    tags?: string[],
+    visibility?: Visibility,
+    maxEnrollees?: number
   ) {
     const tx = await this.buildTx(owner, "update_quest", [
       nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(name, { type: "string" }),
-      nativeToScVal(description, { type: "string" }),
-      nativeToScVal(category, { type: "string" }),
-      nativeToScVal(tags, { type: "array" }),
-      nativeToScVal(visibility, { type: "u32" }),
+      new Address(owner).toScVal(),
+      name !== undefined ? nativeToScVal(name, { type: "string" }) : nativeToScVal(null),
+      description !== undefined ? nativeToScVal(description, { type: "string" }) : nativeToScVal(null),
+      category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
+      tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
+      visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
+      maxEnrollees !== undefined ? nativeToScVal(maxEnrollees, { type: "u32" }) : nativeToScVal(null),
     ])
     return signAndSubmit(tx)
   }
+
+  // updateQuest was replaced by the more flexible version above
 
   /**
    * Archives a quest. Owner only.
@@ -264,6 +272,7 @@ export class QuestClient {
       visibility: Number(r.visibility) as Visibility,
       status: Number(r.status) as QuestStatus,
       deadline: Number(r.deadline),
+      maxEnrollees: r.max_enrollees ? Number(r.max_enrollees) : undefined,
     }
   }
 

@@ -1,11 +1,21 @@
-import { Wallet, Coins, TrendingUp, Trophy, Sparkles, Copy, Check } from "lucide-react"
-import { useState } from "react"
+import {
+  Wallet,
+  Coins,
+  TrendingUp,
+  Trophy,
+  Sparkles,
+  Copy,
+  Check,
+  Loader2,
+  AlertCircle,
+} from "lucide-react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
-import { MOCK_USER_STATS } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
+import { rewardsClient } from "@/lib/contracts/rewards"
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -28,8 +38,56 @@ function WalletAvatar({ address }: { address: string }) {
 
 export function Profile() {
   const { connected, connect, address } = useWallet()
-  const stats = MOCK_USER_STATS
   const [copied, setCopied] = useState(false)
+  const [totalEarned, setTotalEarned] = useState<bigint | null>(0n)
+  const [earningsLoading, setEarningsLoading] = useState(false)
+  const [earningsError, setEarningsError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadEarnings() {
+      if (!connected || !address) {
+        setTotalEarned(0n)
+        setEarningsLoading(false)
+        setEarningsError(null)
+        return
+      }
+
+      setEarningsLoading(true)
+      setEarningsError(null)
+
+      try {
+        const earnings = await rewardsClient.getUserEarnings(address)
+        if (cancelled) return
+
+        if (earnings === null) {
+          setTotalEarned(null)
+          setEarningsError(
+            "On-chain earnings are unavailable until the rewards contract is configured."
+          )
+        } else {
+          setTotalEarned(earnings)
+        }
+      } catch (error) {
+        if (cancelled) return
+        setTotalEarned(null)
+        setEarningsError(
+          error instanceof Error ? error.message : "Failed to load on-chain earnings."
+        )
+      } finally {
+        if (!cancelled) {
+          setEarningsLoading(false)
+        }
+      }
+    }
+
+    void loadEarnings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [address, connected])
 
   const handleCopy = () => {
     if (address) {
@@ -38,6 +96,13 @@ export function Profile() {
       setTimeout(() => setCopied(false), 2000)
     }
   }
+
+  const formattedEarned =
+    totalEarned === null
+      ? "Unavailable"
+      : totalEarned > BigInt(Number.MAX_SAFE_INTEGER)
+        ? totalEarned.toString()
+        : formatTokens(Number(totalEarned))
 
   if (!connected) {
     return (
@@ -112,33 +177,6 @@ export function Profile() {
     )
   }
 
-  const earnings = [
-    {
-      milestone: "Hello World",
-      quest: "Learn to Code with Alex",
-      amount: 50,
-      date: "2 days ago",
-    },
-    {
-      milestone: "Build a CLI Tool",
-      quest: "Learn to Code with Alex",
-      amount: 100,
-      date: "5 days ago",
-    },
-    {
-      milestone: "Set up Stellar CLI",
-      quest: "Stellar Dev Bootcamp",
-      amount: 100,
-      date: "1 week ago",
-    },
-    {
-      milestone: "First Soroban Contract",
-      quest: "Stellar Dev Bootcamp",
-      amount: 200,
-      date: "2 weeks ago",
-    },
-  ]
-
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
@@ -193,12 +231,16 @@ export function Profile() {
               <div className="sm:mt-6">
                 <div className="bg-primary border-border border-2 px-5 py-3 shadow-[3px_3px_0_var(--color-border)]">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    <p className="text-2xl font-black tabular-nums">
-                      {formatTokens(stats.totalEarned)}
-                    </p>
+                    {earningsLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <TrendingUp className="h-4 w-4" />
+                    )}
+                    <p className="text-2xl font-black tabular-nums">{formattedEarned}</p>
                   </div>
-                  <p className="text-xs font-bold">USDC earned</p>
+                  <p className="text-xs font-bold">
+                    {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -210,50 +252,67 @@ export function Profile() {
       <div>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-xl font-black">Earnings History</h2>
-          <span className="text-muted-foreground text-sm font-bold">
-            {earnings.length} transactions
-          </span>
+          <span className="text-muted-foreground text-sm font-bold">Aggregate total only</span>
         </div>
 
         <div className="space-y-4">
-          {earnings.length === 0 ? (
+          {earningsLoading ? (
+            <Card className="animate-fade-in-up">
+              <CardContent className="flex flex-col items-center py-12 text-center">
+                <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                </div>
+                <h3 className="mb-2 font-black">Loading on-chain earnings</h3>
+                <p className="text-muted-foreground text-sm">
+                  Fetching your aggregate rewards from the rewards contract.
+                </p>
+              </CardContent>
+            </Card>
+          ) : earningsError ? (
+            <Card className="animate-fade-in-up">
+              <CardContent className="flex flex-col items-center py-12 text-center">
+                <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                  <AlertCircle className="text-destructive h-6 w-6" />
+                </div>
+                <h3 className="mb-2 font-black">On-chain earnings unavailable</h3>
+                <p className="text-muted-foreground max-w-md text-sm">{earningsError}</p>
+              </CardContent>
+            </Card>
+          ) : totalEarned === 0n ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                   <Coins className="h-6 w-6" />
                 </div>
-                <h3 className="mb-2 font-black">No earnings yet</h3>
+                <h3 className="mb-2 font-black">No on-chain earnings yet</h3>
                 <p className="text-muted-foreground text-sm">
-                  Complete milestones to start earning USDC.
+                  Your wallet has not received rewards from the rewards contract yet.
                 </p>
               </CardContent>
             </Card>
           ) : (
-            earnings.map((e, i) => (
-              <div key={i} className={`animate-fade-in-up stagger-${i + 1}`}>
-                <Card className="neo-lift group hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="bg-success/10 border-border group-hover:bg-success/20 flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)] transition-colors">
-                          <Coins className="text-success h-5 w-5" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-black">{e.milestone}</p>
-                          <p className="text-muted-foreground text-xs font-bold">{e.quest}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 text-right">
-                        <Badge variant="success" className="tabular-nums">
-                          +{e.amount} USDC
-                        </Badge>
-                        <p className="text-muted-foreground text-xs font-bold">{e.date}</p>
-                      </div>
+            <Card className="animate-fade-in-up">
+              <CardContent className="py-10">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex items-start gap-4">
+                    <div className="bg-success/10 border-border flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]">
+                      <Coins className="text-success h-5 w-5" />
                     </div>
-                  </CardContent>
-                </Card>
-              </div>
-            ))
+                    <div>
+                      <p className="text-sm font-black">On-chain earnings total</p>
+                      <p className="text-muted-foreground mt-1 max-w-md text-sm">
+                        The rewards contract exposes your aggregate earnings by wallet address.
+                        Per-milestone payout history is not indexable from the current on-chain API
+                        yet, so this page does not fabricate transactions.
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="success" className="self-start tabular-nums">
+                    +{formattedEarned} USDC
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

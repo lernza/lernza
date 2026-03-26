@@ -21,10 +21,15 @@ export interface MilestoneInfo {
 }
 
 export class MilestoneClient {
-  private contract: Contract;
+  private contract: Contract | null;
 
   constructor() {
-    this.contract = new Contract(CONTRACT_ID);
+    this.contract = CONTRACT_ID ? new Contract(CONTRACT_ID) : null;
+  }
+
+  private getContract(): Contract {
+    if (!this.contract) throw new Error("Milestone contract not configured. Set VITE_MILESTONE_CONTRACT_ID.");
+    return this.contract;
   }
 
   // --- Read Operations ---
@@ -102,7 +107,7 @@ export class MilestoneClient {
         fee: "100",
         networkPassphrase: NETWORK_PASSPHRASE
       })
-      .addOperation(this.contract.call(method, ...args))
+      .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build();
 
@@ -124,10 +129,10 @@ export class MilestoneClient {
        fee: "100",
        networkPassphrase: NETWORK_PASSPHRASE
      })
-     .addOperation(this.contract.call(method, ...args))
+     .addOperation(this.getContract().call(method, ...args))
      .setTimeout(30)
      .build();
-     
+
      return await server.prepareTransaction(tx);
   }
 }

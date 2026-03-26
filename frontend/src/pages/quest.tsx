@@ -12,6 +12,9 @@ import {
   Sparkles,
   ChevronDown,
   ChevronUp,
+  Loader2,
+  X,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -29,6 +32,8 @@ import { formatTokens } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
+import { useWallet } from "@/hooks/use-wallet"
+import { questClient } from "@/lib/contracts/quest"
 
 type Tab = "milestones" | "enrollees"
 
@@ -38,6 +43,10 @@ export function QuestView() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
+  const [showAddEnrollee, setShowAddEnrollee] = useState(false)
+  const [enrolleeInput, setEnrolleeInput] = useState("")
+  const [addPhase, setAddPhase] = useState<"idle" | "submitting" | "done" | "error">("idle")
+  const [addError, setAddError] = useState<string | null>(null)
 
   const ws = MOCK_WORKSPACES.find(w => w.id === questId)
   const stats = MOCK_WORKSPACE_STATS[questId]
@@ -45,6 +54,10 @@ export function QuestView() {
   const enrollees = MOCK_ENROLLEES[questId] || []
   const completions = MOCK_COMPLETIONS[questId] || []
   const { toasts, addToast, removeToast } = useToast()
+  const { address, isSupportedNetwork } = useWallet()
+
+  const [localEnrollees, setLocalEnrollees] = useState<string[]>(enrollees)
+  const isOwner = !!address && address === ws?.owner
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
@@ -57,7 +70,31 @@ export function QuestView() {
     .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
     .reduce((sum, m) => sum + m.reward_amount, 0)
 
-  const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
+  const closeAddEnrollee = () => {
+    setShowAddEnrollee(false)
+    setEnrolleeInput("")
+    setAddPhase("idle")
+    setAddError(null)
+  }
+
+  const handleAddEnrollee = async () => {
+    const addr = enrolleeInput.trim()
+    if (!addr || !address) return
+    setAddPhase("submitting")
+    setAddError(null)
+    const result = await questClient.addEnrollee(address, questId, addr)
+    if (result.status === "SUCCESS") {
+      setLocalEnrollees(prev => [...prev, addr])
+      setAddPhase("done")
+      addToast("Enrollee added successfully", "success")
+      setTimeout(closeAddEnrollee, 1500)
+    } else {
+      setAddPhase("error")
+      setAddError(result.error ?? "Transaction failed. Please try again.")
+    }
+  }
+
+  const enrolleesCount = useCountUp(localEnrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)
   const poolBalance = useCountUp(stats?.poolBalance ?? 0, 800, statsInView)
   const totalRewardCount = useCountUp(totalReward, 800, statsInView)
@@ -116,10 +153,17 @@ export function QuestView() {
               <p className="text-muted-foreground mt-1 max-w-xl text-sm">{ws.description}</p>
             </div>
             <div className="flex flex-shrink-0 gap-3">
-              <Button variant="outline" size="sm" className="shimmer-on-hover">
-                <UserPlus className="h-4 w-4" />
-                Add Enrollee
-              </Button>
+              {isOwner && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shimmer-on-hover"
+                  onClick={() => setShowAddEnrollee(!showAddEnrollee)}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add Enrollee
+                </Button>
+              )}
               <Button size="sm" className="shimmer-on-hover">
                 <Plus className="h-4 w-4" />
                 Add Milestone
@@ -129,6 +173,84 @@ export function QuestView() {
           </div>
         </div>
       </div>
+
+      {/* Add Enrollee inline panel */}
+      {showAddEnrollee && (
+        <div className="animate-fade-in-up bg-background border-border mb-8 border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+          <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-3">
+            <div className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" />
+              <span className="text-sm font-black tracking-wider uppercase">Add Enrollee</span>
+            </div>
+            <button
+              onClick={closeAddEnrollee}
+              disabled={addPhase === "submitting"}
+              className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-[2px] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="space-y-4 p-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-black">Stellar Address</label>
+              <input
+                value={enrolleeInput}
+                onChange={e => setEnrolleeInput(e.target.value)}
+                placeholder="G..."
+                disabled={addPhase === "submitting" || addPhase === "done"}
+                className="border-border bg-background w-full border-[2px] px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50"
+              />
+            </div>
+            {addError && (
+              <div className="bg-destructive/10 border-destructive flex items-start gap-2 border-[2px] p-3">
+                <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p className="text-destructive text-sm font-bold">{addError}</p>
+              </div>
+            )}
+            {!isSupportedNetwork && (
+              <p className="text-destructive text-xs font-bold">
+                Switch Freighter to Testnet to continue.
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button
+                onClick={handleAddEnrollee}
+                disabled={
+                  !enrolleeInput.trim() ||
+                  addPhase === "submitting" ||
+                  addPhase === "done" ||
+                  !isSupportedNetwork
+                }
+                className="shimmer-on-hover"
+              >
+                {addPhase === "submitting" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : addPhase === "done" ? (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    Added!
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Add Enrollee
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={closeAddEnrollee}
+                disabled={addPhase === "submitting"}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div ref={statsRef} className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -216,7 +338,7 @@ export function QuestView() {
           >
             {tab}
             <span className="ml-2 text-xs opacity-60">
-              ({tab === "milestones" ? milestones.length : enrollees.length})
+              ({tab === "milestones" ? milestones.length : localEnrollees.length})
             </span>
           </button>
         ))}
@@ -314,7 +436,7 @@ export function QuestView() {
                                   </div>
                                 </div>
                               )}
-                              {!isCompleted && enrollees.length > 0 && (
+                              {!isCompleted && localEnrollees.length > 0 && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -341,7 +463,7 @@ export function QuestView() {
       {/* Enrollees tab */}
       {activeTab === "enrollees" && (
         <div className="space-y-4">
-          {enrollees.length === 0 ? (
+          {localEnrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
@@ -349,14 +471,20 @@ export function QuestView() {
                 </div>
                 <h3 className="mb-2 font-black">No enrollees yet</h3>
                 <p className="text-muted-foreground mb-4 text-sm">Add learners to this quest.</p>
-                <Button size="sm" className="shimmer-on-hover">
-                  <UserPlus className="h-4 w-4" />
-                  Add Enrollee
-                </Button>
+                {isOwner && (
+                  <Button
+                    size="sm"
+                    className="shimmer-on-hover"
+                    onClick={() => setShowAddEnrollee(true)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Add Enrollee
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
-            enrollees.map((addr, i) => {
+            localEnrollees.map((addr, i) => {
               const completed = completions.filter(c => c.enrollee === addr && c.completed).length
               const earned = milestones
                 .filter(m =>

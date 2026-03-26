@@ -772,13 +772,8 @@ fn test_create_milestone_exceeds_max_milestones() {
     // Create exactly MAX_MILESTONES (50) milestones — all must succeed
     for i in 0..MAX_MILESTONES {
         let title = String::from_str(&env, "MS");
-        let id = client.create_milestone(
-            &owner,
-            &q_id,
-            &title,
-            &String::from_str(&env, "Desc"),
-            &1,
-        );
+        let id =
+            client.create_milestone(&owner, &q_id, &title, &String::from_str(&env, "Desc"), &1);
         assert_eq!(id, i);
     }
     assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);

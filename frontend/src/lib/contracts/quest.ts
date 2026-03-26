@@ -38,12 +38,6 @@ export class QuestClient {
     }
   }
 
-  private getContract(): Contract {
-    if (!this.contract)
-      throw new Error("Quest contract not configured. Set VITE_QUEST_CONTRACT_ID.")
-    return this.contract
-  }
-
   // --- Read Operations ---
 
   async getQuest(questId: number): Promise<QuestInfo | null> {
@@ -91,12 +85,23 @@ export class QuestClient {
 
   // --- Write Operations ---
 
-  async createQuest(owner: string, name: string, description: string, tokenAddr: string) {
+  async createQuest(
+    owner: string,
+    name: string,
+    description: string,
+    category: string,
+    tags: string[],
+    tokenAddr: string,
+    visibility: number
+  ) {
     const tx = await this.buildTx(owner, "create_quest", [
       new Address(owner).toScVal(),
       nativeToScVal(name, { type: "string" }),
       nativeToScVal(description, { type: "string" }),
+      nativeToScVal(category, { type: "string" }),
+      nativeToScVal(tags, { type: "string" }),
       new Address(tokenAddr).toScVal(),
+      nativeToScVal(visibility, { type: "u32" }),
     ])
     return signAndSubmit(tx)
   }
@@ -138,7 +143,7 @@ export class QuestClient {
         fee: "100",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
-        .addOperation(this.getContract().call(method, ...args))
+        .addOperation(this.contract!.call(method, ...args))
         .setTimeout(30)
         .build()
 
@@ -160,7 +165,7 @@ export class QuestClient {
       fee: "100",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
-      .addOperation(this.getContract().call(method, ...args))
+      .addOperation(this.contract!.call(method, ...args))
       .setTimeout(30)
       .build()
 

@@ -13,10 +13,16 @@ import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
 
 export class RewardsClient {
-  private contract: Contract
+  private contract: Contract | null
 
   constructor() {
-    this.contract = new Contract(CONTRACT_ID)
+    this.contract = CONTRACT_ID ? new Contract(CONTRACT_ID) : null
+  }
+
+  private getContract(): Contract {
+    if (!this.contract)
+      throw new Error("Rewards contract not configured. Set VITE_REWARDS_CONTRACT_ID.")
+    return this.contract
   }
 
   // --- Read Operations ---
@@ -82,7 +88,7 @@ export class RewardsClient {
         fee: "100",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
-        .addOperation(this.contract.call(method, ...args))
+        .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
@@ -104,7 +110,7 @@ export class RewardsClient {
       fee: "100",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
-      .addOperation(this.contract.call(method, ...args))
+      .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 

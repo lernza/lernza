@@ -165,7 +165,18 @@ jobs:
           PR_NUM: ${{ steps.pr.outputs.number }}
           ACTION: ${{ steps.review.outputs.action }}
           BODY: ${{ steps.review.outputs.body }}
+          PR_AUTHOR: ${{ steps.diff.outputs.author }}
         run: |
+          # Determine who the PAT belongs to
+          PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
+
+          # GitHub does not allow approving your own PR
+          if [ "$PR_AUTHOR" = "$PAT_USER" ]; then
+            echo "Skipping review: PR author ($PR_AUTHOR) is the same as the reviewer ($PAT_USER)"
+            gh pr comment "$PR_NUM" --body "$BODY"
+            exit 0
+          fi
+
           gh pr review "$PR_NUM" \
             --"$(echo "$ACTION" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" \
             --body "$BODY"

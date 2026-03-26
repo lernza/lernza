@@ -55,3 +55,18 @@ src/
 ## Wallet
 
 Uses [Freighter](https://freighter.app) (`@stellar/freighter-api`) for wallet connection. Switch to **Testnet** in Freighter settings before connecting.
+
+## Data Sources (Current State)
+
+The frontend currently uses a **mixed data model**:
+
+- **On-chain contract reads** are already used in some views (for example, dashboard and profile fetch data through the generated contract clients).
+- **Mock data** from `src/lib/mock-data.ts` is still used in `src/pages/quest.tsx` for quest detail rendering and local UI state.
+
+This means mock data is **not** fully replaced in production yet.
+
+## Planned Migration to Live Contract Data
+
+The remaining migration work is to remove `mock-data.ts` usage from quest detail flows and source all quest/milestone/enrollee/completion state from contract reads.
+
+Until that migration is complete, treat `mock-data.ts` as an active compatibility layer rather than development-only scaffolding.

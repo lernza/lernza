@@ -164,6 +164,9 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
+      - name: Smoke-check test module syntax
+        run: cargo check --workspace --tests
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets
 

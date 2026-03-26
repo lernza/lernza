@@ -55,6 +55,7 @@ export function Dashboard() {
         token_addr: q.tokenAddr,
         created_at: q.createdAt,
         visibility: Visibility.Public,
+        max_enrollees: q.maxEnrollees,
       }))
 
       const statsEntries = await Promise.all(

@@ -10,6 +10,7 @@ import {
 } from "@stellar/stellar-sdk"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 import type { QuestInfo, Visibility } from "../contract-types"
+import { safeContractCall } from "../error-utils"
 
 const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
 
@@ -72,47 +73,55 @@ export class QuestClient {
     visibility: Visibility,
     maxEnrollees?: number
   ) {
-    const args = [
-      new Address(owner).toScVal(),
-      nativeToScVal(name, { type: "string" }),
-      nativeToScVal(description, { type: "string" }),
-      nativeToScVal(category, { type: "string" }),
-      nativeToScVal(tags, { type: "Vec" }),
-      new Address(tokenAddr).toScVal(),
-      nativeToScVal(deadline, { type: "u64" }),
-      nativeToScVal(visibility, { type: "u32" }),
-    ]
+    return safeContractCall(async () => {
+      const args = [
+        new Address(owner).toScVal(),
+        nativeToScVal(name, { type: "string" }),
+        nativeToScVal(description, { type: "string" }),
+        nativeToScVal(category, { type: "string" }),
+        nativeToScVal(tags, { type: "Vec" }),
+        new Address(tokenAddr).toScVal(),
+        nativeToScVal(deadline, { type: "u64" }),
+        nativeToScVal(visibility, { type: "u32" }),
+      ]
 
-    if (maxEnrollees !== undefined) {
-      args.push(nativeToScVal(maxEnrollees, { type: "u32" }))
-    }
+      if (maxEnrollees !== undefined) {
+        args.push(nativeToScVal(maxEnrollees, { type: "u32" }))
+      }
 
-    const tx = await this.buildTx(owner, "create_quest", args)
-    return signAndSubmit(tx)
+      const tx = await this.buildTx(owner, "create_quest", args)
+      return signAndSubmit(tx)
+    })
   }
 
   async addEnrollee(owner: string, questId: number, enrollee: string) {
-    const tx = await this.buildTx(owner, "add_enrollee", [
-      nativeToScVal(questId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "add_enrollee", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   async removeEnrollee(owner: string, questId: number, enrollee: string) {
-    const tx = await this.buildTx(owner, "remove_enrollee", [
-      nativeToScVal(questId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "remove_enrollee", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   async setVisibility(owner: string, questId: number, visibility: Visibility) {
-    const tx = await this.buildTx(owner, "set_visibility", [
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(visibility, { type: "u32" }),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "set_visibility", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(visibility, { type: "u32" }),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   // --- Private Helpers ---

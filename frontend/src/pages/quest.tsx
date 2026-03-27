@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { ProgressRing } from "@/components/progress-ring"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { ErrorState } from "@/components/ui/async-states"
 import { Skeleton, SkeletonMilestoneList, SkeletonStatsRow } from "@/components/ui/skeleton"
@@ -796,9 +797,54 @@ export function QuestView() {
         <div className="relative p-6">
           <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
-              <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
+            <div className="flex flex-1 flex-col gap-4">
+              <div>
+                <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
+                <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
+              </div>
+              {/* Progress section with ring */}
+              {milestones.length > 0 && (
+                <div className="flex items-center gap-4">
+                  <ProgressRing
+                    progress={Math.round((completedMilestones / milestones.length) * 100)}
+                    size="lg"
+                    animated
+                  />
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-black tracking-wider uppercase">
+                      Your Progress
+                    </span>
+                    <span className="text-2xl font-black">
+                      {completedMilestones} / {milestones.length} milestones
+                    </span>
+                    {earnedReward > 0 && (
+                      <span className="text-sm font-bold text-green-700">
+                        +{formatTokens(earnedReward)} USDC earned
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Certificate CTA when complete */}
+              {isComplete && (
+                <div className="animate-fade-in-up bg-success/10 border-success/30 flex items-center justify-between gap-4 rounded-lg border-[2px] p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-success border-success animate-pulse-slow flex h-10 w-10 items-center justify-center rounded-full border-[2px]">
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="text-success text-sm font-black">100% Complete!</span>
+                      <p className="text-muted-foreground text-xs font-bold">
+                        Claim your certificate to celebrate your achievement
+                      </p>
+                    </div>
+                  </div>
+                  <Button className="shimmer-on-hover bg-success hover:bg-success/90">
+                    <Download className="h-4 w-4" />
+                    Claim Certificate
+                  </Button>
+                </div>
+              )}
             </div>
             <div className="flex flex-shrink-0 flex-wrap gap-3">
               {isOwner ? (

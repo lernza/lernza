@@ -273,7 +273,6 @@ export function Profile() {
                     )}
                   </button>
                 </div>
-
               </div>
 
               <div className="sm:mt-6">
@@ -396,17 +395,17 @@ export function Profile() {
             </CardContent>
           </Card>
         ) : !creatorStats || creatorStats.totalQuests === 0 ? (
-          <Card className="animate-fade-in-up border-dashed border-[3px] shadow-[8px_8px_0_rgba(0,0,0,0.1)]">
+          <Card className="animate-fade-in-up border-[3px] border-dashed shadow-[8px_8px_0_rgba(0,0,0,0.1)]">
             <CardContent className="flex flex-col items-center py-12 text-center">
               <div className="bg-secondary mb-4 flex h-16 w-16 items-center justify-center border-2 border-dashed">
                 <Target className="text-muted-foreground h-8 w-8" />
               </div>
-              <h3 className="text-lg font-black text-muted-foreground">No quests created yet</h3>
+              <h3 className="text-muted-foreground text-lg font-black">No quests created yet</h3>
               <p className="text-muted-foreground mb-6 max-w-sm text-sm">
                 You haven't launched any quests on Lernza. Start sharing your knowledge and
                 incentivizing learners today.
               </p>
-              <Button variant="outline" className="border-black border-[2px] font-bold">
+              <Button variant="outline" className="border-[2px] border-black font-bold">
                 Learn how to create
               </Button>
             </CardContent>
@@ -422,7 +421,7 @@ export function Profile() {
                       <Target className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
                         Quests Created
                       </p>
                       <p className="text-2xl font-black">{creatorStats.totalQuests}</p>
@@ -438,7 +437,7 @@ export function Profile() {
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
                         Total Enrollees
                       </p>
                       <p className="text-2xl font-black">{creatorStats.totalEnrollees}</p>
@@ -454,7 +453,7 @@ export function Profile() {
                       <Coins className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
                         Active Pool Total
                       </p>
                       <p className="text-2xl font-black tabular-nums">
@@ -468,19 +467,19 @@ export function Profile() {
 
             {/* Individual Quests List */}
             <div className="space-y-4">
-              <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider">
+              <h3 className="text-muted-foreground text-sm font-black tracking-wider uppercase">
                 Your Quests
               </h3>
               {creatorStats.quests.map(quest => (
                 <Card
                   key={quest.id}
-                  className="bg-card hover:bg-secondary/50 border-border group border-[3px] transition-colors shadow-[4px_4px_0_var(--color-border)]"
+                  className="bg-card hover:bg-secondary/50 border-border group border-[3px] shadow-[4px_4px_0_var(--color-border)] transition-colors"
                 >
                   <CardContent className="p-5">
                     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="truncate text-lg font-black group-hover:text-primary transition-colors">
+                          <h4 className="group-hover:text-primary truncate text-lg font-black transition-colors">
                             {quest.name}
                           </h4>
                           <Badge variant="outline" className="text-[10px] font-bold uppercase">
@@ -497,7 +496,7 @@ export function Profile() {
                           <Users className="text-muted-foreground h-3.5 w-3.5" />
                           <span className="text-sm font-bold">{quest.enrolleesCount}</span>
                         </div>
-                        <div className="bg-background border-border flex items-center gap-2 border-[2px] px-3 py-1.5 min-w-[100px]">
+                        <div className="bg-background border-border flex min-w-[100px] items-center gap-2 border-[2px] px-3 py-1.5">
                           <Coins className="text-success h-3.5 w-3.5" />
                           <span className="text-sm font-bold tabular-nums">
                             {formatTokens(Number(quest.poolBalance))} USDC

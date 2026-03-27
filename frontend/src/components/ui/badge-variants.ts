@@ -11,6 +11,7 @@ export const badgeVariants = cva(
         outline: "bg-transparent text-foreground",
         success: "bg-success text-success-foreground shadow-[2px_2px_0_#000]",
         warning: "bg-warning text-warning-foreground shadow-[2px_2px_0_#000]",
+        verified: "bg-[#facc15] text-black shadow-[2px_2px_0_#000]",
       },
     },
     defaultVariants: {

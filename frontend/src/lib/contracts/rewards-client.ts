@@ -10,6 +10,7 @@ import {
 } from "@stellar/stellar-sdk"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
+import { safeContractCall } from "../error-utils"
 
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
 
@@ -57,17 +58,21 @@ export class RewardsClient {
   // --- Write Operations ---
 
   async initialize(owner: string, tokenAddr: string) {
-    const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
+      return signAndSubmit(tx)
+    })
   }
 
   async fundQuest(funder: string, questId: number, amount: bigint) {
-    const tx = await this.buildTx(funder, "fund_quest", [
-      new Address(funder).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(amount, { type: "i128" }),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(funder, "fund_quest", [
+        new Address(funder).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   async distributeReward(
@@ -77,14 +82,16 @@ export class RewardsClient {
     enrollee: string,
     amount: bigint
   ) {
-    const tx = await this.buildTx(authority, "distribute_reward", [
-      new Address(authority).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(milestoneId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-      nativeToScVal(amount, { type: "i128" }),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(authority, "distribute_reward", [
+        new Address(authority).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(milestoneId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   // --- Private Helpers ---

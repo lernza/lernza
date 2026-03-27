@@ -25,6 +25,8 @@ pub enum DataKey {
     Enrollees(u32),
     EnrollmentCap(u32),
     PublicQuests,
+    Admin,
+    VerifiedCreator(Address),
 }
 
 // QuestInfo moved to common.
@@ -98,6 +100,43 @@ pub struct QuestContract;
 
 #[contractimpl]
 impl QuestContract {
+    /// Initialize the quest contract with an admin.
+    pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::Unauthorized);
+        }
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Verify a creator address. Admin only.
+    pub fn verify_creator(env: Env, admin: Address, creator: Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if admin != stored_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::VerifiedCreator(creator), &true);
+        Ok(())
+    }
+
+    /// Check if a creator is verified.
+    pub fn is_creator_verified(env: Env, creator: Address) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::VerifiedCreator(creator))
+            .unwrap_or(false)
+    }
+
     /// Create a new quest. Returns the quest ID.
     #[allow(clippy::too_many_arguments)]
     pub fn create_quest(
@@ -123,6 +162,7 @@ impl QuestContract {
         Self::validate_tags(&tags)?;
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
+        let verified = Self::is_creator_verified(env.clone(), owner.clone());
 
         let quest = QuestInfo {
             id,
@@ -137,6 +177,7 @@ impl QuestContract {
             status: QuestStatus::Active,
             deadline: 0,
             max_enrollees,
+            verified,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);

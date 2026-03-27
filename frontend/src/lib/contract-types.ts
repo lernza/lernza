@@ -53,6 +53,49 @@ export interface QuestInfo {
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
 }
 
+// ─── Rewards Contract Types ──────────────────────────────────────────────────
+
+/**
+ * Error enum matching Rust Rewards contract Error definition.
+ * Used for error handling in reward operations.
+ */
+export const RewardsError = {
+  AlreadyInitialized: 1,
+  NotInitialized: 2,
+  Unauthorized: 3,
+  InsufficientPool: 4,
+  InvalidAmount: 5,
+  QuestNotFunded: 6,
+  QuestLookupFailed: 7,
+  MilestoneNotCompleted: 8,
+  MilestoneContractNotInitialized: 9,
+  ArithmeticOverflow: 10,
+  AlreadyPaid: 11,
+  InvalidToken: 12,
+} as const
+export type RewardsError = (typeof RewardsError)[keyof typeof RewardsError]
+
+/**
+ * Pool balance response type.
+ * Returns the token balance allocated to a quest's reward pool.
+ * Uses bigint to match i128 from Rust contract.
+ */
+export type PoolBalance = bigint
+
+/**
+ * User earnings response type.
+ * Returns total earnings for a user across all quests.
+ * Uses bigint to match i128 from Rust contract.
+ */
+export type UserEarnings = bigint
+
+/**
+ * Total distributed response type.
+ * Returns global total of all distributed rewards.
+ * Uses bigint to match i128 from Rust contract.
+ */
+export type TotalDistributed = bigint
+
 // ─── Legacy Types (to be migrated) ───────────────────────────────────────────
 
 export interface WorkspaceInfo {

@@ -9,6 +9,7 @@ import {
   Account,
 } from "@stellar/stellar-sdk"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
+import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
 
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
 
@@ -36,19 +37,19 @@ export class RewardsClient {
 
   // --- Read Operations ---
 
-  async getPoolBalance(questId: number): Promise<bigint> {
+  async getPoolBalance(questId: number): Promise<PoolBalance> {
     const result = await this.invokeRead("get_pool_balance", [
       nativeToScVal(questId, { type: "u32" }),
     ])
     return result ? BigInt(result) : 0n
   }
 
-  async getUserEarnings(user: string): Promise<bigint> {
+  async getUserEarnings(user: string): Promise<UserEarnings> {
     const result = await this.invokeRead("get_user_earnings", [new Address(user).toScVal()])
     return result ? BigInt(result) : 0n
   }
 
-  async getTotalDistributed(): Promise<bigint> {
+  async getTotalDistributed(): Promise<TotalDistributed> {
     const result = await this.invokeRead("get_total_distributed", [])
     return result ? BigInt(result) : 0n
   }

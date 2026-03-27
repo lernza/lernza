@@ -68,6 +68,7 @@ stellar contract build      # Optimized WASM
 # Frontend
 cd frontend
 pnpm install
+cp .env.example .env.local  # configure environment variables
 pnpm dev                    # → localhost:5173
 ```
 

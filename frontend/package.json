@@ -9,6 +9,7 @@
     "pnpm": "10.33.0"
   },
   "scripts": {
+    "predev": "node scripts/check-env.mjs",
     "dev": "vite",
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/validate-public-assets.mjs",

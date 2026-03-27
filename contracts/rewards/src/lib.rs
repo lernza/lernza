@@ -1,6 +1,6 @@
 #![no_std]
 #![allow(deprecated)]
-use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
     Address, Env,
@@ -101,7 +101,7 @@ impl RewardsContract {
     pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
 
@@ -188,7 +188,7 @@ impl RewardsContract {
     ) -> Result<(), Error> {
         authority.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
 

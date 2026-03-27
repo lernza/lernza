@@ -4,6 +4,10 @@ use soroban_sdk::{contracttype, Address, Env, String, Vec};
 pub const BUMP: u32 = 518_400;
 pub const THRESHOLD: u32 = 120_960;
 
+/// Upper bound on any single reward amount (raw token units).
+/// Prevents overflow-adjacent abuse and unbounded storage costs.
+pub const MAX_REWARD_AMOUNT: i128 = 1_000_000_000_000_000; // 10^15
+
 // Shared error codes
 pub const ERR_NOT_FOUND: u32 = 1;
 pub const ERR_UNAUTHORIZED: u32 = 2;

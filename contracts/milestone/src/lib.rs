@@ -1,6 +1,6 @@
 #![no_std]
 #![allow(deprecated)]
-use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
     Env, String, Vec,
@@ -345,6 +345,9 @@ impl MilestoneContract {
             return Err(Error::DescriptionTooLong);
         }
         if reward_amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+        if reward_amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
         Ok(())

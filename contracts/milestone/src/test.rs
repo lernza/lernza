@@ -1088,6 +1088,36 @@ fn test_create_milestone_zero_reward() {
 }
 
 #[test]
+fn test_create_milestone_reward_too_large() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &String::from_str(&env, "Valid description"),
+        &(MAX_REWARD_AMOUNT + 1),
+        &false,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_create_milestone_max_reward_amount_succeeds() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Valid Title"),
+        &String::from_str(&env, "Valid description"),
+        &MAX_REWARD_AMOUNT,
+        &false,
+    );
+    assert_eq!(id, 0);
+}
+
+#[test]
 fn test_create_milestone_max_length_title_succeeds() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

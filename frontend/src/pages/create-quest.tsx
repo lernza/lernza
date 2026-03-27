@@ -36,6 +36,7 @@ import {
   MAX_MILESTONE_TITLE_LEN,
   MAX_MILESTONE_DESCRIPTION_LEN,
   MAX_MILESTONES,
+  MAX_REWARD_AMOUNT,
 } from "@/lib/contract-types"
 import { scValToNative, xdr } from "@stellar/stellar-sdk"
 
@@ -63,7 +64,10 @@ const milestoneSchema = z.object({
     .string()
     .min(1, "Description is required")
     .max(MAX_MILESTONE_DESCRIPTION_LEN, `Max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`),
-  rewardAmount: z.number().positive("Must be greater than 0"),
+  rewardAmount: z
+    .number()
+    .positive("Must be greater than 0")
+    .max(MAX_REWARD_AMOUNT, `Max ${MAX_REWARD_AMOUNT.toLocaleString()} tokens`),
   requiresPrevious: z.boolean().default(false),
 })
 

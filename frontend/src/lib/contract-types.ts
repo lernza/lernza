@@ -5,6 +5,10 @@ export const MAX_QUEST_DESCRIPTION_LEN = 2000
 export const MAX_MILESTONE_TITLE_LEN = 128
 export const MAX_MILESTONE_DESCRIPTION_LEN = 1000
 export const MAX_MILESTONES = 50
+// Contract enforces 10^15 raw token units; the form collects whole tokens,
+// which are multiplied by 10^6 (USDC decimals) before submission.
+// 10^15 / 10^6 = 10^9 whole tokens max.
+export const MAX_REWARD_AMOUNT = 1_000_000_000
 
 // ─── Quest Contract Types ────────────────────────────────────────────────────
 

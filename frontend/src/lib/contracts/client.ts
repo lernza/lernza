@@ -59,11 +59,11 @@ export async function signAndSubmit(tx: Transaction): Promise<TransactionResult>
         const pollResponse = await pollTransaction(submitResponse.hash)
 
         if (pollResponse.status === "SUCCESS") {
+          const successResp = pollResponse as rpc.Api.GetSuccessfulTransactionResponse
           return {
             status: "SUCCESS",
             txHash: submitResponse.hash,
-            resultXdr: (pollResponse as rpc.Api.GetTransactionResponse & { resultXdr: string })
-              .resultXdr,
+            resultXdr: successResp.returnValue?.toXDR("base64"),
           }
         } else {
           return {

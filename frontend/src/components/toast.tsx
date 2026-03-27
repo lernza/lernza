@@ -61,7 +61,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       )}
     >
       {icons[type]}
-      <p className="flex-1 text-sm leading-snug font-bold">{toast.message}</p>
+      <div className="flex-1 text-sm leading-snug font-bold">{toast.message}</div>
       <button
         onClick={handleRemove}
         className="flex h-5 w-5 flex-shrink-0 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
@@ -95,7 +95,12 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
     // Clear first so ATs re-announce even when the message text is identical
     target.textContent = ""
     requestAnimationFrame(() => {
-      target.textContent = latest.message
+      if (typeof latest.message === "string") {
+        target.textContent = latest.message
+      } else {
+        // Fallback for JSX elements to ensure screen readers get something
+        target.textContent = "Notification"
+      }
     })
   }, [toasts])
 

@@ -2,7 +2,7 @@ import { Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
-import type { WorkspaceInfo } from "@/lib/contract-types"
+import type { QuestInfo } from "@/lib/contracts/quest"
 
 interface QuestStats {
   enrolleeCount: number
@@ -10,7 +10,7 @@ interface QuestStats {
 }
 
 interface TrendingQuestsProps {
-  quests: WorkspaceInfo[]
+  quests: QuestInfo[]
   statsByQuest: Record<number, QuestStats>
   onSelectQuest: (id: number) => void
 }

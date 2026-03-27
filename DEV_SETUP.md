@@ -9,8 +9,8 @@ Before you begin, ensure you have:
 - [ ] **macOS, Linux, or WSL2** (native Windows not recommended)
 - [ ] **Git** installed (`git --version`)
 - [ ] **Rust 1.80+** (stable toolchain)
-- [ ] **Node.js 24.x** (LTS recommended)
-- [ ] **pnpm 9.x** (frontend package manager)
+- [ ] **Node.js 24.12.0** (LTS recommended)
+- [ ] **pnpm 10.33.0** (frontend package manager)
 - [ ] **Stellar CLI v25.2+**
 - [ ] **WASM target for Rust** (`wasm32-unknown-unknown`)
 
@@ -47,9 +47,9 @@ Verify:
 rustup target list | grep wasm32-unknown-unknown
 ```
 
-### 3. Install Node.js 24
+### 3. Install Node.js 24.12.0
 
-Use **nvm** (Node Version Manager) to install Node.js 24:
+Use **nvm** (Node Version Manager) to install Node.js 24.12.0:
 
 #### On macOS (with Homebrew):
 
@@ -58,7 +58,7 @@ brew install node@24
 brew link node@24 --force
 
 # Verify
-node --version  # Should be v24.x.x
+node --version  # Should be v24.12.0
 ```
 
 #### On Linux / WSL2:
@@ -68,32 +68,44 @@ curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # Verify
-node --version  # Should be v24.x.x
+node --version  # Should be v24.12.0
 ```
 
 #### Using nvm (macOS/Linux/WSL2):
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 24
-nvm use 24
+nvm install 24.12.0
+nvm use 24.12.0
 
 # Verify
-node --version  # Should be v24.x.x
+node --version  # Should be v24.12.0
 ```
 
-### 4. Install pnpm 9
+### 4. Install pnpm 10.33.0
 
 pnpm is a fast, disk-space efficient package manager. Install it globally:
 
 ```bash
-npm install -g pnpm@9
+npm install -g pnpm@10.33.0
 
 # Verify
-pnpm --version  # Should be 9.x.x
+pnpm --version  # Should be 10.33.0
 ```
 
-### 5. Install Stellar CLI v25.2+
+### 5. Automatic Node Version Management (Optional)
+
+If you use **nvm**, the repository includes a `.nvmrc` file that specifies the exact Node.js version. When you enter the project directory, nvm will automatically switch to the correct version:
+
+```bash
+cd lernza
+# nvm automatically uses v24.12.0 (if you have nvm installed)
+node --version  # v24.12.0
+```
+
+This ensures all contributors use the same Node.js version, preventing "works on my machine" issues.
+
+### 6. Install Stellar CLI v25.2+
 
 The Stellar CLI is required to build Soroban contracts. Install it:
 
@@ -127,17 +139,7 @@ tar xz -C /usr/local/bin -f stellar-cli-25.2.0-x86_64-apple-darwin.tar.gz
 stellar version
 ```
 
-### 6. Clone the Repository
-# Development Environment Setup
-
-## Prerequisites
-
-- [Rust](https://rustup.rs/) (latest stable)
-- [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) v25.1.0+
-- [Node.js](https://nodejs.org/) v18+
-- [pnpm](https://pnpm.io/) v10+
-
-## Clone & Install
+### 7. Clone the Repository
 
 ```bash
 git clone https://github.com/lernza/lernza.git

@@ -2,6 +2,7 @@ import { Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
+import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import type { WorkspaceInfo } from "@/lib/contract-types"
 
 interface QuestStats {
@@ -16,6 +17,18 @@ interface TrendingQuestsProps {
 }
 
 export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: TrendingQuestsProps) {
+  // Get token metadata for formatting
+  const tokenAddress =
+    import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
+  const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
+
+  // Format amounts with token metadata
+  const formatRewardAmount = (amount: number) => {
+    return tokenMetadata
+      ? formatTokens(amount, tokenMetadata.decimals, tokenMetadata.symbol)
+      : formatTokens(amount)
+  }
+
   return (
     <div>
       <h2 className="mb-4 flex items-center gap-2 text-xl font-black">
@@ -50,7 +63,7 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                       <Users className="h-3 w-3" /> {stats.enrolleeCount}
                     </span>
                     <span className="flex items-center gap-1 font-bold">
-                      <Coins className="h-3 w-3" /> {formatTokens(stats.poolBalance)}
+                      <Coins className="h-3 w-3" /> {formatRewardAmount(stats.poolBalance)}
                     </span>
                   </div>
                 </CardContent>

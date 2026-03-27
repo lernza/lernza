@@ -23,11 +23,6 @@ import { rewardsClient } from "@/lib/contracts/rewards"
 import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
 
-// Sub-components
-import { PersonalProgress } from "./dashboard/personal-progress"
-import { TrendingQuests } from "./dashboard/trending-quests"
-import { RecentActivity } from "./dashboard/recent-activity"
-
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 

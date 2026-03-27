@@ -671,12 +671,6 @@ export function QuestView() {
         .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
         .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const totalReward = milestones.reduce(
-    (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
-    0
-  )
-
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
 
   if (isLoading) {

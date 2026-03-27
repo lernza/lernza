@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
@@ -537,14 +535,14 @@ fn test_private_quest_remains_directly_queryable_by_id() {
 #[test]
 fn test_owner_can_add_enrollee_to_private_quest() {
     let (env, client, owner, token) = setup();
-    
+
     // Create a private quest
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    
+
     // Owner adds an enrollee - should succeed
     let enrollee = Address::generate(&env);
     client.add_enrollee(&quest_id, &enrollee);
-    
+
     assert!(client.is_enrollee(&quest_id, &enrollee));
     assert_eq!(client.get_enrollees(&quest_id).len(), 1);
 }
@@ -553,17 +551,17 @@ fn test_owner_can_add_enrollee_to_private_quest() {
 #[test]
 fn test_private_quest_visibility_flag_persists() {
     let (env, client, owner, token) = setup();
-    
+
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    
+
     // Verify visibility is stored correctly
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.visibility, Visibility::Private);
-    
+
     // Verify it persists after operations
     let enrollee = Address::generate(&env);
     client.add_enrollee(&quest_id, &enrollee);
-    
+
     let quest_after = client.get_quest(&quest_id);
     assert_eq!(quest_after.visibility, Visibility::Private);
 }
@@ -572,10 +570,10 @@ fn test_private_quest_visibility_flag_persists() {
 fn test_visibility_flag_returns_correctly_for_public_quest() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-    
+
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.visibility, Visibility::Public);
-    
+
     // Also verify via list_public_quests
     let public_quests = client.list_public_quests(&0, &10);
     assert_eq!(public_quests.len(), 1);
@@ -586,10 +584,10 @@ fn test_visibility_flag_returns_correctly_for_public_quest() {
 fn test_visibility_flag_returns_correctly_for_private_quest() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    
+
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.visibility, Visibility::Private);
-    
+
     // Verify NOT in public list
     let public_quests = client.list_public_quests(&0, &10);
     assert_eq!(public_quests.len(), 0);
@@ -598,26 +596,26 @@ fn test_visibility_flag_returns_correctly_for_private_quest() {
 #[test]
 fn test_list_public_quests_excludes_mixed_visibility() {
     let (env, client, owner, token) = setup();
-    
+
     // Create 3 public and 2 private quests
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
-    
+
     let public_quests = client.list_public_quests(&0, &10);
     assert_eq!(public_quests.len(), 3);
-    
+
     // Verify all returned quests are Public
     for i in 0..public_quests.len() {
         assert_eq!(public_quests.get(i).unwrap().visibility, Visibility::Public);
     }
-    
+
     // Verify by directly querying that private quests exist but aren't listed
     let quest_1 = client.get_quest(&1);
     assert_eq!(quest_1.visibility, Visibility::Private);
-    
+
     let quest_3 = client.get_quest(&3);
     assert_eq!(quest_3.visibility, Visibility::Private);
 }
@@ -625,17 +623,17 @@ fn test_list_public_quests_excludes_mixed_visibility() {
 #[test]
 fn test_set_visibility_preserves_quest_data() {
     let (env, client, owner, token) = setup();
-    
+
     // Create a public quest with enrollees
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
     client.add_enrollee(&quest_id, &e1);
     client.add_enrollee(&quest_id, &e2);
-    
+
     // Change to private
     client.set_visibility(&quest_id, &Visibility::Private);
-    
+
     // Verify quest data is preserved
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.visibility, Visibility::Private);
@@ -643,7 +641,7 @@ fn test_set_visibility_preserves_quest_data() {
     assert_eq!(client.get_enrollees(&quest_id).len(), 2);
     assert!(client.is_enrollee(&quest_id, &e1));
     assert!(client.is_enrollee(&quest_id, &e2));
-    
+
     // Verify no longer in public list
     let public_quests = client.list_public_quests(&0, &10);
     assert_eq!(public_quests.len(), 0);
@@ -652,14 +650,14 @@ fn test_set_visibility_preserves_quest_data() {
 #[test]
 fn test_add_enrollee_on_private_quest_by_owner_succeeds() {
     let (env, client, owner, token) = setup();
-    
+
     // Create a private quest
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
-    
+
     // Owner can still add enrollees to private quest
     let enrollee = Address::generate(&env);
     client.add_enrollee(&quest_id, &enrollee);
-    
+
     assert!(client.is_enrollee(&quest_id, &enrollee));
     assert_eq!(client.get_enrollees(&quest_id).len(), 1);
 }

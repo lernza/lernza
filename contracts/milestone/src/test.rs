@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
@@ -314,7 +312,10 @@ fn test_get_distribution_mode_defaults_to_custom() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
 
-    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(
+        client.get_distribution_mode(&q_id),
+        DistributionMode::Custom
+    );
     assert_eq!(client.get_flat_reward(&q_id), None);
 }
 
@@ -422,15 +423,15 @@ fn test_competitive_mode_limited_winners() {
 fn test_flat_mode_distributes_equal_rewards_to_all() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    
+
     // Create multiple milestones with different reward amounts (ignored in Flat mode)
     create_ms(&env, &client, &owner, q_id, "Task 1", 100);
     create_ms(&env, &client, &owner, q_id, "Task 2", 200);
     create_ms(&env, &client, &owner, q_id, "Task 3", 300);
-    
+
     // Set Flat mode with equal reward of 50 for all
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
-    
+
     // Add three enrollees
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
@@ -438,12 +439,12 @@ fn test_flat_mode_distributes_equal_rewards_to_all() {
     quest_client.add_enrollee(&q_id, &e1);
     quest_client.add_enrollee(&q_id, &e2);
     quest_client.add_enrollee(&q_id, &e3);
-    
+
     // All enrollees get the same flat reward regardless of which milestone they complete
     assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 50);
     assert_eq!(client.verify_completion(&owner, &q_id, &1, &e2), 50);
     assert_eq!(client.verify_completion(&owner, &q_id, &2, &e3), 50);
-    
+
     // Same enrollee completing different milestones also gets flat reward
     let e4 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e4);
@@ -455,13 +456,13 @@ fn test_flat_mode_distributes_equal_rewards_to_all() {
 fn test_competitive_mode_rewards_faster_completers() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    
+
     // Create a milestone with 100 token reward
     let ms_id = create_ms(&env, &client, &owner, q_id, "Speed Task", 100);
-    
+
     // Set Competitive mode: only first 2 completers get rewarded
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(2), &0);
-    
+
     // Add five enrollees
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
@@ -473,11 +474,11 @@ fn test_competitive_mode_rewards_faster_completers() {
     quest_client.add_enrollee(&q_id, &e3);
     quest_client.add_enrollee(&q_id, &e4);
     quest_client.add_enrollee(&q_id, &e5);
-    
+
     // First two completers get full reward (100 tokens each)
     assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e1), 100);
     assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e2), 100);
-    
+
     // Third, fourth, and fifth get nothing (limit reached)
     assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e3), 0);
     assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e4), 0);
@@ -488,28 +489,28 @@ fn test_competitive_mode_rewards_faster_completers() {
 fn test_competitive_mode_per_milestone_limits() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    
+
     // Create two milestones, each with limit of 1 winner
     let ms1 = create_ms(&env, &client, &owner, q_id, "Task A", 150);
     let ms2 = create_ms(&env, &client, &owner, q_id, "Task B", 200);
-    
+
     // Set Competitive mode: only 1 winner per milestone
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
-    
+
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e1);
     quest_client.add_enrollee(&q_id, &e2);
-    
+
     // e1 completes milestone 1 first -> gets 150
     assert_eq!(client.verify_completion(&owner, &q_id, &ms1, &e1), 150);
-    
+
     // e2 tries same milestone -> gets 0 (limit reached for ms1)
     assert_eq!(client.verify_completion(&owner, &q_id, &ms1, &e2), 0);
-    
+
     // e2 completes milestone 2 first -> gets 200 (fresh limit for ms2)
     assert_eq!(client.verify_completion(&owner, &q_id, &ms2, &e2), 200);
-    
+
     // e1 tries milestone 2 -> gets 0 (limit reached for ms2)
     assert_eq!(client.verify_completion(&owner, &q_id, &ms2, &e1), 0);
 }
@@ -518,22 +519,22 @@ fn test_competitive_mode_per_milestone_limits() {
 fn test_custom_mode_uses_configured_per_milestone_rewards() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    
+
     // Create milestones with different reward amounts
     create_ms(&env, &client, &owner, q_id, "Easy Task", 25);
     create_ms(&env, &client, &owner, q_id, "Medium Task", 75);
     create_ms(&env, &client, &owner, q_id, "Hard Task", 150);
-    
+
     // Explicitly set Custom mode (this is the default, but being explicit)
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
-    
+
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
     let e3 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e1);
     quest_client.add_enrollee(&q_id, &e2);
     quest_client.add_enrollee(&q_id, &e3);
-    
+
     // Each milestone pays its configured reward amount
     assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 25);
     assert_eq!(client.verify_completion(&owner, &q_id, &1, &e2), 75);
@@ -545,20 +546,20 @@ fn test_mode_cannot_change_after_first_completion() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Task", 100);
-    
+
     // Start with Custom mode (default)
     let e1 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e1);
-    
+
     // First completion in Custom mode
     assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 100);
-    
+
     // Attempt to switch to Flat mode after completion
     let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
     // Note: Currently the contract allows mode changes; this test documents the behavior
     // If mode locking is desired, this should fail with an error
     assert_eq!(result, Ok(Ok(())));
-    
+
     // New enrollee completes under new Flat mode
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e2);
@@ -570,10 +571,10 @@ fn test_flat_mode_with_zero_enrollees() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Lonely Task", 100);
-    
+
     // Set Flat mode
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &75);
-    
+
     // No enrollees added - quest has no participants
     // Attempting to verify completion for non-enrollee should fail
     let random_addr = Address::generate(&env);
@@ -586,10 +587,10 @@ fn test_competitive_mode_with_zero_enrollees() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Empty Competition", 100);
-    
+
     // Set Competitive mode with limit of 3 winners
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(3), &0);
-    
+
     // No enrollees - any completion attempt should fail
     let random_addr = Address::generate(&env);
     let result = client.try_verify_completion(&owner, &q_id, &0, &random_addr);
@@ -601,7 +602,7 @@ fn test_custom_mode_with_zero_enrollees() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Unclaimed Task", 100);
-    
+
     // Custom mode is default, no enrollees added
     let random_addr = Address::generate(&env);
     let result = client.try_verify_completion(&owner, &q_id, &0, &random_addr);
@@ -613,11 +614,11 @@ fn test_flat_mode_rejects_zero_reward() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Task", 100);
-    
+
     // Flat mode requires positive reward
     let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
-    
+
     // Negative reward also rejected
     let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &-10);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
@@ -627,19 +628,19 @@ fn test_flat_mode_rejects_zero_reward() {
 fn test_distribution_mode_persists_across_milestones() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    
+
     // Set Flat mode before creating milestones
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &60);
-    
+
     // Create milestones after mode is set
     create_ms(&env, &client, &owner, q_id, "Task 1", 100);
     create_ms(&env, &client, &owner, q_id, "Task 2", 200);
-    
+
     let e1 = Address::generate(&env);
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &e1);
     quest_client.add_enrollee(&q_id, &e2);
-    
+
     // Both milestones use flat reward, ignoring their configured amounts
     assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 60);
     assert_eq!(client.verify_completion(&owner, &q_id, &1, &e2), 60);
@@ -1202,8 +1203,14 @@ fn test_create_milestone_exceeds_max_milestones() {
     // Create exactly MAX_MILESTONES (50) milestones, all must succeed
     for i in 0..MAX_MILESTONES {
         let title = String::from_str(&env, "MS");
-        let id =
-            client.create_milestone(&owner, &q_id, &title, &String::from_str(&env, "Desc"), &1, &false);
+        let id = client.create_milestone(
+            &owner,
+            &q_id,
+            &title,
+            &String::from_str(&env, "Desc"),
+            &1,
+            &false,
+        );
         assert_eq!(id, i);
     }
     assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);

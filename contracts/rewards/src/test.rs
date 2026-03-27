@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 
 use certificate::{CertificateContract, CertificateContractClient};

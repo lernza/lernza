@@ -18,6 +18,8 @@ import {
   FileText,
   Sparkles,
   AlertCircle,
+  Eye,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -509,6 +511,151 @@ function Step2Form({
   )
 }
 
+// ─── Quest Preview Modal Component ──────────────────────────────────────────────
+interface QuestPreviewModalProps {
+  isOpen: boolean
+  onClose: () => void
+  questData: {
+    name: string
+    description: string
+    milestones: Array<{
+      title: string
+      description: string
+      rewardAmount: number
+      requiresPrevious: boolean
+    }>
+    maxEnrollees?: number
+  }
+}
+
+function QuestPreviewModal({ isOpen, onClose, questData }: QuestPreviewModalProps) {
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown)
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown)
+      }
+    }
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  // Calculate total reward
+  const totalReward = questData.milestones.reduce((sum: number, m) => sum + m.rewardAmount, 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-background border-border max-h-[90vh] w-full max-w-2xl overflow-auto border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+        <div className="flex items-center justify-between border-b-[2px] p-6">
+          <h2 className="text-xl font-black">Quest Preview</h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted rounded border-[2px] p-2"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Quest Header */}
+          <div className="bg-primary border-border mb-4 border-b-[3px] p-4">
+            <h3 className="text-lg font-black">{questData.name}</h3>
+            <p className="text-muted-foreground mt-2">{questData.description}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <Badge
+                variant="default"
+                className="bg-secondary text-foreground border-border ml-2 border-[1px] px-2 text-[10px]"
+              >
+                Public
+              </Badge>
+              {questData.maxEnrollees && (
+                <span className="text-muted-foreground text-sm">
+                  Max {questData.maxEnrollees} learners
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Milestones */}
+          <div className="space-y-4">
+            <h4 className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
+              Milestones ({questData.milestones.length})
+            </h4>
+            <div className="space-y-3">
+              {questData.milestones.map((milestone, index) => (
+                <div
+                  key={index}
+                  className="bg-secondary border-border flex items-start justify-between gap-3 border-[1.5px] p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="bg-primary border-border mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center border-[1.5px] text-[10px] font-black">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black">{milestone.title}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {milestone.description}
+                      </p>
+                      {milestone.requiresPrevious && index > 0 && (
+                        <p className="text-muted-foreground mt-1 text-[10px] font-bold uppercase">
+                          Sequential
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="default" className="flex-shrink-0 tabular-nums">
+                    {milestone.rewardAmount} USDC
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Reward Pool */}
+          <div className="bg-primary border-border border-[2px] p-4">
+            <h4 className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
+              Reward Pool
+            </h4>
+            <div className="bg-primary border-border mb-4 flex items-center justify-between border-[2px] p-4 shadow-[3px_3px_0_var(--color-border)]">
+              <div className="flex items-center gap-2">
+                <Coins className="h-5 w-5" />
+                <span className="font-black">Total USDC needed</span>
+              </div>
+              <span className="text-xl font-black tabular-nums">
+                {formatTokens(totalReward)} USDC
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="outline" onClick={onClose} className="shimmer-on-hover">
+              Back to Edit
+            </Button>
+            <Button
+              onClick={() => {
+                onClose()
+                // In a real implementation, this would trigger the actual submission
+                console.log("Quest submission would happen here")
+              }}
+              className="shimmer-on-hover"
+            >
+              Looks good, submit
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 3: Fund & Review ────────────────────────────────────────────────────
 
 function Step3Review({
@@ -529,6 +676,7 @@ function Step3Review({
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
   const [fundTxHash, setFundTxHash] = useState<string | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -764,7 +912,7 @@ function Step3Review({
                   key={i}
                   className="bg-secondary border-border flex items-start justify-between gap-3 border-[1.5px] p-3"
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-center gap-2">
                     <div className="bg-primary border-border mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center border-[1.5px] text-[10px] font-black">
                       {i + 1}
                     </div>
@@ -810,6 +958,18 @@ function Step3Review({
                 </p>
               </div>
             )}
+
+            {/* Quest Preview Modal */}
+            <QuestPreviewModal
+              isOpen={showPreview}
+              onClose={() => setShowPreview(false)}
+              questData={{
+                name: step1Data.name,
+                description: step1Data.description,
+                milestones: step2Data.milestones,
+                maxEnrollees: step1Data.maxEnrollees,
+              }}
+            />
 
             {/* Fund button */}
             <Button
@@ -904,6 +1064,15 @@ function Step3Review({
       </div>
 
       <div className="flex items-center justify-between">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handlePreviewClose}
+          className="shimmer-on-hover"
+        >
+          <Eye className="h-4 w-4" />
+          Preview
+        </Button>
         <Button
           type="button"
           variant="outline"

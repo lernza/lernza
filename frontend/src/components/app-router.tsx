@@ -18,6 +18,9 @@ const NotFound = lazy(() =>
 const CreateQuest = lazy(() =>
   import("@/pages/create-quest").then(module => ({ default: module.CreateQuest }))
 )
+const Leaderboard = lazy(() =>
+  import("@/pages/leaderboard").then(module => ({ default: module.Leaderboard }))
+)
 
 export function AppRouter() {
   return (
@@ -58,6 +61,7 @@ export function AppRouter() {
             </WalletRequiredRoute>
           }
         />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

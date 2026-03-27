@@ -306,14 +306,14 @@ export function QuestView() {
   const resetMilestoneForm = useCallback(() => {
     milestoneForm.reset()
     setShowMilestoneForm(false)
-  }, [])
+  }, [milestoneForm])
 
   const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
     enrolleeForm.reset()
     addEnrolleeTx.reset()
     setAddPhase("idle")
-  }, [])
+  }, [addEnrolleeTx, enrolleeForm])
 
   useEffect(() => {
     if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
@@ -450,6 +450,8 @@ export function QuestView() {
       questId,
       refetch,
       resetMilestoneForm,
+      isArchived,
+      isExpired,
     ]
   )
 

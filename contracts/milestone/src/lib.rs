@@ -425,7 +425,9 @@ impl MilestoneContract {
 
     /// Get the configured flat reward for a quest (if set).
     pub fn get_flat_reward(env: Env, quest_id: u32) -> Option<i128> {
-        env.storage().persistent().get(&DataKey::FlatReward(quest_id))
+        env.storage()
+            .persistent()
+            .get(&DataKey::FlatReward(quest_id))
     }
 
     /// Verify an enrollee's completion of a milestone. Owner only.

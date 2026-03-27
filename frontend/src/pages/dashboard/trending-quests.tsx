@@ -2,7 +2,7 @@ import { Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
-import type { WorkspaceInfo } from "@/lib/contract-types"
+import type { QuestInfo } from "@/lib/contracts/quest"
 
 interface QuestStats {
   enrolleeCount: number
@@ -10,7 +10,7 @@ interface QuestStats {
 }
 
 interface TrendingQuestsProps {
-  quests: WorkspaceInfo[]
+  quests: QuestInfo[]
   statsByQuest: Record<number, QuestStats>
   onSelectQuest: (id: number) => void
 }
@@ -42,6 +42,14 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                     >
                       Trending
                     </Badge>
+                    {quest.verified && (
+                      <Badge
+                        variant="verified"
+                        className="border-border ml-2 border-[1px] px-1 text-[10px]"
+                      >
+                        Verified
+                      </Badge>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="p-4 pt-0">

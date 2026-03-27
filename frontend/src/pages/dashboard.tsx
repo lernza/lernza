@@ -9,6 +9,7 @@ import {
   Wallet,
   Sparkles,
   LayoutDashboard,
+  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,6 +36,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
+  const [showVerifiedOnly, setShowVerifiedOnly] = useState(false)
 
   // Use the new async hook for dashboard data
   const {
@@ -120,11 +122,16 @@ export function Dashboard() {
     userEarnings = 0n,
   } = dashboardData || {}
 
-  const filteredWorkspaces = quests.filter(ws => {
-    if (filter === "owned") return !!address && ws.owner === address
-    if (filter === "enrolled") return !address || ws.owner !== address
-    return true
-  })
+  const filteredWorkspaces = quests
+    .filter(ws => {
+      if (filter === "owned") return !!address && ws.owner === address
+      if (filter === "enrolled") return !address || ws.owner !== address
+      return true
+    })
+    .filter(ws => {
+      if (showVerifiedOnly) return ws.verified
+      return true
+    })
 
   const ownedCount = quests.filter((q: QuestInfo) => !!address && q.owner === address).length
   const enrolledCount = Math.max(0, quests.length - ownedCount)
@@ -296,20 +303,34 @@ export function Dashboard() {
               <h2 className="flex items-center gap-2 text-xl font-black">
                 <LayoutDashboard className="h-5 w-5" /> Your Quests
               </h2>
-              <div className="border-border flex gap-0 border-[2px] shadow-[3px_3px_0_var(--color-border)]">
-                {(["all", "owned", "enrolled"] as const).map(f => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
-                      filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowVerifiedOnly(!showVerifiedOnly)}
+                  className={`border-border flex cursor-pointer items-center gap-2 border-[2px] px-4 py-2 text-xs font-black tracking-wider uppercase shadow-[3px_3px_0_var(--color-border)] transition-colors ${
+                    showVerifiedOnly ? "bg-primary" : "bg-background hover:bg-secondary"
+                  }`}
+                >
+                  <Check
+                    className={`h-3.5 w-3.5 ${showVerifiedOnly ? "opacity-100" : "opacity-30"}`}
+                  />
+                  Verified Only
+                </button>
+                <div className="border-border flex gap-0 border-[2px] shadow-[3px_3px_0_var(--color-border)]">
+                  {(["all", "owned", "enrolled"] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
+                        filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
+          </div>
 
             {loadError && (
               <div className="mb-5">
@@ -325,53 +346,46 @@ export function Dashboard() {
               </div>
             )}
 
-            {isLoading && (
-              <div className="mb-5">
-                <LoadingState message="Loading on-chain dashboard data..." variant="compact" />
-              </div>
-            )}
+          {isLoading && (
+            <div className="mb-5">
+              <LoadingState message="Loading on-chain dashboard data..." variant="compact" />
+            </div>
+          )}
 
-            <div className="relative grid gap-5">
-              {filteredWorkspaces.map((ws, i) => {
-                const stats = questStats[ws.id] || {
-                  enrolleeCount: 0,
-                  milestoneCount: 0,
-                  poolBalance: 0,
-                }
-                const totalMilestones = stats.milestoneCount
-                const completedCount = questCompletions[ws.id] || 0
-                const totalReward = stats.poolBalance
-                const earnedReward =
-                  totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
-                const isOwned = !!address && ws.owner === address
+          <div className="relative grid gap-5">
+            {filteredWorkspaces.map((ws, i) => {
+              const stats = questStats[ws.id] || {
+                enrolleeCount: 0,
+                milestoneCount: 0,
+                poolBalance: 0,
+              }
+              const totalMilestones = stats.milestoneCount
+              const completedCount = questCompletions[ws.id] || 0
+              const totalReward = stats.poolBalance
+              const earnedReward =
+                totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
+              const isOwned = !!address && ws.owner === address
 
-                return (
-                  <button
-                    key={ws.id}
-                    type="button"
-                    onClick={() => navigate(`/quest/${ws.id}`)}
-                    aria-label={`Open quest ${ws.name}`}
-                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
-                  >
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="mb-1 flex items-center gap-3">
-                              <CardTitle className="group-hover:text-primary text-base transition-colors">
-                                {ws.name}
-                              </CardTitle>
-                              {completedCount === totalMilestones && totalMilestones > 0 && (
-                                <Badge variant="success" className="gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Complete
-                                </Badge>
-                              )}
-                              <Badge
-                                variant={isOwned ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {isOwned ? "Owner" : "Enrolled"}
+              return (
+                <button
+                  key={ws.id}
+                  type="button"
+                  onClick={() => navigate(`/quest/${ws.id}`)}
+                  aria-label={`Open quest ${ws.name}`}
+                  className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
+                >
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="mb-1 flex items-center gap-3">
+                            <CardTitle className="group-hover:text-primary text-base transition-colors">
+                              {ws.name}
+                            </CardTitle>
+                            {completedCount === totalMilestones && totalMilestones > 0 && (
+                              <Badge variant="success" className="gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                Complete
                               </Badge>
                             </div>
                             <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
@@ -414,83 +428,116 @@ export function Dashboard() {
                             ) : (
                               <>{stats.enrolleeCount} enrolled</>
                             )}
-                          </Badge>
-                          <Badge variant="secondary" className="gap-1">
-                            <Target className="h-3 w-3" />
-                            {stats.milestoneCount} milestones
-                          </Badge>
-                          <Badge variant="default" className="gap-1">
-                            <Coins className="h-3 w-3" />
-                            {formatTokens(stats.poolBalance)} USDC
-                          </Badge>
+                            {ws.verified && (
+                              <Badge variant="verified" className="gap-1 border-black">
+                                <Check className="h-3 w-3" />
+                                Verified Creator
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={isOwned ? "default" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {isOwned ? "Owner" : "Enrolled"}
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                            {ws.description}
+                          </p>
                         </div>
+                        <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
+                          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                        <Badge variant="secondary" className="gap-1">
+                          <Users className="h-3 w-3" />
+                          {ws.max_enrollees ? (
+                            <>
+                              {stats.enrolleeCount}/{ws.max_enrollees} enrolled (
+                              {Math.max(0, ws.max_enrollees - stats.enrolleeCount)} left)
+                            </>
+                          ) : (
+                            <>{stats.enrolleeCount} enrolled</>
+                          )}
+                        </Badge>
+                        <Badge variant="secondary" className="gap-1">
+                          <Target className="h-3 w-3" />
+                          {stats.milestoneCount} milestones
+                        </Badge>
+                        <Badge variant="default" className="gap-1">
+                          <Coins className="h-3 w-3" />
+                          {formatTokens(stats.poolBalance)} USDC
+                        </Badge>
+                      </div>
 
-                        {totalMilestones > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={completedCount}
-                                max={totalMilestones}
-                                className="flex-1"
-                              />
-                              <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                                {completedCount}/{totalMilestones}
+                      {totalMilestones > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Progress
+                              value={completedCount}
+                              max={totalMilestones}
+                              className="flex-1"
+                            />
+                            <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
+                              {completedCount}/{totalMilestones}
+                            </span>
+                          </div>
+                          {earnedReward > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground text-xs font-bold">
+                                Earned so far
+                              </span>
+                              <span className="text-xs font-black text-green-700">
+                                +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
                               </span>
                             </div>
-                            {earnedReward > 0 && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground text-xs font-bold">
-                                  Earned so far
-                                </span>
-                                <span className="text-xs font-black text-green-700">
-                                  +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </button>
-                )
-              })}
-            </div>
-
-            {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
-              <div className="mt-5">
-                <EmptyState
-                  variant="quests"
-                  title={filter === "all" ? "No quests yet" : `No ${filter} quests`}
-                  description={
-                    filter === "all"
-                      ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                      : filter === "owned"
-                        ? "You haven't created any quests yet. Start one to incentivize learners."
-                        : "You haven't enrolled in any quests yet. Browse available quests to get started."
-                  }
-                  action={
-                    filter === "all" || filter === "owned"
-                      ? {
-                          label: "Create Quest",
-                          onClick: () => navigate("/quest/create"),
-                        }
-                      : undefined
-                  }
-                />
-              </div>
-            )}
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </button>
+              )
+            })}
           </div>
-        </div>
 
-        {/* Right Column (Trending & Recent Activity) */}
-        <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests
-            quests={trendingQuests}
-            statsByQuest={questStats}
-            onSelectQuest={id => navigate(`/quest/${id}`)}
-          />
-          <RecentActivity activities={recentActivity} />
+          {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
+            <div className="mt-5">
+              <EmptyState
+                variant="quests"
+                title={filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                description={
+                  filter === "all"
+                    ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                    : filter === "owned"
+                      ? "You haven't created any quests yet. Start one to incentivize learners."
+                      : "You haven't enrolled in any quests yet. Browse available quests to get started."
+                }
+                action={
+                  filter === "all" || filter === "owned"
+                    ? {
+                        label: "Create Quest",
+                        onClick: () => navigate("/quest/create"),
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Right Column (Trending & Recent Activity) */}
+      <div className="animate-fade-in-up stagger-3 space-y-8">
+        <TrendingQuests
+          quests={trendingQuests}
+          statsByQuest={questStats}
+          onSelectQuest={id => navigate(`/quest/${id}`)}
+        />
+        <RecentActivity activities={recentActivity} />
       </div>
     </div>
   )

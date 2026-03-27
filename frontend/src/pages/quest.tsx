@@ -44,6 +44,8 @@ import { questClient, Visibility } from "@/lib/contracts/quest"
 import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+import { validateQuestId, isValidQuestId } from "@/lib/quest-validation"
+import { QuestValidationError } from "@/components/quest-validation-states"
 
 const milestoneFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
@@ -111,8 +113,15 @@ const truncateAddress = (address: string) => {
 
 export function QuestView() {
   const { id } = useParams()
-  const questId = Number(id)
+  const validationState = validateQuestId(id)
   const navigate = useNavigate()
+
+  // Show validation error if ID is invalid
+  if (!isValidQuestId(validationState)) {
+    return <QuestValidationError state={validationState} />
+  }
+
+  const questId = validationState.questId
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
   const [showAddEnrollee, setShowAddEnrollee] = useState(false)

@@ -584,7 +584,7 @@ function Step3Review({
       }
 
       setQuestId(createdQuestId)
-      setCreateQuestTxHash(createResult.txHash)
+      setCreateQuestTxHash((createResult as { txHash: string }).txHash)
 
       for (const [index, m] of step2Data.milestones.entries()) {
         const msResult = await milestoneClient.createMilestone(
@@ -605,12 +605,12 @@ function Step3Review({
       if (fundResult.status !== "SUCCESS") {
         throw new Error(fundResult.error ?? "Funding transaction failed")
       }
-      setFundTxHash(fundResult.txHash)
+      setFundTxHash((fundResult as { txHash: string }).txHash)
       addToast(
         <div className="flex flex-col gap-1">
           <span>Reward pool funded successfully!</span>
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${fundResult.txHash}`}
+            href={`https://stellar.expert/explorer/testnet/tx/${(fundResult as { txHash: string }).txHash}`}
             target="_blank"
             rel="noreferrer"
             className="text-xs underline hover:opacity-80"
@@ -738,7 +738,7 @@ function Step3Review({
           <div className="flex flex-col gap-1">
             <span>Quest created successfully!</span>
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${questResult.txHash}`}
+              href={`https://stellar.expert/explorer/testnet/tx/${(questResult as { txHash: string }).txHash}`}
               target="_blank"
               rel="noreferrer"
               className="text-xs underline hover:opacity-80"

@@ -38,7 +38,7 @@ describe("Profile", () => {
       expect(mockGetUserEarnings).toHaveBeenCalledWith("GABC1234567890XYZ")
     })
 
-    expect(screen.getByText("750")).toBeTruthy()
+    expect(screen.getByText("750 TOKEN")).toBeTruthy()
     expect(screen.getByText("USDC earned on-chain")).toBeTruthy()
     expect(screen.getByText("Aggregate total only")).toBeTruthy()
     expect(

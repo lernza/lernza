@@ -70,10 +70,15 @@ jobs:
           DELS=$(echo "$PR_DATA" | jq -r '.deletions')
 
           echo "author=$AUTHOR" >> $GITHUB_OUTPUT
-          echo "title=$TITLE" >> $GITHUB_OUTPUT
           echo "files=$FILES" >> $GITHUB_OUTPUT
           echo "adds=$ADDS" >> $GITHUB_OUTPUT
           echo "dels=$DELS" >> $GITHUB_OUTPUT
+
+          {
+            echo "title<<GHA_DELIM"
+            echo "$TITLE"
+            echo "GHA_DELIM"
+          } >> $GITHUB_OUTPUT
 
           gh pr diff "$PR_NUM" > /tmp/pr-diff.txt 2>/dev/null || true
           head -3000 /tmp/pr-diff.txt > /tmp/pr-diff-truncated.txt
@@ -81,7 +86,11 @@ jobs:
           LINKED_ISSUES=$(echo "$PR_DATA" | jq -r '.body // ""' | \
             grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | \
             grep -oE '#[0-9]+' || echo "none")
-          echo "issues=$LINKED_ISSUES" >> $GITHUB_OUTPUT
+          {
+            echo "issues<<GHA_DELIM"
+            echo "$LINKED_ISSUES"
+            echo "GHA_DELIM"
+          } >> $GITHUB_OUTPUT
 
       - name: Review with Groq
         if: steps.pr.outputs.skip != 'true'

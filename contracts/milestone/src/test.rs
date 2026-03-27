@@ -615,7 +615,10 @@ fn test_flat_mode_rejects_zero_reward() {
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Task", 100);
 
-    // Flat mode requires positive reward
+    // Flat mode requires positive reward because:
+    // 1. A zero reward would make completion pointless for learners
+    // 2. It could be used to grief quests by setting meaningless rewards
+    // 3. The contract enforces reward > 0 to ensure meaningful incentives
     let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 
@@ -633,6 +636,10 @@ fn test_distribution_mode_persists_across_milestones() {
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &60);
 
     // Create milestones after mode is set
+    // Note: Milestones are created with their own reward_amount (100, 200),
+    // but Flat mode ignores these and uses the quest-level flat_reward (60)
+    // This allows quest owners to set a single reward for all milestones,
+    // simplifying reward management for uniform tasks
     create_ms(&env, &client, &owner, q_id, "Task 1", 100);
     create_ms(&env, &client, &owner, q_id, "Task 2", 200);
 
@@ -641,7 +648,7 @@ fn test_distribution_mode_persists_across_milestones() {
     quest_client.add_enrollee(&q_id, &e1);
     quest_client.add_enrollee(&q_id, &e2);
 
-    // Both milestones use flat reward, ignoring their configured amounts
+    // Both milestones use flat reward (60), ignoring their configured amounts (100, 200)
     assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 60);
     assert_eq!(client.verify_completion(&owner, &q_id, &1, &e2), 60);
 }

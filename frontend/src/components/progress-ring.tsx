@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
+import { Loader2 } from "lucide-react"
 
 interface ProgressRingProps {
-  progress: number
+  progress?: number
   size?: "sm" | "md" | "lg"
   showLabel?: boolean
   className?: string
   animated?: boolean
+  isLoading?: boolean
 }
 
 const sizeConfig = {
@@ -16,11 +18,12 @@ const sizeConfig = {
 }
 
 export function ProgressRing({
-  progress,
+  progress = 0,
   size = "md",
   showLabel = true,
   className,
   animated = true,
+  isLoading = false,
 }: ProgressRingProps) {
   const config = sizeConfig[size]
   const { dimension, strokeWidth, fontSize } = config
@@ -29,7 +32,7 @@ export function ProgressRing({
   const [displayProgress, setDisplayProgress] = useState(animated ? 0 : progress)
 
   useEffect(() => {
-    if (!animated) return
+    if (!animated || isLoading) return
     const duration = 1000
     const start = performance.now()
     let raf: number
@@ -45,7 +48,19 @@ export function ProgressRing({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [progress, animated])
+  }, [progress, animated, isLoading])
+
+  // Show loading spinner when data is loading
+  if (isLoading) {
+    return (
+      <div
+        className={cn("relative inline-flex items-center justify-center", className)}
+        style={{ width: dimension, height: dimension }}
+      >
+        <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+      </div>
+    )
+  }
 
   const offset = circumference - (displayProgress / 100) * circumference
   const isComplete = progress >= 100

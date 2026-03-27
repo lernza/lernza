@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, ReactNode } from "react"
+import { useState, useCallback, useRef, type ReactNode } from "react"
 
 export interface Toast {
   id: string

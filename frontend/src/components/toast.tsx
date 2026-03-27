@@ -95,7 +95,12 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
     // Clear first so ATs re-announce even when the message text is identical
     target.textContent = ""
     requestAnimationFrame(() => {
-      target.textContent = latest.message
+      if (typeof latest.message === "string") {
+        target.textContent = latest.message
+      } else {
+        // Fallback for JSX elements to ensure screen readers get something
+        target.textContent = "Notification"
+      }
     })
   }, [toasts])
 

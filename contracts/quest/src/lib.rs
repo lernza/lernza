@@ -1,5 +1,5 @@
 // Trigger CI check
-#! [no_std]
+#![no_std]
 #![allow(deprecated)]
 #![allow(clippy::too_many_arguments)]
 use common::{

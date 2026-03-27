@@ -257,10 +257,6 @@ export function QuestView() {
         .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
         .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
 
-  const totalReward = milestones.reduce(
-    (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
-    0
-  )
   const isComplete = completedMilestones === milestones.length && milestones.length > 0
 
   const [statsRef, statsInView] = useInView()

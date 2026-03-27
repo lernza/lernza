@@ -20,7 +20,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
+import { Visibility, type QuestInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
@@ -44,21 +44,10 @@ export function Dashboard() {
   } = useContractData(
     "dashboard",
     async () => {
-      const questInfos = await questClient.getQuests()
-
-      const normalized: WorkspaceInfo[] = questInfos.map(q => ({
-        id: q.id,
-        owner: q.owner,
-        name: q.name,
-        description: q.description,
-        token_addr: q.tokenAddr,
-        created_at: q.createdAt,
-        visibility: Visibility.Public,
-        max_enrollees: q.maxEnrollees,
-      }))
+      const quests = await questClient.listPublicQuests(0, 100)
 
       const statsEntries = await Promise.all(
-        normalized.map(async q => {
+        quests.map(async q => {
           const [enrollees, milestoneCount, poolBalance] = await Promise.all([
             questClient.getEnrollees(q.id),
             milestoneClient.getMilestoneCount(q.id),
@@ -98,7 +87,7 @@ export function Dashboard() {
       if (address) {
         const [completionEntries, earnings] = await Promise.all([
           Promise.all(
-            normalized.map(async q => {
+            quests.map(async q => {
               const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
               return [q.id, completed] as const
             })
@@ -110,7 +99,7 @@ export function Dashboard() {
       }
 
       return {
-        quests: normalized,
+        quests,
         questStats,
         questMilestones,
         questCompletions,
@@ -137,7 +126,7 @@ export function Dashboard() {
     return true
   })
 
-  const ownedCount = quests.filter((q: WorkspaceInfo) => !!address && q.owner === address).length
+  const ownedCount = quests.filter((q: QuestInfo) => !!address && q.owner === address).length
   const enrolledCount = Math.max(0, quests.length - ownedCount)
   const milestonesCompleted = (Object.values(questCompletions) as number[]).reduce(
     (sum: number, count: number) => sum + count,
@@ -157,14 +146,14 @@ export function Dashboard() {
 
   const recentActivity = quests
     .slice()
-    .sort((a, b) => b.created_at - a.created_at)
+    .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 5)
     .map(ws => ({
       id: `created-${ws.id}`,
       user: ws.owner,
       action: "created" as const,
       questName: ws.name,
-      timestamp: ws.created_at * 1000,
+      timestamp: ws.createdAt * 1000,
     }))
 
   const earningsHistory = [
@@ -327,7 +316,7 @@ export function Dashboard() {
                 <ErrorState
                   message={`Failed to load dashboard data: ${loadError}`}
                   onRetry={() => {
-                    void questClient.getQuests().then(() => {
+                    void questClient.listPublicQuests(0, 100).then(() => {
                       // no-op: refetch is available from hook but not currently exposed here
                     })
                   }}
@@ -388,6 +377,25 @@ export function Dashboard() {
                             <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
                               {ws.description}
                             </p>
+                            {(ws.category || ws.tags.length > 0) && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {ws.category && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {ws.category}
+                                  </Badge>
+                                )}
+                                {ws.tags.slice(0, 3).map((tag, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-[10px]">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                                {ws.tags.length > 3 && (
+                                  <span className="text-muted-foreground text-[10px]">
+                                    +{ws.tags.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
                             <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -398,10 +406,10 @@ export function Dashboard() {
                         <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
                           <Badge variant="secondary" className="gap-1">
                             <Users className="h-3 w-3" />
-                            {ws.max_enrollees ? (
+                            {ws.maxEnrollees ? (
                               <>
-                                {stats.enrolleeCount}/{ws.max_enrollees} enrolled (
-                                {Math.max(0, ws.max_enrollees - stats.enrolleeCount)} left)
+                                {stats.enrolleeCount}/{ws.maxEnrollees} enrolled (
+                                {Math.max(0, ws.maxEnrollees - stats.enrolleeCount)} left)
                               </>
                             ) : (
                               <>{stats.enrolleeCount} enrolled</>

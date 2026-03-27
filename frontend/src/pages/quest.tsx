@@ -974,7 +974,7 @@ export function QuestView() {
                     disabled={isArchived || isExpired}
                   >
                     <UserPlus className="h-4 w-4" />
-                    Add Enrollee
+                    {quest.visibility === Visibility.Private ? "Invite Learner" : "Add Enrollee"}
                   </Button>
                   <Button
                     size="sm"
@@ -1567,6 +1567,74 @@ export function QuestView() {
 
       {activeTab === "enrollees" && (
         <div className="space-y-4">
+          {isOwner && quest.visibility === Visibility.Private && (
+            <div className="animate-fade-in-up bg-background border-border mb-6 border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="h-4 w-4" />
+                  <span className="text-sm font-black tracking-wider uppercase">
+                    Invite Learner
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const token = btoa(JSON.stringify({ id: questId, invited: true }))
+                    const link = `${window.location.origin}/quest/${questId}?invite=${token}`
+                    navigator.clipboard.writeText(link)
+                    addToast("Invite link copied to clipboard!", "success")
+                  }}
+                  className="gap-2"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Copy Invite Link
+                </Button>
+              </div>
+
+              <form
+                onSubmit={enrolleeForm.handleSubmit(handleAddEnrollee)}
+                className="flex flex-col gap-3 sm:flex-row sm:items-end"
+              >
+                <div className="flex-1">
+                  <FormLabel required>Stellar Address</FormLabel>
+                  <input
+                    {...enrolleeForm.register("address")}
+                    placeholder="G..."
+                    disabled={addPhase === "submitting"}
+                    className={cn(
+                      "border-border bg-background w-full border-[2px] px-3 py-2 font-mono text-sm font-medium transition-shadow focus:shadow-[2px_2px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
+                      enrolleeForm.formState.errors.address && "border-destructive"
+                    )}
+                  />
+                  <FieldError message={enrolleeForm.formState.errors.address?.message} />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={addEnrolleeTx.isPending || !isSupportedNetwork}
+                  className="shimmer-on-hover h-[42px]"
+                >
+                  {addEnrolleeTx.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Inviting...
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Invite
+                    </>
+                  )}
+                </Button>
+              </form>
+              {!isSupportedNetwork && (
+                <p className="text-destructive mt-2 text-xs font-bold">
+                  Switch Freighter to Testnet to continue.
+                </p>
+              )}
+            </div>
+          )}
+
           {enrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">

@@ -208,7 +208,6 @@ export function QuestView() {
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  // Pre-calculate values for useCountUp (these will be used after validation)
   // We need to call useCountUp before any conditional returns
   const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)

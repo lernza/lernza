@@ -5,7 +5,7 @@ export type TransactionStatus = "idle" | "pending" | "success" | "failure"
 export function useTransactionAction() {
   const [status, setStatus] = useState<TransactionStatus>("idle")
   const [error, setError] = useState<string | null>(null)
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<unknown>(null)
 
   const run = useCallback(async <T>(action: () => Promise<T>): Promise<T> => {
     setStatus("pending")

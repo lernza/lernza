@@ -356,7 +356,7 @@ export function QuestView() {
               <div className="flex flex-col gap-1">
                 <span>Milestone created successfully!</span>
                 <a
-                  href={`https://stellar.expert/explorer/testnet/tx/${createMilestoneTx.data?.txHash}`}
+                  href={`https://stellar.expert/explorer/testnet/tx/${(createMilestoneTx.data as { txHash?: string })?.txHash}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-xs underline hover:opacity-80"
@@ -412,7 +412,7 @@ export function QuestView() {
           <div className="flex flex-col gap-1">
             <span>Enrollee added successfully.</span>
             <a
-              href={`https://stellar.expert/explorer/testnet/tx/${addEnrolleeTx.data?.txHash}`}
+              href={`https://stellar.expert/explorer/testnet/tx/${(addEnrolleeTx.data as { txHash?: string })?.txHash}`}
               target="_blank"
               rel="noreferrer"
               className="text-xs underline hover:opacity-80"

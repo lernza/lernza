@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import {
   cn,
   shortenAddress,
@@ -6,6 +6,8 @@ import {
   formatDeadlineLabel,
   isExpiredDeadline,
   isExpiringSoon,
+  setPageMeta,
+  resetPageMeta,
 } from "./utils"
 
 describe("cn", () => {
@@ -81,5 +83,80 @@ describe("deadline helpers", () => {
     expect(formatDeadlineLabel(0, nowMs)).toBe("No deadline")
     expect(formatDeadlineLabel(Math.floor(nowMs / 1000) - 60, nowMs)).toBe("Expired")
     expect(formatDeadlineLabel(Math.floor(nowMs / 1000) + 2 * 60 * 60, nowMs)).toBe("Expires in 2h")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// setPageMeta / resetPageMeta
+// ---------------------------------------------------------------------------
+
+type MetaSpec = { attr: "name" | "property"; val: string; content: string }
+
+const META_SEEDS: MetaSpec[] = [
+  { attr: "name", val: "description", content: "Default desc" },
+  { attr: "property", val: "og:title", content: "Default OG title" },
+  { attr: "property", val: "og:description", content: "Default OG desc" },
+  { attr: "name", val: "twitter:title", content: "Default TW title" },
+  { attr: "name", val: "twitter:description", content: "Default TW desc" },
+  { attr: "property", val: "og:image", content: "https://lernza.com/og-image.png" },
+  { attr: "name", val: "twitter:image", content: "https://lernza.com/og-image.png" },
+  { attr: "name", val: "twitter:image:src", content: "https://lernza.com/og-image.png" },
+]
+
+function getContent(attr: "name" | "property", val: string): string | null {
+  return (
+    document.querySelector<HTMLMetaElement>(`meta[${attr}='${val}']`)?.getAttribute("content") ??
+    null
+  )
+}
+
+describe("setPageMeta / resetPageMeta", () => {
+  beforeEach(() => {
+    document.title = "Default"
+    for (const { attr, val, content } of META_SEEDS) {
+      const el = document.createElement("meta")
+      el.setAttribute(attr, val)
+      el.setAttribute("content", content)
+      document.head.appendChild(el)
+    }
+  })
+
+  afterEach(() => {
+    document.head.querySelectorAll("meta").forEach(el => el.remove())
+  })
+
+  it("updates document.title and all OG / Twitter meta tags", () => {
+    setPageMeta("Quest: Rust 101 on Lernza", "Learn Rust and earn tokens.")
+
+    expect(document.title).toBe("Quest: Rust 101 on Lernza")
+    expect(getContent("property", "og:title")).toBe("Quest: Rust 101 on Lernza")
+    expect(getContent("name", "twitter:title")).toBe("Quest: Rust 101 on Lernza")
+    expect(getContent("name", "description")).toBe("Learn Rust and earn tokens.")
+    expect(getContent("property", "og:description")).toBe("Learn Rust and earn tokens.")
+    expect(getContent("name", "twitter:description")).toBe("Learn Rust and earn tokens.")
+  })
+
+  it("does not touch image tags when imageUrl is omitted", () => {
+    setPageMeta("Quest: Rust 101 on Lernza", "Learn Rust.")
+
+    expect(getContent("property", "og:image")).toBe("https://lernza.com/og-image.png")
+    expect(getContent("name", "twitter:image")).toBe("https://lernza.com/og-image.png")
+  })
+
+  it("overrides image tags when imageUrl is provided", () => {
+    setPageMeta("Quest: Rust 101 on Lernza", "Learn Rust.", "https://lernza.com/quest-1.png")
+
+    expect(getContent("property", "og:image")).toBe("https://lernza.com/quest-1.png")
+    expect(getContent("name", "twitter:image")).toBe("https://lernza.com/quest-1.png")
+    expect(getContent("name", "twitter:image:src")).toBe("https://lernza.com/quest-1.png")
+  })
+
+  it("resets all tags back to site defaults via resetPageMeta", () => {
+    setPageMeta("Quest: Rust 101 on Lernza", "Learn Rust.")
+    resetPageMeta()
+
+    expect(document.title).toBe("Lernza \u2014 Learn. Earn. On-chain.")
+    expect(getContent("property", "og:title")).toBe("Lernza \u2014 Learn. Earn. On-chain.")
+    expect(getContent("name", "twitter:title")).toBe("Lernza \u2014 Learn. Earn. On-chain.")
   })
 })

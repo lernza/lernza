@@ -38,6 +38,8 @@ import {
   getSecondsRemaining,
   isExpiredDeadline,
   isExpiringSoon,
+  setPageMeta,
+  resetPageMeta,
 } from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
 import { useToast } from "@/hooks/use-toast"
@@ -318,6 +320,18 @@ export function QuestView() {
     addEnrolleeTx.reset()
     setAddPhase("idle")
   }, [addEnrolleeTx, enrolleeForm])
+
+  // Update page title and OG/Twitter meta tags when quest data is available.
+  // resetPageMeta runs as cleanup so navigating away restores the site defaults.
+  useEffect(() => {
+    if (!quest) return
+    setPageMeta(
+      `Quest: ${quest.name} on Lernza`,
+      quest.description ||
+        "Complete milestones and earn token rewards on the Lernza learn-to-earn platform."
+    )
+    return resetPageMeta
+  }, [quest])
 
   useEffect(() => {
     if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {

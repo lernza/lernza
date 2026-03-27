@@ -57,3 +57,41 @@ export function formatDeadlineLabel(deadline: number, nowMs = Date.now()): strin
   }
   return `Expires in ${days} day${days === 1 ? "" : "s"}`
 }
+
+// ---------------------------------------------------------------------------
+// Page metadata helpers (Open Graph / Twitter Card / document.title)
+// ---------------------------------------------------------------------------
+
+const DEFAULT_TITLE = "Lernza — Learn. Earn. On-chain."
+const DEFAULT_DESCRIPTION =
+  "The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+
+function setMeta(selector: string, value: string): void {
+  const el = document.querySelector<HTMLMetaElement>(selector)
+  if (el) el.setAttribute("content", value)
+}
+
+/**
+ * Dynamically updates `document.title` and all OG / Twitter meta tags.
+ * Call with `imageUrl` to also override the share image.
+ */
+export function setPageMeta(title: string, description: string, imageUrl?: string): void {
+  document.title = title
+
+  setMeta("meta[name='description']", description)
+  setMeta("meta[property='og:title']", title)
+  setMeta("meta[property='og:description']", description)
+  setMeta("meta[name='twitter:title']", title)
+  setMeta("meta[name='twitter:description']", description)
+
+  if (imageUrl) {
+    setMeta("meta[property='og:image']", imageUrl)
+    setMeta("meta[name='twitter:image']", imageUrl)
+    setMeta("meta[name='twitter:image:src']", imageUrl)
+  }
+}
+
+/** Resets all page metadata back to the site-wide defaults from index.html. */
+export function resetPageMeta(): void {
+  setPageMeta(DEFAULT_TITLE, DEFAULT_DESCRIPTION)
+}

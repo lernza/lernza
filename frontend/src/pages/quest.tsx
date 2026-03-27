@@ -186,7 +186,7 @@ export function QuestView() {
       enrolleesData.refetch(),
       poolBalanceData.refetch(),
     ])
-  }, [questData.refetch, milestonesData.refetch, enrolleesData.refetch, poolBalanceData.refetch])
+  }, [questData, milestonesData, enrolleesData, poolBalanceData])
 
   // Get raw data
   const quest = questData.data
@@ -227,63 +227,10 @@ export function QuestView() {
       } else {
         setCompletions(EMPTY_COMPLETIONS)
       }
-
-      const quest = await questClient.getQuest(questId)
-      if (!quest) {
-        throw new Error("Quest not found")
-      }
-
-      const [milestones, enrollees, poolBalance] = await Promise.all([
-        milestoneClient.listMilestones(questId),
-        questClient.getEnrollees(questId),
-        rewardsClient.getPoolBalance(questId),
-      ])
-
-      const completionEntries = await Promise.all(
-        enrollees.flatMap(enrollee =>
-          milestones.map(async milestone => {
-            const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
-            return completed
-              ? ({
-                milestoneId: milestone.id,
-                enrollee,
-                completed: true,
-              } satisfies CompletionRecord)
-              : null
-          })
-        )
-      )
-
-      const completions = completionEntries.filter(
-        (entry): entry is CompletionRecord => entry !== null
-      )
-
-      return {
-        quest,
-        milestones,
-        enrollees,
-        completions,
-        poolBalance,
-      }
-    },
-    {
-      enabled: Number.isInteger(questId) && questId >= 0,
-      dependencies: [questId],
-      contractUnavailableMessage:
-        "On-chain quest data is unavailable until the quest and milestone contracts are configured.",
     }
 
     fetchCompletions()
-  }, [
-    questId,
-    milestones,
-    enrollees,
-    milestoneClient,
-    questData,
-    milestonesData,
-    enrolleesData,
-    poolBalanceData,
-  ])
+  }, [questId, milestones, enrollees])
 
   const isOwner = !!address && quest?.owner === address
   const isEnrolled = !!address && enrollees.includes(address)
@@ -299,8 +246,8 @@ export function QuestView() {
   const earnedReward = isOwner
     ? 0
     : milestones
-      .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
-      .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
+        .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
+        .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
 
   const totalReward = milestones.reduce(
     (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
@@ -1054,10 +1001,11 @@ export function QuestView() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${activeTab === tab
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
+              activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"
-              }`}
+            }`}
           >
             {tab}
             <span className="ml-2 text-xs opacity-60">
@@ -1247,14 +1195,16 @@ export function QuestView() {
                     className="focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none"
                   >
                     <Card
-                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${isCompleted ? "border-success" : ""
-                        }`}
+                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
+                        isCompleted ? "border-success" : ""
+                      }`}
                     >
                       <CardContent className="p-5">
                         <div className="flex items-start gap-4">
                           <div
-                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
-                              }`}
+                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
+                              isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
+                            }`}
                           >
                             {isCompleted ? (
                               <CheckCircle2 className="h-4 w-4" />

@@ -314,7 +314,10 @@ fn test_get_distribution_mode_defaults_to_custom() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
 
-    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(
+        client.get_distribution_mode(&q_id),
+        DistributionMode::Custom
+    );
     assert_eq!(client.get_flat_reward(&q_id), None);
 }
 
@@ -973,8 +976,14 @@ fn test_create_milestone_exceeds_max_milestones() {
     // Create exactly MAX_MILESTONES (50) milestones, all must succeed
     for i in 0..MAX_MILESTONES {
         let title = String::from_str(&env, "MS");
-        let id =
-            client.create_milestone(&owner, &q_id, &title, &String::from_str(&env, "Desc"), &1, &false);
+        let id = client.create_milestone(
+            &owner,
+            &q_id,
+            &title,
+            &String::from_str(&env, "Desc"),
+            &1,
+            &false,
+        );
         assert_eq!(id, i);
     }
     assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);

@@ -39,9 +39,7 @@ export class QuestClient {
   // --- Read Operations ---
 
   async getQuest(questId: number): Promise<QuestInfo | null> {
-    const result = await this.invokeRead("get_quest", [
-      nativeToScVal(questId, { type: "u32" }),
-    ])
+    const result = await this.invokeRead("get_quest", [nativeToScVal(questId, { type: "u32" })])
     return result ? this.parseQuestInfo(result) : null
   }
 
@@ -50,13 +48,13 @@ export class QuestClient {
       nativeToScVal(start, { type: "u32" }),
       nativeToScVal(limit, { type: "u32" }),
     ])
-    return result ? result.map((q: unknown) => this.parseQuestInfo(q)) : []
+    return result
+      ? result.map((q: unknown) => this.parseQuestInfo(q as Record<string, unknown>))
+      : []
   }
 
   async getEnrollees(questId: number): Promise<string[]> {
-    const result = await this.invokeRead("get_enrollees", [
-      nativeToScVal(questId, { type: "u32" }),
-    ])
+    const result = await this.invokeRead("get_enrollees", [nativeToScVal(questId, { type: "u32" })])
     return result || []
   }
 
@@ -164,20 +162,20 @@ export class QuestClient {
     return await server.prepareTransaction(tx)
   }
 
-  private parseQuestInfo(raw: any): QuestInfo {
+  private parseQuestInfo(raw: Record<string, unknown>): QuestInfo {
     return {
-      id: raw.id,
-      owner: raw.owner,
-      name: raw.name,
-      description: raw.description,
-      category: raw.category,
-      tags: raw.tags || [],
-      tokenAddr: raw.token_addr,
-      createdAt: raw.created_at,
-      visibility: raw.visibility,
-      status: raw.status,
-      deadline: raw.deadline,
-      maxEnrollees: raw.max_enrollees,
+      id: Number(raw.id),
+      owner: String(raw.owner),
+      name: String(raw.name),
+      description: String(raw.description),
+      category: String(raw.category),
+      tags: Array.isArray(raw.tags) ? (raw.tags as unknown[]).map(String) : [],
+      tokenAddr: String(raw.token_addr),
+      createdAt: Number(raw.created_at),
+      visibility: Number(raw.visibility) as 0 | 1,
+      status: Number(raw.status) as 0 | 1,
+      deadline: Number(raw.deadline),
+      maxEnrollees: raw.max_enrollees != null ? Number(raw.max_enrollees) : undefined,
     }
   }
 }

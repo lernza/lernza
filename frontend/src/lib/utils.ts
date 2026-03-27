@@ -33,3 +33,37 @@ export function formatTokens(
   // Remove trailing zeros and add symbol
   return `${Number(formattedAmount).toLocaleString()} ${symbol}`
 }
+
+export function getSecondsRemaining(deadline: number, nowMs = Date.now()): number {
+  return Math.max(0, Math.floor(deadline - nowMs / 1000))
+}
+
+export function isExpiredDeadline(deadline: number, nowMs = Date.now()): boolean {
+  return deadline > 0 && deadline <= nowMs / 1000
+}
+
+export function isExpiringSoon(deadline: number, nowMs = Date.now()): boolean {
+  if (deadline <= 0) return false
+  const remaining = getSecondsRemaining(deadline, nowMs)
+  return remaining > 0 && remaining <= 24 * 60 * 60
+}
+
+export function formatDeadlineDate(deadline: number): string {
+  return new Date(deadline * 1000).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+export function formatDeadlineLabel(deadline: number, nowMs = Date.now()): string {
+  if (deadline <= 0) return "No deadline"
+  if (isExpiredDeadline(deadline, nowMs)) return "Expired"
+
+  const remaining = getSecondsRemaining(deadline, nowMs)
+  const days = Math.ceil(remaining / (24 * 60 * 60))
+  if (remaining <= 24 * 60 * 60) {
+    const hours = Math.max(1, Math.ceil(remaining / (60 * 60)))
+    return `Expires in ${hours}h`
+  }
+  return `Expires in ${days} day${days === 1 ? "" : "s"}`
+}

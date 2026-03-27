@@ -826,25 +826,6 @@ export function QuestView() {
     return <QuestValidationError state={validationState} />
   }
 
-  const isOwner = !!address && quest?.owner === address
-  const isEnrolled = !!address && enrollees.includes(address)
-
-  const viewerCompletedMilestoneIds = new Set(
-    completions
-      .filter(completion => completion.enrollee === address)
-      .map(completion => completion.milestoneId)
-  )
-  const completedMilestones = isOwner
-    ? new Set(completions.map(completion => completion.milestoneId)).size
-    : viewerCompletedMilestoneIds.size
-  const earnedReward = isOwner
-    ? 0
-    : milestones
-        .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
-        .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
-
-  const isComplete = completedMilestones === milestones.length && milestones.length > 0
-
   if (isLoading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">

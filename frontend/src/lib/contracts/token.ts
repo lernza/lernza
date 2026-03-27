@@ -1,11 +1,4 @@
-import {
-  Contract,
-  scValToNative,
-  xdr,
-  Keypair,
-  Account,
-  TransactionBuilder,
-} from "@stellar/stellar-sdk"
+import { Contract, scValToNative, Keypair, Account, TransactionBuilder } from "@stellar/stellar-sdk"
 import { server, NETWORK_PASSPHRASE } from "./client"
 
 export interface TokenMetadata {
@@ -89,17 +82,16 @@ export class TokenClient {
       ])
 
       // Extract values from simulation results
-      const symbol = symbolResult.results?.[0]
-        ? (scValToNative(xdr.ScVal.fromXDR(symbolResult.results[0].xdr, "base64")) as string)
-        : "TOKEN"
+      const extractResult = (sim: typeof symbolResult, fallback: unknown) => {
+        if ("result" in sim && sim.result) {
+          return scValToNative(sim.result.retval)
+        }
+        return fallback
+      }
 
-      const decimals = decimalsResult.results?.[0]
-        ? Number(scValToNative(xdr.ScVal.fromXDR(decimalsResult.results[0].xdr, "base64")))
-        : 7
-
-      const name = nameResult.results?.[0]
-        ? (scValToNative(xdr.ScVal.fromXDR(nameResult.results[0].xdr, "base64")) as string)
-        : "Unknown Token"
+      const symbol = extractResult(symbolResult, "TOKEN") as string
+      const decimals = Number(extractResult(decimalsResult, 7))
+      const name = extractResult(nameResult, "Unknown Token") as string
 
       const metadata: TokenMetadata = {
         symbol,

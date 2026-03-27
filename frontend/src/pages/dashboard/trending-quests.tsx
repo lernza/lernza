@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
-import type { WorkspaceInfo } from "@/lib/contract-types"
+import type { WorkspaceInfo as QuestInfo } from "@/lib/contract-types"
 
 interface QuestStats {
   enrolleeCount: number

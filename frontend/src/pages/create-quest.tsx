@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+import { useToast } from "@/hooks/use-toast"
 import { formatTokens, cn } from "@/lib/utils"
 import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
@@ -525,6 +526,7 @@ function Step3Review({
   const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
+  const { addToast } = useToast()
 
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
@@ -582,7 +584,7 @@ function Step3Review({
       }
 
       setQuestId(createdQuestId)
-      setCreateQuestTxHash(createResult.txHash)
+      setCreateQuestTxHash((createResult as { txHash: string }).txHash)
 
       for (const [index, m] of step2Data.milestones.entries()) {
         const msResult = await milestoneClient.createMilestone(
@@ -603,10 +605,24 @@ function Step3Review({
       if (fundResult.status !== "SUCCESS") {
         throw new Error(fundResult.error ?? "Funding transaction failed")
       }
-      setFundTxHash(fundResult.txHash)
+      setFundTxHash((fundResult as { txHash: string }).txHash)
+      addToast(
+        <div className="flex flex-col gap-1">
+          <span>Reward pool funded successfully!</span>
+          <a
+            href={`https://stellar.expert/explorer/testnet/tx/${(fundResult as { txHash: string }).txHash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs underline hover:opacity-80"
+          >
+            View on Stellar Expert
+          </a>
+        </div>,
+        "success"
+      )
       return {
         questId: createdQuestId,
-        createQuestTxHash: createResult.txHash,
+        createQuestTxHash: (createResult as { txHash: string }).txHash,
         fundTxHash: fundResult.txHash,
       }
     })
@@ -718,6 +734,20 @@ function Step3Review({
           }
         }
 
+        addToast(
+          <div className="flex flex-col gap-1">
+            <span>Quest created successfully!</span>
+            <a
+              href={`https://stellar.expert/explorer/testnet/tx/${(questResult as { txHash: string }).txHash}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs underline hover:opacity-80"
+            >
+              View on Stellar Expert
+            </a>
+          </div>,
+          "success"
+        )
         return true
       } catch (error) {
         console.error("Quest creation error:", error)

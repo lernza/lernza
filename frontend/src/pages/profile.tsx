@@ -8,6 +8,8 @@ import {
   Check,
   Loader2,
   AlertCircle,
+  Target,
+  Users,
 } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +20,7 @@ import { useContractData } from "@/hooks/use-async-data"
 import { useUserRole } from "@/hooks/use-user-role"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
+import { questClient } from "@/lib/contracts/quest"
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -90,6 +93,47 @@ export function Profile() {
         return "secondary"
     }
   }
+  const {
+    data: creatorStats,
+    isLoading: statsLoading,
+    error: statsError,
+  } = useContractData(
+    "quest",
+    async () => {
+      if (!address) throw new Error("No wallet address")
+      const allQuests = await questClient.getQuests()
+      const ownedQuests = allQuests.filter(q => q.owner === address)
+
+      let totalEnrollees = 0
+      let totalPoolBalance = 0n
+
+      const questsWithStats = await Promise.all(
+        ownedQuests.map(async q => {
+          try {
+            const enrollees = await questClient.getEnrollees(q.id)
+            const balance = await rewardsClient.getPoolBalance(q.id)
+            totalEnrollees += enrollees.length
+            totalPoolBalance += balance
+            return { ...q, enrolleesCount: enrollees.length, poolBalance: balance }
+          } catch (err) {
+            console.error(`Failed to fetch stats for quest ${q.id}:`, err)
+            return { ...q, enrolleesCount: 0, poolBalance: 0n }
+          }
+        })
+      )
+
+      return {
+        totalQuests: ownedQuests.length,
+        totalEnrollees,
+        totalPoolBalance,
+        quests: questsWithStats,
+      }
+    },
+    {
+      enabled: connected && !!address,
+      dependencies: [connected, address],
+    }
+  )
 
   const handleCopy = () => {
     if (address) {
@@ -319,6 +363,161 @@ export function Profile() {
             </Card>
           )}
         </div>
+      </div>
+
+      {/* Creator Dashboard (Issue #354) */}
+      <div className="mt-12">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-black">Creator Dashboard</h2>
+            <Badge variant="outline" className="border-primary text-primary border-[2px] font-bold">
+              Beta
+            </Badge>
+          </div>
+          <span className="text-muted-foreground text-sm font-bold">Manage your quests</span>
+        </div>
+
+        {statsLoading ? (
+          <Card className="animate-fade-in-up border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+            <CardContent className="flex flex-col items-center py-12 text-center">
+              <Loader2 className="text-primary mb-4 h-10 w-10 animate-spin" />
+              <h3 className="text-lg font-black">Loading creator statistics</h3>
+              <p className="text-muted-foreground max-w-sm text-sm">
+                Scanning the ledger for your quests and calculating active reward pools...
+              </p>
+            </CardContent>
+          </Card>
+        ) : statsError ? (
+          <Card className="animate-fade-in-up border-destructive border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+            <CardContent className="flex flex-col items-center py-12 text-center">
+              <AlertCircle className="text-destructive mb-4 h-10 w-10" />
+              <h3 className="text-lg font-black">Failed to load statistics</h3>
+              <p className="text-muted-foreground max-w-sm text-sm">{statsError}</p>
+            </CardContent>
+          </Card>
+        ) : !creatorStats || creatorStats.totalQuests === 0 ? (
+          <Card className="animate-fade-in-up border-dashed border-[3px] shadow-[8px_8px_0_rgba(0,0,0,0.1)]">
+            <CardContent className="flex flex-col items-center py-12 text-center">
+              <div className="bg-secondary mb-4 flex h-16 w-16 items-center justify-center border-2 border-dashed">
+                <Target className="text-muted-foreground h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-black text-muted-foreground">No quests created yet</h3>
+              <p className="text-muted-foreground mb-6 max-w-sm text-sm">
+                You haven't launched any quests on Lernza. Start sharing your knowledge and
+                incentivizing learners today.
+              </p>
+              <Button variant="outline" className="border-black border-[2px] font-bold">
+                Learn how to create
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="animate-fade-in-up stagger-1 space-y-6">
+            {/* Creator Overview Stats */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Card className="bg-primary/5 border-border border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Target className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        Quests Created
+                      </p>
+                      <p className="text-2xl font-black">{creatorStats.totalQuests}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-success/5 border-border border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-success border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        Total Enrollees
+                      </p>
+                      <p className="text-2xl font-black">{creatorStats.totalEnrollees}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-warning/5 border-border border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-secondary border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Coins className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        Active Pool Total
+                      </p>
+                      <p className="text-2xl font-black tabular-nums">
+                        {formatTokens(Number(creatorStats.totalPoolBalance))}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Individual Quests List */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-black text-muted-foreground uppercase tracking-wider">
+                Your Quests
+              </h3>
+              {creatorStats.quests.map(quest => (
+                <Card
+                  key={quest.id}
+                  className="bg-card hover:bg-secondary/50 border-border group border-[3px] transition-colors shadow-[4px_4px_0_var(--color-border)]"
+                >
+                  <CardContent className="p-5">
+                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h4 className="truncate text-lg font-black group-hover:text-primary transition-colors">
+                            {quest.name}
+                          </h4>
+                          <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                            ID: {quest.id}
+                          </Badge>
+                        </div>
+                        <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                          {quest.description}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="bg-background border-border flex items-center gap-2 border-[2px] px-3 py-1.5">
+                          <Users className="text-muted-foreground h-3.5 w-3.5" />
+                          <span className="text-sm font-bold">{quest.enrolleesCount}</span>
+                        </div>
+                        <div className="bg-background border-border flex items-center gap-2 border-[2px] px-3 py-1.5 min-w-[100px]">
+                          <Coins className="text-success h-3.5 w-3.5" />
+                          <span className="text-sm font-bold tabular-nums">
+                            {formatTokens(Number(quest.poolBalance))} USDC
+                          </span>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="font-bold shadow-[2px_2px_0_#000]"
+                          onClick={() => (window.location.href = `/quest/${quest.id}`)}
+                        >
+                          Manage
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

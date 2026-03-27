@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { useContractData } from "@/hooks/use-async-data"
+import { useUserRole } from "@/hooks/use-user-role"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
 
@@ -40,6 +41,7 @@ function WalletAvatar({ address }: { address: string }) {
 export function Profile() {
   const { connected, connect, address } = useWallet()
   const [copied, setCopied] = useState(false)
+  const { role, isLoading: roleLoading } = useUserRole()
 
   // Use the new async hook for earnings data
   const {
@@ -61,6 +63,33 @@ export function Profile() {
       dependencies: [connected, address],
     }
   )
+
+  const getRoleLabel = () => {
+    if (roleLoading) return "Loading..."
+    switch (role) {
+      case "owner":
+        return "Quest Owner"
+      case "learner":
+        return "Learner"
+      case "mixed":
+        return "Owner & Learner"
+      default:
+        return "Community Member"
+    }
+  }
+
+  const getRoleBadgeVariant = () => {
+    switch (role) {
+      case "owner":
+        return "default"
+      case "learner":
+        return "success"
+      case "mixed":
+        return "default"
+      default:
+        return "secondary"
+    }
+  }
 
   const handleCopy = () => {
     if (address) {
@@ -178,8 +207,8 @@ export function Profile() {
 
               <div className="mt-2 min-w-0 flex-1 sm:mt-6">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-black">Learner</h2>
-                  <Badge variant="success" className="gap-1">
+                  <h2 className="text-xl font-black">{getRoleLabel()}</h2>
+                  <Badge variant={getRoleBadgeVariant()} className="gap-1">
                     <Sparkles className="h-3 w-3" />
                     Active
                   </Badge>

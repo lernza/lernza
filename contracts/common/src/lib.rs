@@ -40,6 +40,7 @@ pub struct QuestInfo {
     pub status: QuestStatus,
     pub deadline: u64,
     pub max_enrollees: Option<u32>,
+    pub verified: bool,
 }
 
 pub fn is_contract_address(addr: &Address) -> bool {

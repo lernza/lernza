@@ -52,6 +52,8 @@ const step1Schema = z.object({
     .min(1, "Description is required")
     .max(MAX_QUEST_DESCRIPTION_LEN, `Max ${MAX_QUEST_DESCRIPTION_LEN} characters`),
   maxEnrollees: z.number().int().min(1, "Must be at least 1").optional().or(z.literal("")),
+  deadlineEnabled: z.boolean().default(false),
+  deadlineAt: z.string().optional(),
 })
 type Step1Values = z.infer<typeof step1Schema>
 
@@ -112,6 +114,13 @@ function clearDraft() {
   localStorage.removeItem(DRAFT_KEY)
 }
 
+function getDefaultDeadlineInput() {
+  const date = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+  const offset = date.getTimezoneOffset()
+  const local = new Date(date.getTime() - offset * 60 * 1000)
+  return local.toISOString().slice(0, 16)
+}
+
 // ─── Helper components ────────────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: FormStep }) {
@@ -166,14 +175,24 @@ function Step1Form({
     control,
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
-  } = useForm<Step1Values>({
+  } = useForm<z.input<typeof step1Schema>, undefined, Step1Values>({
     resolver: zodResolver(step1Schema),
     defaultValues,
   })
 
   const nameValue = useWatch({ control, name: "name" }) ?? ""
   const descValue = useWatch({ control, name: "description" }) ?? ""
+  const deadlineEnabled = useWatch({ control, name: "deadlineEnabled" }) ?? false
+
+  useEffect(() => {
+    if (deadlineEnabled) {
+      setValue("deadlineAt", defaultValues.deadlineAt || getDefaultDeadlineInput(), {
+        shouldDirty: true,
+      })
+    }
+  }, [deadlineEnabled, defaultValues.deadlineAt, setValue])
 
   return (
     <form onSubmit={handleSubmit(onNext)} className="space-y-6">
@@ -262,6 +281,40 @@ function Step1Form({
             </p>
             <FieldError message={errors.maxEnrollees?.message} />
           </div>
+
+          <div>
+            <label className="flex items-start gap-3 text-sm font-bold">
+              <input
+                {...register("deadlineEnabled")}
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-black"
+              />
+              <span>
+                Set quest deadline
+                <span className="text-muted-foreground block text-xs font-medium">
+                  Optional. New quests default to no expiry until you enable this.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {deadlineEnabled && (
+            <div>
+              <FormLabel>Deadline</FormLabel>
+              <input
+                {...register("deadlineAt")}
+                type="datetime-local"
+                className={cn(
+                  "border-border bg-background w-full border-[2px] px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none",
+                  errors.deadlineAt && "border-destructive"
+                )}
+              />
+              <p className="text-muted-foreground mt-1 text-xs font-bold">
+                Learners will see this deadline on quest cards and the workspace page.
+              </p>
+              <FieldError message={errors.deadlineAt?.message} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -670,11 +723,11 @@ function Step3Review({
   onComplete: () => void
 }) {
   const { isSupportedNetwork, address } = useWallet()
-  const fundingTx = useTransactionAction()
-  const createTx = useTransactionAction()
+  const submitTx = useTransactionAction()
 
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
+  const [deadlineTxHash, setDeadlineTxHash] = useState<string | null>(null)
   const [fundTxHash, setFundTxHash] = useState<string | null>(null)
   const [showPreview, setShowPreview] = useState(false)
 
@@ -699,10 +752,10 @@ function Step3Review({
     }
   }
 
-  const handleFund = async () => {
+  const handleCreateAndFund = async () => {
     if (!address) throw new Error("Connect wallet first")
 
-    await fundingTx.run(async () => {
+    await submitTx.run(async () => {
       const category = "General"
       const tags: string[] = []
       const tokenAddr = import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || ""
@@ -732,6 +785,19 @@ function Step3Review({
       setQuestId(createdQuestId)
       setCreateQuestTxHash(createResult.txHash)
 
+      if (step1Data.deadlineEnabled && step1Data.deadlineAt) {
+        const deadline = Math.floor(new Date(step1Data.deadlineAt).getTime() / 1000)
+        if (!Number.isFinite(deadline) || deadline <= Date.now() / 1000) {
+          throw new Error("Deadline must be a valid future date.")
+        }
+
+        const deadlineResult = await questClient.setDeadline(address, createdQuestId, deadline)
+        if (deadlineResult.status !== "SUCCESS") {
+          throw new Error(deadlineResult.error ?? "Deadline transaction failed")
+        }
+        setDeadlineTxHash(deadlineResult.txHash)
+      }
+
       for (const [index, m] of step2Data.milestones.entries()) {
         const msResult = await milestoneClient.createMilestone(
           address,
@@ -755,130 +821,15 @@ function Step3Review({
       return {
         questId: createdQuestId,
         createQuestTxHash: createResult.txHash,
+        deadlineTxHash,
         fundTxHash: fundResult.txHash,
       }
     })
-  }
-
-  const handleCreate = async () => {
-    if (!address) {
-      throw new Error("Wallet not connected")
-    }
-
-    await createTx.run(async () => {
-      try {
-        // Step 1: Create the quest on-chain
-        // TODO: Add VITE_USDC_TOKEN_ADDRESS to environment variables
-        const tokenAddress =
-          import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
-          "CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG"
-        if (!tokenAddress) {
-          throw new Error("USDC token address not configured")
-        }
-
-        const questResult = await questClient.createQuest(
-          address,
-          step1Data.name,
-          step1Data.description,
-          "Education", // Education category
-          [], // Tags
-          tokenAddress,
-          Visibility.Public,
-          typeof step1Data.maxEnrollees === "number" ? step1Data.maxEnrollees : undefined
-        )
-
-        if (questResult.status !== "SUCCESS") {
-          throw new Error(`Quest creation failed: ${questResult.error}`)
-        }
-
-        // Extract quest ID from the result (this may need adjustment based on actual contract response)
-        // For now, we'll assume we can get the quest ID from the result or need to query it
-        let questId: number
-        try {
-          // Try to get the latest quest ID (assuming the new quest is the last one)
-          const questCount = await questClient.getQuestCount()
-          questId = questCount - 1 // New quest should be at index count-1
-        } catch (error) {
-          console.error("Failed to get quest ID:", error)
-          throw new Error("Failed to retrieve created quest ID")
-        }
-
-        // Step 2: Create milestones for the quest
-        const milestoneResults = []
-        const failedMilestones = []
-
-        for (let i = 0; i < step2Data.milestones.length; i++) {
-          const milestone = step2Data.milestones[i]
-          try {
-            const result = await milestoneClient.createMilestone(
-              address,
-              questId,
-              milestone.title,
-              milestone.description,
-              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)), // Convert to USDC smallest unit (6 decimals)
-              milestone.requiresPrevious && i > 0
-            )
-
-            if (result.status !== "SUCCESS") {
-              failedMilestones.push({
-                index: i,
-                title: milestone.title,
-                error: result.error || "Unknown transaction error",
-              })
-              milestoneResults.push({ index: i, status: "FAILED", result })
-            } else {
-              milestoneResults.push({ index: i, status: "SUCCESS", result })
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Unknown error"
-            failedMilestones.push({
-              index: i,
-              title: milestone.title,
-              error: errorMessage,
-            })
-            milestoneResults.push({
-              index: i,
-              status: "FAILED",
-              error: errorMessage,
-            })
-          }
-        }
-
-        // Handle partial failure cases
-        if (failedMilestones.length > 0) {
-          const successCount = step2Data.milestones.length - failedMilestones.length
-          const errorMessages = failedMilestones
-            .map(f => `Milestone ${f.index + 1} ("${f.title}"): ${f.error}`)
-            .join("; ")
-
-          if (successCount === 0) {
-            // All milestones failed - treat as complete failure
-            throw new Error(
-              `Quest created successfully, but all milestone creations failed: ${errorMessages}`
-            )
-          } else {
-            // Some milestones failed - partial success with detailed error
-            throw new Error(
-              `Quest created successfully with ${successCount}/${step2Data.milestones.length} milestones. ` +
-                `Failed milestones: ${errorMessages}. ` +
-                `You may need to manually create the remaining milestones.`
-            )
-          }
-        }
-
-        return true
-      } catch (error) {
-        console.error("Quest creation error:", error)
-        throw error
-      }
-    })
-
     onComplete()
   }
 
-  const isFunded = fundingTx.isSuccess
-  const fundPending = fundingTx.isPending
-  const createPending = createTx.isPending
+  const isSubmitted = submitTx.isSuccess
+  const submitPending = submitTx.isPending
 
   return (
     <div className="space-y-6">
@@ -899,6 +850,11 @@ function Step3Review({
             </p>
             <h3 className="text-xl font-black">{step1Data.name}</h3>
             <p className="text-muted-foreground text-sm">{step1Data.description}</p>
+            {step1Data.deadlineEnabled && step1Data.deadlineAt && (
+              <p className="text-muted-foreground text-xs font-bold">
+                Deadline: {new Date(step1Data.deadlineAt).toLocaleString()}
+              </p>
+            )}
           </div>
 
           {/* Milestones list */}
@@ -973,52 +929,30 @@ function Step3Review({
 
             {/* Fund button */}
             <Button
-              onClick={handleFund}
-              disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
-              variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
-              className={cn(
-                "shimmer-on-hover mb-3 w-full",
-                (isFunded || createPending || createTx.isSuccess) && "border-success"
-              )}
+              onClick={handleCreateAndFund}
+              disabled={submitPending || isSubmitted || !isSupportedNetwork}
+              variant={isSubmitted ? "secondary" : "default"}
+              className={cn("shimmer-on-hover mb-3 w-full", isSubmitted && "border-success")}
             >
-              {fundPending ? (
+              {submitPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Funding reward pool...
+                  Creating and funding quest...
                 </>
-              ) : isFunded || createPending || createTx.isSuccess ? (
+              ) : isSubmitted ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Reward pool funded
-                </>
-              ) : (
-                <>
-                  <Coins className="h-4 w-4" />
-                  Fund Reward Pool ({formatTokens(totalReward)} USDC)
-                </>
-              )}
-            </Button>
-
-            {/* Create button */}
-            <Button
-              onClick={handleCreate}
-              disabled={!isFunded || createPending || !isSupportedNetwork}
-              className="shimmer-on-hover w-full"
-            >
-              {createPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
+                  Quest created and funded
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" />
-                  Confirm & Create Quest
+                  Create & Fund Quest ({formatTokens(totalReward)} USDC)
                 </>
               )}
             </Button>
 
-            {isFunded && questId !== null && (
+            {isSubmitted && questId !== null && (
               <div className="bg-secondary mt-3 border-[2px] border-black p-3 text-xs font-bold">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-muted-foreground">Quest ID</span>
@@ -1030,6 +964,12 @@ function Step3Review({
                     <span className="font-mono">{createQuestTxHash.slice(0, 8)}…</span>
                   </div>
                 )}
+                {deadlineTxHash && (
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Deadline tx</span>
+                    <span className="font-mono">{deadlineTxHash.slice(0, 8)}…</span>
+                  </div>
+                )}
                 {fundTxHash && (
                   <div className="mt-1 flex items-center justify-between gap-2">
                     <span className="text-muted-foreground">Fund tx</span>
@@ -1039,24 +979,20 @@ function Step3Review({
               </div>
             )}
 
-            {fundingTx.isFailure && (
+            {submitTx.isFailure && (
               <p className="text-destructive mt-2 text-center text-xs font-bold">
-                {fundingTx.error ?? "Funding failed. Try again."}
+                {submitTx.error ?? "Quest creation failed. Try again."}
               </p>
             )}
-            {createTx.isFailure && (
-              <p className="text-destructive mt-2 text-center text-xs font-bold">
-                {createTx.error ?? "Creation failed. Try again."}
-              </p>
-            )}
-            {!isFunded && !fundPending && (
+            {!isSubmitted && !submitPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Fund the pool first, then confirm to create the quest on Stellar.
+                One action will create the quest, apply the deadline, add milestones, and fund the
+                reward pool.
               </p>
             )}
-            {isFunded && !createPending && (
+            {isSubmitted && !submitPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Pool funded! Sign the creation transaction to go live.
+                Quest created successfully on Stellar.
               </p>
             )}
           </div>
@@ -1089,7 +1025,13 @@ function Step3Review({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-const DEFAULT_STEP1: Step1Values = { name: "", description: "", maxEnrollees: "" }
+const DEFAULT_STEP1: Step1Values = {
+  name: "",
+  description: "",
+  maxEnrollees: "",
+  deadlineEnabled: false,
+  deadlineAt: getDefaultDeadlineInput(),
+}
 const DEFAULT_STEP2: Step2Values = {
   milestones: [{ title: "", description: "", rewardAmount: 0, requiresPrevious: false }],
 }
@@ -1118,7 +1060,13 @@ export function CreateQuest() {
       }
 
       // Override with imported data
-      initialStep1Data = { name: imported.name, description: imported.description }
+      initialStep1Data = {
+        name: imported.name,
+        description: imported.description,
+        maxEnrollees: "",
+        deadlineEnabled: false,
+        deadlineAt: getDefaultDeadlineInput(),
+      }
       initialStep2Data = {
         milestones: imported.milestones.map(milestone => ({
           ...milestone,

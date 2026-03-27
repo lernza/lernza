@@ -20,6 +20,7 @@ import {
   X,
   Download,
   Upload,
+  Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,7 +29,15 @@ import { Progress } from "@/components/ui/progress"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { ErrorState } from "@/components/ui/async-states"
 import { Skeleton, SkeletonMilestoneList, SkeletonStatsRow } from "@/components/ui/skeleton"
-import { cn, formatTokens } from "@/lib/utils"
+import {
+  cn,
+  formatDeadlineDate,
+  formatDeadlineLabel,
+  formatTokens,
+  getSecondsRemaining,
+  isExpiredDeadline,
+  isExpiringSoon,
+} from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
@@ -40,8 +49,8 @@ import {
 } from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
 import { useQuest, useMilestones, useEnrollees, useRewardPool } from "@/hooks/use-quest-data"
-import { questClient, Visibility } from "@/lib/contracts/quest"
-import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
+import { questClient, QuestStatus, Visibility } from "@/lib/contracts/quest"
+import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone-client"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 
@@ -103,6 +112,16 @@ function toSafeNumber(value: bigint): number {
   return value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value)
 }
 
+function formatCountdown(deadline: number, nowMs: number): string {
+  const remaining = getSecondsRemaining(deadline, nowMs)
+  const hours = Math.floor(remaining / 3600)
+  const minutes = Math.floor((remaining % 3600) / 60)
+  const seconds = remaining % 60
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`
+}
+
 // Helper function to truncate addresses
 const truncateAddress = (address: string) => {
   if (!address) return ""
@@ -128,6 +147,8 @@ export function QuestView() {
   const createMilestoneTx = useTransactionAction()
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
+  const archiveQuestTx = useTransactionAction()
+  const [nowMs, setNowMs] = useState(Date.now())
 
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -242,6 +263,12 @@ export function QuestView() {
 
   const isOwner = !!address && quest?.owner === address
   const isEnrolled = !!address && enrollees.includes(address)
+  const isArchived = quest?.status === QuestStatus.Archived
+  const isExpired = quest ? isExpiredDeadline(quest.deadline, nowMs) : false
+  const expiringSoon = quest ? isExpiringSoon(quest.deadline, nowMs) : false
+  const deadlineLabel = quest ? formatDeadlineLabel(quest.deadline, nowMs) : "No deadline"
+  const deadlineDate = quest && quest.deadline > 0 ? formatDeadlineDate(quest.deadline) : null
+  const countdownLabel = quest && expiringSoon ? formatCountdown(quest.deadline, nowMs) : null
 
   const viewerCompletedMilestoneIds = new Set(
     completions
@@ -282,6 +309,23 @@ export function QuestView() {
     addEnrolleeTx.reset()
     setAddPhase("idle")
   }, [addEnrolleeTx, enrolleeForm])
+
+  useEffect(() => {
+    if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
+      return
+    }
+
+    const interval = window.setInterval(
+      () => {
+        setNowMs(Date.now())
+      },
+      expiringSoon ? 1000 : 60_000
+    )
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [expiringSoon, quest])
 
   const isMilestoneCompletedBy = useCallback(
     (milestoneId: number, enrollee: string) =>
@@ -326,6 +370,10 @@ export function QuestView() {
     async (values: MilestoneFormValues) => {
       if (!address) {
         addToast("Connect your wallet first.", "error")
+        return
+      }
+      if (isArchived || isExpired) {
+        addToast("Archived or expired quests cannot be changed.", "error")
         return
       }
 
@@ -389,6 +437,10 @@ export function QuestView() {
         addToast("Connect your wallet first.", "error")
         return
       }
+      if (isArchived || isExpired) {
+        addToast("Archived or expired quests do not accept new learners.", "error")
+        return
+      }
 
       setAddPhase("submitting")
       try {
@@ -419,6 +471,8 @@ export function QuestView() {
       closeAddEnrollee,
       enrolleeForm,
       getQuestErrorMessage,
+      isArchived,
+      isExpired,
       questId,
       refetch,
     ]
@@ -427,6 +481,10 @@ export function QuestView() {
   const handleEnroll = useCallback(async () => {
     if (!address) {
       addToast("Connect your wallet first.", "error")
+      return
+    }
+    if (isArchived || isExpired) {
+      addToast("This quest is no longer accepting enrollments.", "info")
       return
     }
 
@@ -448,12 +506,26 @@ export function QuestView() {
           : "Enrollment failed. Please try again."
       addToast(message, quest?.visibility === Visibility.Private ? "info" : "error")
     }
-  }, [address, addToast, enrollTx, getQuestErrorMessage, quest?.visibility, questId, refetch])
+  }, [
+    address,
+    addToast,
+    enrollTx,
+    getQuestErrorMessage,
+    isArchived,
+    isExpired,
+    quest?.visibility,
+    questId,
+    refetch,
+  ])
 
   const handleVerifyAndPayout = useCallback(
     async (milestone: MilestoneInfo) => {
       if (!address) {
         addToast("Connect your wallet first.", "error")
+        return
+      }
+      if (isArchived || isExpired) {
+        addToast("Archived or expired quests cannot verify completions.", "info")
         return
       }
 
@@ -542,8 +614,37 @@ export function QuestView() {
       questId,
       refetch,
       verifyPayoutTx,
+      isArchived,
+      isExpired,
     ]
   )
+
+  const handleArchiveQuest = useCallback(async () => {
+    if (!address) {
+      addToast("Connect your wallet first.", "error")
+      return
+    }
+    if (isArchived) {
+      addToast("This quest is already archived.", "info")
+      return
+    }
+
+    try {
+      await archiveQuestTx.run(async () => {
+        const result = await questClient.archiveQuest(address, questId)
+        if (result.status !== "SUCCESS") {
+          throw new Error(result.error ?? "Could not archive quest.")
+        }
+        return result
+      })
+
+      await refetch()
+      addToast("Quest archived. Historical data remains visible.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not archive quest."
+      addToast(message, "error")
+    }
+  }, [address, addToast, archiveQuestTx, isArchived, questId, refetch])
 
   const handleRemoveEnrollee = useCallback(
     async (enrollee: string) => {
@@ -740,6 +841,8 @@ export function QuestView() {
                 Complete
               </Badge>
             )}
+            {isArchived && <Badge variant="outline">Archived</Badge>}
+            {isExpired && <Badge variant="outline">Expired</Badge>}
             <Badge variant={quest.visibility === Visibility.Public ? "default" : "outline"}>
               {quest.visibility === Visibility.Public ? "Public" : "Invite Only"}
             </Badge>
@@ -756,6 +859,15 @@ export function QuestView() {
             <div>
               <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
               <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
+                <Badge variant={isExpired ? "outline" : "secondary"}>{deadlineLabel}</Badge>
+                {deadlineDate && (
+                  <span className="text-muted-foreground">Deadline: {deadlineDate}</span>
+                )}
+                {countdownLabel && (
+                  <span className="text-destructive">Countdown {countdownLabel}</span>
+                )}
+              </div>
             </div>
             <div className="flex flex-shrink-0 flex-wrap gap-3">
               {isOwner ? (
@@ -790,6 +902,7 @@ export function QuestView() {
                     size="sm"
                     className="shimmer-on-hover"
                     onClick={() => setShowAddEnrollee(current => !current)}
+                    disabled={isArchived || isExpired}
                   >
                     <UserPlus className="h-4 w-4" />
                     Add Enrollee
@@ -798,23 +911,45 @@ export function QuestView() {
                     size="sm"
                     className="shimmer-on-hover"
                     onClick={() => setShowMilestoneForm(true)}
+                    disabled={isExpired}
                   >
                     <Plus className="h-4 w-4" />
                     Add Milestone
                   </Button>
+                  {!isArchived && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => void handleArchiveQuest()}
+                      disabled={archiveQuestTx.isPending}
+                    >
+                      {archiveQuestTx.isPending ? "Archiving..." : "Archive Quest"}
+                    </Button>
+                  )}
                 </>
               ) : (
                 <Button
                   size="sm"
                   className="shimmer-on-hover"
                   onClick={() => void handleEnroll()}
-                  disabled={enrollTx.isPending || isEnrolled || !isSupportedNetwork || !address}
+                  disabled={
+                    enrollTx.isPending ||
+                    isEnrolled ||
+                    !isSupportedNetwork ||
+                    !address ||
+                    isArchived ||
+                    isExpired
+                  }
                   title={
                     !isSupportedNetwork
                       ? "Switch Freighter to Testnet to continue."
-                      : quest.visibility === Visibility.Private && !isEnrolled
-                        ? "Invite only"
-                        : undefined
+                      : isArchived
+                        ? "Archived quests are read-only."
+                        : isExpired
+                          ? "Expired quests no longer accept enrollments."
+                          : quest.visibility === Visibility.Private && !isEnrolled
+                            ? "Invite only"
+                            : undefined
                   }
                 >
                   {enrollTx.isPending ? (
@@ -826,6 +961,16 @@ export function QuestView() {
                     <>
                       <CheckCircle2 className="h-4 w-4" />
                       Already Enrolled
+                    </>
+                  ) : isArchived ? (
+                    <>
+                      <Lock className="h-4 w-4" />
+                      Archived
+                    </>
+                  ) : isExpired ? (
+                    <>
+                      <Clock className="h-4 w-4" />
+                      Expired
                     </>
                   ) : quest.visibility === Visibility.Private ? (
                     <>
@@ -846,6 +991,13 @@ export function QuestView() {
           {!isOwner && quest.visibility === Visibility.Private && !isEnrolled && (
             <p className="text-muted-foreground relative mt-4 text-xs font-bold">
               This quest is invite only. If you try to enroll, the contract will reject it.
+            </p>
+          )}
+          {(isArchived || isExpired) && (
+            <p className="text-muted-foreground relative mt-3 text-xs font-bold">
+              {isArchived
+                ? "This quest has been archived. Historical progress stays visible, but new enrollments are blocked."
+                : "This quest deadline has passed. Enrollment and completion actions are disabled."}
             </p>
           )}
         </div>
@@ -892,7 +1044,13 @@ export function QuestView() {
             <div className="flex gap-2">
               <Button
                 type="submit"
-                disabled={addEnrolleeTx.isPending || addPhase === "done" || !isSupportedNetwork}
+                disabled={
+                  addEnrolleeTx.isPending ||
+                  addPhase === "done" ||
+                  !isSupportedNetwork ||
+                  isArchived ||
+                  isExpired
+                }
                 className="shimmer-on-hover"
               >
                 {addEnrolleeTx.isPending ? (
@@ -1100,7 +1258,7 @@ export function QuestView() {
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={createMilestoneTx.isPending}
+                  disabled={createMilestoneTx.isPending || isExpired}
                   className="shimmer-on-hover"
                 >
                   {createMilestoneTx.isPending ? (
@@ -1292,12 +1450,19 @@ export function QuestView() {
                                     disabled={
                                       isVerifying ||
                                       !isSupportedNetwork ||
-                                      eligibleEnrollees.length === 0
+                                      eligibleEnrollees.length === 0 ||
+                                      isArchived ||
+                                      isExpired
                                     }
                                     title={
-                                      eligibleEnrollees.length === 0 && milestone.requiresPrevious
-                                        ? "Complete previous milestone first"
-                                        : undefined
+                                      isArchived
+                                        ? "Archived quests are read-only."
+                                        : isExpired
+                                          ? "Expired quests cannot verify completions."
+                                          : eligibleEnrollees.length === 0 &&
+                                              milestone.requiresPrevious
+                                            ? "Complete previous milestone first"
+                                            : undefined
                                     }
                                     onClick={event => {
                                       event.stopPropagation()
@@ -1359,7 +1524,14 @@ export function QuestView() {
                     size="sm"
                     className="shimmer-on-hover"
                     onClick={() => void handleEnroll()}
-                    disabled={enrollTx.isPending || isEnrolled || !isSupportedNetwork || !address}
+                    disabled={
+                      enrollTx.isPending ||
+                      isEnrolled ||
+                      !isSupportedNetwork ||
+                      !address ||
+                      isArchived ||
+                      isExpired
+                    }
                   >
                     <UserPlus className="h-4 w-4" />
                     {isEnrolled ? "Already Enrolled" : "Enroll"}

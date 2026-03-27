@@ -28,17 +28,14 @@ export function useUserRole(): UserRoleData {
 
     useEffect(() => {
         if (!connected || !address) {
-            setRoleData({
-                role: "unknown",
-                isOwner: false,
-                isEnrolled: false,
-                isLoading: false,
-                error: null,
-            })
             return
         }
 
+        let isMounted = true
+
         const determineRole = async () => {
+            if (!isMounted) return
+
             setRoleData(prev => ({ ...prev, isLoading: true, error: null }))
 
             try {
@@ -74,25 +71,33 @@ export function useUserRole(): UserRoleData {
                     role = "learner"
                 }
 
-                setRoleData({
-                    role,
-                    isOwner,
-                    isEnrolled,
-                    isLoading: false,
-                    error: null,
-                })
+                if (isMounted) {
+                    setRoleData({
+                        role,
+                        isOwner,
+                        isEnrolled,
+                        isLoading: false,
+                        error: null,
+                    })
+                }
             } catch (err) {
                 const message = err instanceof Error ? err.message : "Failed to determine user role"
-                setRoleData(prev => ({
-                    ...prev,
-                    isLoading: false,
-                    error: message,
-                    role: "unknown",
-                }))
+                if (isMounted) {
+                    setRoleData(prev => ({
+                        ...prev,
+                        isLoading: false,
+                        error: message,
+                        role: "unknown",
+                    }))
+                }
             }
         }
 
         void determineRole()
+
+        return () => {
+            isMounted = false
+        }
     }, [connected, address])
 
     return roleData

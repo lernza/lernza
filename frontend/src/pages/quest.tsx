@@ -113,15 +113,9 @@ const truncateAddress = (address: string) => {
 
 export function QuestView() {
   const { id } = useParams()
-  const validationState = validateQuestId(id)
   const navigate = useNavigate()
 
-  // Show validation error if ID is invalid
-  if (!isValidQuestId(validationState)) {
-    return <QuestValidationError state={validationState} />
-  }
-
-  const questId = validationState.questId
+  // Call all hooks BEFORE any conditional returns
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
   const [showAddEnrollee, setShowAddEnrollee] = useState(false)
@@ -169,7 +163,11 @@ export function QuestView() {
     defaultValues: { address: "" },
   })
 
-  // Use individual hooks for quest data
+  // Validate quest ID
+  const validationState = validateQuestId(id)
+
+  // Use individual hooks for quest data - must be called before any returns
+  const questId = isValidQuestId(validationState) ? validationState.questId : -1
   const questData = useQuest(questId)
   const milestonesData = useMilestones(questId)
   const enrolleesData = useEnrollees(questId)
@@ -248,6 +246,11 @@ export function QuestView() {
     enrolleesData,
     poolBalanceData,
   ])
+
+  // Show validation error if ID is invalid - AFTER all hooks
+  if (!isValidQuestId(validationState)) {
+    return <QuestValidationError state={validationState} />
+  }
 
   const isOwner = !!address && quest?.owner === address
   const isEnrolled = !!address && enrollees.includes(address)

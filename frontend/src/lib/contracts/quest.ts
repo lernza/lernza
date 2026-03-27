@@ -141,7 +141,9 @@ export class QuestClient {
   }
 
   async isCreatorVerified(creator: string): Promise<boolean> {
-    const result = await this.invokeRead("is_creator_verified", [new Address(creator).toScVal()])
+    const result = await this.invokeRead("is_creator_verified", [
+      new Address(creator).toScVal(),
+    ])
     return !!result
   }
 

@@ -24,11 +24,6 @@ import { milestoneClient } from "@/lib/contracts/milestone-client"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { formatDeadlineLabel, formatTokens, isExpiredDeadline } from "@/lib/utils"
 
-// Sub-components
-import { PersonalProgress } from "./dashboard/personal-progress"
-import { TrendingQuests } from "./dashboard/trending-quests"
-import { RecentActivity } from "./dashboard/recent-activity"
-
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 
@@ -423,19 +418,19 @@ export function Dashboard() {
             </div>
           </div>
 
-          {loadError && (
-            <div className="mb-5">
-              <ErrorState
-                message={`Failed to load dashboard data: ${loadError}`}
-                onRetry={() => {
-                  void questClient.getQuests().then(() => {
-                    // no-op: refetch is available from hook but not currently exposed here
-                  })
-                }}
-                variant="compact"
-              />
-            </div>
-          )}
+            {loadError && (
+              <div className="mb-5">
+                <ErrorState
+                  message={`Failed to load dashboard data: ${loadError}`}
+                  onRetry={() => {
+                    void questClient.listPublicQuests(0, 100).then(() => {
+                      // no-op: refetch is available from hook but not currently exposed here
+                    })
+                  }}
+                  variant="compact"
+                />
+              </div>
+            )}
 
           {isLoading && (
             <div className="mb-5">
@@ -652,9 +647,9 @@ export function Dashboard() {
                 action={
                   filter === "all" || filter === "owned"
                     ? {
-                        label: "Create Quest",
-                        onClick: () => navigate("/quest/create"),
-                      }
+                      label: "Create Quest",
+                      onClick: () => navigate("/quest/create"),
+                    }
                     : undefined
                 }
               />

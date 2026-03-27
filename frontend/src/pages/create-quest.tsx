@@ -18,6 +18,8 @@ import {
   FileText,
   Sparkles,
   AlertCircle,
+  Eye,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -25,6 +27,7 @@ import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
+import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -562,6 +565,158 @@ function Step2Form({
   )
 }
 
+// ─── Quest Preview Modal Component ──────────────────────────────────────────────
+interface QuestPreviewModalProps {
+  isOpen: boolean
+  onClose: () => void
+  questData: {
+    name: string
+    description: string
+    milestones: Array<{
+      title: string
+      description: string
+      rewardAmount: number
+      requiresPrevious: boolean
+    }>
+    maxEnrollees?: number
+  }
+}
+
+function QuestPreviewModal({ isOpen, onClose, questData }: QuestPreviewModalProps) {
+  // Get token metadata for formatting - MUST be before any conditional returns
+  const tokenAddress =
+    import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
+  const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
+
+  // Handle ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeyDown)
+      return () => {
+        document.removeEventListener("keydown", handleKeyDown)
+      }
+    }
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  // Calculate total reward
+  const totalReward = questData.milestones.reduce((sum: number, m) => sum + m.rewardAmount, 0)
+
+  // Format amounts with token metadata
+  const formatRewardAmount = (amount: number) => {
+    return tokenMetadata
+      ? formatTokens(amount, tokenMetadata.decimals, tokenMetadata.symbol)
+      : formatTokens(amount)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-background border-border max-h-[90vh] w-full max-w-2xl overflow-auto border-[3px] shadow-[8px_8px_0_var(--color-border)]">
+        <div className="flex items-center justify-between border-b-[2px] p-6">
+          <h2 className="text-xl font-black">Quest Preview</h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted rounded border-[2px] p-2"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {/* Quest Header */}
+          <div className="bg-primary border-border mb-4 border-b-[3px] p-4">
+            <h3 className="text-lg font-black">{questData.name}</h3>
+            <p className="text-muted-foreground mt-2">{questData.description}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <Badge
+                variant="default"
+                className="bg-secondary text-foreground border-border ml-2 border-[1px] px-2 text-[10px]"
+              >
+                Public
+              </Badge>
+              {questData.maxEnrollees && (
+                <span className="text-muted-foreground text-sm">
+                  Max {questData.maxEnrollees} learners
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Milestones */}
+          <div className="space-y-4">
+            <h4 className="text-muted-foreground mb-3 text-xs font-black tracking-wider uppercase">
+              Milestones ({questData.milestones.length})
+            </h4>
+            <div className="space-y-3">
+              {questData.milestones.map((milestone, index) => (
+                <div
+                  key={index}
+                  className="bg-secondary border-border flex items-start justify-between gap-3 border-[1.5px] p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="bg-primary border-border mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center border-[1.5px] text-[10px] font-black">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-black">{milestone.title}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {milestone.description}
+                      </p>
+                      {milestone.requiresPrevious && index > 0 && (
+                        <p className="text-muted-foreground mt-1 text-[10px] font-bold uppercase">
+                          Sequential
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="default" className="flex-shrink-0 tabular-nums">
+                    {formatRewardAmount(milestone.rewardAmount)}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Reward Pool */}
+          <div className="bg-primary border-border mb-4 flex items-center justify-between border-[2px] p-4 shadow-[3px_3px_0_var(--color-border)]">
+            <div className="flex items-center gap-2">
+              <Coins className="h-5 w-5" />
+              <span className="font-black">Total {tokenMetadata?.symbol || "USDC"} needed</span>
+            </div>
+            <span className="text-xl font-black tabular-nums">
+              {formatRewardAmount(totalReward)}
+            </span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="outline" onClick={onClose} className="shimmer-on-hover">
+              Back to Edit
+            </Button>
+            <Button
+              onClick={() => {
+                onClose()
+                // In a real implementation, this would trigger the actual submission
+                console.log("Quest submission would happen here")
+              }}
+              className="shimmer-on-hover"
+            >
+              Looks good, submit
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Step 3: Fund & Review ────────────────────────────────────────────────────
 
 function Step3Review({
@@ -582,11 +737,22 @@ function Step3Review({
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
   const [deadlineTxHash, setDeadlineTxHash] = useState<string | null>(null)
   const [fundTxHash, setFundTxHash] = useState<string | null>(null)
+  const [showPreview, setShowPreview] = useState(false)
+
+  // Get token metadata for proper formatting
+  const tokenAddress =
+    import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
+  const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
+
+  // Format total reward with token metadata
+  const formattedTotalReward = tokenMetadata
+    ? formatTokens(totalReward, tokenMetadata.decimals, tokenMetadata.symbol)
+    : formatTokens(totalReward)
 
   const parseQuestIdFromResultXdr = (resultXdr: string): number | null => {
     try {
@@ -720,7 +886,7 @@ function Step3Review({
                   key={i}
                   className="bg-secondary border-border flex items-start justify-between gap-3 border-[1.5px] p-3"
                 >
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-center gap-2">
                     <div className="bg-primary border-border mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center border-[1.5px] text-[10px] font-black">
                       {i + 1}
                     </div>
@@ -735,7 +901,9 @@ function Step3Review({
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
-                    {m.rewardAmount} USDC
+                    {tokenMetadata
+                      ? formatTokens(m.rewardAmount, tokenMetadata.decimals, tokenMetadata.symbol)
+                      : `${formatTokens(m.rewardAmount)} USDC`}
                   </Badge>
                 </div>
               ))}
@@ -750,11 +918,9 @@ function Step3Review({
             <div className="bg-primary border-border mb-4 flex items-center justify-between border-[2px] p-4 shadow-[3px_3px_0_var(--color-border)]">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                <span className="font-black">Total USDC needed</span>
+                <span className="font-black">Total {tokenMetadata?.symbol || "USDC"} needed</span>
               </div>
-              <span className="text-xl font-black tabular-nums">
-                {formatTokens(totalReward)} USDC
-              </span>
+              <span className="text-xl font-black tabular-nums">{formattedTotalReward}</span>
             </div>
 
             {/* Network Warning */}
@@ -767,6 +933,19 @@ function Step3Review({
               </div>
             )}
 
+            {/* Quest Preview Modal */}
+            <QuestPreviewModal
+              isOpen={showPreview}
+              onClose={() => setShowPreview(false)}
+              questData={{
+                name: step1Data.name,
+                description: step1Data.description,
+                milestones: step2Data.milestones,
+                maxEnrollees: step1Data.maxEnrollees,
+              }}
+            />
+
+            {/* Fund button */}
             <Button
               onClick={handleCreateAndFund}
               disabled={submitPending || isSubmitted || !isSupportedNetwork}
@@ -781,7 +960,26 @@ function Step3Review({
               ) : isSubmitted ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Quest created and funded
+                  Reward pool funded
+                </>
+              ) : (
+                <>
+                  <Coins className="h-4 w-4" />
+                  Fund Reward Pool ({formattedTotalReward})
+                </>
+              )}
+            </Button>
+
+            {/* Create button */}
+            <Button
+              onClick={handleCreate}
+              disabled={!isFunded || createPending || !isSupportedNetwork}
+              className="shimmer-on-hover w-full"
+            >
+              {createPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
                 </>
               ) : (
                 <>
@@ -839,7 +1037,21 @@ function Step3Review({
       </div>
 
       <div className="flex items-center justify-between">
-        <Button type="button" variant="outline" onClick={onBack} disabled={submitPending}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setShowPreview(true)}
+          className="shimmer-on-hover"
+        >
+          <Eye className="h-4 w-4" />
+          Preview
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onBack}
+          disabled={fundPending || createPending}
+        >
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>

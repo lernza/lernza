@@ -39,7 +39,9 @@ export class QuestClient {
   // --- Read Operations ---
 
   async getQuest(questId: number): Promise<QuestInfo | null> {
-    const result = await this.invokeRead("get_quest", [nativeToScVal(questId, { type: "u32" })])
+    const result = await this.invokeRead("get_quest", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
     return result ? this.parseQuestInfo(result) : null
   }
 
@@ -52,7 +54,9 @@ export class QuestClient {
   }
 
   async getEnrollees(questId: number): Promise<string[]> {
-    const result = await this.invokeRead("get_enrollees", [nativeToScVal(questId, { type: "u32" })])
+    const result = await this.invokeRead("get_enrollees", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
     return result || []
   }
 
@@ -160,7 +164,7 @@ export class QuestClient {
     return await server.prepareTransaction(tx)
   }
 
-  private parseQuestInfo(raw: Record<string, unknown>): QuestInfo {
+  private parseQuestInfo(raw: any): QuestInfo {
     return {
       id: raw.id,
       owner: raw.owner,

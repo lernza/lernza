@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 const NAV_ITEMS = [
   { key: "landing", path: "/", label: "Home" },
   { key: "dashboard", path: "/dashboard", label: "Dashboard" },
+  { key: "leaderboard", path: "/leaderboard", label: "Leaderboard" },
   { key: "profile", path: "/profile", label: "Profile" },
 ] as const
 

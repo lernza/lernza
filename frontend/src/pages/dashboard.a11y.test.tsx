@@ -1,6 +1,6 @@
 import React from "react"
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
 vi.mock("./dashboard/earnings-chart", () => ({
@@ -15,17 +15,37 @@ vi.mock("@/hooks/use-async-data", () => ({
           id: 7,
           owner: "GOWNER",
           name: "Quest Alpha",
-          description: "Desc",
-          token_addr: "TOKEN",
-          created_at: 123,
+          description: "Frontend integration quest",
+          tokenAddr: "TOKEN",
+          createdAt: 123,
           visibility: 0,
+          status: 0,
+          deadline: 0,
+          maxEnrollees: 10,
+        },
+        {
+          id: 8,
+          owner: "GOWNER",
+          name: "Archive Basics",
+          description: "A different searchable description",
+          tokenAddr: "TOKEN",
+          createdAt: 456,
+          visibility: 1,
+          status: 1,
+          deadline: 0,
+          maxEnrollees: 10,
         },
       ],
       questStats: {
         7: {
-          enrolleeCount: 0,
+          enrolleeCount: 4,
           milestoneCount: 0,
           poolBalance: 0,
+        },
+        8: {
+          enrolleeCount: 1,
+          milestoneCount: 0,
+          poolBalance: 25,
         },
       },
       questMilestones: {},
@@ -57,6 +77,7 @@ const mockUseWallet = vi.mocked(useWallet)
 describe("Dashboard keyboard navigation", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useFakeTimers()
 
     mockUseWallet.mockReturnValue({
       connected: true,
@@ -64,6 +85,10 @@ describe("Dashboard keyboard navigation", () => {
       shortAddress: "GABC…XYZ",
       address: "GABC1234567890XYZ",
     } as unknown as ReturnType<typeof useWallet>)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("opens a quest card with Enter and Space", async () => {
@@ -82,5 +107,30 @@ describe("Dashboard keyboard navigation", () => {
       fireEvent.click(cardButton!)
     })
     expect(mockNavigate).toHaveBeenCalledWith("/quest/7")
+  })
+
+  it("shows the filtered empty state after a debounced search", async () => {
+    vi.useRealTimers()
+    const { Dashboard } = await import("./dashboard")
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={["/dashboard?filter=all&sort=newest"]}>
+          <Dashboard />
+        </MemoryRouter>
+      )
+    })
+
+    const searchInput = screen.getByLabelText(/search quests/i)
+    fireEvent.change(searchInput, { target: { value: "no-match-query" } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/no matching quests/i)).toBeTruthy()
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /funded/i }))
+    })
+
+    expect(screen.getByText(/no matching quests/i)).toBeTruthy()
   })
 })

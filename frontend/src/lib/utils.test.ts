@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest"
-import { cn, shortenAddress, formatTokens } from "./utils"
+import {
+  cn,
+  shortenAddress,
+  formatTokens,
+  formatDeadlineLabel,
+  isExpiredDeadline,
+  isExpiringSoon,
+} from "./utils"
 
 describe("cn", () => {
   it("merges class names", () => {
@@ -54,5 +61,25 @@ describe("formatTokens", () => {
   it("formats millions with one decimal place", () => {
     expect(formatTokens(1_000_000)).toBe("1.0M")
     expect(formatTokens(2_500_000)).toBe("2.5M")
+  })
+})
+
+describe("deadline helpers", () => {
+  const nowMs = new Date("2026-03-27T12:00:00Z").getTime()
+
+  it("marks expired deadlines correctly", () => {
+    expect(isExpiredDeadline(Math.floor(nowMs / 1000) - 1, nowMs)).toBe(true)
+    expect(isExpiredDeadline(Math.floor(nowMs / 1000) + 60, nowMs)).toBe(false)
+  })
+
+  it("detects when a deadline is within 24 hours", () => {
+    expect(isExpiringSoon(Math.floor(nowMs / 1000) + 60 * 60, nowMs)).toBe(true)
+    expect(isExpiringSoon(Math.floor(nowMs / 1000) + 3 * 24 * 60 * 60, nowMs)).toBe(false)
+  })
+
+  it("formats relative deadline labels", () => {
+    expect(formatDeadlineLabel(0, nowMs)).toBe("No deadline")
+    expect(formatDeadlineLabel(Math.floor(nowMs / 1000) - 60, nowMs)).toBe("Expired")
+    expect(formatDeadlineLabel(Math.floor(nowMs / 1000) + 2 * 60 * 60, nowMs)).toBe("Expires in 2h")
   })
 })

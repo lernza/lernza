@@ -27,6 +27,7 @@ import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { formatTokens, cn } from "@/lib/utils"
+import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -736,6 +737,11 @@ function Step3Review({
     0
   )
 
+  // Format total reward with token metadata
+  const formattedTotalReward = tokenMetadata
+    ? formatTokens(totalReward, tokenMetadata.decimals, tokenMetadata.symbol)
+    : formatTokens(totalReward)
+
   const parseQuestIdFromResultXdr = (resultXdr: string): number | null => {
     try {
       const scVal = xdr.ScVal.fromXDR(resultXdr, "base64")
@@ -883,7 +889,9 @@ function Step3Review({
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
-                    {m.rewardAmount} USDC
+                    {tokenMetadata
+                      ? formatTokens(m.rewardAmount, tokenMetadata.decimals, tokenMetadata.symbol)
+                      : `${formatTokens(m.rewardAmount)} USDC`}
                   </Badge>
                 </div>
               ))}
@@ -898,11 +906,9 @@ function Step3Review({
             <div className="bg-primary border-border mb-4 flex items-center justify-between border-[2px] p-4 shadow-[3px_3px_0_var(--color-border)]">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                <span className="font-black">Total USDC needed</span>
+                <span className="font-black">Total {tokenMetadata?.symbol || "USDC"} needed</span>
               </div>
-              <span className="text-xl font-black tabular-nums">
-                {formatTokens(totalReward)} USDC
-              </span>
+              <span className="text-xl font-black tabular-nums">{formattedTotalReward}</span>
             </div>
 
             {/* Network Warning */}
@@ -942,7 +948,26 @@ function Step3Review({
               ) : isSubmitted ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Quest created and funded
+                  Reward pool funded
+                </>
+              ) : (
+                <>
+                  <Coins className="h-4 w-4" />
+                  Fund Reward Pool ({formattedTotalReward})
+                </>
+              )}
+            </Button>
+
+            {/* Create button */}
+            <Button
+              onClick={handleCreate}
+              disabled={!isFunded || createPending || !isSupportedNetwork}
+              className="shimmer-on-hover w-full"
+            >
+              {createPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
                 </>
               ) : (
                 <>

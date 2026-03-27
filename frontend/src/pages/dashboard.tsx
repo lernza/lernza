@@ -21,13 +21,8 @@ import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import { Visibility, type WorkspaceInfo } from "@/lib/contract-types"
+import { Visibility, type QuestInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
-
-// Sub-components
-import { PersonalProgress } from "./dashboard/personal-progress"
-import { TrendingQuests } from "./dashboard/trending-quests"
-import { RecentActivity } from "./dashboard/recent-activity"
 
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
@@ -46,22 +41,10 @@ export function Dashboard() {
   } = useContractData(
     "dashboard",
     async () => {
-      const questInfos = await questClient.getQuests()
-
-      const normalized: WorkspaceInfo[] = questInfos.map(q => ({
-        id: q.id,
-        owner: q.owner,
-        name: q.name,
-        description: q.description,
-        token_addr: q.tokenAddr,
-        created_at: q.createdAt,
-        visibility: Visibility.Public,
-        max_enrollees: q.maxEnrollees,
-        verified: q.verified,
-      }))
+      const quests = await questClient.listPublicQuests(0, 100)
 
       const statsEntries = await Promise.all(
-        normalized.map(async q => {
+        quests.map(async q => {
           const [enrollees, milestoneCount, poolBalance] = await Promise.all([
             questClient.getEnrollees(q.id),
             milestoneClient.getMilestoneCount(q.id),
@@ -101,7 +84,7 @@ export function Dashboard() {
       if (address) {
         const [completionEntries, earnings] = await Promise.all([
           Promise.all(
-            normalized.map(async q => {
+            quests.map(async q => {
               const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
               return [q.id, completed] as const
             })
@@ -113,7 +96,7 @@ export function Dashboard() {
       }
 
       return {
-        quests: normalized,
+        quests,
         questStats,
         questMilestones,
         questCompletions,
@@ -134,18 +117,16 @@ export function Dashboard() {
     userEarnings = 0n,
   } = dashboardData || {}
 
-  const filteredWorkspaces = quests
-    .filter(ws => {
-      if (filter === "owned") return !!address && ws.owner === address
-      if (filter === "enrolled") return !address || ws.owner !== address
-      return true
-    })
-    .filter(ws => {
-      if (showVerifiedOnly) return ws.verified
-      return true
-    })
+  const filteredWorkspaces = quests.filter(ws => {
+    if (filter === "owned") return !!address && ws.owner === address
+    if (filter === "enrolled") return !address || ws.owner !== address
+    return true
+  }).filter(ws => {
+    if (showVerifiedOnly) return ws.verified
+    return true
+  })
 
-  const ownedCount = quests.filter((q: WorkspaceInfo) => !!address && q.owner === address).length
+  const ownedCount = quests.filter((q: QuestInfo) => !!address && q.owner === address).length
   const enrolledCount = Math.max(0, quests.length - ownedCount)
   const milestonesCompleted = (Object.values(questCompletions) as number[]).reduce(
     (sum: number, count: number) => sum + count,
@@ -165,14 +146,14 @@ export function Dashboard() {
 
   const recentActivity = quests
     .slice()
-    .sort((a, b) => b.created_at - a.created_at)
+    .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 5)
     .map(ws => ({
       id: `created-${ws.id}`,
       user: ws.owner,
       action: "created" as const,
       questName: ws.name,
-      timestamp: ws.created_at * 1000,
+      timestamp: ws.createdAt * 1000,
     }))
 
   const earningsHistory = [
@@ -318,9 +299,8 @@ export function Dashboard() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setShowVerifiedOnly(!showVerifiedOnly)}
-                  className={`border-border flex cursor-pointer items-center gap-2 border-[2px] px-4 py-2 text-xs font-black tracking-wider uppercase shadow-[3px_3px_0_var(--color-border)] transition-colors ${
-                    showVerifiedOnly ? "bg-primary" : "bg-background hover:bg-secondary"
-                  }`}
+                  className={`border-border flex cursor-pointer items-center gap-2 border-[2px] px-4 py-2 text-xs font-black tracking-wider uppercase transition-colors shadow-[3px_3px_0_var(--color-border)] ${showVerifiedOnly ? "bg-primary" : "bg-background hover:bg-secondary"
+                    }`}
                 >
                   <Check
                     className={`h-3.5 w-3.5 ${showVerifiedOnly ? "opacity-100" : "opacity-30"}`}
@@ -332,9 +312,8 @@ export function Dashboard() {
                     <button
                       key={f}
                       onClick={() => setFilter(f)}
-                      className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
-                        filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
-                      }`}
+                      className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider capitalize uppercase transition-colors last:border-r-0 ${filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
+                        }`}
                     >
                       {f}
                     </button>
@@ -344,19 +323,19 @@ export function Dashboard() {
             </div>
           </div>
 
-          {loadError && (
-            <div className="mb-5">
-              <ErrorState
-                message={`Failed to load dashboard data: ${loadError}`}
-                onRetry={() => {
-                  void questClient.getQuests().then(() => {
-                    // no-op: refetch is available from hook but not currently exposed here
-                  })
-                }}
-                variant="compact"
-              />
-            </div>
-          )}
+            {loadError && (
+              <div className="mb-5">
+                <ErrorState
+                  message={`Failed to load dashboard data: ${loadError}`}
+                  onRetry={() => {
+                    void questClient.listPublicQuests(0, 100).then(() => {
+                      // no-op: refetch is available from hook but not currently exposed here
+                    })
+                  }}
+                  variant="compact"
+                />
+              </div>
+            )}
 
           {isLoading && (
             <div className="mb-5">
@@ -399,6 +378,46 @@ export function Dashboard() {
                                 <Sparkles className="h-3 w-3" />
                                 Complete
                               </Badge>
+                            </div>
+                            <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                              {ws.description}
+                            </p>
+                            {(ws.category || ws.tags.length > 0) && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                {ws.category && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {ws.category}
+                                  </Badge>
+                                )}
+                                {ws.tags.slice(0, 3).map((tag, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-[10px]">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                                {ws.tags.length > 3 && (
+                                  <span className="text-muted-foreground text-[10px]">
+                                    +{ws.tags.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
+                            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                          <Badge variant="secondary" className="gap-1">
+                            <Users className="h-3 w-3" />
+                            {ws.maxEnrollees ? (
+                              <>
+                                {stats.enrolleeCount}/{ws.maxEnrollees} enrolled (
+                                {Math.max(0, ws.maxEnrollees - stats.enrolleeCount)} left)
+                              </>
+                            ) : (
+                              <>{stats.enrolleeCount} enrolled</>
                             )}
                             {ws.verified && (
                               <Badge variant="verified" className="gap-1 border-black">
@@ -491,9 +510,9 @@ export function Dashboard() {
                 action={
                   filter === "all" || filter === "owned"
                     ? {
-                        label: "Create Quest",
-                        onClick: () => navigate("/quest/create"),
-                      }
+                      label: "Create Quest",
+                      onClick: () => navigate("/quest/create"),
+                    }
                     : undefined
                 }
               />

@@ -266,7 +266,7 @@ lernza/
 | :--------------------- | :-------------------------------------------------------------------------------------------------------------- |
 | **Rust** + WASM target | [rustup.rs](https://rustup.rs) → `rustup target add wasm32-unknown-unknown`                                     |
 | **Stellar CLI** 25.x   | `brew install stellar-cli` or [docs](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) |
-| **Node.js** 22+        | [nodejs.org](https://nodejs.org)                                                                                |
+| **Node.js** 24.12.0    | [nodejs.org](https://nodejs.org) or use `.nvmrc` with nvm                                                       |
 | **Freighter** wallet   | [freighter.app](https://freighter.app) (browser extension)                                                      |
 
 </details>

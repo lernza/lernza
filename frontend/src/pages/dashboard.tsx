@@ -421,26 +421,27 @@ export function Dashboard() {
                 </label>
               </div>
             </div>
+          </div>
 
-            {loadError && (
-              <div className="mb-5">
-                <ErrorState
-                  message={`Failed to load dashboard data: ${loadError}`}
-                  onRetry={() => {
-                    void questClient.getQuests().then(() => {
-                      // no-op: refetch is available from hook but not currently exposed here
-                    })
-                  }}
-                  variant="compact"
-                />
-              </div>
-            )}
+          {loadError && (
+            <div className="mb-5">
+              <ErrorState
+                message={`Failed to load dashboard data: ${loadError}`}
+                onRetry={() => {
+                  void questClient.getQuests().then(() => {
+                    // no-op: refetch is available from hook but not currently exposed here
+                  })
+                }}
+                variant="compact"
+              />
+            </div>
+          )}
 
-            {isLoading && (
-              <div className="mb-5">
-                <LoadingState message="Loading on-chain dashboard data..." variant="compact" />
-              </div>
-            )}
+          {isLoading && (
+            <div className="mb-5">
+              <LoadingState message="Loading on-chain dashboard data..." variant="compact" />
+            </div>
+          )}
 
             <div className="relative grid gap-5">
               {visibleQuests.map((ws, i) => {
@@ -520,27 +521,70 @@ export function Dashboard() {
                             ) : (
                               <>{stats.enrolleeCount} enrolled</>
                             )}
-                          </Badge>
-                          <Badge variant="secondary" className="gap-1">
-                            <Target className="h-3 w-3" />
-                            {stats.milestoneCount} milestones
-                          </Badge>
-                          <Badge variant="default" className="gap-1">
-                            <Coins className="h-3 w-3" />
-                            {formatTokens(stats.poolBalance)} USDC
-                          </Badge>
+                            {ws.verified && (
+                              <Badge variant="verified" className="gap-1 border-black">
+                                <Check className="h-3 w-3" />
+                                Verified Creator
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={isOwned ? "default" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {isOwned ? "Owner" : "Enrolled"}
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                            {ws.description}
+                          </p>
                         </div>
+                        <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
+                          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                        <Badge variant="secondary" className="gap-1">
+                          <Users className="h-3 w-3" />
+                          {ws.max_enrollees ? (
+                            <>
+                              {stats.enrolleeCount}/{ws.max_enrollees} enrolled (
+                              {Math.max(0, ws.max_enrollees - stats.enrolleeCount)} left)
+                            </>
+                          ) : (
+                            <>{stats.enrolleeCount} enrolled</>
+                          )}
+                        </Badge>
+                        <Badge variant="secondary" className="gap-1">
+                          <Target className="h-3 w-3" />
+                          {stats.milestoneCount} milestones
+                        </Badge>
+                        <Badge variant="default" className="gap-1">
+                          <Coins className="h-3 w-3" />
+                          {formatTokens(stats.poolBalance)} USDC
+                        </Badge>
+                      </div>
 
-                        {totalMilestones > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={completedCount}
-                                max={totalMilestones}
-                                className="flex-1"
-                              />
-                              <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                                {completedCount}/{totalMilestones}
+                      {totalMilestones > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Progress
+                              value={completedCount}
+                              max={totalMilestones}
+                              className="flex-1"
+                            />
+                            <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
+                              {completedCount}/{totalMilestones}
+                            </span>
+                          </div>
+                          {earnedReward > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground text-xs font-bold">
+                                Earned so far
+                              </span>
+                              <span className="text-xs font-black text-green-700">
+                                +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
                               </span>
                             </div>
                             {earnedReward > 0 && (
@@ -592,17 +636,41 @@ export function Dashboard() {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Right Column (Trending & Recent Activity) */}
-        <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests
-            quests={trendingQuests}
-            statsByQuest={questStats}
-            onSelectQuest={id => navigate(`/quest/${id}`)}
-          />
-          <RecentActivity activities={recentActivity} />
+          {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
+            <div className="mt-5">
+              <EmptyState
+                variant="quests"
+                title={filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                description={
+                  filter === "all"
+                    ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                    : filter === "owned"
+                      ? "You haven't created any quests yet. Start one to incentivize learners."
+                      : "You haven't enrolled in any quests yet. Browse available quests to get started."
+                }
+                action={
+                  filter === "all" || filter === "owned"
+                    ? {
+                        label: "Create Quest",
+                        onClick: () => navigate("/quest/create"),
+                      }
+                    : undefined
+                }
+              />
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Right Column (Trending & Recent Activity) */}
+      <div className="animate-fade-in-up stagger-3 space-y-8">
+        <TrendingQuests
+          quests={trendingQuests}
+          statsByQuest={questStats}
+          onSelectQuest={id => navigate(`/quest/${id}`)}
+        />
+        <RecentActivity activities={recentActivity} />
       </div>
     </div>
   )

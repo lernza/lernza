@@ -30,6 +30,7 @@ export const MOCK_WORKSPACES: WorkspaceInfo[] = [
     token_addr: "USDC...STELLAR",
     created_at: 1710000000,
     visibility: Visibility.Public,
+    verified: false,
   },
   {
     id: 1,
@@ -40,16 +41,17 @@ export const MOCK_WORKSPACES: WorkspaceInfo[] = [
     token_addr: "USDC...STELLAR",
     created_at: 1709500000,
     visibility: Visibility.Public,
+    verified: false,
   },
   {
     id: 2,
     owner: "GCMN...P8TL",
     name: "Design Fundamentals",
-    description:
-      "Learn UI/UX design principles. From Figma basics to shipping a design system.",
+    description: "Learn UI/UX design principles. From Figma basics to shipping a design system.",
     token_addr: "USDC...STELLAR",
     created_at: 1709800000,
     visibility: Visibility.Public,
+    verified: false,
   },
 ]
 

@@ -622,7 +622,7 @@ function Step3Review({
       )
       return {
         questId: createdQuestId,
-        createQuestTxHash: createResult.txHash,
+        createQuestTxHash: (createResult as { txHash: string }).txHash,
         fundTxHash: fundResult.txHash,
       }
     })

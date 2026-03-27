@@ -461,7 +461,7 @@ export function QuestView() {
         <div className="flex flex-col gap-1">
           <span>Enrollment confirmed.</span>
           <a
-            href={`https://stellar.expert/explorer/testnet/tx/${enrollTx.data?.txHash}`}
+            href={`https://stellar.expert/explorer/testnet/tx/${(enrollTx.data as { txHash?: string })?.txHash}`}
             target="_blank"
             rel="noreferrer"
             className="text-xs underline hover:opacity-80"
@@ -554,7 +554,7 @@ export function QuestView() {
               <div className="flex flex-col gap-1">
                 <span>Completion verified and reward paid out.</span>
                 <a
-                  href={`https://stellar.expert/explorer/testnet/tx/${verifyPayoutTx.data?.txHash}`}
+                  href={`https://stellar.expert/explorer/testnet/tx/${(verifyPayoutTx.data as { txHash?: string })?.txHash}`}
                   target="_blank"
                   rel="noreferrer"
                   className="text-xs underline hover:opacity-80"

@@ -182,11 +182,7 @@ export function Leaderboard() {
           {earners.map(entry => (
             <li
               key={entry.address}
-              className="border-border bg-card flex cursor-pointer items-center gap-4 border-[2px] px-4 py-3 shadow-[3px_3px_0_var(--color-border)] transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_var(--color-border)]"
-              onClick={() => navigate("/profile")}
-              role="button"
-              tabIndex={0}
-              onKeyDown={e => e.key === "Enter" && navigate("/profile")}
+              className="border-border bg-card flex items-center gap-4 border-[2px] px-4 py-3 shadow-[3px_3px_0_var(--color-border)]"
             >
               <RankBadge rank={entry.rank} />
               <span className="flex-1 font-mono text-sm font-bold">

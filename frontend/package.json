@@ -20,6 +20,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "prepare": "cd .. && husky"
   },
   "dependencies": {
@@ -43,6 +45,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@hookform/resolvers": "^5.2.2",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

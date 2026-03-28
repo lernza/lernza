@@ -14,6 +14,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -80,6 +81,7 @@ function WalletAvatar({ address }: { address: string }) {
 }
 
 export function Profile() {
+  const navigate = useNavigate()
   const { connected, connect, address } = useWallet()
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
@@ -747,7 +749,7 @@ export function Profile() {
                         <Button
                           size="sm"
                           className="font-bold shadow-[2px_2px_0_#000]"
-                          onClick={() => (window.location.href = `/quest/${quest.id}`)}
+                          onClick={() => navigate(`/quest/${quest.id}`)}
                         >
                           Manage
                         </Button>

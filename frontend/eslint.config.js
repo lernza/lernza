@@ -1,5 +1,6 @@
 import js from "@eslint/js"
 import globals from "globals"
+import react from "eslint-plugin-react"
 import reactHooks from "eslint-plugin-react-hooks"
 import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
@@ -20,6 +21,19 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    plugins: {
+      react,
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
     },
     rules: {
       'react-refresh/only-export-components': [
@@ -27,6 +41,7 @@ export default defineConfig([
         { allowConstantExport: true },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      'react/no-danger': 'error',
     },
   },
 ])

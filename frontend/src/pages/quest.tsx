@@ -153,6 +153,7 @@ export function QuestView() {
   const createMilestoneTx = useTransactionAction()
   const verifyPayoutTx = useTransactionAction()
   const removeEnrolleeTx = useTransactionAction()
+  const leaveQuestTx = useTransactionAction()
   const archiveQuestTx = useTransactionAction()
   const [nowMs, setNowMs] = useState(Date.now())
 
@@ -716,6 +717,48 @@ export function QuestView() {
     },
     [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
   )
+
+  const handleLeaveQuest = useCallback(async () => {
+    if (!address) {
+      addToast("Connect your wallet first.", "error")
+      return
+    }
+
+    if (!isEnrolled) {
+      addToast("You are not enrolled in this quest.", "info")
+      return
+    }
+
+    if (earnedReward > 0) {
+      addToast("You cannot leave this quest after rewards have been paid out.", "info")
+      return
+    }
+
+    try {
+      await leaveQuestTx.run(async () => {
+        const result = await questClient.leaveQuest(address, questId)
+        if (result.status !== "SUCCESS") {
+          throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
+        }
+        return result
+      })
+
+      await refetch()
+      addToast("You left the quest successfully.", "success")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not leave quest."
+      addToast(message, "error")
+    }
+  }, [
+    address,
+    addToast,
+    earnedReward,
+    getQuestErrorMessage,
+    isEnrolled,
+    leaveQuestTx,
+    questId,
+    refetch,
+  ])
 
   const handleExportQuest = useCallback(() => {
     if (!quest) {
@@ -1756,6 +1799,32 @@ export function QuestView() {
                               "Remove"
                             )}
                           </Button>
+                        </div>
+                      )}
+                      {!isOwner && enrollee === address && (
+                        <div className="mt-3 flex flex-col items-end gap-2">
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            disabled={leaveQuestTx.isPending || earned > 0}
+                            onClick={() => void handleLeaveQuest()}
+                          >
+                            {leaveQuestTx.isPending ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Leaving...
+                              </>
+                            ) : earned > 0 ? (
+                              "Rewards Received"
+                            ) : (
+                              "Leave Quest"
+                            )}
+                          </Button>
+                          {earned > 0 && (
+                            <p className="text-muted-foreground text-xs font-bold">
+                              Rewards have already been paid to this wallet.
+                            </p>
+                          )}
                         </div>
                       )}
                       {milestones.length > 0 && (

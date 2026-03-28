@@ -4,14 +4,16 @@ import {
   TrendingUp,
   Trophy,
   Sparkles,
+  History,
   Copy,
   Check,
   Loader2,
   AlertCircle,
   Target,
   Users,
+  ExternalLink,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +23,42 @@ import { useUserRole } from "@/hooks/use-user-role"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { questClient } from "@/lib/contracts/quest"
+import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
+
+type ProfileTab = "overview" | "activity"
+
+function formatActivityDate(timestamp: number) {
+  return new Date(timestamp).toLocaleString([], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+function getActivityLabel(type: WalletActivityItem["type"]) {
+  switch (type) {
+    case "enrolled":
+      return "Enrolled"
+    case "completed":
+      return "Completed"
+    case "rewarded":
+      return "Rewarded"
+    case "left":
+      return "Left quest"
+  }
+}
+
+function getActivityDescription(item: WalletActivityItem) {
+  switch (item.type) {
+    case "enrolled":
+      return `Joined ${item.questName}`
+    case "completed":
+      return `Completion verified for ${item.questName}`
+    case "rewarded":
+      return `Reward received from ${item.questName}`
+    case "left":
+      return `Left ${item.questName}`
+  }
+}
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -44,6 +82,11 @@ function WalletAvatar({ address }: { address: string }) {
 export function Profile() {
   const { connected, connect, address } = useWallet()
   const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
+  const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityError, setActivityError] = useState<string | null>(null)
+  const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
   const { role, isLoading: roleLoading } = useUserRole()
 
   // Use the new async hook for earnings data
@@ -101,8 +144,7 @@ export function Profile() {
     "quest",
     async () => {
       if (!address) throw new Error("No wallet address")
-      const allQuests = await questClient.getQuests()
-      const ownedQuests = allQuests.filter(q => q.owner === address)
+      const ownedQuests = await questClient.listQuestsByOwner(address)
 
       let totalEnrollees = 0
       let totalPoolBalance = 0n
@@ -135,6 +177,47 @@ export function Profile() {
     }
   )
 
+  useEffect(() => {
+    setActivityItems([])
+    setActivityError(null)
+    setNextActivityCursor(null)
+    setActivityLoading(false)
+  }, [address])
+
+  useEffect(() => {
+    if (!connected || !address || activeTab !== "activity" || activityItems.length > 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadInitialActivity = async () => {
+      setActivityLoading(true)
+      setActivityError(null)
+
+      try {
+        const page = await fetchWalletActivity(address)
+        if (cancelled) return
+
+        setActivityItems(page.items)
+        setNextActivityCursor(page.nextCursor)
+      } catch (error) {
+        if (cancelled) return
+        setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
+      } finally {
+        if (!cancelled) {
+          setActivityLoading(false)
+        }
+      }
+    }
+
+    void loadInitialActivity()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, activityItems.length, address, connected])
+
   const handleCopy = () => {
     if (address) {
       navigator.clipboard.writeText(address)
@@ -143,12 +226,31 @@ export function Profile() {
     }
   }
 
+  const handleLoadMoreActivity = async () => {
+    if (!address || !nextActivityCursor || activityLoading) {
+      return
+    }
+
+    setActivityLoading(true)
+    setActivityError(null)
+
+    try {
+      const page = await fetchWalletActivity(address, nextActivityCursor)
+      setActivityItems(current => [...current, ...page.items])
+      setNextActivityCursor(page.nextCursor)
+    } catch (error) {
+      setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
   const formattedEarned =
     totalEarned === null
       ? "Unavailable"
       : totalEarned > BigInt(Number.MAX_SAFE_INTEGER)
         ? totalEarned.toString()
-        : formatTokens(Number(totalEarned))
+        : formatTokens(Number(totalEarned), 7, "USDC")
 
   if (!connected) {
     return (
@@ -295,73 +397,213 @@ export function Profile() {
         </div>
       </div>
 
-      {/* Earnings history */}
       <div>
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-black">Earnings History</h2>
-          <span className="text-muted-foreground text-sm font-bold">Aggregate total only</span>
+        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-xl font-black">Profile Activity</h2>
+            <p className="text-muted-foreground text-sm font-bold">
+              Track aggregate rewards and recent wallet actions.
+            </p>
+          </div>
+          <div className="border-border flex gap-0 border-[2px] shadow-[3px_3px_0_var(--color-border)]">
+            {(["overview", "activity"] as const).map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`border-border cursor-pointer border-r-[2px] px-4 py-2 text-xs font-black tracking-wider uppercase transition-colors last:border-r-0 ${
+                  activeTab === tab ? "bg-primary" : "bg-background hover:bg-secondary"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="space-y-4">
-          {earningsLoading ? (
-            <Card className="animate-fade-in-up">
-              <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-                <h3 className="mb-2 font-black">Loading on-chain earnings</h3>
-                <p className="text-muted-foreground text-sm">
-                  Fetching your aggregate rewards from the rewards contract.
-                </p>
-              </CardContent>
-            </Card>
-          ) : earningsError ? (
-            <Card className="animate-fade-in-up">
-              <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                  <AlertCircle className="text-destructive h-6 w-6" />
-                </div>
-                <h3 className="mb-2 font-black">On-chain earnings unavailable</h3>
-                <p className="text-muted-foreground max-w-md text-sm">{earningsError}</p>
-              </CardContent>
-            </Card>
-          ) : totalEarned === 0n ? (
-            <Card className="animate-fade-in-up">
-              <CardContent className="flex flex-col items-center py-12 text-center">
-                <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                  <Coins className="h-6 w-6" />
-                </div>
-                <h3 className="mb-2 font-black">No on-chain earnings yet</h3>
-                <p className="text-muted-foreground text-sm">
-                  Your wallet has not received rewards from the rewards contract yet.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="animate-fade-in-up">
-              <CardContent className="py-10">
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex items-start gap-4">
-                    <div className="bg-success/10 border-border flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]">
-                      <Coins className="text-success h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black">On-chain earnings total</p>
-                      <p className="text-muted-foreground mt-1 max-w-md text-sm">
-                        The rewards contract exposes your aggregate earnings by wallet address.
-                        Per-milestone payout history is not indexable from the current on-chain API
-                        yet, so this page does not fabricate transactions.
-                      </p>
-                    </div>
+        {activeTab === "overview" ? (
+          <div className="space-y-4">
+            {earningsLoading ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                    <Loader2 className="h-6 w-6 animate-spin" />
                   </div>
-                  <Badge variant="success" className="self-start tabular-nums">
-                    +{formattedEarned} USDC
-                  </Badge>
+                  <h3 className="mb-2 font-black">Loading on-chain earnings</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Fetching your aggregate rewards from the rewards contract.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : earningsError ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                    <AlertCircle className="text-destructive h-6 w-6" />
+                  </div>
+                  <h3 className="mb-2 font-black">On-chain earnings unavailable</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">{earningsError}</p>
+                </CardContent>
+              </Card>
+            ) : totalEarned === 0n ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                    <Coins className="h-6 w-6" />
+                  </div>
+                  <h3 className="mb-2 font-black">No on-chain earnings yet</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Your wallet has not received rewards from the rewards contract yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="animate-fade-in-up">
+                <CardContent className="py-10">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="bg-success/10 border-border flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]">
+                        <Coins className="text-success h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black">On-chain earnings total</p>
+                        <p className="text-muted-foreground mt-1 max-w-md text-sm">
+                          Aggregate rewards are read from the rewards contract. Use the Activity tab
+                          to inspect recent enrollments, completions, and payouts sourced from
+                          Horizon.
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="success" className="self-start tabular-nums">
+                      +{formattedEarned}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <Card className="animate-fade-in-up">
+              <CardContent className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-primary border-border flex h-12 w-12 items-center justify-center border-[3px] shadow-[3px_3px_0_var(--color-border)]">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black">Wallet timeline</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Loaded from `VITE_HORIZON_URL` with direct transaction links.
+                    </p>
+                  </div>
                 </div>
+                <Badge variant="outline" className="border-[2px] font-bold">
+                  {activityItems.length} loaded
+                </Badge>
               </CardContent>
             </Card>
-          )}
-        </div>
+
+            {activityLoading && activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <Loader2 className="text-primary mb-4 h-8 w-8 animate-spin" />
+                  <h3 className="mb-2 font-black">Loading activity</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Fetching recent wallet operations from Horizon.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : activityError ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <AlertCircle className="text-destructive mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">Could not load activity</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">{activityError}</p>
+                </CardContent>
+              </Card>
+            ) : activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <History className="text-muted-foreground mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">No wallet activity yet</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">
+                    Enroll in a quest or complete a milestone to start building your on-chain
+                    timeline.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {activityItems.map(item => (
+                  <Card key={item.id} className="animate-fade-in-up">
+                    <CardContent className="py-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="bg-primary/10 border-border flex h-11 w-11 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
+                            {item.type === "rewarded" ? (
+                              <Coins className="h-5 w-5" />
+                            ) : item.type === "completed" ? (
+                              <Trophy className="h-5 w-5" />
+                            ) : (
+                              <History className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-black">{getActivityLabel(item.type)}</p>
+                              <Badge variant="secondary">{item.questName}</Badge>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {getActivityDescription(item)}
+                            </p>
+                            <p className="text-muted-foreground mt-2 text-xs font-bold">
+                              {formatActivityDate(item.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:flex-col sm:items-end">
+                          {item.amount !== undefined && (
+                            <Badge variant="success" className="tabular-nums">
+                              +{formatTokens(item.amount, 7, "USDC")}
+                            </Badge>
+                          )}
+                          <a
+                            href={item.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary inline-flex items-center gap-1 text-sm font-bold underline underline-offset-2"
+                          >
+                            View transaction
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {nextActivityCursor && (
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={() => void handleLoadMoreActivity()}
+                      disabled={activityLoading}
+                    >
+                      {activityLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Creator Dashboard (Issue #354) */}

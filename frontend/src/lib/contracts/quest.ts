@@ -112,6 +112,26 @@ export class QuestClient {
   }
 
   /**
+   * Returns all quests owned by the provided address.
+   */
+  async listQuestsByOwner(owner: string): Promise<QuestInfo[]> {
+    const result = await this.invokeRead("list_quests_by_owner", [new Address(owner).toScVal()])
+    if (!Array.isArray(result)) return []
+    return result.map((r: unknown) => this.parseQuestInfo(r))
+  }
+
+  /**
+   * Returns all quests the provided address is enrolled in.
+   */
+  async listQuestsByEnrollee(enrollee: string): Promise<QuestInfo[]> {
+    const result = await this.invokeRead("list_quests_by_enrollee", [
+      new Address(enrollee).toScVal(),
+    ])
+    if (!Array.isArray(result)) return []
+    return result.map((r: unknown) => this.parseQuestInfo(r))
+  }
+
+  /**
    * Returns all public quests within a category.
    */
   async getQuestsByCategory(category: string): Promise<QuestInfo[]> {
@@ -141,9 +161,7 @@ export class QuestClient {
   }
 
   async isCreatorVerified(creator: string): Promise<boolean> {
-    const result = await this.invokeRead("is_creator_verified", [
-      new Address(creator).toScVal(),
-    ])
+    const result = await this.invokeRead("is_creator_verified", [new Address(creator).toScVal()])
     return !!result
   }
 

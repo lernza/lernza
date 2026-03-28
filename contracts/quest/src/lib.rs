@@ -532,6 +532,41 @@ impl QuestContract {
         matches
     }
 
+    /// Get all quests owned by an address.
+    pub fn list_quests_by_owner(env: Env, owner: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                if quest.owner == owner {
+                    matches.push_back(quest);
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        matches
+    }
+
+    /// Get all quests an address is enrolled in.
+    pub fn list_quests_by_enrollee(env: Env, enrollee: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                let enrollees = Self::load_enrollees(&env, id);
+                if enrollees.contains(&enrollee) {
+                    matches.push_back(quest);
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        matches
+    }
+
     /// Get enrollment cap for a quest.
     pub fn get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32> {
         let quest = Self::load_quest(&env, quest_id).ok()?;

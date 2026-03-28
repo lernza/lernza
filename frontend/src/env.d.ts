@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly DEV: boolean
   readonly VITE_QUEST_CONTRACT_ID: string
   readonly VITE_MILESTONE_CONTRACT_ID: string
   readonly VITE_REWARDS_CONTRACT_ID: string

@@ -422,7 +422,9 @@ export function Landing() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="mb-12 text-center">
             <h2 className="text-2xl font-black sm:text-3xl">Platform at a glance</h2>
-            <p className="text-muted-foreground mt-2 font-bold">Real-time metrics from the Stellar network</p>
+            <p className="text-muted-foreground mt-2 font-bold">
+              Sample statistics for preview. Real-time on-chain metrics coming soon.
+            </p>
           </div>
           <PlatformStats stats={MOCK_PLATFORM_STATS} />
         </div>

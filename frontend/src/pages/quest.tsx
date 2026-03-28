@@ -997,41 +997,6 @@ export function QuestView() {
     addToast("Quest data loaded. Complete the creation process.", "success")
   }, [addToast, importedData, navigate])
 
-  // Fetch completions when milestones and enrollees are available
-  useEffect(() => {
-    const fetchCompletions = async () => {
-      if (milestones.length > 0 && enrollees.length > 0) {
-        try {
-          const completionEntries = await Promise.all(
-            enrollees.flatMap(enrollee =>
-              milestones.map(async milestone => {
-                const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
-                return completed
-                  ? ({
-                      milestoneId: milestone.id,
-                      enrollee,
-                      completed: true,
-                    } satisfies CompletionRecord)
-                  : null
-              })
-            )
-          )
-
-          const filteredCompletions = completionEntries.filter(
-            (entry): entry is CompletionRecord => entry !== null
-          )
-          setCompletions(filteredCompletions)
-        } catch (error) {
-          console.error("Failed to fetch completions:", error)
-        }
-      } else {
-        setCompletions(EMPTY_COMPLETIONS)
-      }
-    }
-
-    fetchCompletions()
-  }, [questId, milestones, enrollees])
-
   // Show validation error if ID is invalid - AFTER all hooks
   if (!isValidQuestId(validationState)) {
     return <QuestValidationError state={validationState} />
@@ -1323,7 +1288,9 @@ export function QuestView() {
           </div>
           <div className="space-y-4 p-5">
             <div>
-              <FormLabel htmlFor="enrollee-address-1" required>Stellar Address</FormLabel>
+              <FormLabel htmlFor="enrollee-address-1" required>
+                Stellar Address
+              </FormLabel>
               <input
                 id="enrollee-address-1"
                 {...enrolleeForm.register("address")}
@@ -1493,7 +1460,9 @@ export function QuestView() {
             </div>
             <CardContent className="space-y-4 p-5">
               <div>
-                <FormLabel htmlFor="milestone-title-1" required>Title</FormLabel>
+                <FormLabel htmlFor="milestone-title-1" required>
+                  Title
+                </FormLabel>
                 <input
                   id="milestone-title-1"
                   {...milestoneForm.register("title")}
@@ -1509,7 +1478,9 @@ export function QuestView() {
                 <FieldError message={milestoneForm.formState.errors.title?.message} />
               </div>
               <div>
-                <FormLabel htmlFor="milestone-desc-1" required>Description</FormLabel>
+                <FormLabel htmlFor="milestone-desc-1" required>
+                  Description
+                </FormLabel>
                 <textarea
                   id="milestone-desc-1"
                   {...milestoneForm.register("description")}
@@ -1525,7 +1496,9 @@ export function QuestView() {
                 <FieldError message={milestoneForm.formState.errors.description?.message} />
               </div>
               <div>
-                <FormLabel htmlFor="milestone-reward-1" required>Reward (tokens)</FormLabel>
+                <FormLabel htmlFor="milestone-reward-1" required>
+                  Reward (tokens)
+                </FormLabel>
                 <input
                   id="milestone-reward-1"
                   {...milestoneForm.register("rewardAmount")}
@@ -1835,7 +1808,9 @@ export function QuestView() {
                 className="flex flex-col gap-3 sm:flex-row sm:items-end"
               >
                 <div className="flex-1">
-                  <FormLabel htmlFor="enrollee-address-2" required>Stellar Address</FormLabel>
+                  <FormLabel htmlFor="enrollee-address-2" required>
+                    Stellar Address
+                  </FormLabel>
                   <input
                     id="enrollee-address-2"
                     {...enrolleeForm.register("address")}

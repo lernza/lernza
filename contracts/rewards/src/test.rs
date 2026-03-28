@@ -276,15 +276,15 @@ fn test_distribute_reward_overflow() {
         &q_id,
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
-        &1,
+        &MAX_REWARD_AMOUNT,
         &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute within cap
+    // Distribute within cap — amount matches milestone reward
     client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     // Try to distribute again — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
@@ -322,15 +322,15 @@ fn test_distribute_reward_earnings_overflow() {
         &q_id,
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
-        &1,
+        &MAX_REWARD_AMOUNT,
         &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute within cap
+    // Distribute within cap — amount matches milestone reward
     client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     // Try to distribute again — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
@@ -542,15 +542,15 @@ fn test_distribute_multiple_rewards() {
 
     client.distribute_reward(&owner, &q_id, &ms1_id, &e1, &100);
     client.distribute_reward(&owner, &q_id, &ms2_id, &e2, &200);
-    // e1 gets reward from a different milestone (ms2), not a duplicate
-    client.distribute_reward(&owner, &q_id, &ms2_id, &e1, &50);
+    // e1 also completes ms2 and receives its configured reward (200)
+    client.distribute_reward(&owner, &q_id, &ms2_id, &e1, &200);
 
     let token_client = TokenClient::new(&env, &token_addr);
-    assert_eq!(token_client.balance(&e1), 150);
+    assert_eq!(token_client.balance(&e1), 300);
     assert_eq!(token_client.balance(&e2), 200);
-    assert_eq!(client.get_user_earnings(&e1), 150);
-    assert_eq!(client.get_pool_balance(&q_id), 4_650);
-    assert_eq!(client.get_total_distributed(), 350);
+    assert_eq!(client.get_user_earnings(&e1), 300);
+    assert_eq!(client.get_pool_balance(&q_id), 4_500);
+    assert_eq!(client.get_total_distributed(), 500);
 }
 
 #[test]

@@ -783,6 +783,18 @@ impl MilestoneContract {
             .ok_or(Error::NotFound)
     }
 
+    /// Get the configured reward amount for a milestone.
+    /// Returns the reward_amount stored at milestone creation.
+    /// Used by the rewards contract to validate distribute_reward amounts.
+    pub fn get_milestone_reward(env: Env, quest_id: u32, milestone_id: u32) -> Result<i128, Error> {
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
+        env.storage()
+            .persistent()
+            .get::<DataKey, MilestoneInfo>(&ms_key)
+            .map(|m| m.reward_amount)
+            .ok_or(Error::NotFound)
+    }
+
     /// Get all milestones for a quest.
     pub fn get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
         let count: u32 = env

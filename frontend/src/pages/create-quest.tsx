@@ -26,6 +26,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
 import { useTransactionQueue } from "@/hooks/use-transaction-queue"
 import { useToast } from "@/hooks/use-toast"
+import { ToastContainer } from "@/components/toast"
 import { formatTokens, cn } from "@/lib/utils"
 import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
@@ -193,7 +194,9 @@ function Step1Form({
         <div className="border-border bg-background space-y-5 border-[3px] border-t-0 p-6 shadow-[4px_4px_0_var(--color-border)]">
           {/* Name */}
           <div>
-            <FormLabel htmlFor="quest-name" required>Quest Name</FormLabel>
+            <FormLabel htmlFor="quest-name" required>
+              Quest Name
+            </FormLabel>
             <input
               id="quest-name"
               {...register("name")}
@@ -221,7 +224,9 @@ function Step1Form({
 
           {/* Description */}
           <div>
-            <FormLabel htmlFor="quest-desc" required>Description</FormLabel>
+            <FormLabel htmlFor="quest-desc" required>
+              Description
+            </FormLabel>
             <textarea
               id="quest-desc"
               {...register("description")}
@@ -380,7 +385,9 @@ function Step2Form({
 
                 {/* Title */}
                 <div>
-                  <FormLabel htmlFor={`milestone-${index}-title`} required>Title</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-title`} required>
+                    Title
+                  </FormLabel>
                   <input
                     id={`milestone-${index}-title`}
                     {...register(`milestones.${index}.title`)}
@@ -408,7 +415,9 @@ function Step2Form({
 
                 {/* Description */}
                 <div>
-                  <FormLabel htmlFor={`milestone-${index}-desc`} required>Description</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-desc`} required>
+                    Description
+                  </FormLabel>
                   <textarea
                     id={`milestone-${index}-desc`}
                     {...register(`milestones.${index}.description`)}
@@ -438,7 +447,9 @@ function Step2Form({
 
                 {/* Reward Amount */}
                 <div>
-                  <FormLabel htmlFor={`milestone-${index}-reward`} required>Reward Amount (USDC)</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-reward`} required>
+                    Reward Amount (USDC)
+                  </FormLabel>
                   <div className="flex items-center gap-0">
                     <div className="border-border bg-secondary border-[2px] border-r-0 px-3 py-2 text-xs font-black">
                       USDC
@@ -538,7 +549,7 @@ function Step3Review({
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
   const transactionQueue = useTransactionQueue<"fund_quest", { amount: bigint }>()
-  const { addToast } = useToast()
+  const { toasts, addToast, removeToast } = useToast()
 
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
@@ -568,7 +579,7 @@ function Step3Review({
 
   const handleFund = async () => {
     if (!address) throw new Error("Connect wallet first")
-    const fundAmount = BigInt(Math.round(totalReward))
+    const fundAmount = BigInt(Math.floor(totalReward * 1_000_000))
     const queuedTransactionId = transactionQueue.enqueue({
       type: "fund_quest",
       label: "Fund reward pool",
@@ -613,7 +624,7 @@ function Step3Review({
           createdQuestId,
           m.title,
           m.description,
-          BigInt(Math.round(m.rewardAmount)),
+          BigInt(Math.floor(m.rewardAmount * 1_000_000)),
           m.requiresPrevious && index > 0
         )
         if (msResult.status !== "SUCCESS") {
@@ -661,7 +672,7 @@ function Step3Review({
     try {
       await handleFund()
     } catch (error) {
-      const fundAmount = BigInt(Math.round(totalReward))
+      const fundAmount = BigInt(Math.floor(totalReward * 1_000_000))
       setOptimisticPoolBalance(prev => (prev > fundAmount ? prev - fundAmount : 0n))
       const queued = transactionQueue.transactions.find(tx => tx.type === "fund_quest")
       if (queued) {
@@ -682,7 +693,9 @@ function Step3Review({
   const isFunded = fundingTx.isSuccess
   const fundPending = fundingTx.isPending
   const createPending = createTx.isPending
-  const displayedPoolBalance = isFunded ? BigInt(Math.round(totalReward)) : optimisticPoolBalance
+  const displayedPoolBalance = isFunded
+    ? BigInt(Math.floor(totalReward * 1_000_000))
+    : optimisticPoolBalance
   const pendingFundLabel = fundingTx.isConfirming ? "Confirming..." : "Awaiting Signature..."
 
   return (
@@ -893,6 +906,8 @@ function Step3Review({
           Back
         </Button>
       </div>
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   )
 }

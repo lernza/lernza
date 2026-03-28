@@ -236,6 +236,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Create .env.local for dev server
+        run: cp .env.example .env.local
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 

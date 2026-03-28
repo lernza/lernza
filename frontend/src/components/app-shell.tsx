@@ -35,10 +35,17 @@ const enableAnalytics = import.meta.env.VITE_ENABLE_ANALYTICS === "true"
 export function AppShell() {
   return (
     <div className="bg-background text-foreground min-h-screen">
+      <a
+        href="#main-content"
+        className="bg-background text-foreground focus-visible:ring-ring sr-only absolute top-4 left-4 z-[100] px-4 py-2 font-bold opacity-0 transition-opacity focus-visible:not-sr-only focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2"
+      >
+        Skip to main content
+      </a>
       <ScrollToTop />
       <Navbar />
       <ErrorBoundary>
-        <main>
+        <main id="main-content" tabIndex={-1} className="outline-none">
+          <h1 className="sr-only">Lernza Platform</h1>
           <AppRouter />
         </main>
       </ErrorBoundary>

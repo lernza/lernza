@@ -99,6 +99,7 @@ export function Navbar() {
             <button
               key={item.key}
               onClick={() => handleNavigate(item.path)}
+              aria-current={activePage === item.key ? "page" : undefined}
               className={cn(
                 "animated-underline focus-visible:ring-ring cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
                 activePage === item.key
@@ -126,7 +127,7 @@ export function Navbar() {
                 ) : null}
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
-              <Button variant="ghost" size="icon" onClick={disconnect}>
+              <Button variant="ghost" size="icon" onClick={disconnect} aria-label="Disconnect wallet">
                 <LogOut className="h-4 w-4" />
               </Button>
             </>
@@ -149,6 +150,9 @@ export function Navbar() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-menu"
+            aria-label="Toggle Menu"
             className="border-border bg-background neo-press focus-visible:ring-ring flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none sm:hidden"
           >
             {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -190,12 +194,13 @@ export function Navbar() {
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
+        <div id="mobile-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
           <div className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
               <button
                 key={item.key}
                 onClick={() => handleNavigate(item.path)}
+                aria-current={activePage === item.key ? "page" : undefined}
                 className={cn(
                   "focus-visible:ring-ring w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
                   activePage === item.key

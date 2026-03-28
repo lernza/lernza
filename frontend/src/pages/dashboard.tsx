@@ -52,7 +52,7 @@ export function Dashboard() {
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
 
-  // Use the new async hook for dashboard data
+  // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
     data: dashboardData,
     isLoading,

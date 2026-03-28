@@ -191,12 +191,12 @@ impl QuestContract {
         if visibility == Visibility::Public {
             let mut public_ids: Vec<u32> = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::PublicQuests)
                 .unwrap_or(Vec::new(&env));
             public_ids.push_back(id);
             env.storage()
-                .instance()
+                .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
         }
         // Emit quest creation event
@@ -504,7 +504,7 @@ impl QuestContract {
     pub fn list_public_quests(env: Env, start: u32, limit: u32) -> Vec<QuestInfo> {
         let public_ids: Vec<u32> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PublicQuests)
             .unwrap_or(Vec::new(&env));
         let mut public_quests = Vec::new(&env);
@@ -521,7 +521,7 @@ impl QuestContract {
             }
         }
 
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
         public_quests
     }
 
@@ -529,7 +529,7 @@ impl QuestContract {
     pub fn get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo> {
         let public_ids: Vec<u32> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PublicQuests)
             .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
@@ -544,7 +544,7 @@ impl QuestContract {
             }
         }
 
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
         matches
     }
 
@@ -614,7 +614,7 @@ impl QuestContract {
         if quest.visibility != visibility {
             let mut public_ids: Vec<u32> = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::PublicQuests)
                 .unwrap_or(Vec::new(env));
 
@@ -624,7 +624,7 @@ impl QuestContract {
                 public_ids.remove(index);
             }
             env.storage()
-                .instance()
+                .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
         }
         quest.visibility = visibility;

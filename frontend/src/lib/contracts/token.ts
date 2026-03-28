@@ -10,8 +10,10 @@ export interface TokenMetadata {
 export class TokenClient {
   private contract: Contract | null
   private cache: Map<string, TokenMetadata> = new Map()
+  private tokenAddress: string = ""
 
   constructor(tokenAddress: string) {
+    this.tokenAddress = tokenAddress
     if (tokenAddress) {
       try {
         this.contract = new Contract(tokenAddress)
@@ -123,6 +125,7 @@ export class TokenClient {
    */
   private getContractAddress(): string {
     return (
+      this.tokenAddress ||
       import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
       import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
       ""

@@ -264,7 +264,7 @@ export function QuestView() {
     } else {
       setCompletions(EMPTY_COMPLETIONS)
     }
-  }, [questId, milestonesData.data, enrolleesData.data])
+  }, [questId, milestonesData.data, enrolleesData.data, addToast])
 
   useEffect(() => {
     fetchCompletions()

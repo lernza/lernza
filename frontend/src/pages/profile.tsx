@@ -92,7 +92,7 @@ export function Profile() {
   const [activityError, setActivityError] = useState<string | null>(null)
   const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
   const { role, isLoading: roleLoading } = useUserRole()
-  const { toasts, addToast, removeToast } = useToast()
+  const { toasts, removeToast } = useToast()
 
   // Use the new async hook for earnings data
   const {

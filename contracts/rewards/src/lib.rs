@@ -208,6 +208,9 @@ impl RewardsContract {
         if stored != authority {
             return Err(Error::Unauthorized);
         }
+        if authority == enrollee {
+            return Err(Error::Unauthorized);
+        }
 
         // Verify milestone completion before allowing reward distribution
         let milestone_contract_addr = env

@@ -678,7 +678,7 @@ fn test_initialize_no_auth_guard() {
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
-/// MED-02: Self-distribution
+/// MED-02: Self-distribution should be rejected
 #[test]
 fn test_authority_self_distribution() {
     let (
@@ -723,13 +723,14 @@ fn test_authority_self_distribution() {
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
 
-    // Authority distributes reward pool tokens back to themselves
-    client.distribute_reward(&owner, &q_id, &ms_id, &owner, &1_000);
+    // Authority cannot distribute reward pool tokens back to themselves
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &owner, &1_000);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
 
     let token_client = TokenClient::new(&env, &token_addr);
-    assert_eq!(token_client.balance(&owner), 6_000);
-    assert_eq!(client.get_pool_balance(&q_id), 4_000);
-    assert_eq!(client.get_user_earnings(&owner), 1_000);
+    assert_eq!(token_client.balance(&owner), 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+    assert_eq!(client.get_user_earnings(&owner), 0);
 }
 
 /// Integration test: rewards cannot be sent before milestone completion

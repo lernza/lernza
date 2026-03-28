@@ -1337,3 +1337,270 @@ fn test_fund_quest_valid_sac() {
     let token_client = TokenClient::new(&env, &token_addr);
     assert_eq!(token_client.balance(&owner), 5_000);
 }
+
+#[test]
+fn test_refund_pool_success() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+
+    // Archive the quest to allow refund
+    quest_client.archive_quest(&q_id);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    client.refund_pool(&owner, &q_id, &3_000);
+
+    assert_eq!(client.get_pool_balance(&q_id), 2_000);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+}
+
+#[test]
+fn test_refund_pool_full_balance() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    client.refund_pool(&owner, &q_id, &5_000);
+
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_pool_requires_archive() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Should fail — quest is still active
+    let result = client.try_refund_pool(&owner, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::QuestNotArchived)));
+}
+
+#[test]
+fn test_refund_pool_unauthorized() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+
+    // Non-authority should be rejected
+    let result = client.try_refund_pool(&attacker, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_refund_pool_insufficient_balance() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &1_000);
+    quest_client.archive_quest(&q_id);
+
+    // Requesting more than the pool holds
+    let result = client.try_refund_pool(&owner, &q_id, &5_000);
+    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+}
+
+#[test]
+fn test_refund_pool_not_funded() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    quest_client.archive_quest(&q_id);
+
+    // Quest was never funded — no authority stored
+    let result = client.try_refund_pool(&owner, &q_id, &100);
+    assert_eq!(result, Err(Ok(Error::QuestNotFunded)));
+}
+
+#[test]
+fn test_refund_pool_invalid_amount() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &1_000);
+    quest_client.archive_quest(&q_id);
+
+    let result = client.try_refund_pool(&owner, &q_id, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}

@@ -1,6 +1,6 @@
 #![no_std]
 #![allow(deprecated)]
-use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
+use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
     Address, Env, Symbol,
@@ -65,6 +65,7 @@ pub enum Error {
     AlreadyPaid = 11,
     InvalidToken = 12,
     RewardAmountMismatch = 13,
+    QuestNotArchived = 14,
 }
 
 // TTL constants moved to common.
@@ -294,6 +295,80 @@ impl RewardsContract {
         env.events().publish(
             (Symbol::new(&env, "reward_distributed"),),
             (quest_id, milestone_id, enrollee, amount),
+        );
+
+        Ok(())
+    }
+
+    /// Withdraw unallocated tokens from a quest's reward pool back to the authority.
+    /// The quest must be archived before funds can be withdrawn to prevent withdrawing
+    /// from an active quest that still has pending milestones.
+    pub fn refund_pool(
+        env: Env,
+        authority: Address,
+        quest_id: u32,
+        amount: i128,
+    ) -> Result<(), Error> {
+        authority.require_auth();
+
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Verify authority matches the stored quest authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let stored: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if stored != authority {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify the quest is archived before allowing refund
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = match quest_client.try_get_quest(&quest_id) {
+            Ok(Ok(quest)) => quest,
+            Ok(Err(_)) => return Err(Error::QuestLookupFailed),
+            Err(_) => return Err(Error::QuestLookupFailed),
+        };
+
+        if quest_info.status != QuestStatus::Archived {
+            return Err(Error::QuestNotArchived);
+        }
+
+        // Check pool has sufficient balance
+        let pool_key = DataKey::QuestPool(quest_id);
+        let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
+        if pool < amount {
+            return Err(Error::InsufficientPool);
+        }
+
+        // Transfer tokens from contract back to authority
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &authority, &amount);
+
+        // Update pool balance
+        let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
+        env.storage()
+            .persistent()
+            .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Emit refund event
+        // Event topics: (reward, refund)
+        // Event data: (quest_id, authority, amount)
+        env.events().publish(
+            (symbol_short!("reward"), symbol_short!("refund")),
+            (quest_id, authority, amount),
         );
 
         Ok(())

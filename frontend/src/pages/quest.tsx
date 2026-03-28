@@ -639,7 +639,7 @@ export function QuestView() {
 
     try {
       await enrollTx.run(async ({ onSubmitted }) => {
-        const result = await questClient.addEnrollee(questId, address, {
+        const result = await questClient.joinQuest(address, questId, {
           onSubmitted: txHash => {
             transactionQueue.update(queuedTransactionId, {
               phase: "confirming",

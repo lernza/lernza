@@ -1,6 +1,7 @@
 import React from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { MemoryRouter } from "react-router-dom"
 import { Profile } from "./profile"
 
 vi.mock("@/hooks/use-wallet", () => ({
@@ -28,6 +29,14 @@ const mockUseWallet = vi.mocked(useWallet)
 const mockUseUserRole = vi.mocked(useUserRole)
 const mockUseContractData = vi.mocked(useContractData)
 const mockFetchWalletActivity = vi.mocked(fetchWalletActivity)
+
+function renderProfile() {
+  return render(
+    <MemoryRouter>
+      <Profile />
+    </MemoryRouter>
+  )
+}
 
 describe("Profile", () => {
   beforeEach(() => {
@@ -67,7 +76,7 @@ describe("Profile", () => {
   })
 
   it("shows the aggregate on-chain earnings in the overview tab", () => {
-    render(<Profile />)
+    renderProfile()
 
     expect(screen.getByText("Profile Activity")).toBeTruthy()
     expect(screen.getByText("750 USDC")).toBeTruthy()
@@ -92,7 +101,7 @@ describe("Profile", () => {
       nextCursor: null,
     })
 
-    render(<Profile />)
+    renderProfile()
     fireEvent.click(screen.getByRole("button", { name: "activity" }))
 
     await waitFor(() => {

@@ -15,8 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { useContractData } from "@/hooks/use-async-data"
-import { ErrorState, EmptyState } from "@/components/ui/async-states"
+import { EmptyState } from "@/components/ui/async-states"
 import { SkeletonQuestList } from "@/components/ui/skeleton"
+import { SmartError } from "@/components/error-states"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient, type QuestInfo } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
@@ -56,6 +57,7 @@ export function Dashboard() {
     data: dashboardData,
     isLoading,
     error: loadError,
+    refetch,
   } = useContractData(
     "dashboard",
     async () => {
@@ -346,14 +348,9 @@ export function Dashboard() {
 
             {loadError && (
               <div className="mb-5">
-                <ErrorState
-                  message={`Failed to load dashboard data: ${loadError}`}
-                  onRetry={() => {
-                    void questClient.getQuests().then(() => {
-                      // no-op: refetch is available from hook but not currently exposed here
-                    })
-                  }}
-                  variant="compact"
+                <SmartError
+                  message={loadError}
+                  onRetry={() => void refetch()}
                 />
               </div>
             )}

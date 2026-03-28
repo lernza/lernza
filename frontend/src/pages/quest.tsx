@@ -28,7 +28,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
-import { ErrorState } from "@/components/ui/async-states"
+import { SmartError, QuestNotFound } from "@/components/error-states"
 import { Skeleton, SkeletonMilestoneList, SkeletonStatsRow } from "@/components/ui/skeleton"
 import {
   cn,
@@ -1063,7 +1063,12 @@ export function QuestView() {
   if (loadError) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <ErrorState message={loadError} onRetry={() => void refetch()} />
+        <SmartError
+          message={loadError}
+          onRetry={() => void refetch()}
+          onBack={() => navigate("/dashboard")}
+          questId={typeof questId === "number" ? questId : undefined}
+        />
       </div>
     )
   }
@@ -1071,14 +1076,11 @@ export function QuestView() {
   if (!quest) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <div className="bg-destructive/10 border-destructive mx-auto mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-destructive)]">
-          <X className="text-destructive h-8 w-8" />
-        </div>
-        <h2 className="mb-2 text-2xl font-black">{loadError || "Quest not found"}</h2>
-        <p className="text-muted-foreground mb-8 font-bold">
-          We couldn't resolve the quest details.
-        </p>
-        <Button variant="outline" onClick={() => navigate("/dashboard")}>
+        <QuestNotFound
+          questId={typeof questId === "number" ? questId : undefined}
+          onBack={() => navigate("/dashboard")}
+        />
+        <Button variant="outline" onClick={() => navigate("/dashboard")} className="mt-4">
           Go back
         </Button>
       </div>

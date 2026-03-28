@@ -526,7 +526,7 @@ function Step3Review({
   step1Data: Step1Values
   step2Data: Step2Values
   onBack: () => void
-  onComplete: () => void
+  onComplete: (questId: number) => void
 }) {
   const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
@@ -665,134 +665,12 @@ function Step3Review({
     }
   }
 
-  const handleCreate = async () => {
-    if (!address) {
-      throw new Error("Wallet not connected")
+  const handleCreate = () => {
+    // Quest and milestones were already created on-chain by handleFund.
+    // Navigate to the new quest's workspace page.
+    if (questId !== null) {
+      onComplete(questId)
     }
-
-    await createTx.run(async () => {
-      try {
-        // Step 1: Create the quest on-chain
-        // TODO: Add VITE_USDC_TOKEN_ADDRESS to environment variables
-        const tokenAddress =
-          import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
-          "CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG"
-        if (!tokenAddress) {
-          throw new Error("USDC token address not configured")
-        }
-
-        const questResult = await questClient.createQuest(
-          address,
-          step1Data.name,
-          step1Data.description,
-          "Education", // Education category
-          [], // Tags
-          tokenAddress,
-          Visibility.Public,
-          typeof step1Data.maxEnrollees === "number" ? step1Data.maxEnrollees : undefined
-        )
-
-        if (questResult.status !== "SUCCESS") {
-          throw new Error(`Quest creation failed: ${questResult.error}`)
-        }
-
-        // Extract quest ID from the result (this may need adjustment based on actual contract response)
-        // For now, we'll assume we can get the quest ID from the result or need to query it
-        let questId: number
-        try {
-          // Try to get the latest quest ID (assuming the new quest is the last one)
-          const questCount = await questClient.getQuestCount()
-          questId = questCount - 1 // New quest should be at index count-1
-        } catch (error) {
-          console.error("Failed to get quest ID:", error)
-          throw new Error("Failed to retrieve created quest ID")
-        }
-
-        // Step 2: Create milestones for the quest
-        const milestoneResults = []
-        const failedMilestones = []
-
-        for (let i = 0; i < step2Data.milestones.length; i++) {
-          const milestone = step2Data.milestones[i]
-          try {
-            const result = await milestoneClient.createMilestone(
-              address,
-              questId,
-              milestone.title,
-              milestone.description,
-              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)), // Convert to USDC smallest unit (6 decimals)
-              milestone.requiresPrevious && i > 0
-            )
-
-            if (result.status !== "SUCCESS") {
-              failedMilestones.push({
-                index: i,
-                title: milestone.title,
-                error: result.error || "Unknown transaction error",
-              })
-              milestoneResults.push({ index: i, status: "FAILED", result })
-            } else {
-              milestoneResults.push({ index: i, status: "SUCCESS", result })
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Unknown error"
-            failedMilestones.push({
-              index: i,
-              title: milestone.title,
-              error: errorMessage,
-            })
-            milestoneResults.push({
-              index: i,
-              status: "FAILED",
-              error: errorMessage,
-            })
-          }
-        }
-
-        // Handle partial failure cases
-        if (failedMilestones.length > 0) {
-          const successCount = step2Data.milestones.length - failedMilestones.length
-          const errorMessages = failedMilestones
-            .map(f => `Milestone ${f.index + 1} ("${f.title}"): ${f.error}`)
-            .join("; ")
-
-          if (successCount === 0) {
-            // All milestones failed - treat as complete failure
-            throw new Error(
-              `Quest created successfully, but all milestone creations failed: ${errorMessages}`
-            )
-          } else {
-            // Some milestones failed - partial success with detailed error
-            throw new Error(
-              `Quest created successfully with ${successCount}/${step2Data.milestones.length} milestones. ` +
-                `Failed milestones: ${errorMessages}. ` +
-                `You may need to manually create the remaining milestones.`
-            )
-          }
-        }
-
-        addToast(
-          <div className="flex flex-col gap-1">
-            <span>Quest created successfully!</span>
-            <a
-              href={`https://stellar.expert/explorer/testnet/tx/${(questResult as { txHash: string }).txHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs underline hover:opacity-80"
-            >
-              View on Stellar Expert
-            </a>
-          </div>,
-          "success"
-        )
-        return true
-      } catch (error) {
-        console.error("Quest creation error:", error)
-        throw error
-      }
-    })
-
-    onComplete()
   }
 
   const isFunded = fundingTx.isSuccess
@@ -938,23 +816,14 @@ function Step3Review({
               )}
             </Button>
 
-            {/* Create button */}
+            {/* Navigate to quest workspace button — enabled once fund tx succeeds */}
             <Button
               onClick={handleCreate}
-              disabled={!isFunded || createPending || !isSupportedNetwork}
+              disabled={!isFunded || questId === null}
               className="shimmer-on-hover w-full"
             >
-              {createPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Confirm & Create Quest
-                </>
-              )}
+              <Sparkles className="h-4 w-4" />
+              View Quest Workspace
             </Button>
 
             {isFunded && questId !== null && (
@@ -998,9 +867,9 @@ function Step3Review({
                 Funding is in progress. Pool balance is shown optimistically.
               </p>
             )}
-            {isFunded && !createPending && (
+            {isFunded && questId !== null && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Pool funded! Sign the creation transaction to go live.
+                Quest created and pool funded! Click above to open your quest workspace.
               </p>
             )}
           </div>
@@ -1191,9 +1060,9 @@ export function CreateQuest() {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={() => {
+            onComplete={(questId: number) => {
               clearDraft()
-              navigate("/dashboard")
+              navigate(`/quest/${questId}`)
             }}
           />
         )}

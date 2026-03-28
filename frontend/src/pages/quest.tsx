@@ -1323,8 +1323,9 @@ export function QuestView() {
           </div>
           <div className="space-y-4 p-5">
             <div>
-              <FormLabel required>Stellar Address</FormLabel>
+              <FormLabel htmlFor="enrollee-address-1" required>Stellar Address</FormLabel>
               <input
+                id="enrollee-address-1"
                 {...enrolleeForm.register("address")}
                 placeholder="G..."
                 disabled={addPhase === "submitting" || addPhase === "done"}
@@ -1492,8 +1493,9 @@ export function QuestView() {
             </div>
             <CardContent className="space-y-4 p-5">
               <div>
-                <FormLabel required>Title</FormLabel>
+                <FormLabel htmlFor="milestone-title-1" required>Title</FormLabel>
                 <input
+                  id="milestone-title-1"
                   {...milestoneForm.register("title")}
                   type="text"
                   placeholder="e.g. Complete Module 1"
@@ -1507,8 +1509,9 @@ export function QuestView() {
                 <FieldError message={milestoneForm.formState.errors.title?.message} />
               </div>
               <div>
-                <FormLabel required>Description</FormLabel>
+                <FormLabel htmlFor="milestone-desc-1" required>Description</FormLabel>
                 <textarea
+                  id="milestone-desc-1"
                   {...milestoneForm.register("description")}
                   placeholder="Describe what the learner needs to accomplish..."
                   rows={3}
@@ -1522,8 +1525,9 @@ export function QuestView() {
                 <FieldError message={milestoneForm.formState.errors.description?.message} />
               </div>
               <div>
-                <FormLabel required>Reward (tokens)</FormLabel>
+                <FormLabel htmlFor="milestone-reward-1" required>Reward (tokens)</FormLabel>
                 <input
+                  id="milestone-reward-1"
                   {...milestoneForm.register("rewardAmount")}
                   type="number"
                   min="0"
@@ -1831,8 +1835,9 @@ export function QuestView() {
                 className="flex flex-col gap-3 sm:flex-row sm:items-end"
               >
                 <div className="flex-1">
-                  <FormLabel required>Stellar Address</FormLabel>
+                  <FormLabel htmlFor="enrollee-address-2" required>Stellar Address</FormLabel>
                   <input
+                    id="enrollee-address-2"
                     {...enrolleeForm.register("address")}
                     placeholder="G..."
                     disabled={addPhase === "submitting"}

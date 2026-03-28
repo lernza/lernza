@@ -193,8 +193,9 @@ function Step1Form({
         <div className="border-border bg-background space-y-5 border-[3px] border-t-0 p-6 shadow-[4px_4px_0_var(--color-border)]">
           {/* Name */}
           <div>
-            <FormLabel required>Quest Name</FormLabel>
+            <FormLabel htmlFor="quest-name" required>Quest Name</FormLabel>
             <input
+              id="quest-name"
               {...register("name")}
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
@@ -220,8 +221,9 @@ function Step1Form({
 
           {/* Description */}
           <div>
-            <FormLabel required>Description</FormLabel>
+            <FormLabel htmlFor="quest-desc" required>Description</FormLabel>
             <textarea
+              id="quest-desc"
               {...register("description")}
               rows={5}
               placeholder="Describe what learners will accomplish..."
@@ -248,8 +250,9 @@ function Step1Form({
 
           {/* Max Enrollees (Optional) */}
           <div>
-            <FormLabel>Enrollment Capacity (Optional)</FormLabel>
+            <FormLabel htmlFor="max-enrollees">Enrollment Capacity (Optional)</FormLabel>
             <input
+              id="max-enrollees"
               {...register("maxEnrollees", {
                 setValueAs: v => (v === "" ? undefined : parseInt(v, 10)),
               })}
@@ -377,8 +380,9 @@ function Step2Form({
 
                 {/* Title */}
                 <div>
-                  <FormLabel required>Title</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-title`} required>Title</FormLabel>
                   <input
+                    id={`milestone-${index}-title`}
                     {...register(`milestones.${index}.title`)}
                     placeholder="e.g. Hello World"
                     className={cn(
@@ -404,8 +408,9 @@ function Step2Form({
 
                 {/* Description */}
                 <div>
-                  <FormLabel required>Description</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-desc`} required>Description</FormLabel>
                   <textarea
+                    id={`milestone-${index}-desc`}
                     {...register(`milestones.${index}.description`)}
                     rows={2}
                     placeholder="What should the learner do to complete this milestone?"
@@ -433,12 +438,13 @@ function Step2Form({
 
                 {/* Reward Amount */}
                 <div>
-                  <FormLabel required>Reward Amount (USDC)</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-reward`} required>Reward Amount (USDC)</FormLabel>
                   <div className="flex items-center gap-0">
                     <div className="border-border bg-secondary border-[2px] border-r-0 px-3 py-2 text-xs font-black">
                       USDC
                     </div>
                     <input
+                      id={`milestone-${index}-reward`}
                       {...register(`milestones.${index}.rewardAmount`, {
                         valueAsNumber: true,
                       })}

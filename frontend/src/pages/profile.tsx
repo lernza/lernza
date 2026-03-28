@@ -283,9 +283,9 @@ export function Profile() {
               <div className="bg-primary border-border animate-fade-in-up mx-auto mb-6 flex h-20 w-20 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
                 <Wallet className="h-8 w-8" />
               </div>
-              <h2 className="animate-fade-in-up stagger-1 mb-3 text-2xl font-black sm:text-3xl">
+              <h1 className="animate-fade-in-up stagger-1 mb-3 text-2xl font-black sm:text-3xl">
                 Connect your wallet
-              </h2>
+              </h1>
               <p className="text-muted-foreground animate-fade-in-up stagger-2 mx-auto mb-8 max-w-sm">
                 Connect your Freighter wallet to view your profile, track earnings, and see your
                 quest history.
@@ -400,7 +400,7 @@ export function Profile() {
       <div>
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-xl font-black">Profile Activity</h2>
+            <h1 className="text-xl font-black">Profile Activity</h1>
             <p className="text-muted-foreground text-sm font-bold">
               Track aggregate rewards and recent wallet actions.
             </p>
@@ -611,7 +611,7 @@ export function Profile() {
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-black">Creator Dashboard</h2>
-            <Badge variant="outline" className="border-primary text-primary border-[2px] font-bold">
+            <Badge className="bg-primary text-primary-foreground border-border border-2 font-bold shadow-[2px_2px_0_var(--color-border)]">
               Beta
             </Badge>
           </div>
@@ -621,7 +621,7 @@ export function Profile() {
         {statsLoading ? (
           <Card className="animate-fade-in-up border-[3px] shadow-[8px_8px_0_var(--color-border)]">
             <CardContent className="flex flex-col items-center py-12 text-center">
-              <Loader2 className="text-primary mb-4 h-10 w-10 animate-spin" />
+              <Loader2 className="mb-4 h-10 w-10 animate-spin" />
               <h3 className="text-lg font-black">Loading creator statistics</h3>
               <p className="text-muted-foreground max-w-sm text-sm">
                 Scanning the ledger for your quests and calculating active reward pools...
@@ -721,7 +721,7 @@ export function Profile() {
                     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="group-hover:text-primary truncate text-lg font-black transition-colors">
+                          <h4 className="group-hover:underline decoration-primary decoration-4 underline-offset-4 truncate text-lg font-black transition-colors">
                             {quest.name}
                           </h4>
                           <Badge variant="outline" className="text-[10px] font-bold uppercase">

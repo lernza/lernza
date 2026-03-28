@@ -462,7 +462,7 @@
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 50
+                    "lo": 200
                   }
                 }
               ]
@@ -632,6 +632,49 @@
             "ext": "v0"
           },
           518400
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+            "key": {
+              "vec": [
+                {
+                  "symbol": "PublicQuests"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "PublicQuests"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "vec": [
+                    {
+                      "u32": 0
+                    }
+                  ]
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
         ]
       ],
       [
@@ -815,22 +858,6 @@
                         },
                         "val": {
                           "u32": 1
-                        }
-                      },
-                      {
-                        "key": {
-                          "vec": [
-                            {
-                              "symbol": "PublicQuests"
-                            }
-                          ]
-                        },
-                        "val": {
-                          "vec": [
-                            {
-                              "u32": 0
-                            }
-                          ]
                         }
                       }
                     ]
@@ -2224,7 +2251,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 50
+                    "lo": 200
                   }
                 }
               }
@@ -2377,7 +2404,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 4650
+                    "lo": 4500
                   }
                 }
               }
@@ -2425,7 +2452,7 @@
                 "val": {
                   "i128": {
                     "hi": 0,
-                    "lo": 150
+                    "lo": 300
                   }
                 }
               }
@@ -2553,7 +2580,7 @@
                         "val": {
                           "i128": {
                             "hi": 0,
-                            "lo": 350
+                            "lo": 500
                           }
                         }
                       }
@@ -3007,7 +3034,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 4650
+                          "lo": 4500
                         }
                       }
                     },
@@ -3153,7 +3180,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 150
+                          "lo": 300
                         }
                       }
                     },

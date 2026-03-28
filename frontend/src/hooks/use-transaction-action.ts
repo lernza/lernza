@@ -1,28 +1,39 @@
 import { useCallback, useState } from "react"
 
-export type TransactionStatus = "idle" | "pending" | "success" | "failure"
+export type TransactionStatus = "idle" | "pending" | "confirming" | "success" | "failure"
+
+export interface TransactionActionRunOptions {
+  onSubmitted?: (txHash: string) => void
+}
 
 export function useTransactionAction() {
   const [status, setStatus] = useState<TransactionStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<unknown>(null)
 
-  const run = useCallback(async <T>(action: () => Promise<T>): Promise<T> => {
-    setStatus("pending")
-    setError(null)
-    setData(null)
-    try {
-      const result = await action()
-      setStatus("success")
-      setData(result)
-      return result
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transaction failed"
-      setStatus("failure")
-      setError(message)
-      throw err
-    }
-  }, [])
+  const run = useCallback(
+    async <T>(action: (options: TransactionActionRunOptions) => Promise<T>): Promise<T> => {
+      setStatus("pending")
+      setError(null)
+      setData(null)
+      try {
+        const result = await action({
+          onSubmitted: () => {
+            setStatus("confirming")
+          },
+        })
+        setStatus("success")
+        setData(result)
+        return result
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Transaction failed"
+        setStatus("failure")
+        setError(message)
+        throw err
+      }
+    },
+    []
+  )
 
   const reset = useCallback(() => {
     setStatus("idle")
@@ -34,7 +45,8 @@ export function useTransactionAction() {
     status,
     error,
     data,
-    isPending: status === "pending",
+    isPending: status === "pending" || status === "confirming",
+    isConfirming: status === "confirming",
     isSuccess: status === "success",
     isFailure: status === "failure",
     run,

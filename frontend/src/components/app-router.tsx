@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react"
-import { Routes, Route } from "react-router-dom"
+import { Routes, Route, Navigate } from "react-router-dom"
 import { WalletRequiredRoute } from "@/components/wallet-required-route"
 import { PageSkeleton } from "@/components/page-skeleton"
 
@@ -50,6 +50,7 @@ export function AppRouter() {
             </WalletRequiredRoute>
           }
         />
+        <Route path="/workspace/:id" element={<Navigate replace to="/quest/:id" />} />
         <Route
           path="/profile"
           element={

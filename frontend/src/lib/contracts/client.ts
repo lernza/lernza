@@ -15,6 +15,10 @@ export interface TransactionResult {
   error?: string
 }
 
+export interface TransactionLifecycleHandlers {
+  onSubmitted?: (txHash: string) => void
+}
+
 /**
  * Common helper to wait for transaction completion
  */
@@ -35,7 +39,10 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
 /**
  * Signs and submits a transaction using Freighter
  */
-export async function signAndSubmit(tx: Transaction): Promise<TransactionResult> {
+export async function signAndSubmit(
+  tx: Transaction,
+  handlers: TransactionLifecycleHandlers = {}
+): Promise<TransactionResult> {
   try {
     const net = await getNetworkDetails()
     if (net.networkPassphrase && net.networkPassphrase !== NETWORK_PASSPHRASE) {
@@ -56,6 +63,7 @@ export async function signAndSubmit(tx: Transaction): Promise<TransactionResult>
       // The sendTransaction status was wrongly check for SUCCESS previously.
       // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
       if (submitResponse.status === "PENDING") {
+        handlers.onSubmitted?.(submitResponse.hash)
         const pollResponse = await pollTransaction(submitResponse.hash)
 
         if (pollResponse.status === "SUCCESS") {

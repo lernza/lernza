@@ -8,7 +8,12 @@ import {
   Keypair,
   Account,
 } from "@stellar/stellar-sdk"
-import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  type TransactionLifecycleHandlers,
+} from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
 
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
@@ -56,18 +61,23 @@ export class RewardsClient {
 
   // --- Write Operations ---
 
-  async initialize(owner: string, tokenAddr: string) {
+  async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {
     const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
-    return signAndSubmit(tx)
+    return signAndSubmit(tx, handlers)
   }
 
-  async fundQuest(funder: string, questId: number, amount: bigint) {
+  async fundQuest(
+    funder: string,
+    questId: number,
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
+  ) {
     const tx = await this.buildTx(funder, "fund_quest", [
       new Address(funder).toScVal(),
       nativeToScVal(questId, { type: "u32" }),
       nativeToScVal(amount, { type: "i128" }),
     ])
-    return signAndSubmit(tx)
+    return signAndSubmit(tx, handlers)
   }
 
   async distributeReward(
@@ -75,7 +85,8 @@ export class RewardsClient {
     questId: number,
     milestoneId: number,
     enrollee: string,
-    amount: bigint
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
   ) {
     const tx = await this.buildTx(authority, "distribute_reward", [
       new Address(authority).toScVal(),
@@ -84,7 +95,7 @@ export class RewardsClient {
       new Address(enrollee).toScVal(),
       nativeToScVal(amount, { type: "i128" }),
     ])
-    return signAndSubmit(tx)
+    return signAndSubmit(tx, handlers)
   }
 
   // --- Private Helpers ---

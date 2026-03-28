@@ -3,7 +3,7 @@
 use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
-    Address, Env,
+    Address, Env, Symbol,
 };
 
 // Visibility, QuestStatus, and QuestInfo moved to common.
@@ -270,6 +270,11 @@ impl RewardsContract {
         // Event data: (quest_id, milestone_id, enrollee, amount)
         env.events().publish(
             (symbol_short!("reward"), symbol_short!("paid")),
+            (quest_id, milestone_id, enrollee.clone(), amount),
+        );
+        // Canonical reward event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "reward_distributed"),),
             (quest_id, milestone_id, enrollee, amount),
         );
 

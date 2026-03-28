@@ -453,6 +453,40 @@ fn test_list_public_quests_excludes_private() {
 }
 
 #[test]
+fn test_list_quests_by_owner_returns_only_owned_quests() {
+    let (env, client, owner, token) = setup();
+    let other_owner = Address::generate(&env);
+
+    create_quest_helper(&env, &client, &owner, &token);
+    create_quest_helper(&env, &client, &owner, &token);
+    create_quest_helper(&env, &client, &other_owner, &token);
+
+    let owned = client.list_quests_by_owner(&owner);
+    assert_eq!(owned.len(), 2);
+    for i in 0..owned.len() {
+        assert_eq!(owned.get(i).unwrap().owner, owner);
+    }
+}
+
+#[test]
+fn test_list_quests_by_enrollee_returns_only_joined_quests() {
+    let (env, client, owner, token) = setup();
+    let learner = Address::generate(&env);
+
+    create_quest_helper(&env, &client, &owner, &token);
+    create_quest_helper(&env, &client, &owner, &token);
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.add_enrollee(&0, &learner);
+    client.add_enrollee(&2, &learner);
+
+    let enrolled = client.list_quests_by_enrollee(&learner);
+    assert_eq!(enrolled.len(), 2);
+    assert_eq!(enrolled.get(0).unwrap().id, 0);
+    assert_eq!(enrolled.get(1).unwrap().id, 2);
+}
+
+#[test]
 fn test_list_public_quests_all_private() {
     let (env, client, owner, token) = setup();
     create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);

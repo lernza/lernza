@@ -8,7 +8,7 @@ import {
   Keypair,
   Account,
 } from "@stellar/stellar-sdk"
-import type { TransactionResult } from "./client"
+import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
 import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
 
 const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
@@ -122,7 +122,8 @@ export class MilestoneClient {
     title: string,
     description: string,
     rewardAmount: bigint,
-    requiresPrevious = false
+    requiresPrevious = false,
+    handlers?: TransactionLifecycleHandlers
   ): Promise<TransactionResult> {
     const tx = await this.buildTx(owner, "create_milestone", [
       new Address(owner).toScVal(),
@@ -132,14 +133,15 @@ export class MilestoneClient {
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious, { type: "bool" }),
     ])
-    return this.normalizeTransactionResult(await signAndSubmit(tx))
+    return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
   }
 
   async verifyCompletion(
     owner: string,
     questId: number,
     milestoneId: number,
-    enrollee: string
+    enrollee: string,
+    handlers?: TransactionLifecycleHandlers
   ): Promise<VerifyCompletionResult> {
     const tx = await this.buildTx(owner, "verify_completion", [
       new Address(owner).toScVal(),
@@ -147,7 +149,7 @@ export class MilestoneClient {
       nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])
-    const result = this.normalizeTransactionResult(await signAndSubmit(tx))
+    const result = this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
     return {
       ...result,
       rewardAmount: this.parseNumericResult(result.resultXdr),

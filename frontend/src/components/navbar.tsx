@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
+import { useWalletBalance } from "@/hooks/use-wallet-balance"
 import { useTheme } from "@/hooks/use-theme"
 import { useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
@@ -57,10 +58,65 @@ function ThemeToggle() {
   )
 }
 
+/**
+ * BalanceBadge renders the XLM (and optionally reward token) balance
+ * alongside the connected address chip. It shows a spinner while loading
+ * and silently hides itself when the wallet is disconnected.
+ */
+function BalanceBadge({
+  xlmBalance,
+  rewardBalance,
+  isLoading,
+}: {
+  xlmBalance: string | null
+  rewardBalance: string | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <span className="flex items-center" aria-label="Fetching balance" title="Fetching balance…">
+        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+      </span>
+    )
+  }
+
+  if (xlmBalance === null && rewardBalance === null) return null
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {xlmBalance !== null && (
+        <span
+          className={cn(
+            "border-border inline-flex items-center border px-1.5 py-0.5",
+            "font-mono text-[11px] leading-none font-bold",
+            "bg-background text-foreground"
+          )}
+          title={`XLM balance: ${xlmBalance}`}
+        >
+          {xlmBalance} XLM
+        </span>
+      )}
+      {rewardBalance !== null && (
+        <span
+          className={cn(
+            "border-border inline-flex items-center border px-1.5 py-0.5",
+            "font-mono text-[11px] leading-none font-bold",
+            "bg-primary text-black"
+          )}
+          title={`Reward token balance: ${rewardBalance}`}
+        >
+          {rewardBalance} RWD
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function Navbar() {
   const {
     connected,
     shortAddress,
+    address,
     connect,
     disconnect,
     loading,
@@ -70,6 +126,13 @@ export function Navbar() {
     wrongNetwork,
     expectedNetworkName,
   } = useWallet()
+
+  const {
+    xlmBalance,
+    rewardBalance,
+    isLoading: balanceLoading,
+  } = useWalletBalance(address, networkName)
+
   const [mobileOpen, setMobileOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -118,6 +181,11 @@ export function Navbar() {
 
           {connected ? (
             <>
+              {/*
+               * Wallet chip — shows network badge, balance badges, and short address.
+               * BalanceBadge is hidden on mobile (sm:flex) to keep the header compact;
+               * the full balance is still visible if the user opens the mobile menu.
+               */}
               <div className="border-border bg-secondary hidden items-center gap-2 border-[2px] px-3 py-1.5 shadow-[2px_2px_0_var(--color-border)] sm:flex">
                 <div className="bg-success border-border h-2.5 w-2.5 border" />
                 {networkName ? (
@@ -125,6 +193,12 @@ export function Navbar() {
                     {networkName}
                   </span>
                 ) : null}
+                {/* Balance display sits between network badge and address */}
+                <BalanceBadge
+                  xlmBalance={xlmBalance}
+                  rewardBalance={rewardBalance}
+                  isLoading={balanceLoading}
+                />
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
               <Button variant="ghost" size="icon" onClick={disconnect} aria-label="Disconnect wallet">
@@ -211,6 +285,19 @@ export function Navbar() {
                 {item.label}
               </button>
             ))}
+
+            {/* Mobile balance display — shown when wallet is connected */}
+            {connected && (
+              <div className="border-border mt-2 flex items-center gap-2 border-t-[2px] pt-3">
+                <div className="bg-success border-border h-2.5 w-2.5 border" />
+                <BalanceBadge
+                  xlmBalance={xlmBalance}
+                  rewardBalance={rewardBalance}
+                  isLoading={balanceLoading}
+                />
+                <span className="font-mono text-sm font-bold">{shortAddress}</span>
+              </div>
+            )}
           </div>
         </div>
       )}

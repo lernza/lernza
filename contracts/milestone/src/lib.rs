@@ -3,7 +3,7 @@
 use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
-    Env, String, Vec,
+    Env, String, Symbol, Vec,
 };
 
 // Quest contract error type (must match the quest contract)
@@ -544,6 +544,11 @@ impl MilestoneContract {
         env.events().publish(
             (symbol_short!("milestone"), symbol_short!("done")),
             (milestone_id, quest_id, enrollee.clone(), reward),
+        );
+        // Canonical completion event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "milestone_completed"),),
+            (quest_id, milestone_id, enrollee.clone()),
         );
 
         // Check if this completes the quest and mint certificate if so

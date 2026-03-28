@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+import { useTransactionQueue } from "@/hooks/use-transaction-queue"
 import { useToast } from "@/hooks/use-toast"
 import { formatTokens, cn } from "@/lib/utils"
 import { Visibility } from "@/lib/contract-types"
@@ -536,11 +537,13 @@ function Step3Review({
   const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
+  const transactionQueue = useTransactionQueue<"fund_quest", { amount: bigint }>()
   const { addToast } = useToast()
 
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
   const [fundTxHash, setFundTxHash] = useState<string | null>(null)
+  const [optimisticPoolBalance, setOptimisticPoolBalance] = useState<bigint>(0n)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -565,8 +568,16 @@ function Step3Review({
 
   const handleFund = async () => {
     if (!address) throw new Error("Connect wallet first")
+    const fundAmount = BigInt(Math.round(totalReward))
+    const queuedTransactionId = transactionQueue.enqueue({
+      type: "fund_quest",
+      label: "Fund reward pool",
+      phase: "signing",
+      meta: { amount: fundAmount },
+    })
+    setOptimisticPoolBalance(prev => prev + fundAmount)
 
-    await fundingTx.run(async () => {
+    await fundingTx.run(async ({ onSubmitted }) => {
       const category = "General"
       const tags: string[] = []
       const tokenAddr = import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || ""
@@ -610,11 +621,19 @@ function Step3Review({
         }
       }
 
-      const fundAmount = BigInt(Math.round(totalReward))
-      const fundResult = await rewardsClient.fundQuest(address, createdQuestId, fundAmount)
+      const fundResult = await rewardsClient.fundQuest(address, createdQuestId, fundAmount, {
+        onSubmitted: txHash => {
+          transactionQueue.update(queuedTransactionId, {
+            phase: "confirming",
+            txHash,
+          })
+          onSubmitted?.(txHash)
+        },
+      })
       if (fundResult.status !== "SUCCESS") {
         throw new Error(fundResult.error ?? "Funding transaction failed")
       }
+      transactionQueue.remove(queuedTransactionId)
       setFundTxHash((fundResult as { txHash: string }).txHash)
       addToast(
         <div className="flex flex-col gap-1">
@@ -636,6 +655,20 @@ function Step3Review({
         fundTxHash: fundResult.txHash,
       }
     })
+  }
+
+  const handleFundWithRollback = async () => {
+    try {
+      await handleFund()
+    } catch (error) {
+      const fundAmount = BigInt(Math.round(totalReward))
+      setOptimisticPoolBalance(prev => (prev > fundAmount ? prev - fundAmount : 0n))
+      const queued = transactionQueue.transactions.find(tx => tx.type === "fund_quest")
+      if (queued) {
+        transactionQueue.remove(queued.id)
+      }
+      throw error
+    }
   }
 
   const handleCreate = async () => {
@@ -771,6 +804,8 @@ function Step3Review({
   const isFunded = fundingTx.isSuccess
   const fundPending = fundingTx.isPending
   const createPending = createTx.isPending
+  const displayedPoolBalance = isFunded ? BigInt(Math.round(totalReward)) : optimisticPoolBalance
+  const pendingFundLabel = fundingTx.isConfirming ? "Confirming..." : "Awaiting Signature..."
 
   return (
     <div className="space-y-6">
@@ -840,6 +875,36 @@ function Step3Review({
                 {formatTokens(totalReward)} USDC
               </span>
             </div>
+            <div className="bg-secondary border-border mb-4 flex items-center justify-between border-[2px] p-4">
+              <span className="text-xs font-black tracking-wider uppercase">Pool Balance</span>
+              <span className="text-sm font-black tabular-nums">
+                {formatTokens(Number(displayedPoolBalance))} USDC
+                {fundPending ? " (optimistic)" : ""}
+              </span>
+            </div>
+
+            {transactionQueue.transactions.length > 0 && (
+              <div className="bg-secondary border-border mb-4 border-[2px] p-3">
+                <p className="mb-2 text-xs font-black tracking-wider uppercase">
+                  Pending Transactions
+                </p>
+                <div className="space-y-2">
+                  {transactionQueue.transactions.map(transaction => (
+                    <div
+                      key={transaction.id}
+                      className="border-border bg-background flex items-center justify-between border-[1.5px] px-2 py-1.5 text-xs font-bold"
+                    >
+                      <span>{transaction.label}</span>
+                      <span>
+                        {transaction.phase === "confirming"
+                          ? "Confirming..."
+                          : "Awaiting Signature..."}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Network Warning */}
             {!isSupportedNetwork && (
@@ -853,7 +918,7 @@ function Step3Review({
 
             {/* Fund button */}
             <Button
-              onClick={handleFund}
+              onClick={handleFundWithRollback}
               disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
               variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
               className={cn(
@@ -864,7 +929,7 @@ function Step3Review({
               {fundPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Funding reward pool...
+                  {pendingFundLabel}
                 </>
               ) : isFunded || createPending || createTx.isSuccess ? (
                 <>
@@ -932,6 +997,11 @@ function Step3Review({
             {!isFunded && !fundPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
                 Fund the pool first, then confirm to create the quest on Stellar.
+              </p>
+            )}
+            {fundPending && (
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
+                Funding is in progress. Pool balance is shown optimistically.
               </p>
             )}
             {isFunded && !createPending && (

@@ -6,7 +6,8 @@ use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
 };
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String,
+    Symbol, Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -203,7 +204,12 @@ impl QuestContract {
         // Event data: (quest_id, owner, category)
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("new")),
-            (id, quest.owner, quest.category),
+            (id, quest.owner.clone(), quest.category),
+        );
+        // Canonical event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "quest_created"),),
+            (id, quest.owner.clone(), quest.name.clone()),
         );
 
         Self::bump(&env, id);
@@ -338,6 +344,11 @@ impl QuestContract {
             (symbol_short!("quest"), symbol_short!("add_enr")),
             (quest_id, &enrollee),
         );
+        // Canonical enrollment event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_added"),),
+            (quest_id, enrollee.clone()),
+        );
 
         Self::bump(&env, quest_id);
         Ok(())
@@ -376,6 +387,11 @@ impl QuestContract {
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("join")),
             (quest_id, &enrollee),
+        );
+        // Canonical enrollment event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_added"),),
+            (quest_id, enrollee.clone()),
         );
 
         Self::bump(&env, quest_id);
@@ -524,6 +540,41 @@ impl QuestContract {
                     if quest.category == category {
                         matches.push_back(quest);
                     }
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        matches
+    }
+
+    /// Get all quests owned by an address.
+    pub fn list_quests_by_owner(env: Env, owner: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                if quest.owner == owner {
+                    matches.push_back(quest);
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        matches
+    }
+
+    /// Get all quests an address is enrolled in.
+    pub fn list_quests_by_enrollee(env: Env, enrollee: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                let enrollees = Self::load_enrollees(&env, id);
+                if enrollees.contains(&enrollee) {
+                    matches.push_back(quest);
                 }
             }
         }

@@ -63,7 +63,9 @@ export class MilestoneClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
       }
     } else {
       this.contract = null
@@ -209,7 +211,9 @@ export class MilestoneClient {
         return scValToNative(response.result.retval)
       }
     } catch (e) {
-      console.error(`Read error ${method}:`, e)
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
     }
     return null
   }

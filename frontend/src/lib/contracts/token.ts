@@ -17,7 +17,9 @@ export class TokenClient {
         this.contract = new Contract(tokenAddress)
       } catch {
         this.contract = null
-        console.error(`[TokenClient] Invalid token address: "${tokenAddress}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[TokenClient] Invalid token address: "${tokenAddress}"`)
+        }
       }
     } else {
       this.contract = null
@@ -104,7 +106,9 @@ export class TokenClient {
 
       return metadata
     } catch (error) {
-      console.error("Failed to fetch token metadata:", error)
+      if (import.meta.env.DEV) {
+        console.error("Failed to fetch token metadata:", error)
+      }
       // Return fallback metadata
       return {
         symbol: "TOKEN",

@@ -95,7 +95,9 @@ export async function signAndSubmit(
       }
     }
   } catch (err: unknown) {
-    console.error("Transaction submission error:", err)
+    if (import.meta.env.DEV) {
+      console.error("Transaction submission error:", err)
+    }
     const message = err instanceof Error ? err.message : "Unknown error during signing/submission"
     return {
       status: "FAILED",

@@ -28,7 +28,9 @@ export class RewardsClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
       }
     } else {
       this.contract = null
@@ -142,7 +144,9 @@ export class RewardsClient {
         return scValToNative(response.result.retval)
       }
     } catch (e) {
-      console.error(`Read error ${method}:`, e)
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
     }
     return null
   }

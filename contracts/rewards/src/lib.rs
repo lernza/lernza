@@ -21,6 +21,7 @@ pub trait MilestoneContractTrait {
         quest_id: u32,
         milestone_id: u32,
     ) -> Result<i128, soroban_sdk::Val>;
+    fn get_total_reserved_reward(env: Env, quest_id: u32) -> i128;
 }
 
 // Rewards contract: holds token pools per quest and distributes rewards.
@@ -44,6 +45,8 @@ pub enum DataKey {
     UserEarnings(Address),
     // Global stats
     TotalDistributed,
+    // Total tokens distributed per quest
+    QuestDistributed(u32),
     // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
     PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
 }
@@ -66,6 +69,7 @@ pub enum Error {
     InvalidToken = 12,
     RewardAmountMismatch = 13,
     QuestNotArchived = 14,
+    RefundWindowNotOpen = 15,
 }
 
 // TTL constants moved to common.
@@ -282,6 +286,15 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &new_total);
+
+        // Update quest specific total distributed
+        let q_dist_key = DataKey::QuestDistributed(quest_id);
+        let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&q_dist_key, &(q_total + amount));
+        common::extend_persistent_ttl(&env, &q_dist_key);
+
         extend_instance_ttl(&env);
 
         // Emit reward distribution event
@@ -344,10 +357,39 @@ impl RewardsContract {
             return Err(Error::QuestNotArchived);
         }
 
-        // Check pool has sufficient balance
+        // 7-day grace period (604,800 seconds)
+        let now = env.ledger().timestamp();
+        if now < quest_info.archived_at + 604_800 {
+            return Err(Error::RefundWindowNotOpen);
+        }
+
+        // Calculate reserved obligations
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let total_reserved = milestone_client.get_total_reserved_reward(&quest_id);
+        let quest_distributed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestDistributed(quest_id))
+            .unwrap_or(0);
+
+        let obligations = total_reserved
+            .checked_sub(quest_distributed)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        // Check pool has sufficient balance after reserving obligations
         let pool_key = DataKey::QuestPool(quest_id);
         let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
-        if pool < amount {
+
+        let refundable = pool
+            .checked_sub(obligations)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        if amount > refundable {
             return Err(Error::InsufficientPool);
         }
 
@@ -364,8 +406,6 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Emit refund event
-        // Event topics: (reward, refund)
-        // Event data: (quest_id, authority, amount)
         env.events().publish(
             (symbol_short!("reward"), symbol_short!("refund")),
             (quest_id, authority, amount),

@@ -6,7 +6,7 @@ use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 
 use soroban_sdk::{
-    testutils::Address as _,
+    testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
     Address, Env, String,
 };
@@ -1374,6 +1374,9 @@ fn test_refund_pool_success() {
     // Archive the quest to allow refund
     quest_client.archive_quest(&q_id);
 
+    // Advance time by 7 days + 1 second
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
     let token_client = TokenClient::new(&env, &token_addr);
     let balance_before = token_client.balance(&owner);
 
@@ -1415,6 +1418,7 @@ fn test_refund_pool_full_balance() {
 
     client.fund_quest(&owner, &q_id, &5_000);
     quest_client.archive_quest(&q_id);
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 + 1);
     client.refund_pool(&owner, &q_id, &5_000);
 
     assert_eq!(client.get_pool_balance(&q_id), 0);
@@ -1455,6 +1459,11 @@ fn test_refund_pool_requires_archive() {
     // Should fail — quest is still active
     let result = client.try_refund_pool(&owner, &q_id, &1_000);
     assert_eq!(result, Err(Ok(Error::QuestNotArchived)));
+
+    // Archive but don't wait — should fail with RefundWindowNotOpen
+    quest_client.archive_quest(&q_id);
+    let result = client.try_refund_pool(&owner, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
 }
 
 #[test]
@@ -1490,6 +1499,7 @@ fn test_refund_pool_unauthorized() {
 
     client.fund_quest(&owner, &q_id, &5_000);
     quest_client.archive_quest(&q_id);
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 + 1);
 
     // Non-authority should be rejected
     let result = client.try_refund_pool(&attacker, &q_id, &1_000);
@@ -1528,6 +1538,7 @@ fn test_refund_pool_insufficient_balance() {
 
     client.fund_quest(&owner, &q_id, &1_000);
     quest_client.archive_quest(&q_id);
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 + 1);
 
     // Requesting more than the pool holds
     let result = client.try_refund_pool(&owner, &q_id, &5_000);
@@ -1603,4 +1614,120 @@ fn test_refund_pool_invalid_amount() {
 
     let result = client.try_refund_pool(&owner, &q_id, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_refund_pool_grace_period_enforced() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Grace Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+
+    // Initial archived_at + 1 hour — should fail
+    env.ledger().set_timestamp(env.ledger().timestamp() + 3600);
+    let result = client.try_refund_pool(&owner, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+
+    // 6.9 days — should fail
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 - 3600 - 10);
+    let result = client.try_refund_pool(&owner, &q_id, &1_000);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+
+    // Exactly 7 days — should succeed
+    env.ledger().set_timestamp(env.ledger().timestamp() + 10);
+    client.refund_pool(&owner, &q_id, &1_000);
+}
+
+#[test]
+fn test_refund_pool_respects_reserved_obligations() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Reserved Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Create milestone with 2,000 reward
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS1"),
+        &String::from_str(&env, "Desc"),
+        &2_000,
+        &false,
+    );
+
+    // Enrollee completes it
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    // Pool = 5,000. Reserved = 2,000. Refundable = 3,000.
+
+    // Archive and wait
+    quest_client.archive_quest(&q_id);
+    env.ledger().set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    // Try to refund 4,000 (shoud fail, only 3,000 refundable)
+    let result = client.try_refund_pool(&owner, &q_id, &4_000);
+    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+
+    // Refund 3,000 (should succeed)
+    client.refund_pool(&owner, &q_id, &3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 2_000);
+
+    // Even after refund, we can still pay the earner!
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &2_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    let token_client = TokenClient::new(&env, &token_addr);
+    assert_eq!(token_client.balance(&enrollee), 2_000);
 }

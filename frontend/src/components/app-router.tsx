@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react"
-import { Routes, Route, Navigate } from "react-router-dom"
+import { Routes, Route } from "react-router-dom"
 import { WalletRequiredRoute } from "@/components/wallet-required-route"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { WorkspaceRedirect } from "@/components/workspace-redirect"

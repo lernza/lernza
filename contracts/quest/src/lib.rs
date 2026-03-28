@@ -521,7 +521,9 @@ impl QuestContract {
             }
         }
 
-        common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        if env.storage().persistent().has(&DataKey::PublicQuests) {
+            common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        }
         public_quests
     }
 
@@ -544,7 +546,9 @@ impl QuestContract {
             }
         }
 
-        common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        if env.storage().persistent().has(&DataKey::PublicQuests) {
+            common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        }
         matches
     }
 

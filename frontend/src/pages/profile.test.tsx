@@ -56,7 +56,7 @@ describe("Profile", () => {
     mockUseContractData.mockImplementation(key => {
       if (key === "rewards") {
         return {
-          data: 750n,
+          data: 7_500_000_000n,
           isLoading: false,
           error: null,
         }
@@ -95,7 +95,7 @@ describe("Profile", () => {
           timestamp: Date.parse("2026-03-20T12:00:00Z"),
           txHash: "abc123",
           href: "https://stellar.expert/explorer/testnet/tx/abc123",
-          amount: 250n,
+          amount: 2_500_000_000n,
         },
       ],
       nextCursor: null,

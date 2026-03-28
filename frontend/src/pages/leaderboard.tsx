@@ -25,7 +25,7 @@ interface ActiveQuestEntry {
 }
 
 async function fetchTopEarners(): Promise<EarnerEntry[]> {
-  const quests = await questClient.getQuests()
+  const quests = await questClient.listPublicQuests(0, 50)
   const enrolleeSets = await Promise.all(quests.map(q => questClient.getEnrollees(q.id)))
 
   const allAddresses = new Set<string>()

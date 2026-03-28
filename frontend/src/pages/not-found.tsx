@@ -100,7 +100,7 @@ export function NotFound() {
         <div className="bg-background border-border animate-fade-in-up stagger-1 shimmer-on-hover max-w-md border-[3px] px-8 py-6 shadow-[6px_6px_0_var(--color-border)]">
           <div className="mb-3 flex items-center justify-center gap-2">
             <Sparkles className="text-primary h-5 w-5" />
-            <h2 className="text-2xl font-black sm:text-3xl">Lost in the chain</h2>
+            <h1 className="text-2xl font-black sm:text-3xl">Lost in the chain</h1>
             <Sparkles className="text-primary h-5 w-5" />
           </div>
           <p className="text-muted-foreground mb-6 leading-relaxed">

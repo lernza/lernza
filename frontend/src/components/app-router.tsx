@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react"
 import { Routes, Route } from "react-router-dom"
 import { WalletRequiredRoute } from "@/components/wallet-required-route"
 import { PageSkeleton } from "@/components/page-skeleton"
+import { WorkspaceRedirect } from "@/components/workspace-redirect"
 
 // Lazy load page components
 const Landing = lazy(() => import("@/pages/landing").then(module => ({ default: module.Landing })))
@@ -17,6 +18,9 @@ const NotFound = lazy(() =>
 )
 const CreateQuest = lazy(() =>
   import("@/pages/create-quest").then(module => ({ default: module.CreateQuest }))
+)
+const Leaderboard = lazy(() =>
+  import("@/pages/leaderboard").then(module => ({ default: module.Leaderboard }))
 )
 
 export function AppRouter() {
@@ -47,6 +51,7 @@ export function AppRouter() {
             </WalletRequiredRoute>
           }
         />
+        <Route path="/workspace/:id" element={<WorkspaceRedirect />} />
         <Route
           path="/profile"
           element={
@@ -58,6 +63,7 @@ export function AppRouter() {
             </WalletRequiredRoute>
           }
         />
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </Suspense>

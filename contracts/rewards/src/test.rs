@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 
 use certificate::{CertificateContract, CertificateContractClient};
@@ -239,11 +237,9 @@ fn test_fund_quest_overflow() {
         &Visibility::Public,
         &None,
     );
-    // Fund with max value
-    client.fund_quest(&owner, &q_id, &i128::MAX);
-    // Try to overflow
-    let result = client.try_fund_quest(&owner, &q_id, &1);
-    assert_eq!(result, Err(Ok(Error::ArithmeticOverflow)));
+    // Amounts above MAX_REWARD_AMOUNT are rejected before any storage writes
+    let result = client.try_fund_quest(&owner, &q_id, &i128::MAX);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
 #[test]
@@ -263,7 +259,7 @@ fn test_distribute_reward_overflow() {
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &i128::MAX);
+    sac.mint(&owner, &MAX_REWARD_AMOUNT);
     let q_id = quest_client.create_quest(
         &owner,
         &String::from_str(&env, "Test"),
@@ -274,21 +270,21 @@ fn test_distribute_reward_overflow() {
         &Visibility::Public,
         &None,
     );
-    client.fund_quest(&owner, &q_id, &i128::MAX);
+    client.fund_quest(&owner, &q_id, &MAX_REWARD_AMOUNT);
     let ms_id = milestone_client.create_milestone(
         &owner,
         &q_id,
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
-        &1,
+        &MAX_REWARD_AMOUNT,
         &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute max value
-    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
+    // Distribute within cap — amount matches milestone reward
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     // Try to distribute again — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
@@ -309,7 +305,7 @@ fn test_distribute_reward_earnings_overflow() {
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
-    sac.mint(&owner, &i128::MAX);
+    sac.mint(&owner, &MAX_REWARD_AMOUNT);
     let q_id = quest_client.create_quest(
         &owner,
         &String::from_str(&env, "Test"),
@@ -320,21 +316,21 @@ fn test_distribute_reward_earnings_overflow() {
         &Visibility::Public,
         &None,
     );
-    client.fund_quest(&owner, &q_id, &i128::MAX);
+    client.fund_quest(&owner, &q_id, &MAX_REWARD_AMOUNT);
     let ms_id = milestone_client.create_milestone(
         &owner,
         &q_id,
         &String::from_str(&env, "Big Milestone"),
         &String::from_str(&env, "Desc"),
-        &1,
+        &MAX_REWARD_AMOUNT,
         &false,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
-    // Distribute max value
-    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &i128::MAX);
-    // Try to overflow earnings — idempotency rejects the duplicate
-    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1);
+    // Distribute within cap — amount matches milestone reward
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
+    // Try to distribute again — idempotency rejects the duplicate
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &MAX_REWARD_AMOUNT);
     assert_eq!(result, Err(Ok(Error::AlreadyPaid)));
 }
 
@@ -546,15 +542,15 @@ fn test_distribute_multiple_rewards() {
 
     client.distribute_reward(&owner, &q_id, &ms1_id, &e1, &100);
     client.distribute_reward(&owner, &q_id, &ms2_id, &e2, &200);
-    // e1 gets reward from a different milestone (ms2), not a duplicate
-    client.distribute_reward(&owner, &q_id, &ms2_id, &e1, &50);
+    // e1 also completes ms2 and receives its configured reward (200)
+    client.distribute_reward(&owner, &q_id, &ms2_id, &e1, &200);
 
     let token_client = TokenClient::new(&env, &token_addr);
-    assert_eq!(token_client.balance(&e1), 150);
+    assert_eq!(token_client.balance(&e1), 300);
     assert_eq!(token_client.balance(&e2), 200);
-    assert_eq!(client.get_user_earnings(&e1), 150);
-    assert_eq!(client.get_pool_balance(&q_id), 4_650);
-    assert_eq!(client.get_total_distributed(), 350);
+    assert_eq!(client.get_user_earnings(&e1), 300);
+    assert_eq!(client.get_pool_balance(&q_id), 4_500);
+    assert_eq!(client.get_total_distributed(), 500);
 }
 
 #[test]
@@ -682,7 +678,7 @@ fn test_initialize_no_auth_guard() {
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
-/// MED-02: Self-distribution
+/// MED-02: Self-distribution should be rejected
 #[test]
 fn test_authority_self_distribution() {
     let (
@@ -727,13 +723,14 @@ fn test_authority_self_distribution() {
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
 
-    // Authority distributes reward pool tokens back to themselves
-    client.distribute_reward(&owner, &q_id, &ms_id, &owner, &1_000);
+    // Authority cannot distribute reward pool tokens back to themselves
+    let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &owner, &1_000);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
 
     let token_client = TokenClient::new(&env, &token_addr);
-    assert_eq!(token_client.balance(&owner), 6_000);
-    assert_eq!(client.get_pool_balance(&q_id), 4_000);
-    assert_eq!(client.get_user_earnings(&owner), 1_000);
+    assert_eq!(token_client.balance(&owner), 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+    assert_eq!(client.get_user_earnings(&owner), 0);
 }
 
 /// Integration test: rewards cannot be sent before milestone completion
@@ -1158,6 +1155,86 @@ fn test_distribute_reward_negative_amount_rejected() {
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
 
     let result = client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &-1);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_fund_quest_amount_exceeds_max_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    let result = client.try_fund_quest(&owner, &q_id, &(MAX_REWARD_AMOUNT + 1));
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_distribute_reward_amount_exceeds_max_rejected() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &MAX_REWARD_AMOUNT);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &MAX_REWARD_AMOUNT);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+        &false,
+    );
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    let result =
+        client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &(MAX_REWARD_AMOUNT + 1));
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 

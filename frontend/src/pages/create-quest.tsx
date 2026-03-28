@@ -24,7 +24,9 @@ import { Badge } from "@/components/ui/badge"
 import { FieldError, FormLabel } from "@/components/ui/form-field"
 import { useWallet } from "@/hooks/use-wallet"
 import { useTransactionAction } from "@/hooks/use-transaction-action"
+import { useTransactionQueue } from "@/hooks/use-transaction-queue"
 import { useToast } from "@/hooks/use-toast"
+import { ToastContainer } from "@/components/toast"
 import { formatTokens, cn } from "@/lib/utils"
 import { Visibility } from "@/lib/contract-types"
 import { questClient } from "@/lib/contracts/quest"
@@ -36,6 +38,7 @@ import {
   MAX_MILESTONE_TITLE_LEN,
   MAX_MILESTONE_DESCRIPTION_LEN,
   MAX_MILESTONES,
+  MAX_REWARD_AMOUNT,
 } from "@/lib/contract-types"
 import { scValToNative, xdr } from "@stellar/stellar-sdk"
 
@@ -63,7 +66,10 @@ const milestoneSchema = z.object({
     .string()
     .min(1, "Description is required")
     .max(MAX_MILESTONE_DESCRIPTION_LEN, `Max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`),
-  rewardAmount: z.number().positive("Must be greater than 0"),
+  rewardAmount: z
+    .number()
+    .positive("Must be greater than 0")
+    .max(MAX_REWARD_AMOUNT, `Max ${MAX_REWARD_AMOUNT.toLocaleString()} tokens`),
   requiresPrevious: z.boolean().default(false),
 })
 
@@ -188,8 +194,11 @@ function Step1Form({
         <div className="border-border bg-background space-y-5 border-[3px] border-t-0 p-6 shadow-[4px_4px_0_var(--color-border)]">
           {/* Name */}
           <div>
-            <FormLabel required>Quest Name</FormLabel>
+            <FormLabel htmlFor="quest-name" required>
+              Quest Name
+            </FormLabel>
             <input
+              id="quest-name"
               {...register("name")}
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
@@ -215,8 +224,11 @@ function Step1Form({
 
           {/* Description */}
           <div>
-            <FormLabel required>Description</FormLabel>
+            <FormLabel htmlFor="quest-desc" required>
+              Description
+            </FormLabel>
             <textarea
+              id="quest-desc"
               {...register("description")}
               rows={5}
               placeholder="Describe what learners will accomplish..."
@@ -243,8 +255,9 @@ function Step1Form({
 
           {/* Max Enrollees (Optional) */}
           <div>
-            <FormLabel>Enrollment Capacity (Optional)</FormLabel>
+            <FormLabel htmlFor="max-enrollees">Enrollment Capacity (Optional)</FormLabel>
             <input
+              id="max-enrollees"
               {...register("maxEnrollees", {
                 setValueAs: v => (v === "" ? undefined : parseInt(v, 10)),
               })}
@@ -372,8 +385,11 @@ function Step2Form({
 
                 {/* Title */}
                 <div>
-                  <FormLabel required>Title</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-title`} required>
+                    Title
+                  </FormLabel>
                   <input
+                    id={`milestone-${index}-title`}
                     {...register(`milestones.${index}.title`)}
                     placeholder="e.g. Hello World"
                     className={cn(
@@ -399,8 +415,11 @@ function Step2Form({
 
                 {/* Description */}
                 <div>
-                  <FormLabel required>Description</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-desc`} required>
+                    Description
+                  </FormLabel>
                   <textarea
+                    id={`milestone-${index}-desc`}
                     {...register(`milestones.${index}.description`)}
                     rows={2}
                     placeholder="What should the learner do to complete this milestone?"
@@ -428,12 +447,15 @@ function Step2Form({
 
                 {/* Reward Amount */}
                 <div>
-                  <FormLabel required>Reward Amount (USDC)</FormLabel>
+                  <FormLabel htmlFor={`milestone-${index}-reward`} required>
+                    Reward Amount (USDC)
+                  </FormLabel>
                   <div className="flex items-center gap-0">
                     <div className="border-border bg-secondary border-[2px] border-r-0 px-3 py-2 text-xs font-black">
                       USDC
                     </div>
                     <input
+                      id={`milestone-${index}-reward`}
                       {...register(`milestones.${index}.rewardAmount`, {
                         valueAsNumber: true,
                       })}
@@ -521,16 +543,18 @@ function Step3Review({
   step1Data: Step1Values
   step2Data: Step2Values
   onBack: () => void
-  onComplete: () => void
+  onComplete: (questId: number) => void
 }) {
   const { isSupportedNetwork, address } = useWallet()
   const fundingTx = useTransactionAction()
   const createTx = useTransactionAction()
-  const { addToast } = useToast()
+  const transactionQueue = useTransactionQueue<"fund_quest", { amount: bigint }>()
+  const { toasts, addToast, removeToast } = useToast()
 
   const [questId, setQuestId] = useState<number | null>(null)
   const [createQuestTxHash, setCreateQuestTxHash] = useState<string | null>(null)
   const [fundTxHash, setFundTxHash] = useState<string | null>(null)
+  const [optimisticPoolBalance, setOptimisticPoolBalance] = useState<bigint>(0n)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -555,8 +579,16 @@ function Step3Review({
 
   const handleFund = async () => {
     if (!address) throw new Error("Connect wallet first")
+    const fundAmount = BigInt(Math.floor(totalReward * 1_000_000))
+    const queuedTransactionId = transactionQueue.enqueue({
+      type: "fund_quest",
+      label: "Fund reward pool",
+      phase: "signing",
+      meta: { amount: fundAmount },
+    })
+    setOptimisticPoolBalance(prev => prev + fundAmount)
 
-    await fundingTx.run(async () => {
+    await fundingTx.run(async ({ onSubmitted }) => {
       const category = "General"
       const tags: string[] = []
       const tokenAddr = import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || ""
@@ -592,7 +624,7 @@ function Step3Review({
           createdQuestId,
           m.title,
           m.description,
-          BigInt(Math.round(m.rewardAmount)),
+          BigInt(Math.floor(m.rewardAmount * 1_000_000)),
           m.requiresPrevious && index > 0
         )
         if (msResult.status !== "SUCCESS") {
@@ -600,11 +632,19 @@ function Step3Review({
         }
       }
 
-      const fundAmount = BigInt(Math.round(totalReward))
-      const fundResult = await rewardsClient.fundQuest(address, createdQuestId, fundAmount)
+      const fundResult = await rewardsClient.fundQuest(address, createdQuestId, fundAmount, {
+        onSubmitted: txHash => {
+          transactionQueue.update(queuedTransactionId, {
+            phase: "confirming",
+            txHash,
+          })
+          onSubmitted?.(txHash)
+        },
+      })
       if (fundResult.status !== "SUCCESS") {
         throw new Error(fundResult.error ?? "Funding transaction failed")
       }
+      transactionQueue.remove(queuedTransactionId)
       setFundTxHash((fundResult as { txHash: string }).txHash)
       addToast(
         <div className="flex flex-col gap-1">
@@ -628,139 +668,35 @@ function Step3Review({
     })
   }
 
-  const handleCreate = async () => {
-    if (!address) {
-      throw new Error("Wallet not connected")
-    }
-
-    await createTx.run(async () => {
-      try {
-        // Step 1: Create the quest on-chain
-        // TODO: Add VITE_USDC_TOKEN_ADDRESS to environment variables
-        const tokenAddress =
-          import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
-          "CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG"
-        if (!tokenAddress) {
-          throw new Error("USDC token address not configured")
-        }
-
-        const questResult = await questClient.createQuest(
-          address,
-          step1Data.name,
-          step1Data.description,
-          "Education", // Education category
-          [], // Tags
-          tokenAddress,
-          Visibility.Public,
-          typeof step1Data.maxEnrollees === "number" ? step1Data.maxEnrollees : undefined
-        )
-
-        if (questResult.status !== "SUCCESS") {
-          throw new Error(`Quest creation failed: ${questResult.error}`)
-        }
-
-        // Extract quest ID from the result (this may need adjustment based on actual contract response)
-        // For now, we'll assume we can get the quest ID from the result or need to query it
-        let questId: number
-        try {
-          // Try to get the latest quest ID (assuming the new quest is the last one)
-          const questCount = await questClient.getQuestCount()
-          questId = questCount - 1 // New quest should be at index count-1
-        } catch (error) {
-          console.error("Failed to get quest ID:", error)
-          throw new Error("Failed to retrieve created quest ID")
-        }
-
-        // Step 2: Create milestones for the quest
-        const milestoneResults = []
-        const failedMilestones = []
-
-        for (let i = 0; i < step2Data.milestones.length; i++) {
-          const milestone = step2Data.milestones[i]
-          try {
-            const result = await milestoneClient.createMilestone(
-              address,
-              questId,
-              milestone.title,
-              milestone.description,
-              BigInt(Math.floor(milestone.rewardAmount * 1_000_000)), // Convert to USDC smallest unit (6 decimals)
-              milestone.requiresPrevious && i > 0
-            )
-
-            if (result.status !== "SUCCESS") {
-              failedMilestones.push({
-                index: i,
-                title: milestone.title,
-                error: result.error || "Unknown transaction error",
-              })
-              milestoneResults.push({ index: i, status: "FAILED", result })
-            } else {
-              milestoneResults.push({ index: i, status: "SUCCESS", result })
-            }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : "Unknown error"
-            failedMilestones.push({
-              index: i,
-              title: milestone.title,
-              error: errorMessage,
-            })
-            milestoneResults.push({
-              index: i,
-              status: "FAILED",
-              error: errorMessage,
-            })
-          }
-        }
-
-        // Handle partial failure cases
-        if (failedMilestones.length > 0) {
-          const successCount = step2Data.milestones.length - failedMilestones.length
-          const errorMessages = failedMilestones
-            .map(f => `Milestone ${f.index + 1} ("${f.title}"): ${f.error}`)
-            .join("; ")
-
-          if (successCount === 0) {
-            // All milestones failed - treat as complete failure
-            throw new Error(
-              `Quest created successfully, but all milestone creations failed: ${errorMessages}`
-            )
-          } else {
-            // Some milestones failed - partial success with detailed error
-            throw new Error(
-              `Quest created successfully with ${successCount}/${step2Data.milestones.length} milestones. ` +
-                `Failed milestones: ${errorMessages}. ` +
-                `You may need to manually create the remaining milestones.`
-            )
-          }
-        }
-
-        addToast(
-          <div className="flex flex-col gap-1">
-            <span>Quest created successfully!</span>
-            <a
-              href={`https://stellar.expert/explorer/testnet/tx/${(questResult as { txHash: string }).txHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs underline hover:opacity-80"
-            >
-              View on Stellar Expert
-            </a>
-          </div>,
-          "success"
-        )
-        return true
-      } catch (error) {
-        console.error("Quest creation error:", error)
-        throw error
+  const handleFundWithRollback = async () => {
+    try {
+      await handleFund()
+    } catch (error) {
+      const fundAmount = BigInt(Math.floor(totalReward * 1_000_000))
+      setOptimisticPoolBalance(prev => (prev > fundAmount ? prev - fundAmount : 0n))
+      const queued = transactionQueue.transactions.find(tx => tx.type === "fund_quest")
+      if (queued) {
+        transactionQueue.remove(queued.id)
       }
-    })
+      throw error
+    }
+  }
 
-    onComplete()
+  const handleCreate = () => {
+    // Quest and milestones were already created on-chain by handleFund.
+    // Navigate to the new quest's workspace page.
+    if (questId !== null) {
+      onComplete(questId)
+    }
   }
 
   const isFunded = fundingTx.isSuccess
   const fundPending = fundingTx.isPending
   const createPending = createTx.isPending
+  const displayedPoolBalance = isFunded
+    ? BigInt(Math.floor(totalReward * 1_000_000))
+    : optimisticPoolBalance
+  const pendingFundLabel = fundingTx.isConfirming ? "Confirming..." : "Awaiting Signature..."
 
   return (
     <div className="space-y-6">
@@ -830,6 +766,36 @@ function Step3Review({
                 {formatTokens(totalReward)} USDC
               </span>
             </div>
+            <div className="bg-secondary border-border mb-4 flex items-center justify-between border-[2px] p-4">
+              <span className="text-xs font-black tracking-wider uppercase">Pool Balance</span>
+              <span className="text-sm font-black tabular-nums">
+                {formatTokens(Number(displayedPoolBalance))} USDC
+                {fundPending ? " (optimistic)" : ""}
+              </span>
+            </div>
+
+            {transactionQueue.transactions.length > 0 && (
+              <div className="bg-secondary border-border mb-4 border-[2px] p-3">
+                <p className="mb-2 text-xs font-black tracking-wider uppercase">
+                  Pending Transactions
+                </p>
+                <div className="space-y-2">
+                  {transactionQueue.transactions.map(transaction => (
+                    <div
+                      key={transaction.id}
+                      className="border-border bg-background flex items-center justify-between border-[1.5px] px-2 py-1.5 text-xs font-bold"
+                    >
+                      <span>{transaction.label}</span>
+                      <span>
+                        {transaction.phase === "confirming"
+                          ? "Confirming..."
+                          : "Awaiting Signature..."}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Network Warning */}
             {!isSupportedNetwork && (
@@ -843,7 +809,7 @@ function Step3Review({
 
             {/* Fund button */}
             <Button
-              onClick={handleFund}
+              onClick={handleFundWithRollback}
               disabled={fundPending || createPending || isFunded || !isSupportedNetwork}
               variant={isFunded || createPending || createTx.isSuccess ? "secondary" : "default"}
               className={cn(
@@ -854,7 +820,7 @@ function Step3Review({
               {fundPending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Funding reward pool...
+                  {pendingFundLabel}
                 </>
               ) : isFunded || createPending || createTx.isSuccess ? (
                 <>
@@ -869,23 +835,14 @@ function Step3Review({
               )}
             </Button>
 
-            {/* Create button */}
+            {/* Navigate to quest workspace button — enabled once fund tx succeeds */}
             <Button
               onClick={handleCreate}
-              disabled={!isFunded || createPending || !isSupportedNetwork}
+              disabled={!isFunded || questId === null}
               className="shimmer-on-hover w-full"
             >
-              {createPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Confirm & Create Quest
-                </>
-              )}
+              <Sparkles className="h-4 w-4" />
+              View Quest Workspace
             </Button>
 
             {isFunded && questId !== null && (
@@ -924,9 +881,14 @@ function Step3Review({
                 Fund the pool first, then confirm to create the quest on Stellar.
               </p>
             )}
-            {isFunded && !createPending && (
+            {fundPending && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Pool funded! Sign the creation transaction to go live.
+                Funding is in progress. Pool balance is shown optimistically.
+              </p>
+            )}
+            {isFunded && questId !== null && (
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
+                Quest created and pool funded! Click above to open your quest workspace.
               </p>
             )}
           </div>
@@ -944,6 +906,8 @@ function Step3Review({
           Back
         </Button>
       </div>
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   )
 }
@@ -991,8 +955,8 @@ export function CreateQuest() {
       // Clear the imported data so it doesn't persist
       localStorage.removeItem("lernza:imported-quest")
     }
-  } catch (err) {
-    console.error("Failed to load imported quest:", err)
+  } catch {
+    // silently ignore import parse errors
   }
 
   const [step, setStep] = useState<FormStep>(initialStep)
@@ -1117,9 +1081,9 @@ export function CreateQuest() {
               setStep(2)
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
-            onComplete={() => {
+            onComplete={(questId: number) => {
               clearDraft()
-              navigate("/dashboard")
+              navigate(`/quest/${questId}`)
             }}
           />
         )}

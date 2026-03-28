@@ -7,7 +7,10 @@ function getInitialTheme(): Theme {
     const stored = localStorage.getItem("lernza-theme")
     if (stored === "dark" || stored === "light") return stored
   } catch {
-    return "light"
+    // localStorage unavailable (sandboxed iframe, private mode quota) - ignore
+  }
+  if (typeof window !== "undefined" && "matchMedia" in window) {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   }
   return "light"
 }

@@ -5,9 +5,11 @@
   "packageManager": "pnpm@10.33.0",
   "type": "module",
   "engines": {
-    "node": ">=22.12.0"
+    "node": "24.12.0",
+    "pnpm": "10.33.0"
   },
   "scripts": {
+    "predev": "node scripts/check-env.mjs",
     "dev": "vite",
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/validate-public-assets.mjs",
@@ -18,6 +20,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "prepare": "cd .. && husky"
   },
   "dependencies": {
@@ -39,8 +43,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@axe-core/react": "^4.11.1",
     "@eslint/js": "^9.39.4",
     "@hookform/resolvers": "^5.2.2",
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
@@ -50,6 +56,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",

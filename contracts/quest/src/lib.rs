@@ -6,7 +6,8 @@ use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
 };
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String,
+    Symbol, Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -25,6 +26,8 @@ pub enum DataKey {
     Enrollees(u32),
     EnrollmentCap(u32),
     PublicQuests,
+    Admin,
+    VerifiedCreator(Address),
 }
 
 // QuestInfo moved to common.
@@ -98,6 +101,43 @@ pub struct QuestContract;
 
 #[contractimpl]
 impl QuestContract {
+    /// Initialize the quest contract with an admin.
+    pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::Admin) {
+            return Err(Error::Unauthorized);
+        }
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Verify a creator address. Admin only.
+    pub fn verify_creator(env: Env, admin: Address, creator: Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if admin != stored_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::VerifiedCreator(creator), &true);
+        Ok(())
+    }
+
+    /// Check if a creator is verified.
+    pub fn is_creator_verified(env: Env, creator: Address) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::VerifiedCreator(creator))
+            .unwrap_or(false)
+    }
+
     /// Create a new quest. Returns the quest ID.
     #[allow(clippy::too_many_arguments)]
     pub fn create_quest(
@@ -123,6 +163,7 @@ impl QuestContract {
         Self::validate_tags(&tags)?;
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
+        let verified = Self::is_creator_verified(env.clone(), owner.clone());
 
         let quest = QuestInfo {
             id,
@@ -137,6 +178,7 @@ impl QuestContract {
             status: QuestStatus::Active,
             deadline: 0,
             max_enrollees,
+            verified,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -149,12 +191,12 @@ impl QuestContract {
         if visibility == Visibility::Public {
             let mut public_ids: Vec<u32> = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::PublicQuests)
                 .unwrap_or(Vec::new(&env));
             public_ids.push_back(id);
             env.storage()
-                .instance()
+                .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
         }
         // Emit quest creation event
@@ -162,7 +204,12 @@ impl QuestContract {
         // Event data: (quest_id, owner, category)
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("new")),
-            (id, quest.owner, quest.category),
+            (id, quest.owner.clone(), quest.category),
+        );
+        // Canonical event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "quest_created"),),
+            (id, quest.owner.clone(), quest.name.clone()),
         );
 
         Self::bump(&env, id);
@@ -297,6 +344,11 @@ impl QuestContract {
             (symbol_short!("quest"), symbol_short!("add_enr")),
             (quest_id, &enrollee),
         );
+        // Canonical enrollment event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_added"),),
+            (quest_id, enrollee.clone()),
+        );
 
         Self::bump(&env, quest_id);
         Ok(())
@@ -335,6 +387,11 @@ impl QuestContract {
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("join")),
             (quest_id, &enrollee),
+        );
+        // Canonical enrollment event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_added"),),
+            (quest_id, enrollee.clone()),
         );
 
         Self::bump(&env, quest_id);
@@ -447,7 +504,7 @@ impl QuestContract {
     pub fn list_public_quests(env: Env, start: u32, limit: u32) -> Vec<QuestInfo> {
         let public_ids: Vec<u32> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PublicQuests)
             .unwrap_or(Vec::new(&env));
         let mut public_quests = Vec::new(&env);
@@ -464,7 +521,9 @@ impl QuestContract {
             }
         }
 
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        if env.storage().persistent().has(&DataKey::PublicQuests) {
+            common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        }
         public_quests
     }
 
@@ -472,7 +531,7 @@ impl QuestContract {
     pub fn get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo> {
         let public_ids: Vec<u32> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PublicQuests)
             .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
@@ -483,6 +542,43 @@ impl QuestContract {
                     if quest.category == category {
                         matches.push_back(quest);
                     }
+                }
+            }
+        }
+
+        if env.storage().persistent().has(&DataKey::PublicQuests) {
+            common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        }
+        matches
+    }
+
+    /// Get all quests owned by an address.
+    pub fn list_quests_by_owner(env: Env, owner: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                if quest.owner == owner {
+                    matches.push_back(quest);
+                }
+            }
+        }
+
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        matches
+    }
+
+    /// Get all quests an address is enrolled in.
+    pub fn list_quests_by_enrollee(env: Env, enrollee: Address) -> Vec<QuestInfo> {
+        let total = Self::get_quest_count(env.clone());
+        let mut matches = Vec::new(&env);
+
+        for id in 0..total {
+            if let Ok(quest) = Self::load_quest(&env, id) {
+                let enrollees = Self::load_enrollees(&env, id);
+                if enrollees.contains(&enrollee) {
+                    matches.push_back(quest);
                 }
             }
         }
@@ -522,7 +618,7 @@ impl QuestContract {
         if quest.visibility != visibility {
             let mut public_ids: Vec<u32> = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::PublicQuests)
                 .unwrap_or(Vec::new(env));
 
@@ -532,7 +628,7 @@ impl QuestContract {
                 public_ids.remove(index);
             }
             env.storage()
-                .instance()
+                .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
         }
         quest.visibility = visibility;

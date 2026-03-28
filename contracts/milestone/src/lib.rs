@@ -1,9 +1,9 @@
 #![no_std]
 #![allow(deprecated)]
-use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
-    Env, String, Vec,
+    Env, String, Symbol, Vec,
 };
 
 // Quest contract error type (must match the quest contract)
@@ -347,6 +347,9 @@ impl MilestoneContract {
         if reward_amount <= 0 {
             return Err(Error::InvalidAmount);
         }
+        if reward_amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
         Ok(())
     }
 
@@ -541,6 +544,11 @@ impl MilestoneContract {
         env.events().publish(
             (symbol_short!("milestone"), symbol_short!("done")),
             (milestone_id, quest_id, enrollee.clone(), reward),
+        );
+        // Canonical completion event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "milestone_completed"),),
+            (quest_id, milestone_id, enrollee.clone()),
         );
 
         // Check if this completes the quest and mint certificate if so
@@ -771,6 +779,18 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .get(&ms_key)
+            .ok_or(Error::NotFound)
+    }
+
+    /// Get the configured reward amount for a milestone.
+    /// Returns the reward_amount stored at milestone creation.
+    /// Used by the rewards contract to validate distribute_reward amounts.
+    pub fn get_milestone_reward(env: Env, quest_id: u32, milestone_id: u32) -> Result<i128, Error> {
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
+        env.storage()
+            .persistent()
+            .get::<DataKey, MilestoneInfo>(&ms_key)
+            .map(|m| m.reward_amount)
             .ok_or(Error::NotFound)
     }
 

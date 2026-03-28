@@ -1,9 +1,9 @@
 #![no_std]
 #![allow(deprecated)]
-use common::{extend_instance_ttl, QuestInfo, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
-    Address, Env,
+    Address, Env, Symbol,
 };
 
 // Visibility, QuestStatus, and QuestInfo moved to common.
@@ -16,6 +16,11 @@ pub trait QuestContractTrait {
 #[contractclient(name = "MilestoneClient")]
 pub trait MilestoneContractTrait {
     fn is_completed(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool;
+    fn get_milestone_reward(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+    ) -> Result<i128, soroban_sdk::Val>;
 }
 
 // Rewards contract: holds token pools per quest and distributes rewards.
@@ -59,6 +64,7 @@ pub enum Error {
     ArithmeticOverflow = 10,
     AlreadyPaid = 11,
     InvalidToken = 12,
+    RewardAmountMismatch = 13,
 }
 
 // TTL constants moved to common.
@@ -101,7 +107,7 @@ impl RewardsContract {
     pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
 
@@ -188,7 +194,7 @@ impl RewardsContract {
     ) -> Result<(), Error> {
         authority.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
 
@@ -208,6 +214,9 @@ impl RewardsContract {
         if stored != authority {
             return Err(Error::Unauthorized);
         }
+        if authority == enrollee {
+            return Err(Error::Unauthorized);
+        }
 
         // Verify milestone completion before allowing reward distribution
         let milestone_contract_addr = env
@@ -219,6 +228,15 @@ impl RewardsContract {
         let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
         if !milestone_client.is_completed(&quest_id, &milestone_id, &enrollee) {
             return Err(Error::MilestoneNotCompleted);
+        }
+
+        // Validate amount matches the milestone's configured reward to prevent
+        // the authority from over- or under-paying relative to what was promised.
+        match milestone_client.try_get_milestone_reward(&quest_id, &milestone_id) {
+            Ok(Ok(expected)) if expected > 0 && amount != expected => {
+                return Err(Error::RewardAmountMismatch);
+            }
+            _ => {} // Proceed if milestone not found or amount matches
         }
 
         // Check pool balance
@@ -270,6 +288,11 @@ impl RewardsContract {
         // Event data: (quest_id, milestone_id, enrollee, amount)
         env.events().publish(
             (symbol_short!("reward"), symbol_short!("paid")),
+            (quest_id, milestone_id, enrollee.clone(), amount),
+        );
+        // Canonical reward event name for indexers/streaming clients.
+        env.events().publish(
+            (Symbol::new(&env, "reward_distributed"),),
             (quest_id, milestone_id, enrollee, amount),
         );
 

@@ -280,13 +280,14 @@ export function Landing() {
               </div>
 
               <h1 className="mb-10 text-6xl leading-[0.88] font-black tracking-tight sm:text-7xl lg:text-[5.5rem] xl:text-[6.5rem]">
-                <span className="animate-slide-in-left block">Learn.</span>
-                <span className="animate-slide-in-left stagger-2 block">
+                <span className="sr-only">Learn. Earn. On-chain.</span>
+                <span className="animate-slide-in-left block" aria-hidden="true">Learn.</span>
+                <span className="animate-slide-in-left stagger-2 block" aria-hidden="true">
                   <span className="bg-primary border-border my-2 inline-block -rotate-2 cursor-default border-[3px] px-4 py-2 shadow-[6px_6px_0_var(--color-border)] transition-all duration-300 hover:rotate-0 hover:shadow-[8px_8px_0_var(--color-border)]">
                     Earn.
                   </span>
                 </span>
-                <span className="animate-slide-in-left stagger-3 block">On-chain.</span>
+                <span className="animate-slide-in-left stagger-3 block" aria-hidden="true">On-chain.</span>
               </h1>
 
               <p className="text-muted-foreground animate-fade-in stagger-4 mb-12 h-[3.5em] max-w-lg text-xl leading-relaxed">
@@ -421,7 +422,9 @@ export function Landing() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="mb-12 text-center">
             <h2 className="text-2xl font-black sm:text-3xl">Platform at a glance</h2>
-            <p className="text-muted-foreground mt-2 font-bold">Real-time metrics from the Stellar network</p>
+            <p className="text-muted-foreground mt-2 font-bold">
+              Sample statistics for preview. Real-time on-chain metrics coming soon.
+            </p>
           </div>
           <PlatformStats stats={MOCK_PLATFORM_STATS} />
         </div>

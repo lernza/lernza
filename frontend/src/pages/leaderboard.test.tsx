@@ -26,8 +26,8 @@ describe("Leaderboard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mockUseAsyncData.mockImplementation((_fetcher, options) => {
-      if (options?.enabled) {
+    mockUseAsyncData.mockImplementation((_fetcher, _options) => {
+      if (mockUseAsyncData.mock.calls.length === 1) {
         return {
           data: [
             {

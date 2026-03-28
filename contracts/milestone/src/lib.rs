@@ -23,6 +23,7 @@ pub enum QuestError {
 pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> QuestInfo;
     fn is_enrollee(env: Env, quest_id: u32, user: Address) -> bool;
+    fn get_enrollees(env: Env, quest_id: u32) -> Vec<Address>;
 }
 
 // Visibility, QuestStatus, and QuestInfo moved to common.
@@ -887,21 +888,32 @@ impl MilestoneContract {
             return 0;
         }
 
-        let total_milestones: u32 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
-            .unwrap_or(0);
+        let total_milestones = match Self::get_quest_milestone_count(env.clone(), quest_id) {
+            Ok(count) => count,
+            Err(_) => return 0,
+        };
 
         if total_milestones == 0 {
             return 0;
         }
 
-        let fully_completed = 0u32;
-        for _ in 0..total_milestones {
-            // Count enrollees who completed this milestone
-            // This is a simplified approach - in production we'd need to iterate over enrollees
-            // For now, return a placeholder based on available data
+        // Get quest contract address
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .expect("Quest contract NOT INITIALIZED");
+
+        // Cross-contract call to get enrollees
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let enrollees = quest_client.get_enrollees(&quest_id);
+
+        let mut fully_completed = 0u32;
+        for enrollee in enrollees.iter() {
+            let completions = Self::get_enrollee_completions(env.clone(), quest_id, enrollee);
+            if completions >= total_milestones {
+                fully_completed += 1;
+            }
         }
 
         // Return percentage (0-100)

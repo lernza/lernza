@@ -8,7 +8,7 @@ function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem("lernza-theme")
     if (stored === "dark" || stored === "light") return stored
-  } catch (e) {
+  } catch {
     // Ignore localStorage errors
   }
 

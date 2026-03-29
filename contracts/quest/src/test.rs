@@ -983,6 +983,42 @@ fn test_verified_creator_quest() {
 }
 
 #[test]
+fn test_pause_blocks_state_changes_until_unpaused() {
+    let (env, client, owner, token) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    assert!(!client.is_paused());
+    client.pause(&admin);
+    assert!(client.is_paused());
+
+    let create_result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Paused Quest"),
+        &String::from_str(&env, "Should fail while paused"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+    );
+    assert_eq!(create_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&admin);
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    client.pause(&admin);
+
+    let enrollee = Address::generate(&env);
+    let add_result = client.try_add_enrollee(&quest_id, &enrollee);
+    assert_eq!(add_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&admin);
+    assert!(!client.is_paused());
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
 fn test_pre_existing_enrollees_retained_after_archive() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);

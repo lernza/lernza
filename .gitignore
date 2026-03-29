@@ -28,4 +28,5 @@ issue.md
 frontend/src/lib/contracts/generated/
 
 
-contracts/quest/test_snapshots/test/*frontend/.vercel
+contracts/quest/test_snapshots/test/*
+frontend/.vercel

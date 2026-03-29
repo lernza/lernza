@@ -27,6 +27,7 @@ pub enum DataKey {
     EnrollmentCap(u32),
     PublicQuests,
     Admin,
+    Paused,
     VerifiedCreator(Address),
 }
 
@@ -46,6 +47,7 @@ pub enum Error {
     NameTooLong = 9,
     DescriptionTooLong = 10,
     InviteOnly = 11,
+    Paused = 12,
 }
 
 // TTL constants and address validation moved to common.
@@ -107,35 +109,58 @@ impl QuestContract {
             return Err(Error::Unauthorized);
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Paused, &false);
         extend_instance_ttl(&env);
         Ok(())
     }
 
     /// Verify a creator address. Admin only.
     pub fn verify_creator(env: Env, admin: Address, creator: Address) -> Result<(), Error> {
-        admin.require_auth();
-        let stored_admin: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .ok_or(Error::Unauthorized)?;
-
-        if admin != stored_admin {
-            return Err(Error::Unauthorized);
-        }
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
 
         env.storage()
             .persistent()
-            .set(&DataKey::VerifiedCreator(creator), &true);
+            .set(&DataKey::VerifiedCreator(creator.clone()), &true);
+        common::extend_persistent_ttl(&env, &DataKey::VerifiedCreator(creator));
         Ok(())
     }
 
     /// Check if a creator is verified.
     pub fn is_creator_verified(env: Env, creator: Address) -> bool {
-        env.storage()
-            .persistent()
-            .get(&DataKey::VerifiedCreator(creator))
-            .unwrap_or(false)
+        let key = DataKey::VerifiedCreator(creator);
+        let is_verified = env.storage().persistent().get(&key).unwrap_or(false);
+        if is_verified {
+            common::extend_persistent_ttl(&env, &key);
+        }
+        is_verified
+    }
+
+    /// Pause state-mutating operations. Admin only.
+    pub fn pause(env: Env, admin: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Resume state-mutating operations. Admin only.
+    pub fn unpause(env: Env, admin: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Paused, &false);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Returns true when the contract is paused.
+    pub fn is_paused(env: Env) -> bool {
+        let paused = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        extend_instance_ttl(&env);
+        paused
     }
 
     /// Create a new quest. Returns the quest ID.
@@ -152,6 +177,7 @@ impl QuestContract {
         max_enrollees: Option<u32>,
     ) -> Result<u32, Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
 
         // Input validation — happens before any storage reads
         validate_name(&name)?;
@@ -231,6 +257,7 @@ impl QuestContract {
         max_enrollees: Option<u32>,
     ) -> Result<(), Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
         let mut quest = Self::load_quest(&env, quest_id)?;
 
         if quest.owner != owner {
@@ -288,6 +315,7 @@ impl QuestContract {
 
     /// Archive a quest. Owner only. Archived quests do not accept new enrollments.
     pub fn archive_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
@@ -312,6 +340,7 @@ impl QuestContract {
 
     /// Add an enrollee to a quest. Owner only.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
@@ -359,6 +388,7 @@ impl QuestContract {
     /// Allow a learner to enroll themselves in a public quest.
     pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
+        Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
         if quest.status == QuestStatus::Archived {
@@ -402,6 +432,7 @@ impl QuestContract {
 
     /// Remove an enrollee from a quest. Owner only.
     pub fn remove_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
@@ -422,6 +453,7 @@ impl QuestContract {
     /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
     pub fn leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
+        Self::require_not_paused(&env)?;
         Self::load_quest(&env, quest_id)?;
         Self::internal_remove_enrollee(&env, quest_id, enrollee)
     }
@@ -461,6 +493,7 @@ impl QuestContract {
     /// Update or clear the deadline for a quest. Owner only.
     /// Pass 0 to remove the deadline.
     pub fn set_deadline(env: Env, quest_id: u32, deadline: u64) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
         quest.deadline = deadline;
@@ -490,6 +523,7 @@ impl QuestContract {
     /// This only controls whether the quest appears in public discovery lists.
     /// It does not provide on-chain confidentiality.
     pub fn set_visibility(env: Env, quest_id: u32, visibility: Visibility) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
@@ -602,6 +636,34 @@ impl QuestContract {
             .persistent()
             .get(&DataKey::Quest(id))
             .ok_or(Error::NotFound)
+    }
+
+    fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if *admin != stored_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        Ok(())
+    }
+
+    fn require_not_paused(env: &Env) -> Result<(), Error> {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            Err(Error::Paused)
+        } else {
+            Ok(())
+        }
     }
 
     fn load_enrollees(env: &Env, id: u32) -> Vec<Address> {

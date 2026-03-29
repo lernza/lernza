@@ -99,6 +99,22 @@ interface QuestPendingTransactionMeta {
 const EMPTY_MILESTONES: MilestoneInfo[] = []
 const EMPTY_ENROLLEES: string[] = []
 const EMPTY_COMPLETIONS: CompletionRecord[] = []
+const MAX_IMPORT_FILE_SIZE_BYTES = 1024 * 1024
+
+const questImportSchema = z.object({
+  name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
+  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
+  milestones: z
+    .array(
+      z.object({
+        title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
+        description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
+        rewardAmount: z.number().positive("Must be greater than 0"),
+        requiresPrevious: z.boolean().default(false),
+      })
+    )
+    .min(1, "At least one milestone is required"),
+})
 
 const QUEST_ERROR_MESSAGES: Record<number, string> = {
   4: "You are already enrolled in this quest.",
@@ -183,6 +199,7 @@ export function QuestView() {
 
   // Import quest state
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [isImportingFile, setIsImportingFile] = useState(false)
   const [importedData, setImportedData] = useState<{
     name: string
     description: string
@@ -942,31 +959,17 @@ export function QuestView() {
         return
       }
 
+      if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+        addToast("Quest JSON files must be 1 MB or smaller.", "error")
+        event.target.value = ""
+        return
+      }
+
       try {
+        setIsImportingFile(true)
         const text = await file.text()
         const data = JSON.parse(text)
-        const importSchema = z.object({
-          name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
-          description: z
-            .string()
-            .min(1, "Description is required")
-            .max(2000, "Max 2000 characters"),
-          milestones: z
-            .array(
-              z.object({
-                title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-                description: z
-                  .string()
-                  .min(1, "Description is required")
-                  .max(500, "Max 500 characters"),
-                rewardAmount: z.number().positive("Must be greater than 0"),
-                requiresPrevious: z.boolean().default(false),
-              })
-            )
-            .min(1, "At least one milestone is required"),
-        })
-
-        setImportedData(importSchema.parse(data))
+        setImportedData(questImportSchema.parse(data))
         setShowImportDialog(true)
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
@@ -979,6 +982,7 @@ export function QuestView() {
           addToast(`Failed to import quest: ${message}`, "error")
         }
       } finally {
+        setIsImportingFile(false)
         event.target.value = ""
       }
     },
@@ -1132,16 +1136,27 @@ export function QuestView() {
                     variant="outline"
                     size="sm"
                     className="shimmer-on-hover"
+                    disabled={isImportingFile}
                     onClick={() => document.getElementById("quest-import-file-input")?.click()}
                   >
-                    <Upload className="h-4 w-4" />
-                    Import Template
+                    {isImportingFile ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        Import Template
+                      </>
+                    )}
                   </Button>
                   <input
                     id="quest-import-file-input"
                     type="file"
                     accept="application/json"
                     className="hidden"
+                    disabled={isImportingFile}
                     onChange={event => void handleImportFile(event)}
                   />
                   <Button

@@ -138,6 +138,12 @@ impl RewardsContract {
 
         let token_addr = Self::get_token(&env)?;
 
+        // Verify the quest's configured token matches the rewards contract's token.
+        // Prevents a mismatch where a quest advertises token A but rewards are paid in token B.
+        if quest_info.token_addr != token_addr {
+            return Err(Error::InvalidToken);
+        }
+
         // Validate that token_addr points to a live SAC contract.
         // A non-contract address or an address without a token interface
         // will cause try_symbol() to fail, rejecting the funding early.

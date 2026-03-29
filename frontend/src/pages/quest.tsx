@@ -193,7 +193,11 @@ export function QuestView() {
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
-    type: "add_enrollee" | "create_milestone" | "verify_payout"
+    type:
+      | "add_enrollee"
+      | "create_milestone"
+      | "verify_payout"
+      | "archive_quest"
     details: TransactionDetails
     execute: () => Promise<void>
   } | null>(null)
@@ -838,21 +842,34 @@ export function QuestView() {
       return
     }
 
-    try {
-      await archiveQuestTx.run(async () => {
-        const result = await questClient.archiveQuest(address, questId)
-        if (result.status !== "SUCCESS") {
-          throw new Error(result.error ?? "Could not archive quest.")
-        }
-        return result
-      })
+    setPendingTransaction({
+      type: "archive_quest",
+      details: {
+        actionName: "Archive Quest",
+        fromAddress: address,
+        estimatedFee: "0.001",
+        description:
+          "Archiving a quest is irreversible. It will disable new enrollments and milestone creation forever. Existing progress and historical data will remain visible.",
+      },
+      execute: async () => {
+        try {
+          await archiveQuestTx.run(async () => {
+            const result = await questClient.archiveQuest(address, questId)
+            if (result.status !== "SUCCESS") {
+              throw new Error(result.error ?? "Could not archive quest.")
+            }
+            return result
+          })
 
-      await refetch()
-      addToast("Quest archived. Historical data remains visible.", "success")
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not archive quest."
-      addToast(message, "error")
-    }
+          await refetch()
+          addToast("Quest archived. Historical data remains visible.", "success")
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Could not archive quest."
+          addToast(message, "error")
+        }
+      },
+    })
+    setShowConfirmDialog(true)
   }, [address, addToast, archiveQuestTx, isArchived, questId, refetch])
 
   const handleRemoveEnrollee = useCallback(
@@ -2056,7 +2073,10 @@ export function QuestView() {
           setPendingTransaction(null)
         }}
         isPending={
-          addEnrolleeTx.isPending || createMilestoneTx.isPending || verifyPayoutTx.isPending
+          addEnrolleeTx.isPending ||
+          createMilestoneTx.isPending ||
+          verifyPayoutTx.isPending ||
+          archiveQuestTx.isPending
         }
       />
 

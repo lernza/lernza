@@ -27,14 +27,21 @@ export function useUserRole(): UserRoleData {
     })
 
     useEffect(() => {
-        if (!connected || !address) {
-            return
-        }
-
         let isMounted = true
 
         const determineRole = async () => {
             if (!isMounted) return
+
+            if (!connected || !address) {
+                setRoleData({
+                    role: "unknown",
+                    isOwner: false,
+                    isEnrolled: false,
+                    isLoading: false,
+                    error: null,
+                })
+                return
+            }
 
             setRoleData(prev => ({ ...prev, isLoading: true, error: null }))
 

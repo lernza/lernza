@@ -124,6 +124,38 @@ WEBHOOK_SECRET=your-webhook-secret     # The secret you generated
 
 ## Step 3: Project Constants
 
+### Maintenance: How to retrieve IDs
+
+If the project board is recreated or fields are modified, you must update the IDs in `src/constants.ts`. Use the GitHub CLI to fetch the current values:
+
+```bash
+# 1. Find the Project ID
+gh api graphql -f query='
+  query($org: String!) {
+    organization(login: $org) {
+      projectV2(number: 1) { id }
+    }
+  }' -f org=lernza
+
+# 2. Find the Status Field ID and Option IDs
+gh api graphql -f query='
+  query($project: ID!) {
+    node(id: $project) {
+      ... on ProjectV2 {
+        fields(first: 20) {
+          nodes {
+            ... on ProjectV2SingleSelectField {
+              id
+              name
+              options { id name }
+            }
+          }
+        }
+      }
+    }
+  }' -f project=YOUR_PROJECT_ID
+```
+
 ### `src/constants.ts`
 
 ```typescript
@@ -164,6 +196,47 @@ export const STATUS_ORDER: Record<string, number> = {
 import { createAppAuth } from "@octokit/auth-app";
 import { graphql } from "@octokit/graphql";
 import { PROJECT, STATUS_ORDER } from "./constants";
+
+// ─── Validation ────────────────────────────────────────────────
+
+/**
+ * Validates that the configured Project, Field, and Status IDs exist and match.
+ * Fails loudly if the board configuration has drifted.
+ */
+export async function validateProjectConfig(gql: typeof graphql) {
+  try {
+    const result = await gql<any>(`
+      query($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            field(name: "Status") {
+              ... on ProjectV2SingleSelectField {
+                id
+                options { id name }
+              }
+            }
+          }
+        }
+      }
+    `, { projectId: PROJECT.id });
+
+    const statusField = result.node?.field;
+    if (!statusField || statusField.id !== PROJECT.field.statusId) {
+      throw new Error(`Project status field ID mismatch. Expected ${PROJECT.field.statusId}, got ${statusField?.id}`);
+    }
+
+    // Cross-reference options
+    const remoteOptions = new Set(statusField.options.map((o: any) => o.id));
+    for (const [key, id] of Object.entries(PROJECT.status)) {
+      if (!remoteOptions.has(id)) {
+        throw new Error(`Project status option ID for "${key}" not found on GitHub: ${id}`);
+      }
+    }
+  } catch (err: any) {
+    console.error("FATAL: Project Automation Configuration Validation Failed");
+    throw err;
+  }
+}
 
 // Create authenticated GraphQL client for a specific installation
 export async function createClient(installationId: number) {

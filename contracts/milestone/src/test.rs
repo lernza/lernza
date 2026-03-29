@@ -100,6 +100,41 @@ fn test_create_multiple_milestones() {
 }
 
 #[test]
+fn test_pause_blocks_milestone_writes_until_unpaused() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    assert!(!client.is_paused());
+    client.pause(&owner);
+    assert!(client.is_paused());
+
+    let create_result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Paused"),
+        &String::from_str(&env, "Should fail while paused"),
+        &100,
+        &false,
+    );
+    assert_eq!(create_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    let milestone_id = create_ms(&env, &client, &owner, q_id, "Task 1", 50);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.pause(&owner);
+    let verify_result = client.try_verify_completion(&owner, &q_id, &milestone_id, &enrollee);
+    assert_eq!(verify_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    assert_eq!(
+        client.verify_completion(&owner, &q_id, &milestone_id, &enrollee),
+        50
+    );
+}
+
+#[test]
 fn test_milestones_per_quest_are_independent() {
     let (env, client, quest_client, owner) = setup();
     let q0 = create_quest(&env, &quest_client, &owner);
@@ -1351,4 +1386,57 @@ fn test_milestone_cap_per_quest_independent() {
     );
     assert_eq!(id, 0);
     assert_eq!(client.get_milestone_count(&q2), 1);
+}
+
+#[test]
+fn test_get_quest_completion_rate() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Create 2 milestones
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+    create_ms(&env, &client, &owner, q_id, "M2", 100);
+
+    // Enroll 4 users
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    let e4 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+    quest_client.add_enrollee(&q_id, &e2);
+    quest_client.add_enrollee(&q_id, &e3);
+    quest_client.add_enrollee(&q_id, &e4);
+
+    // Initial rate should be 0
+    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 0);
+
+    // e1 completes both (100%)
+    client.verify_completion(&owner, &q_id, &0, &e1);
+    client.verify_completion(&owner, &q_id, &1, &e1);
+
+    // e2 completes only one (50% progress, but quest completion is 0 since only e1 finished all)
+    client.verify_completion(&owner, &q_id, &0, &e2);
+
+    // Current rate: 1/4 = 25%
+    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 25);
+
+    // e3 completes both
+    client.verify_completion(&owner, &q_id, &0, &e3);
+    client.verify_completion(&owner, &q_id, &1, &e3);
+
+    // Current rate: 2/4 = 50%
+    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 50);
+
+    // e4 completes both
+    client.verify_completion(&owner, &q_id, &0, &e4);
+    client.verify_completion(&owner, &q_id, &1, &e4);
+
+    // Current rate: 3/4 = 75%
+    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 75);
+
+    // e2 completes the second one
+    client.verify_completion(&owner, &q_id, &1, &e2);
+
+    // Current rate: 4/4 = 100%
+    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 100);
 }

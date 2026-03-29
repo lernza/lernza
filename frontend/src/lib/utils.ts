@@ -10,18 +10,17 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 export function formatTokens(amount: number | bigint, decimals = 7, symbol = "TOKEN"): string {
-  void decimals
-  const num = Number(amount)
+  const adjusted = Number(amount) / Math.pow(10, decimals)
 
-  if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1)}M ${symbol}`
+  if (adjusted >= 1_000_000) {
+    return `${(adjusted / 1_000_000).toFixed(1)}M ${symbol}`
   }
 
-  if (num >= 1_000) {
-    return `${(num / 1_000).toFixed(1)}K ${symbol}`
+  if (adjusted >= 1_000) {
+    return `${(adjusted / 1_000).toFixed(1)}K ${symbol}`
   }
 
-  return `${num.toLocaleString()} ${symbol}`
+  return `${adjusted.toLocaleString(undefined, { maximumFractionDigits: decimals })} ${symbol}`
 }
 
 export function getSecondsRemaining(deadline: number, nowMs = Date.now()): number {

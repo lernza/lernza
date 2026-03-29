@@ -15,6 +15,7 @@ import {
   type TransactionLifecycleHandlers,
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
+import { safeContractCall } from "../error-utils"
 
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
 
@@ -27,7 +28,9 @@ export class RewardsClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
       }
     } else {
       this.contract = null
@@ -62,8 +65,10 @@ export class RewardsClient {
   // --- Write Operations ---
 
   async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {
-    const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
-    return signAndSubmit(tx, handlers)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   async fundQuest(
@@ -72,12 +77,14 @@ export class RewardsClient {
     amount: bigint,
     handlers?: TransactionLifecycleHandlers
   ) {
-    const tx = await this.buildTx(funder, "fund_quest", [
-      new Address(funder).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(amount, { type: "i128" }),
-    ])
-    return signAndSubmit(tx, handlers)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(funder, "fund_quest", [
+        new Address(funder).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   async distributeReward(
@@ -88,14 +95,32 @@ export class RewardsClient {
     amount: bigint,
     handlers?: TransactionLifecycleHandlers
   ) {
-    const tx = await this.buildTx(authority, "distribute_reward", [
-      new Address(authority).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(milestoneId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-      nativeToScVal(amount, { type: "i128" }),
-    ])
-    return signAndSubmit(tx, handlers)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(authority, "distribute_reward", [
+        new Address(authority).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(milestoneId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
+  }
+
+  async refundPool(
+    authority: string,
+    questId: number,
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(authority, "refund_pool", [
+        new Address(authority).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   // --- Private Helpers ---
@@ -119,7 +144,9 @@ export class RewardsClient {
         return scValToNative(response.result.retval)
       }
     } catch (e) {
-      console.error(`Read error ${method}:`, e)
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
     }
     return null
   }

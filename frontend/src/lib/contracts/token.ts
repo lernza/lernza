@@ -10,14 +10,18 @@ export interface TokenMetadata {
 export class TokenClient {
   private contract: Contract | null
   private cache: Map<string, TokenMetadata> = new Map()
+  private tokenAddress: string = ""
 
   constructor(tokenAddress: string) {
+    this.tokenAddress = tokenAddress
     if (tokenAddress) {
       try {
         this.contract = new Contract(tokenAddress)
       } catch {
         this.contract = null
-        console.error(`[TokenClient] Invalid token address: "${tokenAddress}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[TokenClient] Invalid token address: "${tokenAddress}"`)
+        }
       }
     } else {
       this.contract = null
@@ -104,7 +108,9 @@ export class TokenClient {
 
       return metadata
     } catch (error) {
-      console.error("Failed to fetch token metadata:", error)
+      if (import.meta.env.DEV) {
+        console.error("Failed to fetch token metadata:", error)
+      }
       // Return fallback metadata
       return {
         symbol: "TOKEN",
@@ -119,6 +125,7 @@ export class TokenClient {
    */
   private getContractAddress(): string {
     return (
+      this.tokenAddress ||
       import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
       import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
       ""

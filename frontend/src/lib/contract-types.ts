@@ -55,6 +55,7 @@ export interface QuestInfo {
   status: QuestStatus // QuestStatus enum
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
+  verified: boolean // bool
 }
 
 // ─── Rewards Contract Types ──────────────────────────────────────────────────
@@ -76,6 +77,8 @@ export const RewardsError = {
   ArithmeticOverflow: 10,
   AlreadyPaid: 11,
   InvalidToken: 12,
+  RewardAmountMismatch: 13,
+  QuestNotArchived: 14,
 } as const
 export type RewardsError = (typeof RewardsError)[keyof typeof RewardsError]
 

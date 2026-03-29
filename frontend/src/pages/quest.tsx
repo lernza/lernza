@@ -22,6 +22,7 @@ import {
   Download,
   Upload,
   Clock,
+  Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -99,6 +100,22 @@ interface QuestPendingTransactionMeta {
 const EMPTY_MILESTONES: MilestoneInfo[] = []
 const EMPTY_ENROLLEES: string[] = []
 const EMPTY_COMPLETIONS: CompletionRecord[] = []
+const MAX_IMPORT_FILE_SIZE_BYTES = 1024 * 1024
+//
+const questImportSchema = z.object({
+  name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
+  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
+  milestones: z
+    .array(
+      z.object({
+        title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
+        description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
+        rewardAmount: z.number().positive("Must be greater than 0"),
+        requiresPrevious: z.boolean().default(false),
+      })
+    )
+    .min(1, "At least one milestone is required"),
+})
 
 const QUEST_ERROR_MESSAGES: Record<number, string> = {
   4: "You are already enrolled in this quest.",
@@ -176,13 +193,19 @@ export function QuestView() {
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
-    type: "add_enrollee" | "create_milestone" | "verify_payout"
+    type: 
+      | "create_milestone" 
+      | "verify_payout" 
+      | "archive_quest" 
+      | "remove_enrollee" 
+      | "leave_quest"
     details: TransactionDetails
     execute: () => Promise<void>
   } | null>(null)
 
   // Import quest state
   const [showImportDialog, setShowImportDialog] = useState(false)
+  const [isImportingFile, setIsImportingFile] = useState(false)
   const [importedData, setImportedData] = useState<{
     name: string
     description: string
@@ -622,7 +645,7 @@ export function QuestView() {
 
     try {
       await enrollTx.run(async ({ onSubmitted }) => {
-        const result = await questClient.addEnrollee(questId, address, {
+        const result = await questClient.joinQuest(address, questId, {
           onSubmitted: txHash => {
             transactionQueue.update(queuedTransactionId, {
               phase: "confirming",
@@ -803,21 +826,34 @@ export function QuestView() {
       return
     }
 
-    try {
-      await archiveQuestTx.run(async () => {
-        const result = await questClient.archiveQuest(address, questId)
-        if (result.status !== "SUCCESS") {
-          throw new Error(result.error ?? "Could not archive quest.")
-        }
-        return result
-      })
+    setPendingTransaction({
+      type: "archive_quest",
+      details: {
+        actionName: "Archive Quest",
+        fromAddress: address,
+        estimatedFee: "0.001",
+        description:
+          "Archiving a quest is irreversible. It will disable new enrollments and milestone creation forever. Existing progress and historical data will remain visible.",
+      },
+      execute: async () => {
+        try {
+          await archiveQuestTx.run(async () => {
+            const result = await questClient.archiveQuest(address, questId)
+            if (result.status !== "SUCCESS") {
+              throw new Error(result.error ?? "Could not archive quest.")
+            }
+            return result
+          })
 
-      await refetch()
-      addToast("Quest archived. Historical data remains visible.", "success")
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not archive quest."
-      addToast(message, "error")
-    }
+          await refetch()
+          addToast("Quest archived. Historical data remains visible.", "success")
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Could not archive quest."
+          addToast(message, "error")
+        }
+      },
+    })
+    setShowConfirmDialog(true)
   }, [address, addToast, archiveQuestTx, isArchived, questId, refetch])
 
   const handleRemoveEnrollee = useCallback(
@@ -827,21 +863,34 @@ export function QuestView() {
         return
       }
 
-      try {
-        await removeEnrolleeTx.run(async () => {
-          const result = await questClient.removeEnrollee(address, questId, enrollee)
-          if (result.status !== "SUCCESS") {
-            throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
-          }
-          return result
-        })
+      setPendingTransaction({
+        type: "remove_enrollee",
+        details: {
+          actionName: "Remove Enrollee",
+          fromAddress: address,
+          toAddress: enrollee,
+          estimatedFee: "0.001",
+          description: `Remove learner ${truncateAddress(enrollee)} from this quest. They will lose access to progress tracking until re-enrolled.`,
+        },
+        execute: async () => {
+          try {
+            await removeEnrolleeTx.run(async () => {
+              const result = await questClient.removeEnrollee(address, questId, enrollee)
+              if (result.status !== "SUCCESS") {
+                throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
+              }
+              return result
+            })
 
-        await refetch()
-        addToast("Enrollee removed successfully.", "success")
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Could not remove enrollee."
-        addToast(message, "error")
-      }
+            await refetch()
+            addToast("Enrollee removed successfully.", "success")
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Could not remove enrollee."
+            addToast(message, "error")
+          }
+        },
+      })
+      setShowConfirmDialog(true)
     },
     [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
   )
@@ -862,21 +911,33 @@ export function QuestView() {
       return
     }
 
-    try {
-      await leaveQuestTx.run(async () => {
-        const result = await questClient.leaveQuest(address, questId)
-        if (result.status !== "SUCCESS") {
-          throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
-        }
-        return result
-      })
+    setPendingTransaction({
+      type: "leave_quest",
+      details: {
+        actionName: "Leave Quest",
+        fromAddress: address,
+        estimatedFee: "0.001",
+        description: "Are you sure you want to leave this quest? Your progress will be cleared from the active enrollee list.",
+      },
+      execute: async () => {
+        try {
+          await leaveQuestTx.run(async () => {
+            const result = await questClient.leaveQuest(address, questId)
+            if (result.status !== "SUCCESS") {
+              throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
+            }
+            return result
+          })
 
-      await refetch()
-      addToast("You left the quest successfully.", "success")
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not leave quest."
-      addToast(message, "error")
-    }
+          await refetch()
+          addToast("You left the quest successfully.", "success")
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Could not leave quest."
+          addToast(message, "error")
+        }
+      },
+    })
+    setShowConfirmDialog(true)
   }, [
     address,
     addToast,
@@ -918,6 +979,31 @@ export function QuestView() {
     addToast("Quest exported successfully!", "success")
   }, [addToast, milestones, quest])
 
+  const handleDuplicateQuest = useCallback(() => {
+    if (!quest) {
+      return
+    }
+
+    const PREFIX = "Copy of "
+    const MAX_NAME = 64
+    const rawName = `${PREFIX}${quest.name}`
+    const clonedName = rawName.length > MAX_NAME ? rawName.slice(0, MAX_NAME) : rawName
+
+    const duplicateData = {
+      name: clonedName,
+      description: quest.description,
+      milestones: milestones.map(milestone => ({
+        title: milestone.title,
+        description: milestone.description,
+        rewardAmount: toSafeNumber(milestone.rewardAmount),
+        requiresPrevious: milestone.requiresPrevious,
+      })),
+    }
+
+    localStorage.setItem("lernza:imported-quest", JSON.stringify(duplicateData))
+    navigate("/quest/create")
+  }, [milestones, navigate, quest])
+
   const handleImportFile = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0]
@@ -925,31 +1011,17 @@ export function QuestView() {
         return
       }
 
+      if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+        addToast("Quest JSON files must be 1 MB or smaller.", "error")
+        event.target.value = ""
+        return
+      }
+
       try {
+        setIsImportingFile(true)
         const text = await file.text()
         const data = JSON.parse(text)
-        const importSchema = z.object({
-          name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
-          description: z
-            .string()
-            .min(1, "Description is required")
-            .max(2000, "Max 2000 characters"),
-          milestones: z
-            .array(
-              z.object({
-                title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-                description: z
-                  .string()
-                  .min(1, "Description is required")
-                  .max(500, "Max 500 characters"),
-                rewardAmount: z.number().positive("Must be greater than 0"),
-                requiresPrevious: z.boolean().default(false),
-              })
-            )
-            .min(1, "At least one milestone is required"),
-        })
-
-        setImportedData(importSchema.parse(data))
+        setImportedData(questImportSchema.parse(data))
         setShowImportDialog(true)
       } catch (err: unknown) {
         if (err instanceof z.ZodError) {
@@ -962,6 +1034,7 @@ export function QuestView() {
           addToast(`Failed to import quest: ${message}`, "error")
         }
       } finally {
+        setIsImportingFile(false)
         event.target.value = ""
       }
     },
@@ -974,7 +1047,7 @@ export function QuestView() {
     }
 
     localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
-    navigate("/create-quest")
+    navigate("/quest/create")
     setShowImportDialog(false)
     setImportedData(null)
     addToast("Quest data loaded. Complete the creation process.", "success")
@@ -1048,7 +1121,7 @@ export function QuestView() {
         onClick={() => navigate("/dashboard")}
         className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
-        <div className="border-border bg-background neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-colors hover:shadow-[3px_3px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]">
+        <div className="border-border bg-background neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)] transition-colors hover:shadow-[3px_3px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]">
           <ArrowLeft className="h-3.5 w-3.5" />
         </div>
         Back to Dashboard
@@ -1099,7 +1172,7 @@ export function QuestView() {
                 )}
               </div>
             </div>
-            <div className="flex flex-shrink-0 flex-wrap gap-3">
+            <div className="flex shrink-0 flex-wrap gap-3">
               {isOwner ? (
                 <>
                   <Button
@@ -1115,16 +1188,36 @@ export function QuestView() {
                     variant="outline"
                     size="sm"
                     className="shimmer-on-hover"
+                    onClick={handleDuplicateQuest}
+                  >
+                    <Copy className="h-4 w-4" />
+                    Duplicate
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shimmer-on-hover"
+                    disabled={isImportingFile}
                     onClick={() => document.getElementById("quest-import-file-input")?.click()}
                   >
-                    <Upload className="h-4 w-4" />
-                    Import Template
+                    {isImportingFile ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Importing...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        Import Template
+                      </>
+                    )}
                   </Button>
                   <input
                     id="quest-import-file-input"
                     type="file"
                     accept="application/json"
                     className="hidden"
+                    disabled={isImportingFile}
                     onChange={event => void handleImportFile(event)}
                   />
                   <Button
@@ -1240,7 +1333,7 @@ export function QuestView() {
             {transactionQueue.transactions.map(transaction => (
               <div
                 key={transaction.id}
-                className="border-border bg-background flex items-center justify-between border-[2px] px-3 py-2 text-xs font-bold"
+                className="border-border bg-background flex items-center justify-between border-2 px-3 py-2 text-xs font-bold"
               >
                 <span>{transaction.label}</span>
                 <span>{getPendingLabel(transaction.phase)}</span>
@@ -1264,7 +1357,7 @@ export function QuestView() {
               type="button"
               onClick={closeAddEnrollee}
               disabled={addPhase === "submitting"}
-              className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-[2px] disabled:cursor-not-allowed disabled:opacity-50"
+              className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X className="h-3 w-3" />
             </button>
@@ -1280,7 +1373,7 @@ export function QuestView() {
                 placeholder="G..."
                 disabled={addPhase === "submitting" || addPhase === "done"}
                 className={cn(
-                  "border-border bg-background w-full border-[2px] px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
+                  "border-border bg-background w-full border-2 px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
                   enrolleeForm.formState.errors.address && "border-destructive"
                 )}
               />
@@ -1368,7 +1461,7 @@ export function QuestView() {
             <Card className="neo-lift hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
               <CardContent className="flex items-center gap-3 p-4">
                 <div
-                  className={`h-10 w-10 ${stat.bg} border-border flex flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]`}
+                  className={`h-10 w-10 ${stat.bg} border-border flex shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]`}
                 >
                   <stat.icon className="h-4 w-4" />
                 </div>
@@ -1410,7 +1503,7 @@ export function QuestView() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
+            className={`-mb-0.75 cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
               activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"
@@ -1453,7 +1546,7 @@ export function QuestView() {
                   placeholder="e.g. Complete Module 1"
                   maxLength={100}
                   className={cn(
-                    "border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    "border-border bg-background w-full border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
                     milestoneForm.formState.errors.title && "border-destructive"
                   )}
                   disabled={createMilestoneTx.isPending}
@@ -1471,7 +1564,7 @@ export function QuestView() {
                   rows={3}
                   maxLength={500}
                   className={cn(
-                    "border-border bg-background w-full resize-none border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    "border-border bg-background w-full resize-none border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
                     milestoneForm.formState.errors.description && "border-destructive"
                   )}
                   disabled={createMilestoneTx.isPending}
@@ -1490,7 +1583,7 @@ export function QuestView() {
                   step="1"
                   placeholder="100"
                   className={cn(
-                    "border-border bg-background w-full border-[2px] px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
+                    "border-border bg-background w-full border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
                     milestoneForm.formState.errors.rewardAmount && "border-destructive"
                   )}
                   disabled={createMilestoneTx.isPending}
@@ -1624,7 +1717,7 @@ export function QuestView() {
                       <CardContent className="p-5">
                         <div className="flex items-start gap-4">
                           <div
-                            className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
+                            className={`border-border mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
                               isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
                             }`}
                           >
@@ -1663,7 +1756,7 @@ export function QuestView() {
                                   {milestone.title}
                                 </h3>
                               </div>
-                              <div className="flex flex-shrink-0 items-center gap-2">
+                              <div className="flex shrink-0 items-center gap-2">
                                 <Badge variant={isCompleted ? "success" : "default"}>
                                   {formatTokens(toSafeNumber(milestone.rewardAmount))} USDC
                                 </Badge>
@@ -1800,7 +1893,7 @@ export function QuestView() {
                     placeholder="G..."
                     disabled={addPhase === "submitting"}
                     className={cn(
-                      "border-border bg-background w-full border-[2px] px-3 py-2 font-mono text-sm font-medium transition-shadow focus:shadow-[2px_2px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
+                      "border-border bg-background w-full border-2 px-3 py-2 font-mono text-sm font-medium transition-shadow focus:shadow-[2px_2px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
                       enrolleeForm.formState.errors.address && "border-destructive"
                     )}
                   />
@@ -1809,7 +1902,7 @@ export function QuestView() {
                 <Button
                   type="submit"
                   disabled={addEnrolleeTx.isPending || !isSupportedNetwork}
-                  className="shimmer-on-hover h-[42px]"
+                  className="shimmer-on-hover h-10.5"
                 >
                   {addEnrolleeTx.isPending ? (
                     <>
@@ -1893,7 +1986,7 @@ export function QuestView() {
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-[2px] font-mono text-sm font-black shadow-[2px_2px_0_var(--color-border)] transition-shadow group-hover:shadow-[3px_3px_0_var(--color-border)]">
+                          <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-2 font-mono text-sm font-black shadow-[2px_2px_0_var(--color-border)] transition-shadow group-hover:shadow-[3px_3px_0_var(--color-border)]">
                             {enrollee.slice(0, 2)}
                           </div>
                           <div>
@@ -1989,7 +2082,12 @@ export function QuestView() {
           setPendingTransaction(null)
         }}
         isPending={
-          addEnrolleeTx.isPending || createMilestoneTx.isPending || verifyPayoutTx.isPending
+          addEnrolleeTx.isPending ||
+          createMilestoneTx.isPending ||
+          verifyPayoutTx.isPending ||
+          archiveQuestTx.isPending ||
+          removeEnrolleeTx.isPending ||
+          leaveQuestTx.isPending
         }
       />
 
@@ -2016,7 +2114,7 @@ export function QuestView() {
                     setShowImportDialog(false)
                     setImportedData(null)
                   }}
-                  className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-[2px]"
+                  className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-2"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>

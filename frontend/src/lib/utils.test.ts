@@ -51,18 +51,18 @@ describe("shortenAddress", () => {
 describe("formatTokens", () => {
   it("returns raw localized string for values below 1 000", () => {
     expect(formatTokens(0)).toBe("0 TOKEN")
-    expect(formatTokens(999)).toBe("999 TOKEN")
+    expect(formatTokens(9_990_000_000)).toBe("999 TOKEN")
   })
 
   it("formats thousands with one decimal place", () => {
-    expect(formatTokens(1_000)).toBe("1.0K TOKEN")
-    expect(formatTokens(1_500)).toBe("1.5K TOKEN")
-    expect(formatTokens(999_999)).toBe("1000.0K TOKEN")
+    expect(formatTokens(10_000_000_000)).toBe("1.0K TOKEN")
+    expect(formatTokens(15_000_000_000)).toBe("1.5K TOKEN")
+    expect(formatTokens(9_999_990_000_000)).toBe("1000.0K TOKEN")
   })
 
   it("formats millions with one decimal place", () => {
-    expect(formatTokens(1_000_000)).toBe("1.0M TOKEN")
-    expect(formatTokens(2_500_000)).toBe("2.5M TOKEN")
+    expect(formatTokens(10_000_000_000_000)).toBe("1.0M TOKEN")
+    expect(formatTokens(25_000_000_000_000)).toBe("2.5M TOKEN")
   })
 })
 

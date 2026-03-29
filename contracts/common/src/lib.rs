@@ -43,6 +43,7 @@ pub struct QuestInfo {
     pub visibility: Visibility,
     pub status: QuestStatus,
     pub deadline: u64,
+    pub archived_at: u64,
     pub max_enrollees: Option<u32>,
     pub verified: bool,
 }

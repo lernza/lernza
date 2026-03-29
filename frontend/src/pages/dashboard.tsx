@@ -32,6 +32,9 @@ import { RecentActivity } from "./dashboard/recent-activity"
 
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
+const DASHBOARD_QUEST_PAGE_SIZE = 12
+const TRENDING_QUEST_LIMIT = 2
+const RECENT_ACTIVITY_LIMIT = 5
 
 function toWorkspaceInfo(quest: QuestInfo): WorkspaceInfo {
   return {
@@ -61,7 +64,7 @@ export function Dashboard() {
   } = useContractData(
     "dashboard",
     async () => {
-      const publicQuests = await questClient.listPublicQuests(0, 100)
+      const publicQuests = await questClient.listPublicQuests(0, DASHBOARD_QUEST_PAGE_SIZE)
       const [ownedQuests, enrolledQuests] = address
         ? await Promise.all([
             questClient.listQuestsByOwner(address),
@@ -77,8 +80,18 @@ export function Dashboard() {
         ).values()
       )
 
+      const previewQuests = Array.from(
+        new Map(
+          [
+            ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+            ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+            ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+          ].map(quest => [quest.id, quest] as const)
+        ).values()
+      )
+
       const statsEntries = await Promise.all(
-        accessibleQuests.map(async q => {
+        previewQuests.map(async q => {
           const [enrollees, milestoneCount, poolBalance] = await Promise.all([
             questClient.getEnrollees(q.id),
             milestoneClient.getMilestoneCount(q.id),
@@ -109,16 +122,12 @@ export function Dashboard() {
           },
         ])
       )
-      const questMilestones = Object.fromEntries(
-        statsEntries.map(([id, stats]) => [id, stats.milestoneCount])
-      )
-
       let questCompletions: Record<number, number> = {}
       let userEarnings = 0n
       if (address) {
         const [completionEntries, earnings] = await Promise.all([
           Promise.all(
-            accessibleQuests.map(async q => {
+            previewQuests.map(async q => {
               const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
               return [q.id, completed] as const
             })
@@ -135,7 +144,6 @@ export function Dashboard() {
         enrolledQuests,
         accessibleQuests,
         questStats,
-        questMilestones,
         questCompletions,
         userEarnings,
       }
@@ -159,6 +167,7 @@ export function Dashboard() {
 
   const filteredWorkspaces =
     filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
+  const visibleWorkspaces = filteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -176,13 +185,13 @@ export function Dashboard() {
 
   const trendingQuests = [...publicQuests]
     .sort((a, b) => (questStats[b.id]?.enrolleeCount || 0) - (questStats[a.id]?.enrolleeCount || 0))
-    .slice(0, 2)
+    .slice(0, TRENDING_QUEST_LIMIT)
     .map(toWorkspaceInfo)
 
   const recentActivity = accessibleQuests
     .slice()
     .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 5)
+    .slice(0, RECENT_ACTIVITY_LIMIT)
     .map(ws => ({
       id: `created-${ws.id}`,
       user: ws.owner,
@@ -347,17 +356,14 @@ export function Dashboard() {
 
             {loadError && (
               <div className="mb-5">
-                <SmartError
-                  message={loadError}
-                  onRetry={() => void refetch()}
-                />
+                <SmartError message={loadError} onRetry={() => void refetch()} />
               </div>
             )}
 
             {isLoading && <SkeletonQuestList className="mb-5" count={3} />}
 
             <div className="relative grid gap-5">
-              {filteredWorkspaces.map((ws, i) => {
+              {visibleWorkspaces.map((ws, i) => {
                 const stats = questStats[ws.id] || {
                   enrolleeCount: 0,
                   milestoneCount: 0,
@@ -461,6 +467,12 @@ export function Dashboard() {
                 )
               })}
             </div>
+
+            {filteredWorkspaces.length > visibleWorkspaces.length && !isLoading && !loadError && (
+              <p className="text-muted-foreground mt-4 text-xs font-bold">
+                Showing the first {visibleWorkspaces.length} quests to keep dashboard loading fast.
+              </p>
+            )}
 
             {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
               <div className="mt-5">

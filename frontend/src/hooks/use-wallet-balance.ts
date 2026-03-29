@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
-import { rewardsClient } from "@/lib/contracts/rewards-client"
+import { rewardsClient } from "@/lib/contracts/rewards"
 
 // Stellar Horizon endpoints
 const HORIZON_MAINNET = "https://horizon.stellar.org"

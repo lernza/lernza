@@ -983,6 +983,42 @@ fn test_verified_creator_quest() {
 }
 
 #[test]
+fn test_pause_blocks_state_changes_until_unpaused() {
+    let (env, client, owner, token) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    assert!(!client.is_paused());
+    client.pause(&admin);
+    assert!(client.is_paused());
+
+    let create_result = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Paused Quest"),
+        &String::from_str(&env, "Should fail while paused"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+    );
+    assert_eq!(create_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&admin);
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    client.pause(&admin);
+
+    let enrollee = Address::generate(&env);
+    let add_result = client.try_add_enrollee(&quest_id, &enrollee);
+    assert_eq!(add_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&admin);
+    assert!(!client.is_paused());
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
 fn test_pre_existing_enrollees_retained_after_archive() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);
@@ -1163,4 +1199,62 @@ fn test_enrollee_cap() {
     let result = client.try_add_enrollee(&id, &e3);
 
     assert_eq!(result, Err(Ok(Error::QuestFull)));
+}
+
+#[test]
+fn test_initialize_admin() {
+    let env = Env::default();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Try to initialize again should fail
+    let result = client.try_initialize(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_transfer_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Transfer admin
+    client.transfer_admin(&admin, &new_admin);
+
+    // New admin should be able to pause
+    client.pause(&new_admin);
+    assert!(client.is_paused());
+
+    // Old admin should not be able to unpause
+    let result = client.try_unpause(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // New admin should be able to unpause
+    client.unpause(&new_admin);
+    assert!(!client.is_paused());
+}
+
+#[test]
+fn test_transfer_admin_unauthorized() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let hacker = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Hacker tries to transfer admin
+    let result = client.try_transfer_admin(&hacker, &new_admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
 }

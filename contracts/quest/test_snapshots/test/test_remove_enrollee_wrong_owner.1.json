@@ -225,6 +225,14 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "category"
                       },
                       "val": {
@@ -511,10 +519,7 @@
           "v0": {
             "topics": [
               {
-                "symbol": "quest"
-              },
-              {
-                "symbol": "rem_enr"
+                "symbol": "enrollee_removed"
               }
             ],
             "data": {

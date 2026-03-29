@@ -432,23 +432,6 @@ export function QuestView() {
     }
   }, [expiringSoon, quest])
 
-  useEffect(() => {
-    if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
-      return
-    }
-
-    const interval = window.setInterval(
-      () => {
-        setNowMs(Date.now())
-      },
-      expiringSoon ? 1000 : 60_000
-    )
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [expiringSoon, quest])
-
   const isMilestoneCompletedBy = useCallback(
     (milestoneId: number, enrollee: string) =>
       completionsWithOptimisticUpdates.some(

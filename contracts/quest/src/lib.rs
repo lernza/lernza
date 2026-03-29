@@ -152,6 +152,26 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Transfer administrative control to a new address. Admin only.
+    pub fn transfer_admin(
+        env: Env,
+        current_admin: Address,
+        new_admin: Address,
+    ) -> Result<(), Error> {
+        Self::require_admin(&env, &current_admin)?;
+
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        extend_instance_ttl(&env);
+
+        // Emit transfer event
+        env.events().publish(
+            (symbol_short!("admin"), symbol_short!("transfer")),
+            (current_admin, new_admin),
+        );
+
+        Ok(())
+    }
+
     /// Returns true when the contract is paused.
     pub fn is_paused(env: Env) -> bool {
         let paused = env

@@ -165,7 +165,7 @@ impl QuestContract {
 
         // Emit transfer event
         env.events().publish(
-            (symbol_short!("admin"), symbol_short!("transfer")),
+            (Symbol::new(&env, "admin_transferred"),),
             (current_admin, new_admin),
         );
 
@@ -247,13 +247,8 @@ impl QuestContract {
                 .set(&DataKey::PublicQuests, &public_ids);
         }
         // Emit quest creation event
-        // Event topics: (quest, created)
-        // Event data: (quest_id, owner, category)
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("new")),
-            (id, quest.owner.clone(), quest.category),
-        );
-        // Canonical event name for indexers/streaming clients.
+        // Event topics: (quest_created,)
+        // Event data: (quest_id, owner, name)
         env.events().publish(
             (Symbol::new(&env, "quest_created"),),
             (id, quest.owner.clone(), quest.name.clone()),
@@ -324,10 +319,9 @@ impl QuestContract {
             .set(&DataKey::Quest(quest_id), &quest);
 
         // Emit quest updated event
-        // Event topics: (quest, updated)
+        // Event topics: (quest_updated,)
         // Event data: (quest_id)
-        env.events()
-            .publish((symbol_short!("quest"), symbol_short!("updated")), quest_id);
+        env.events().publish((Symbol::new(&env, "quest_updated"),), quest_id);
 
         Self::bump(&env, quest_id);
         Ok(())
@@ -347,10 +341,10 @@ impl QuestContract {
             .set(&DataKey::Quest(quest_id), &quest);
 
         // Emit quest archived event
-        // Event topics: (quest, archived)
+        // Event topics: (quest_archived,)
         // Event data: (quest_id)
         env.events().publish(
-            (symbol_short!("quest"), symbol_short!("archived")),
+            (Symbol::new(&env, "quest_archived"),),
             quest_id,
         );
 
@@ -389,13 +383,8 @@ impl QuestContract {
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
 
         // Emit enrollee added event
-        // Event topics: (quest, enrollee_added)
+        // Event topics: (enrollee_added,)
         // Event data: (quest_id, enrollee_address)
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("add_enr")),
-            (quest_id, &enrollee),
-        );
-        // Canonical enrollment event name for indexers/streaming clients.
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
@@ -436,11 +425,9 @@ impl QuestContract {
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
 
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("join")),
-            (quest_id, &enrollee),
-        );
-        // Canonical enrollment event name for indexers/streaming clients.
+        // Emit enrollment event
+        // Event topics: (enrollee_added,)
+        // Event data: (quest_id, enrollee_address)
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
@@ -459,10 +446,10 @@ impl QuestContract {
         Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
 
         // Emit enrollee removed event
-        // Event topics: (quest, enrollee_removed)
+        // Event topics: (enrollee_removed,)
         // Event data: (quest_id, enrollee_address)
         env.events().publish(
-            (symbol_short!("quest"), symbol_short!("rem_enr")),
+            (Symbol::new(&env, "enrollee_removed"),),
             (quest_id, &enrollee),
         );
 

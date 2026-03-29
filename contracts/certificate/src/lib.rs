@@ -121,10 +121,10 @@ impl CertificateContract {
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 
         // Emit certificate minted event
-        // Event topics: (cert, minted)
+        // Event topics: (certificate_minted,)
         // Event data: (token_id, quest_id, recipient, quest_name)
         env.events().publish(
-            (symbol_short!("cert"), symbol_short!("minted")),
+            (Symbol::new(&env, "certificate_minted"),),
             (token_id, quest_id, recipient, quest_name),
         );
 
@@ -246,8 +246,10 @@ impl CertificateContract {
         Base::burn(&env, &metadata.recipient, token_id);
 
         // Emit revocation event
+        // Event topics: (certificate_revoked,)
+        // Event data: (token_id, quest_id, recipient)
         env.events().publish(
-            (symbol_short!("cert"), symbol_short!("revoked")),
+            (Symbol::new(&env, "certificate_revoked"),),
             (token_id, metadata.quest_id, metadata.recipient),
         );
 

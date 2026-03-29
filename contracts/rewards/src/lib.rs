@@ -176,10 +176,10 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Emit quest funding event
-        // Event topics: (reward, funded)
+        // Event topics: (reward_funded,)
         // Event data: (quest_id, funder, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("funded")),
+            (Symbol::new(&env, "reward_funded"),),
             (quest_id, funder, amount),
         );
 
@@ -298,13 +298,8 @@ impl RewardsContract {
         extend_instance_ttl(&env);
 
         // Emit reward distribution event
-        // Event topics: (reward, distributed)
+        // Event topics: (reward_distributed,)
         // Event data: (quest_id, milestone_id, enrollee, amount)
-        env.events().publish(
-            (symbol_short!("reward"), symbol_short!("paid")),
-            (quest_id, milestone_id, enrollee.clone(), amount),
-        );
-        // Canonical reward event name for indexers/streaming clients.
         env.events().publish(
             (Symbol::new(&env, "reward_distributed"),),
             (quest_id, milestone_id, enrollee, amount),
@@ -406,8 +401,10 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Emit refund event
+        // Event topics: (reward_refunded,)
+        // Event data: (quest_id, authority, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("refund")),
+            (Symbol::new(&env, "reward_refunded"),),
             (quest_id, authority, amount),
         );
 

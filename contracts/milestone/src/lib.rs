@@ -38,6 +38,8 @@ pub trait QuestContractTrait {
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
+    Admin,
+    Paused,
     // Quest contract address for cross-contract validation
     QuestContract,
     // Certificate contract address for minting completion certificates
@@ -144,6 +146,7 @@ pub enum Error {
     TitleTooLong = 15,
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
+    Paused = 18,
     InvalidInput = 3,
 }
 
@@ -185,6 +188,8 @@ impl MilestoneContract {
             return Err(Error::Unauthorized);
         }
 
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Paused, &false);
         env.storage()
             .instance()
             .set(&DataKey::QuestContract, &quest_contract);
@@ -193,6 +198,33 @@ impl MilestoneContract {
             .set(&DataKey::CertificateContract, &certificate_contract);
         extend_instance_ttl(&env);
         Ok(())
+    }
+
+    /// Pause state-mutating operations. Admin only.
+    pub fn pause(env: Env, admin: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Resume state-mutating operations. Admin only.
+    pub fn unpause(env: Env, admin: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage().instance().set(&DataKey::Paused, &false);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Returns true when the contract is paused.
+    pub fn is_paused(env: Env) -> bool {
+        let paused = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        extend_instance_ttl(&env);
+        paused
     }
 
     /// Create a milestone for a quest. Owner auth required.
@@ -207,6 +239,7 @@ impl MilestoneContract {
         requires_previous: bool,
     ) -> Result<u32, Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
 
         Self::validate_ms_input(&title, &description, reward_amount)?;
 
@@ -269,6 +302,7 @@ impl MilestoneContract {
         milestones: Vec<MilestoneInput>,
     ) -> Result<Vec<u32>, Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
 
         if milestones.len() > MAX_BATCH_SIZE {
             return Err(Error::BatchTooLarge);
@@ -362,6 +396,7 @@ impl MilestoneContract {
         mode: VerificationMode,
     ) -> Result<(), Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
         Self::require_quest_owner(&env, quest_id, &owner)?;
 
         let mode_key = DataKey::VerificationMode(quest_id);
@@ -384,6 +419,7 @@ impl MilestoneContract {
         flat_reward: i128,
     ) -> Result<(), Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
 
         // Cross-contract validation: verify caller is the actual quest owner
         let quest_contract_addr: Address = env
@@ -444,6 +480,7 @@ impl MilestoneContract {
         enrollee: Address,
     ) -> Result<i128, Error> {
         owner.require_auth();
+        Self::require_not_paused(&env)?;
 
         // Validate owner via cross-contract call
         let quest_contract_addr: Address = env
@@ -567,6 +604,7 @@ impl MilestoneContract {
         milestone_id: u32,
     ) -> Result<(), Error> {
         enrollee.require_auth();
+        Self::require_not_paused(&env)?;
 
         // Check if milestone exists
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
@@ -632,6 +670,7 @@ impl MilestoneContract {
         enrollee: Address,
     ) -> Result<Option<i128>, Error> {
         peer.require_auth();
+        Self::require_not_paused(&env)?;
 
         // Check if milestone exists
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
@@ -944,6 +983,34 @@ impl MilestoneContract {
 
     fn bump_ms(env: &Env, key: &DataKey) {
         common::extend_persistent_ttl(env, key);
+    }
+
+    fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::Unauthorized)?;
+
+        if *admin != stored_admin {
+            return Err(Error::Unauthorized);
+        }
+
+        Ok(())
+    }
+
+    fn require_not_paused(env: &Env) -> Result<(), Error> {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            Err(Error::Paused)
+        } else {
+            Ok(())
+        }
     }
 
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {

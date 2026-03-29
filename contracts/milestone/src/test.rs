@@ -100,6 +100,41 @@ fn test_create_multiple_milestones() {
 }
 
 #[test]
+fn test_pause_blocks_milestone_writes_until_unpaused() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    assert!(!client.is_paused());
+    client.pause(&owner);
+    assert!(client.is_paused());
+
+    let create_result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Paused"),
+        &String::from_str(&env, "Should fail while paused"),
+        &100,
+        &false,
+    );
+    assert_eq!(create_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    let milestone_id = create_ms(&env, &client, &owner, q_id, "Task 1", 50);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.pause(&owner);
+    let verify_result = client.try_verify_completion(&owner, &q_id, &milestone_id, &enrollee);
+    assert_eq!(verify_result, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    assert_eq!(
+        client.verify_completion(&owner, &q_id, &milestone_id, &enrollee),
+        50
+    );
+}
+
+#[test]
 fn test_milestones_per_quest_are_independent() {
     let (env, client, quest_client, owner) = setup();
     let q0 = create_quest(&env, &quest_client, &owner);

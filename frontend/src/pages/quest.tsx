@@ -101,7 +101,7 @@ const EMPTY_MILESTONES: MilestoneInfo[] = []
 const EMPTY_ENROLLEES: string[] = []
 const EMPTY_COMPLETIONS: CompletionRecord[] = []
 const MAX_IMPORT_FILE_SIZE_BYTES = 1024 * 1024
-
+//
 const questImportSchema = z.object({
   name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
   description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
@@ -193,11 +193,12 @@ export function QuestView() {
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
-    type:
-      | "add_enrollee"
-      | "create_milestone"
-      | "verify_payout"
-      | "archive_quest"
+    type: 
+      | "create_milestone" 
+      | "verify_payout" 
+      | "archive_quest" 
+      | "remove_enrollee" 
+      | "leave_quest"
     details: TransactionDetails
     execute: () => Promise<void>
   } | null>(null)
@@ -436,23 +437,6 @@ export function QuestView() {
     )
     return resetPageMeta
   }, [quest])
-
-  useEffect(() => {
-    if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
-      return
-    }
-
-    const interval = window.setInterval(
-      () => {
-        setNowMs(Date.now())
-      },
-      expiringSoon ? 1000 : 60_000
-    )
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [expiringSoon, quest])
 
   useEffect(() => {
     if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
@@ -879,21 +863,34 @@ export function QuestView() {
         return
       }
 
-      try {
-        await removeEnrolleeTx.run(async () => {
-          const result = await questClient.removeEnrollee(address, questId, enrollee)
-          if (result.status !== "SUCCESS") {
-            throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
-          }
-          return result
-        })
+      setPendingTransaction({
+        type: "remove_enrollee",
+        details: {
+          actionName: "Remove Enrollee",
+          fromAddress: address,
+          toAddress: enrollee,
+          estimatedFee: "0.001",
+          description: `Remove learner ${truncateAddress(enrollee)} from this quest. They will lose access to progress tracking until re-enrolled.`,
+        },
+        execute: async () => {
+          try {
+            await removeEnrolleeTx.run(async () => {
+              const result = await questClient.removeEnrollee(address, questId, enrollee)
+              if (result.status !== "SUCCESS") {
+                throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
+              }
+              return result
+            })
 
-        await refetch()
-        addToast("Enrollee removed successfully.", "success")
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Could not remove enrollee."
-        addToast(message, "error")
-      }
+            await refetch()
+            addToast("Enrollee removed successfully.", "success")
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : "Could not remove enrollee."
+            addToast(message, "error")
+          }
+        },
+      })
+      setShowConfirmDialog(true)
     },
     [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
   )
@@ -914,21 +911,33 @@ export function QuestView() {
       return
     }
 
-    try {
-      await leaveQuestTx.run(async () => {
-        const result = await questClient.leaveQuest(address, questId)
-        if (result.status !== "SUCCESS") {
-          throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
-        }
-        return result
-      })
+    setPendingTransaction({
+      type: "leave_quest",
+      details: {
+        actionName: "Leave Quest",
+        fromAddress: address,
+        estimatedFee: "0.001",
+        description: "Are you sure you want to leave this quest? Your progress will be cleared from the active enrollee list.",
+      },
+      execute: async () => {
+        try {
+          await leaveQuestTx.run(async () => {
+            const result = await questClient.leaveQuest(address, questId)
+            if (result.status !== "SUCCESS") {
+              throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
+            }
+            return result
+          })
 
-      await refetch()
-      addToast("You left the quest successfully.", "success")
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Could not leave quest."
-      addToast(message, "error")
-    }
+          await refetch()
+          addToast("You left the quest successfully.", "success")
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Could not leave quest."
+          addToast(message, "error")
+        }
+      },
+    })
+    setShowConfirmDialog(true)
   }, [
     address,
     addToast,
@@ -1038,7 +1047,7 @@ export function QuestView() {
     }
 
     localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
-    navigate("/create-quest")
+    navigate("/quest/create")
     setShowImportDialog(false)
     setImportedData(null)
     addToast("Quest data loaded. Complete the creation process.", "success")
@@ -2076,7 +2085,9 @@ export function QuestView() {
           addEnrolleeTx.isPending ||
           createMilestoneTx.isPending ||
           verifyPayoutTx.isPending ||
-          archiveQuestTx.isPending
+          archiveQuestTx.isPending ||
+          removeEnrolleeTx.isPending ||
+          leaveQuestTx.isPending
         }
       />
 

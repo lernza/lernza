@@ -149,6 +149,7 @@ pub enum Error {
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
     Paused = 18,
+    Overflow = 19,
     InvalidInput = 3,
 }
 
@@ -581,9 +582,10 @@ impl MilestoneContract {
         // Update total earnings for enrollee
         let earnings_key = DataKey::EnrolleeEarnings(quest_id, enrollee.clone());
         let total_earned: i128 = env.storage().persistent().get(&earnings_key).unwrap_or(0);
+        let updated_earnings = total_earned.checked_add(reward).ok_or(Error::Overflow)?;
         env.storage()
             .persistent()
-            .set(&earnings_key, &(total_earned + reward));
+            .set(&earnings_key, &updated_earnings);
         env.storage()
             .persistent()
             .extend_ttl(&earnings_key, THRESHOLD, BUMP);

@@ -2,8 +2,8 @@
 #![allow(deprecated)]
 use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
-    Address, Env, Symbol,
+    contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
+    Symbol,
 };
 
 // Visibility, QuestStatus, and QuestInfo moved to common.
@@ -138,6 +138,12 @@ impl RewardsContract {
 
         let token_addr = Self::get_token(&env)?;
 
+        // Verify the quest's configured token matches the rewards contract's token.
+        // Prevents a mismatch where a quest advertises token A but rewards are paid in token B.
+        if quest_info.token_addr != token_addr {
+            return Err(Error::InvalidToken);
+        }
+
         // Validate that token_addr points to a live SAC contract.
         // A non-contract address or an address without a token interface
         // will cause try_symbol() to fail, rejecting the funding early.
@@ -176,10 +182,10 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Emit quest funding event
-        // Event topics: (reward, funded)
+        // Event topics: (reward_funded,)
         // Event data: (quest_id, funder, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("funded")),
+            (Symbol::new(&env, "reward_funded"),),
             (quest_id, funder, amount),
         );
 
@@ -298,13 +304,8 @@ impl RewardsContract {
         extend_instance_ttl(&env);
 
         // Emit reward distribution event
-        // Event topics: (reward, distributed)
+        // Event topics: (reward_distributed,)
         // Event data: (quest_id, milestone_id, enrollee, amount)
-        env.events().publish(
-            (symbol_short!("reward"), symbol_short!("paid")),
-            (quest_id, milestone_id, enrollee.clone(), amount),
-        );
-        // Canonical reward event name for indexers/streaming clients.
         env.events().publish(
             (Symbol::new(&env, "reward_distributed"),),
             (quest_id, milestone_id, enrollee, amount),
@@ -406,8 +407,10 @@ impl RewardsContract {
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
         // Emit refund event
+        // Event topics: (reward_refunded,)
+        // Event data: (quest_id, authority, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("refund")),
+            (Symbol::new(&env, "reward_refunded"),),
             (quest_id, authority, amount),
         );
 

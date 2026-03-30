@@ -1339,6 +1339,61 @@ fn test_fund_quest_valid_sac() {
 }
 
 #[test]
+fn test_fund_quest_token_mismatch_rejected() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Deploy two distinct SAC tokens.
+    let token_admin = Address::generate(&env);
+    let token_a_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_a = token_a_contract.address();
+
+    let token_b_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
+    let token_b = token_b_contract.address();
+
+    // Standard contract setup.
+    let quest_id = env.register(QuestContract, ());
+    let quest_client = QuestContractClient::new(&env, &quest_id);
+
+    let milestone_id = env.register(MilestoneContract, ());
+    let milestone_client = MilestoneContractClient::new(&env, &milestone_id);
+
+    let certificate_id = env.register(CertificateContract, (milestone_id.clone(),));
+    let admin = Address::generate(&env);
+    milestone_client.initialize(&admin, &quest_id, &certificate_id);
+
+    // Rewards contract initialized with token_b.
+    let rewards_id = env.register(RewardsContract, ());
+    let client = RewardsContractClient::new(&env, &rewards_id);
+    client.initialize(&token_b, &quest_id, &milestone_id);
+
+    let owner = Address::generate(&env);
+
+    // Quest created with token_a — mismatch with rewards contract's token_b.
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Mismatch Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_a,
+        &Visibility::Public,
+        &None,
+    );
+
+    // Mint token_b to the owner so the transfer could theoretically succeed.
+    let sac_b = StellarAssetClient::new(&env, &token_b);
+    sac_b.mint(&owner, &10_000);
+
+    // fund_quest must reject due to token mismatch.
+    let result = client.try_fund_quest(&owner, &q_id, &5_000);
+    assert_eq!(result, Err(Ok(Error::InvalidToken)));
+
+    // Pool must remain zero.
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
 fn test_refund_pool_success() {
     let (
         env,

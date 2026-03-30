@@ -2,8 +2,8 @@
 #![allow(deprecated)]
 use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
-    Env, String, Symbol, Vec,
+    contract, contractclient, contracterror, contractimpl, contracttype, Address, Env, String,
+    Symbol, Vec,
 };
 
 // Quest contract error type (must match the quest contract)
@@ -149,6 +149,7 @@ pub enum Error {
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
     Paused = 18,
+    Overflow = 19,
     InvalidInput = 3,
 }
 
@@ -282,10 +283,10 @@ impl MilestoneContract {
         env.storage().persistent().set(&next_key, &(id + 1));
 
         // Emit milestone creation event
-        // Event topics: (milestone, created)
+        // Event topics: (milestone_created,)
         // Event data: (milestone_id, quest_id, reward_amount)
         env.events().publish(
-            (symbol_short!("milestone"), symbol_short!("new")),
+            (Symbol::new(&env, "milestone_created"),),
             (id, quest_id, milestone.reward_amount),
         );
 
@@ -351,7 +352,7 @@ impl MilestoneContract {
 
             // Emit milestone creation event
             env.events().publish(
-                (symbol_short!("milestone"), symbol_short!("new")),
+                (Symbol::new(&env, "milestone_created"),),
                 (id, quest_id, ms_info.reward_amount),
             );
 
@@ -581,21 +582,17 @@ impl MilestoneContract {
         // Update total earnings for enrollee
         let earnings_key = DataKey::EnrolleeEarnings(quest_id, enrollee.clone());
         let total_earned: i128 = env.storage().persistent().get(&earnings_key).unwrap_or(0);
+        let updated_earnings = total_earned.checked_add(reward).ok_or(Error::Overflow)?;
         env.storage()
             .persistent()
-            .set(&earnings_key, &(total_earned + reward));
+            .set(&earnings_key, &updated_earnings);
         env.storage()
             .persistent()
             .extend_ttl(&earnings_key, THRESHOLD, BUMP);
 
         // Emit milestone completion event
-        // Event topics: (milestone, completed)
-        // Event data: (milestone_id, quest_id, enrollee, reward_amount)
-        env.events().publish(
-            (symbol_short!("milestone"), symbol_short!("done")),
-            (milestone_id, quest_id, enrollee.clone(), reward),
-        );
-        // Canonical completion event name for indexers/streaming clients.
+        // Event topics: (milestone_completed,)
+        // Event data: (quest_id, milestone_id, enrollee)
         env.events().publish(
             (Symbol::new(&env, "milestone_completed"),),
             (quest_id, milestone_id, enrollee.clone()),
@@ -812,10 +809,10 @@ impl MilestoneContract {
             };
 
             // Emit peer approval completion event
-            // Event topics: (milestone, peer_approved)
+            // Event topics: (peer_approved,)
             // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount)
             env.events().publish(
-                (symbol_short!("milestone"), symbol_short!("peer_ok")),
+                (Symbol::new(&env, "peer_approved"),),
                 (milestone_id, quest_id, enrollee.clone(), peer, reward),
             );
 
@@ -1128,7 +1125,7 @@ impl MilestoneContract {
 
             // Emit certificate minted event
             env.events().publish(
-                (symbol_short!("milestone"), symbol_short!("cert")),
+                (Symbol::new(&env, "certificate_minted"),),
                 (quest_id, enrollee),
             );
         }

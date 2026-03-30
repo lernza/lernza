@@ -437,6 +437,14 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "category"
                       },
                       "val": {
@@ -583,6 +591,14 @@
                 "durability": "persistent",
                 "val": {
                   "map": [
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
                     {
                       "key": {
                         "symbol": "category"
@@ -733,6 +749,14 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "category"
                       },
                       "val": {
@@ -879,6 +903,14 @@
                 "durability": "persistent",
                 "val": {
                   "map": [
+                    {
+                      "key": {
+                        "symbol": "archived_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
                     {
                       "key": {
                         "symbol": "category"

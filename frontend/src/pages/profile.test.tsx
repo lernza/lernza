@@ -50,7 +50,12 @@ describe("Profile", () => {
 
     mockUseUserRole.mockReturnValue({
       role: "learner",
+      isOwner: false,
+      isEnrolled: true,
+      ownedQuests: [],
+      enrolledQuests: [],
       isLoading: false,
+      error: null,
     } as ReturnType<typeof useUserRole>)
 
     mockUseContractData.mockImplementation(key => {

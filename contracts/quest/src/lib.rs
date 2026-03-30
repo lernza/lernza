@@ -6,8 +6,7 @@ use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
 };
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String,
-    Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -24,8 +23,10 @@ pub enum DataKey {
     NextId,
     Quest(u32),
     Enrollees(u32),
-    EnrollmentCap(u32),
     PublicQuests,
+    PublicCategoryQuests(String),
+    OwnerQuests(Address),
+    EnrolleeQuests(Address),
     Admin,
     Paused,
     VerifiedCreator(Address),
@@ -165,7 +166,7 @@ impl QuestContract {
 
         // Emit transfer event
         env.events().publish(
-            (symbol_short!("admin"), symbol_short!("transfer")),
+            (Symbol::new(&env, "admin_transferred"),),
             (current_admin, new_admin),
         );
 
@@ -235,6 +236,8 @@ impl QuestContract {
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
         extend_instance_ttl(&env);
 
+        Self::add_id_to_index(&env, DataKey::OwnerQuests(quest.owner.clone()), id);
+
         if visibility == Visibility::Public {
             let mut public_ids: Vec<u32> = env
                 .storage()
@@ -245,15 +248,15 @@ impl QuestContract {
             env.storage()
                 .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
+            Self::add_id_to_index(
+                &env,
+                DataKey::PublicCategoryQuests(quest.category.clone()),
+                id,
+            );
         }
         // Emit quest creation event
-        // Event topics: (quest, created)
-        // Event data: (quest_id, owner, category)
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("new")),
-            (id, quest.owner.clone(), quest.category),
-        );
-        // Canonical event name for indexers/streaming clients.
+        // Event topics: (quest_created,)
+        // Event data: (quest_id, owner, name)
         env.events().publish(
             (Symbol::new(&env, "quest_created"),),
             (id, quest.owner.clone(), quest.name.clone()),
@@ -303,7 +306,21 @@ impl QuestContract {
             if is_blank_ascii(&c) {
                 return Err(Error::InvalidInput);
             }
+            let old_category = quest.category.clone();
             quest.category = c;
+
+            if quest.visibility == Visibility::Public {
+                Self::remove_id_from_index(
+                    &env,
+                    DataKey::PublicCategoryQuests(old_category),
+                    quest_id,
+                );
+                Self::add_id_to_index(
+                    &env,
+                    DataKey::PublicCategoryQuests(quest.category.clone()),
+                    quest_id,
+                );
+            }
         }
 
         if let Some(t) = tags {
@@ -324,10 +341,10 @@ impl QuestContract {
             .set(&DataKey::Quest(quest_id), &quest);
 
         // Emit quest updated event
-        // Event topics: (quest, updated)
+        // Event topics: (quest_updated,)
         // Event data: (quest_id)
         env.events()
-            .publish((symbol_short!("quest"), symbol_short!("updated")), quest_id);
+            .publish((Symbol::new(&env, "quest_updated"),), quest_id);
 
         Self::bump(&env, quest_id);
         Ok(())
@@ -347,12 +364,10 @@ impl QuestContract {
             .set(&DataKey::Quest(quest_id), &quest);
 
         // Emit quest archived event
-        // Event topics: (quest, archived)
+        // Event topics: (quest_archived,)
         // Event data: (quest_id)
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("archived")),
-            quest_id,
-        );
+        env.events()
+            .publish((Symbol::new(&env, "quest_archived"),), quest_id);
 
         Self::bump(&env, quest_id);
         Ok(())
@@ -387,15 +402,11 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
 
         // Emit enrollee added event
-        // Event topics: (quest, enrollee_added)
+        // Event topics: (enrollee_added,)
         // Event data: (quest_id, enrollee_address)
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("add_enr")),
-            (quest_id, &enrollee),
-        );
-        // Canonical enrollment event name for indexers/streaming clients.
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
@@ -435,12 +446,11 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
 
-        env.events().publish(
-            (symbol_short!("quest"), symbol_short!("join")),
-            (quest_id, &enrollee),
-        );
-        // Canonical enrollment event name for indexers/streaming clients.
+        // Emit enrollment event
+        // Event topics: (enrollee_added,)
+        // Event data: (quest_id, enrollee_address)
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
@@ -459,10 +469,10 @@ impl QuestContract {
         Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
 
         // Emit enrollee removed event
-        // Event topics: (quest, enrollee_removed)
+        // Event topics: (enrollee_removed,)
         // Event data: (quest_id, enrollee_address)
         env.events().publish(
-            (symbol_short!("quest"), symbol_short!("rem_enr")),
+            (Symbol::new(&env, "enrollee_removed"),),
             (quest_id, &enrollee),
         );
 
@@ -585,60 +595,74 @@ impl QuestContract {
 
     /// Get all public quests within a category.
     pub fn get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo> {
-        let public_ids: Vec<u32> = env
+        let category_ids: Vec<u32> = env
             .storage()
             .persistent()
-            .get(&DataKey::PublicQuests)
+            .get(&DataKey::PublicCategoryQuests(category.clone()))
             .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
 
-        for i in 0..public_ids.len() {
-            if let Some(id) = public_ids.get(i) {
+        for i in 0..category_ids.len() {
+            if let Some(id) = category_ids.get(i) {
                 if let Ok(quest) = Self::load_quest(&env, id) {
-                    if quest.category == category {
-                        matches.push_back(quest);
-                    }
+                    matches.push_back(quest);
                 }
             }
         }
 
-        if env.storage().persistent().has(&DataKey::PublicQuests) {
-            common::extend_persistent_ttl(&env, &DataKey::PublicQuests);
+        let category_key = DataKey::PublicCategoryQuests(category);
+        if env.storage().persistent().has(&category_key) {
+            common::extend_persistent_ttl(&env, &category_key);
         }
         matches
     }
 
     /// Get all quests owned by an address.
     pub fn list_quests_by_owner(env: Env, owner: Address) -> Vec<QuestInfo> {
-        let total = Self::get_quest_count(env.clone());
+        let owner_key = DataKey::OwnerQuests(owner);
+        let owner_ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&owner_key)
+            .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
 
-        for id in 0..total {
-            if let Ok(quest) = Self::load_quest(&env, id) {
-                if quest.owner == owner {
+        for i in 0..owner_ids.len() {
+            if let Some(id) = owner_ids.get(i) {
+                if let Ok(quest) = Self::load_quest(&env, id) {
                     matches.push_back(quest);
                 }
             }
         }
 
+        if env.storage().persistent().has(&owner_key) {
+            common::extend_persistent_ttl(&env, &owner_key);
+        }
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         matches
     }
 
     /// Get all quests an address is enrolled in.
     pub fn list_quests_by_enrollee(env: Env, enrollee: Address) -> Vec<QuestInfo> {
-        let total = Self::get_quest_count(env.clone());
+        let enrollee_key = DataKey::EnrolleeQuests(enrollee);
+        let enrollee_ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&enrollee_key)
+            .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
 
-        for id in 0..total {
-            if let Ok(quest) = Self::load_quest(&env, id) {
-                let enrollees = Self::load_enrollees(&env, id);
-                if enrollees.contains(&enrollee) {
+        for i in 0..enrollee_ids.len() {
+            if let Some(id) = enrollee_ids.get(i) {
+                if let Ok(quest) = Self::load_quest(&env, id) {
                     matches.push_back(quest);
                 }
             }
         }
 
+        if env.storage().persistent().has(&enrollee_key) {
+            common::extend_persistent_ttl(&env, &enrollee_key);
+        }
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         matches
     }
@@ -700,6 +724,14 @@ impl QuestContract {
         visibility: Visibility,
     ) {
         if quest.visibility != visibility {
+            if quest.visibility == Visibility::Public {
+                Self::remove_id_from_index(
+                    env,
+                    DataKey::PublicCategoryQuests(quest.category.clone()),
+                    quest_id,
+                );
+            }
+
             let mut public_ids: Vec<u32> = env
                 .storage()
                 .persistent()
@@ -714,6 +746,14 @@ impl QuestContract {
             env.storage()
                 .persistent()
                 .set(&DataKey::PublicQuests, &public_ids);
+
+            if visibility == Visibility::Public {
+                Self::add_id_to_index(
+                    env,
+                    DataKey::PublicCategoryQuests(quest.category.clone()),
+                    quest_id,
+                );
+            }
         }
         quest.visibility = visibility;
     }
@@ -739,7 +779,43 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_list);
+        if found {
+            Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+        }
         Ok(())
+    }
+
+    fn add_id_to_index(env: &Env, key: DataKey, id: u32) {
+        let mut ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(Vec::new(env));
+        if !ids.contains(id) {
+            ids.push_back(id);
+            env.storage().persistent().set(&key, &ids);
+        }
+        common::extend_persistent_ttl(env, &key);
+    }
+
+    fn remove_id_from_index(env: &Env, key: DataKey, id: u32) {
+        let ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(Vec::new(env));
+        let mut updated = Vec::new(env);
+
+        for i in 0..ids.len() {
+            if let Some(existing_id) = ids.get(i) {
+                if existing_id != id {
+                    updated.push_back(existing_id);
+                }
+            }
+        }
+
+        env.storage().persistent().set(&key, &updated);
+        common::extend_persistent_ttl(env, &key);
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {
@@ -761,13 +837,6 @@ impl QuestContract {
         extend_instance_ttl(env);
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        if env
-            .storage()
-            .persistent()
-            .has(&DataKey::EnrollmentCap(quest_id))
-        {
-            common::extend_persistent_ttl(env, &DataKey::EnrollmentCap(quest_id));
-        }
     }
 }
 

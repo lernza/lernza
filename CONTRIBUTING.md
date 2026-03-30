@@ -37,7 +37,7 @@ cargo build --target wasm32-unknown-unknown --release
 
 ```bash
 cd frontend
-cp .env.example .env  # Copy environment variables
+cp .env.example .env.local  # Copy environment variables
 pnpm install
 pnpm dev        # Start dev server
 pnpm build      # Production build
@@ -51,14 +51,14 @@ The Stellar CLI can generate fully-typed TypeScript clients directly from compil
 **Prerequisites:**
 
 - [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli) installed
-- Contracts deployed on testnet and their IDs recorded in `frontend/.env`
+- Contracts deployed on testnet and their IDs recorded in `frontend/.env.local`
 
 **Steps:**
 
 ```bash
 # 1. Copy the env template and fill in your deployed contract IDs
-cp frontend/.env.example frontend/.env
-# Edit frontend/.env:
+cp frontend/.env.example frontend/.env.local
+# Edit frontend/.env.local:
 #   VITE_QUEST_CONTRACT_ID=<your quest contract ID>
 #   VITE_MILESTONE_CONTRACT_ID=<your milestone contract ID>
 #   VITE_REWARDS_CONTRACT_ID=<your rewards contract ID>

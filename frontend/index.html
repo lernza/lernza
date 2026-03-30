@@ -10,6 +10,19 @@
     />
     <meta name="theme-color" content="#FACC15" />
 
+    <!-- Theme blocking script -->
+    <script>
+      ;(function () {
+        try {
+          var theme = localStorage.getItem("lernza-theme")
+          var supportAuto = window.matchMedia("(prefers-color-scheme: dark)").matches
+          if (theme === "dark" || (theme !== "light" && supportAuto)) {
+            document.documentElement.classList.add("dark")
+          }
+        } catch (e) {}
+      })()
+    </script>
+
     <script>
       ;(function () {
         const favicon = document.getElementById("favicon")

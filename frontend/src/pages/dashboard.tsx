@@ -356,14 +356,7 @@ export function Dashboard() {
 
             {loadError && (
               <div className="mb-5">
-<<<<<<< Updated upstream
                 <SmartError message={loadError} onRetry={() => void refetch()} />
-=======
-                <SmartError
-                  message={loadError}
-                  onRetry={refetch}
-                />
->>>>>>> Stashed changes
               </div>
             )}
 

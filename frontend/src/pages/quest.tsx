@@ -193,12 +193,7 @@ export function QuestView() {
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
-    type: 
-      | "create_milestone" 
-      | "verify_payout" 
-      | "archive_quest" 
-      | "remove_enrollee" 
-      | "leave_quest"
+    type: "create_milestone" | "verify_payout" | "archive_quest" | "remove_enrollee" | "leave_quest"
     details: TransactionDetails
     execute: () => Promise<void>
   } | null>(null)
@@ -439,7 +434,8 @@ export function QuestView() {
   }, [quest])
 
   useEffect(() => {
-    if (!quest || quest.deadline <= 0 || isExpiredDeadline(quest.deadline)) {
+    const deadline = quest?.deadline
+    if (!deadline || deadline <= 0 || isExpiredDeadline(deadline)) {
       return
     }
 
@@ -453,7 +449,7 @@ export function QuestView() {
     return () => {
       window.clearInterval(interval)
     }
-  }, [expiringSoon, quest])
+  }, [expiringSoon, quest?.deadline])
 
   const isMilestoneCompletedBy = useCallback(
     (milestoneId: number, enrollee: string) =>
@@ -917,7 +913,8 @@ export function QuestView() {
         actionName: "Leave Quest",
         fromAddress: address,
         estimatedFee: "0.001",
-        description: "Are you sure you want to leave this quest? Your progress will be cleared from the active enrollee list.",
+        description:
+          "Are you sure you want to leave this quest? Your progress will be cleared from the active enrollee list.",
       },
       execute: async () => {
         try {

@@ -53,7 +53,7 @@ export class TokenClient {
 
       // Build transaction to call symbol
       const txSymbol = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("symbol"))
@@ -62,7 +62,7 @@ export class TokenClient {
 
       // Build transaction to call decimal
       const txDecimal = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("decimal"))
@@ -71,7 +71,7 @@ export class TokenClient {
 
       // Build transaction to call name
       const txName = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("name"))

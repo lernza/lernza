@@ -23,7 +23,6 @@ pub enum DataKey {
     NextId,
     Quest(u32),
     Enrollees(u32),
-    EnrollmentCap(u32),
     PublicQuests,
     PublicCategoryQuests(String),
     OwnerQuests(Address),
@@ -838,13 +837,6 @@ impl QuestContract {
         extend_instance_ttl(env);
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        if env
-            .storage()
-            .persistent()
-            .has(&DataKey::EnrollmentCap(quest_id))
-        {
-            common::extend_persistent_ttl(env, &DataKey::EnrollmentCap(quest_id));
-        }
     }
 }
 

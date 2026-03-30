@@ -404,7 +404,7 @@ export class QuestClient {
       const account = new Account(randomKP.publicKey(), "0")
 
       const tx = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call(method, ...args))
@@ -428,7 +428,7 @@ export class QuestClient {
     const account = await server.getAccount(source)
 
     const tx = new TransactionBuilder(account, {
-      fee: "100",
+      fee: "10000",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(this.getContract().call(method, ...args))

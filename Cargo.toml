@@ -6,7 +6,7 @@ members = [
 
 [workspace.dependencies]
 soroban-sdk = "22"
-stellar-tokens = "0.4.1"
+stellar-tokens = "0.6.0"
 stellar-access = "0.4.1"
 stellar-macros = "0.4.1"
 

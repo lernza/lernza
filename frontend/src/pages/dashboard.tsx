@@ -200,11 +200,10 @@ export function Dashboard() {
       timestamp: ws.createdAt * 1000,
     }))
 
+  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date())
   const earningsHistory = [
-    { date: "Jan", amount: 0 },
-    { date: "Feb", amount: Math.round(Number(userEarnings) * 0.25) },
-    { date: "Mar", amount: Math.round(Number(userEarnings) * 0.6) },
-    { date: "Apr", amount: Math.round(Number(userEarnings)) },
+    { date: "Start", amount: 0 },
+    { date: currentMonth, amount: Number(userEarnings) },
   ]
 
   if (!connected) {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { X, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -46,6 +46,67 @@ export function TransactionConfirmDialog({
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  // Handle Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen && !isPending) {
+        handleClose()
+      }
+    }
+
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown)
+    }
+
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isOpen, isPending, handleClose])
+
+  // Handle Focus Trap
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement
+
+      // Focus the first interactive element or the card itself
+      const focusableElements = dialogRef.current?.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusableElements && focusableElements.length > 0) {
+        ;(focusableElements[0] as HTMLElement).focus()
+      }
+
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key !== "Tab" || !dialogRef.current) return
+
+        const focusable = dialogRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const first = focusable[0] as HTMLElement
+        const last = focusable[focusable.length - 1] as HTMLElement
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus()
+            e.preventDefault()
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus()
+            e.preventDefault()
+          }
+        }
+      }
+
+      window.addEventListener("keydown", handleTabKey)
+      return () => {
+        window.removeEventListener("keydown", handleTabKey)
+        previousFocusRef.current?.focus()
+      }
+    }
+  }, [isOpen])
+
   if (!isOpen || !details) return null
 
   return (
@@ -57,10 +118,16 @@ export function TransactionConfirmDialog({
           isClosing ? "opacity-0" : "opacity-100"
         )}
         onClick={handleClose}
+        aria-hidden="true"
       />
 
       {/* Dialog */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tx-dialog-title"
+        aria-describedby="tx-dialog-description"
         className={cn(
           "animate-fade-in-up relative z-10 w-full max-w-md px-4",
           isClosing && "scale-95 opacity-0"
@@ -70,8 +137,8 @@ export function TransactionConfirmDialog({
           {/* Header */}
           <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-4">
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              <span className="text-sm font-black tracking-wider uppercase">
+              <Shield className="h-5 w-5" aria-hidden="true" />
+              <span id="tx-dialog-title" className="text-sm font-black tracking-wider uppercase">
                 Confirm Transaction
               </span>
             </div>
@@ -87,7 +154,7 @@ export function TransactionConfirmDialog({
 
           <CardContent className="space-y-4 p-6">
             {/* Action Name */}
-            <div>
+            <div id="tx-dialog-description">
               <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                 Action
               </p>

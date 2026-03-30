@@ -9,7 +9,7 @@ export interface TokenMetadata {
 
 export class TokenClient {
   private contract: Contract | null
-  private cache: Map<string, TokenMetadata> = new Map()
+  private static cache: Map<string, TokenMetadata> = new Map()
   private tokenAddress: string = ""
 
   constructor(tokenAddress: string) {
@@ -42,8 +42,8 @@ export class TokenClient {
     const tokenAddress = this.getContractAddress()
 
     // Check cache first
-    if (this.cache.has(tokenAddress)) {
-      return this.cache.get(tokenAddress)!
+    if (TokenClient.cache.has(tokenAddress)) {
+      return TokenClient.cache.get(tokenAddress)!
     }
 
     try {
@@ -53,7 +53,7 @@ export class TokenClient {
 
       // Build transaction to call symbol
       const txSymbol = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("symbol"))
@@ -62,7 +62,7 @@ export class TokenClient {
 
       // Build transaction to call decimal
       const txDecimal = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("decimal"))
@@ -71,7 +71,7 @@ export class TokenClient {
 
       // Build transaction to call name
       const txName = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call("name"))
@@ -104,7 +104,7 @@ export class TokenClient {
       }
 
       // Cache the result
-      this.cache.set(tokenAddress, metadata)
+      TokenClient.cache.set(tokenAddress, metadata)
 
       return metadata
     } catch (error) {
@@ -121,15 +121,21 @@ export class TokenClient {
   }
 
   /**
-   * Get the token contract address
+   * Get the token contract address.
+   * Throws if no address is provided via constructor or environment.
    */
   private getContractAddress(): string {
-    return (
+    const addr =
       this.tokenAddress ||
       import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
-      import.meta.env.VITE_USDC_TOKEN_ADDRESS ||
-      ""
-    )
+      import.meta.env.VITE_USDC_TOKEN_ADDRESS
+
+    if (!addr) {
+      throw new Error(
+        "Token address not configured. Set VITE_REWARDS_TOKEN_CONTRACT_ID or VITE_USDC_TOKEN_ADDRESS."
+      )
+    }
+    return addr
   }
 
   /**
@@ -137,9 +143,9 @@ export class TokenClient {
    */
   clearCache(tokenAddress?: string): void {
     if (tokenAddress) {
-      this.cache.delete(tokenAddress)
+      TokenClient.cache.delete(tokenAddress)
     } else {
-      this.cache.clear()
+      TokenClient.cache.clear()
     }
   }
 }

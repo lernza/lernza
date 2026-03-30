@@ -1200,3 +1200,61 @@ fn test_enrollee_cap() {
 
     assert_eq!(result, Err(Ok(Error::QuestFull)));
 }
+
+#[test]
+fn test_initialize_admin() {
+    let env = Env::default();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Try to initialize again should fail
+    let result = client.try_initialize(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_transfer_admin() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Transfer admin
+    client.transfer_admin(&admin, &new_admin);
+
+    // New admin should be able to pause
+    client.pause(&new_admin);
+    assert!(client.is_paused());
+
+    // Old admin should not be able to unpause
+    let result = client.try_unpause(&admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // New admin should be able to unpause
+    client.unpause(&new_admin);
+    assert!(!client.is_paused());
+}
+
+#[test]
+fn test_transfer_admin_unauthorized() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let hacker = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    // Hacker tries to transfer admin
+    let result = client.try_transfer_admin(&hacker, &new_admin);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}

@@ -1,0 +1,54 @@
+contracts	Format check	???2026-03-27T01:13:08.7834538Z ##[group]Run cargo fmt --all -- --check
+contracts	Format check	2026-03-27T01:13:08.7834937Z [36;1mcargo fmt --all -- --check[0m
+contracts	Format check	2026-03-27T01:13:08.7861566Z shell: /usr/bin/bash -e {0}
+contracts	Format check	2026-03-27T01:13:08.7861838Z env:
+contracts	Format check	2026-03-27T01:13:08.7862044Z   CARGO_TERM_COLOR: always
+contracts	Format check	2026-03-27T01:13:08.7862319Z   RUSTFLAGS: -Dwarnings
+contracts	Format check	2026-03-27T01:13:08.7862563Z   CARGO_INCREMENTAL: 0
+contracts	Format check	2026-03-27T01:13:08.7862808Z   CARGO_PROFILE_DEV_DEBUG: 0
+contracts	Format check	2026-03-27T01:13:08.7863070Z   RUST_BACKTRACE: short
+contracts	Format check	2026-03-27T01:13:08.7863318Z   CARGO_UNSTABLE_SPARSE_REGISTRY: true
+contracts	Format check	2026-03-27T01:13:08.7863645Z   CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+contracts	Format check	2026-03-27T01:13:08.7863960Z   CACHE_ON_FAILURE: true
+contracts	Format check	2026-03-27T01:13:08.7864195Z ##[endgroup]
+contracts	Format check	2026-03-27T01:13:08.8858270Z ##[warning]Diff in /home/runner/work/lernza/lernza/contracts/milestone/src/lib.rs:425:
+contracts	Format check	2026-03-27T01:13:08.8866161Z  
+contracts	Format check	2026-03-27T01:13:08.8866489Z      /// Get the configured flat reward for a quest (if set).
+contracts	Format check	2026-03-27T01:13:08.8867147Z      pub fn get_flat_reward(env: Env, quest_id: u32) -> Option<i128> {
+contracts	Format check	2026-03-27T01:13:08.8870530Z -        env.storage().persistent().get(&DataKey::FlatReward(quest_id))
+contracts	Format check	2026-03-27T01:13:08.8870928Z +        env.storage()
+contracts	Format check	2026-03-27T01:13:08.8871160Z +            .persistent()
+contracts	Format check	2026-03-27T01:13:08.8871431Z +            .get(&DataKey::FlatReward(quest_id))
+contracts	Format check	2026-03-27T01:13:08.8871724Z      }
+contracts	Format check	2026-03-27T01:13:08.8871895Z  
+contracts	Format check	2026-03-27T01:13:08.8872159Z      /// Verify an enrollee's completion of a milestone. Owner only.
+contracts	Format check	2026-03-27T01:13:08.8916428Z ##[warning]Diff in /home/runner/work/lernza/lernza/contracts/milestone/src/test.rs:314:
+contracts	Format check	2026-03-27T01:13:08.8918174Z      let (env, client, quest_client, owner) = setup();
+contracts	Format check	2026-03-27T01:13:08.8918727Z      let q_id = create_quest(&env, &quest_client, &owner);
+contracts	Format check	2026-03-27T01:13:08.8919209Z  
+contracts	Format check	2026-03-27T01:13:08.8919774Z -    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+contracts	Format check	2026-03-27T01:13:08.8920424Z +    assert_eq!(
+contracts	Format check	2026-03-27T01:13:08.8920776Z +        client.get_distribution_mode(&q_id),
+contracts	Format check	2026-03-27T01:13:08.8921291Z +        DistributionMode::Custom
+contracts	Format check	2026-03-27T01:13:08.8921702Z +    );
+contracts	Format check	2026-03-27T01:13:08.8922091Z      assert_eq!(client.get_flat_reward(&q_id), None);
+contracts	Format check	2026-03-27T01:13:08.8922578Z  }
+contracts	Format check	2026-03-27T01:13:08.8922847Z  
+contracts	Format check	2026-03-27T01:13:08.8923653Z ##[warning]Diff in /home/runner/work/lernza/lernza/contracts/milestone/src/test.rs:973:
+contracts	Format check	2026-03-27T01:13:08.8924663Z      // Create exactly MAX_MILESTONES (50) milestones, all must succeed
+contracts	Format check	2026-03-27T01:13:08.8925033Z      for i in 0..MAX_MILESTONES {
+contracts	Format check	2026-03-27T01:13:08.8925345Z          let title = String::from_str(&env, "MS");
+contracts	Format check	2026-03-27T01:13:08.8925634Z -        let id =
+contracts	Format check	2026-03-27T01:13:08.8926027Z -            client.create_milestone(&owner, &q_id, &title, &String::from_str(&env, "Desc"), &1, &false);
+contracts	Format check	2026-03-27T01:13:08.8926496Z +        let id = client.create_milestone(
+contracts	Format check	2026-03-27T01:13:08.8927009Z +            &owner,
+contracts	Format check	2026-03-27T01:13:08.8927245Z +            &q_id,
+contracts	Format check	2026-03-27T01:13:08.8927449Z +            &title,
+contracts	Format check	2026-03-27T01:13:08.8927687Z +            &String::from_str(&env, "Desc"),
+contracts	Format check	2026-03-27T01:13:08.8927959Z +            &1,
+contracts	Format check	2026-03-27T01:13:08.8928149Z +            &false,
+contracts	Format check	2026-03-27T01:13:08.8928351Z +        );
+contracts	Format check	2026-03-27T01:13:08.8928551Z          assert_eq!(id, i);
+contracts	Format check	2026-03-27T01:13:08.8929047Z      }
+contracts	Format check	2026-03-27T01:13:08.8929323Z      assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);
+contracts	Format check	2026-03-27T01:13:08.9195616Z ##[error]Process completed with exit code 1.

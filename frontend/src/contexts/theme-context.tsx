@@ -3,16 +3,16 @@ import type { ReactNode } from "react"
 import { ThemeContext, type Theme } from "./theme"
 
 function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+
   try {
     const stored = localStorage.getItem("lernza-theme")
     if (stored === "dark" || stored === "light") return stored
   } catch {
-    // localStorage unavailable (sandboxed iframe, private mode quota) - ignore
+    // Ignore localStorage errors
   }
-  if (typeof window !== "undefined" && "matchMedia" in window) {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-  }
-  return "light"
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
 interface ThemeProviderProps {

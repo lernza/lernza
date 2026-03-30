@@ -2,7 +2,8 @@ import { useEffect, useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
 import { useAsyncData } from "@/hooks/use-async-data"
-import { LoadingState, ErrorState, EmptyState } from "@/components/ui/async-states"
+import { LoadingState, EmptyState } from "@/components/ui/async-states"
+import { SmartError } from "@/components/error-states"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { formatTokens, shortenAddress } from "@/lib/utils"
@@ -168,7 +169,12 @@ export function Leaderboard() {
 
       {/* Content */}
       {isLoading && <LoadingState message="Fetching on-chain data…" />}
-      {!isLoading && error && <ErrorState message={error} />}
+      {!isLoading && error && (
+        <SmartError 
+          message={error} 
+          onRetry={refetchActive} 
+        />
+      )}
       {!isLoading && !error && isEmpty && (
         <EmptyState
           title="No data yet"

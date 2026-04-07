@@ -193,6 +193,11 @@ export function QuestView() {
   // Transaction confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [pendingTransaction, setPendingTransaction] = useState<{
+    type:
+      | "add_enrollee"
+      | "create_milestone"
+      | "verify_payout"
+      | "archive_quest"
     type: "create_milestone" | "verify_payout" | "archive_quest" | "remove_enrollee" | "leave_quest"
     details: TransactionDetails
     execute: () => Promise<void>
@@ -2082,6 +2087,7 @@ export function QuestView() {
           addEnrolleeTx.isPending ||
           createMilestoneTx.isPending ||
           verifyPayoutTx.isPending ||
+          archiveQuestTx.isPending
           archiveQuestTx.isPending ||
           removeEnrolleeTx.isPending ||
           leaveQuestTx.isPending

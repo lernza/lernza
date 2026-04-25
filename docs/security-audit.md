@@ -30,6 +30,17 @@ The three contracts implement a learn-to-earn flow where the frontend orchestrat
 
 ---
 
+## Threat Triage Matrix
+
+This matrix is a quick, OWASP-style triage view: **asset → threat → mitigation**.
+
+| Asset | Primary threat | Likely impact | Current mitigation | Gaps / follow-ups |
+|---|---|---|---|---|
+| Quest funds (reward pools) | Unauthorized authority initialization / front-running | Pool drain, loss of funds, stuck quests | Per-function auth checks + storage guards | Cross-contract validation against quest owner (see CRIT-02); initialize/admin auth (see HIGH-02) |
+| Enrollment data (enrollee lists, progress) | Forged enrollment/completion state | Unfair rewards, data integrity loss | Quest contract enforces enrollee management | Ensure milestone verification checks enrollment (see HIGH-01); avoid duplicated “authority” state across contracts |
+| Certificate metadata (token IDs, ownership) | Incorrect issuance / spoofed proofs | False credentials, reputational damage | Certificate contract ties token ownership to chain | Validate issuance triggers originate from verified completion path; document verification approach for third parties |
+| Admin keys (pause/admin roles) | Key compromise / misuse | Global outage, censorship, funds loss | `require_auth()` on admin paths; pause mechanisms | Rotate keys; consider multisig; document key management and incident response |
+
 ## Findings
 
 ### CRIT-01 — Milestone Ownership Race Condition

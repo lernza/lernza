@@ -17,6 +17,7 @@ Content-Security-Policy: "
   frame-ancestors 'none';
   base-uri 'self';
   form-action 'self';
+  report-uri /api/csp-report;
   upgrade-insecure-requests;
 "
 ```
@@ -92,6 +93,8 @@ document.addEventListener('securitypolicyviolation', (e) => {
     });
 });
 ```
+
+Violations are also reported server-side via `report-uri /api/csp-report`, which logs reports in the deployment's function logs.
 
 ## Deployment Notes
 

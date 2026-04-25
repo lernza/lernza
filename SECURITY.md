@@ -12,7 +12,9 @@ Instead, report vulnerabilities privately:
 2. Click "Report a vulnerability"
 3. Provide as much detail as possible
 
-If GitHub Security Advisories are unavailable, email the maintainers directly with the subject line `[SECURITY] Lernza vulnerability report`.
+This uses GitHub's private vulnerability reporting flow (when enabled in repo settings).
+
+If the "Report a vulnerability" button is not available, email the maintainers directly with the subject line `[SECURITY] Lernza vulnerability report`.
 
 ### What to include
 

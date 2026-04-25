@@ -1,12 +1,10 @@
 export const config = { api: { bodyParser: false } }
 
-import type { IncomingMessage, ServerResponse } from "node:http"
-
-function readRawBody(req: IncomingMessage): Promise<string> {
+function readRawBody(req) {
   return new Promise(resolve => {
     let data = ""
     req.setEncoding("utf8")
-    req.on("data", (chunk: string) => {
+    req.on("data", chunk => {
       data += chunk
     })
     req.on("end", () => resolve(data))
@@ -14,7 +12,7 @@ function readRawBody(req: IncomingMessage): Promise<string> {
   })
 }
 
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.statusCode = 405
     res.setHeader("content-type", "text/plain; charset=utf-8")
@@ -25,8 +23,11 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   const contentType = req.headers["content-type"] || ""
   const raw = await readRawBody(req)
 
-  let parsed: unknown = raw
-  if (String(contentType).includes("application/json") || String(contentType).includes("application/csp-report")) {
+  let parsed = raw
+  if (
+    String(contentType).includes("application/json") ||
+    String(contentType).includes("application/csp-report")
+  ) {
     try {
       parsed = raw ? JSON.parse(raw) : null
     } catch {
@@ -45,3 +46,4 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
   res.statusCode = 204
   res.end()
 }
+

@@ -1,5 +1,3 @@
-export const config = { api: { bodyParser: false } }
-
 function readRawBody(req) {
   return new Promise(resolve => {
     let data = ""
@@ -12,7 +10,7 @@ function readRawBody(req) {
   })
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== "POST") {
     res.statusCode = 405
     res.setHeader("content-type", "text/plain; charset=utf-8")
@@ -47,3 +45,5 @@ export default async function handler(req, res) {
   res.end()
 }
 
+module.exports = handler
+module.exports.config = { api: { bodyParser: false } }

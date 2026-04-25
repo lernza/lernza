@@ -11,5 +11,12 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     exclude: ["e2e/**", "node_modules/**"],
+    coverage: {
+      thresholds: {
+        perFile: true,
+        statements: 70,
+        branches: 60,
+      },
+    },
   },
 })

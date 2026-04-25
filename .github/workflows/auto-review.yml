@@ -1,70 +1,30 @@
 name: Auto Review
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
-  auto-review:
-    if: github.event.workflow_run.conclusion == 'success'
+  review:
+    if: github.event.pull_request.state == 'open' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Find PR for this CI run
-        id: pr
+      - name: Gather PR metadata, diff, and linked issue context
+        id: ctx
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-          EVENT="${{ github.event.workflow_run.event }}"
-
-          echo "CI ran on branch=$HEAD_BRANCH sha=$HEAD_SHA event=$EVENT"
-
-          # Only review PRs, not pushes to main
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "Not a PR event, skipping"
-            echo "skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          # Method 1: search open PRs by head branch
-          PR_NUM=$(gh pr list --repo "${{ github.repository }}" \
-            --head "$HEAD_BRANCH" --state open --json number \
-            --jq '.[0].number' 2>/dev/null || echo "")
-
-          # Method 2: fallback to commits API
-          if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "null" ]; then
-            PR_NUM=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/pulls" \
-              --jq '.[0].number' 2>/dev/null || echo "")
-          fi
-
-          if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "null" ]; then
-            echo "No PR found for branch $HEAD_BRANCH"
-            echo "skip=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "Found PR #$PR_NUM"
-          echo "number=$PR_NUM" >> $GITHUB_OUTPUT
-          echo "skip=false" >> $GITHUB_OUTPUT
-
-      - name: Get PR diff and metadata
-        if: steps.pr.outputs.skip != 'true'
-        id: diff
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUM: ${{ steps.pr.outputs.number }}
+          PR_NUM: ${{ github.event.pull_request.number }}
         run: |
           PR_DATA=$(gh pr view "$PR_NUM" --json title,body,author,files,additions,deletions,changedFiles)
           AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
           TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
           FILES=$(echo "$PR_DATA" | jq -r '.changedFiles')
           ADDS=$(echo "$PR_DATA" | jq -r '.additions')
           DELS=$(echo "$PR_DATA" | jq -r '.deletions')
@@ -80,182 +40,361 @@ jobs:
             echo "GHA_DELIM"
           } >> $GITHUB_OUTPUT
 
-          gh pr diff "$PR_NUM" > /tmp/pr-diff.txt 2>/dev/null || true
-          head -3000 /tmp/pr-diff.txt > /tmp/pr-diff-truncated.txt
-
-          LINKED_ISSUES=$(echo "$PR_DATA" | jq -r '.body // ""' | \
-            grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | \
-            grep -oE '#[0-9]+' || echo "none")
           {
-            echo "issues<<GHA_DELIM"
-            echo "$LINKED_ISSUES"
+            echo "pr_body<<GHA_DELIM"
+            echo "$BODY"
             echo "GHA_DELIM"
           } >> $GITHUB_OUTPUT
 
-      - name: Review with Groq
-        if: steps.pr.outputs.skip != 'true'
+          # Fetch the diff and capture size signals
+          gh pr diff "$PR_NUM" > /tmp/pr-diff.txt 2>/dev/null || true
+          DIFF_BYTES=$(wc -c < /tmp/pr-diff.txt | tr -d ' ')
+          # Count actual +/- lines (excluding diff headers like +++ and ---)
+          REAL_CHANGE_LINES=$(grep -E '^[+-]' /tmp/pr-diff.txt | grep -vE '^(\+\+\+|---)' | wc -l | tr -d ' ')
+          echo "diff_bytes=$DIFF_BYTES" >> $GITHUB_OUTPUT
+          echo "real_change_lines=$REAL_CHANGE_LINES" >> $GITHUB_OUTPUT
+
+          # Truncate diff to keep prompt size manageable
+          head -3000 /tmp/pr-diff.txt > /tmp/pr-diff-truncated.txt
+
+          # Extract linked issue numbers from PR body
+          ISSUE_NUMS=$(echo "$BODY" | \
+            grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | \
+            grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true)
+
+          : > /tmp/issues-context.txt
+          if [ -n "${ISSUE_NUMS:-}" ]; then
+            for NUM in $ISSUE_NUMS; do
+              ISSUE_DATA=$(gh issue view "$NUM" --repo "${{ github.repository }}" \
+                --json number,title,body 2>/dev/null || echo "")
+              if [ -n "$ISSUE_DATA" ]; then
+                ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title // ""')
+                ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""' | head -c 2000)
+                {
+                  echo "--- Issue #$NUM: $ISSUE_TITLE ---"
+                  echo "$ISSUE_BODY"
+                  echo ""
+                } >> /tmp/issues-context.txt
+              fi
+            done
+          fi
+
+          if [ ! -s /tmp/issues-context.txt ]; then
+            echo "(No issues linked or issues could not be fetched)" > /tmp/issues-context.txt
+            echo "has_issue=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_issue=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pre-flight empty-diff fraud check
+        id: preflight
+        env:
+          DIFF_BYTES: ${{ steps.ctx.outputs.diff_bytes }}
+          REAL_CHANGE_LINES: ${{ steps.ctx.outputs.real_change_lines }}
+          ADDS: ${{ steps.ctx.outputs.adds }}
+        run: |
+          # Empty / whitespace / no real additions = automatic fraud flag.
+          # No model call needed — this is unambiguous.
+          if [ "$DIFF_BYTES" -lt 50 ] || [ "$ADDS" -eq 0 ] || [ "$REAL_CHANGE_LINES" -lt 1 ]; then
+            echo "auto_fraud=true" >> $GITHUB_OUTPUT
+            echo "fraud_type=empty" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "auto_fraud=false" >> $GITHUB_OUTPUT
+
+      - name: Lenient fraud-detection review (Groq gpt-oss-120b)
+        if: steps.preflight.outputs.auto_fraud != 'true'
         id: review
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          PR_TITLE: ${{ steps.diff.outputs.title }}
-          PR_AUTHOR: ${{ steps.diff.outputs.author }}
-          PR_FILES: ${{ steps.diff.outputs.files }}
-          PR_ADDS: ${{ steps.diff.outputs.adds }}
-          PR_DELS: ${{ steps.diff.outputs.dels }}
-          PR_ISSUES: ${{ steps.diff.outputs.issues }}
+          PR_TITLE: ${{ steps.ctx.outputs.title }}
+          PR_AUTHOR: ${{ steps.ctx.outputs.author }}
+          PR_BODY: ${{ steps.ctx.outputs.pr_body }}
+          PR_FILES: ${{ steps.ctx.outputs.files }}
+          PR_ADDS: ${{ steps.ctx.outputs.adds }}
+          PR_DELS: ${{ steps.ctx.outputs.dels }}
+          HAS_ISSUE: ${{ steps.ctx.outputs.has_issue }}
         run: |
-          DIFF=$(cat /tmp/pr-diff-truncated.txt)
-
+          # Single-quoted heredoc marker → no shell expansion of the prompt body
           SYSTEM_PROMPT=$(cat <<'SYSTEM_EOF'
-          You are a lenient but intelligent code reviewer for Lernza, a learn-to-earn
-          platform built with Soroban smart contracts (Rust) and a React/TypeScript frontend.
+          You are an EXTREMELY LENIENT code reviewer for Lernza, a hackathon project.
+          Interns are shipping fast. CI has been disabled to maximise velocity.
 
-          This is a fast-paced hackathon project with mostly intern contributors.
-          Be encouraging and constructive. We care that the work is genuine and
-          functional, not perfect.
+          ## Default behaviour: APPROVE almost everything
 
-          APPROVE the PR if:
-          - The changes are genuine and relate to the linked issue
-          - The code generally works and won't break the app
-          - Even if there are minor style issues, missing types, or imperfect patterns
+          IGNORE all of: code style, formatting, naming conventions, missing tests,
+          untyped code, imperfect patterns, unhandled edge cases, performance,
+          accessibility, missing comments, missing documentation, ugly code,
+          "not idiomatic" patterns, suggestions for improvement, partial
+          implementations, work-in-progress code that compiles.
 
-          REQUEST CHANGES only if:
-          - The PR is empty or clearly fake (no real changes)
-          - The changes would break the app (removing critical imports, syntax errors)
-          - The PR has nothing to do with the linked issue (fraud)
-          - There are security vulnerabilities (exposed secrets, XSS, SQL injection)
+          A PR with real code changes that plausibly relate to the title or linked
+          issue → APPROVE. Do not nitpick. Do not request style fixes. Do not worry
+          about quality. Approve.
 
-          Your response MUST start with exactly one of these two lines:
-          DECISION: APPROVE
-          DECISION: REQUEST_CHANGES
+          Examples that should APPROVE:
+          - Bad style but real changes → APPROVE
+          - Solves only part of the issue → APPROVE
+          - Has typos in code or description → APPROVE
+          - Could be done more elegantly → APPROVE
+          - Missing tests → APPROVE
+          - Wrong-looking but plausible attempt → APPROVE
+          - Hardcoded values, magic numbers → APPROVE
+          - No error handling → APPROVE
 
-          Then write a short friendly review (under 200 words) on the following lines.
+          ## Exception: catch SCAM / FRAUD
+
+          You exist for ONE purpose besides approving: catch contributors who are
+          GAMING the contribution credit system without doing real work. Flag fraud
+          ONLY when you have concrete evidence in the diff itself.
+
+          Fraud categories (FLAG_FRAUD):
+
+          1. empty: diff is whitespace-only, formatting-only, import-reordering only,
+             or comment-only changes passed off as substantive feature work.
+          2. unrelated: the diff has no plausible connection to the PR title /
+             description / linked issue (e.g. PR titled "fix login bug" but the diff
+             only changes a colour or unrelated README section).
+          3. ai_slop: obvious AI-generated boilerplate that adds dead code (functions
+             never called, types never used, components never rendered, files never
+             imported) with no actual problem being solved in the existing codebase.
+          4. copy_paste: code copied verbatim from another file in the same repo
+             with trivial renames, presenting duplicated logic as new work.
+          5. revert_repackage: the diff reverts another contributor's prior commits
+             and presents the reverted state as the contributor's own change.
+          6. claim_mismatch: PR description claims to implement X (e.g. "adds JWT
+             auth") but the diff clearly does NOT implement X (e.g. only edits a
+             string literal). The discrepancy must be objectively obvious from the
+             diff, not a subjective judgement about completeness.
+          7. security: exposed secrets / API keys / private keys / credentials
+             hardcoded in the diff, or obviously destructive code (rm -rf $HOME,
+             DROP TABLE in production paths, leaking PII to logs).
+
+          ## Critical decision rule
+
+          If you are NOT highly certain that fraud is happening, APPROVE.
+          False-positive fraud accusations damage intern morale and trust.
+          Only FLAG_FRAUD when the evidence is staring you in the face.
+
+          "Low effort" is NOT fraud. "Could be better" is NOT fraud.
+          "Doesn't fully solve the issue" is NOT fraud. "Code smells" is NOT fraud.
+
+          Your confidence on FLAG_FRAUD must reflect this: if you are even slightly
+          uncertain, either APPROVE or set FLAG_FRAUD confidence below 0.7.
+
+          ## Output
+
+          Respond with a SINGLE JSON object only. No preamble, no markdown fences,
+          no explanation outside the JSON.
+
+          Schema:
+          {
+            "decision": "APPROVE" | "FLAG_FRAUD",
+            "confidence": <number between 0 and 1, where 1 = certain>,
+            "fraud_type": "none" | "empty" | "unrelated" | "ai_slop" | "copy_paste" | "revert_repackage" | "claim_mismatch" | "security",
+            "evidence": <string — for FLAG_FRAUD, cite specific files/lines/patterns from the diff that prove the fraud; for APPROVE, name one real change you observed>,
+            "summary": <string under 150 words, friendly tone, addressed to the contributor>
+          }
           SYSTEM_EOF
           )
 
-          USER_MSG="PR Title: ${PR_TITLE}
-          Author: ${PR_AUTHOR}
-          Files changed: ${PR_FILES}
-          Additions: ${PR_ADDS}
-          Deletions: ${PR_DELS}
-          Linked issues: ${PR_ISSUES}
-
-          Diff:
-          \`\`\`
-          ${DIFF}
-          \`\`\`"
-
+          # Build payload entirely in jq to avoid shell injection from diff/PR content.
+          # --arg passes shell strings safely; --rawfile reads files without shell.
           PAYLOAD=$(jq -n \
-            --arg system "$SYSTEM_PROMPT" \
-            --arg user "$USER_MSG" \
+            --arg system   "$SYSTEM_PROMPT" \
+            --arg title    "$PR_TITLE" \
+            --arg author   "$PR_AUTHOR" \
+            --arg pr_body  "$PR_BODY" \
+            --arg files    "$PR_FILES" \
+            --arg adds     "$PR_ADDS" \
+            --arg dels     "$PR_DELS" \
+            --arg has_iss  "$HAS_ISSUE" \
+            --rawfile diff /tmp/pr-diff-truncated.txt \
+            --rawfile issues /tmp/issues-context.txt \
             '{
-              model: "llama-3.1-8b-instant",
+              model: "openai/gpt-oss-120b",
               messages: [
                 { role: "system", content: $system },
-                { role: "user", content: $user }
+                { role: "user",   content: (
+                    "## PR metadata\n\n" +
+                    "Title: " + $title + "\n" +
+                    "Author: " + $author + "\n" +
+                    "Files changed: " + $files + "\n" +
+                    "Additions: " + $adds + "\n" +
+                    "Deletions: " + $dels + "\n" +
+                    "Has linked issue: " + $has_iss + "\n\n" +
+                    "## PR description\n\n" + $pr_body + "\n\n" +
+                    "## Linked issue(s) full content\n\n" + $issues + "\n\n" +
+                    "## Diff (first 3000 lines)\n\n```diff\n" + $diff + "\n```\n\n" +
+                    "Now produce the JSON review object."
+                ) }
               ],
-              max_tokens: 1024,
-              temperature: 0.3
+              max_completion_tokens: 4096,
+              temperature: 0.1,
+              response_format: { type: "json_object" },
+              reasoning_effort: "medium"
             }')
 
-          RESPONSE=$(curl -s https://api.groq.com/openai/v1/chat/completions \
+          RESPONSE=$(curl -s --max-time 180 https://api.groq.com/openai/v1/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $GROQ_API_KEY" \
             -d "$PAYLOAD")
 
-          # Debug: log response structure (redacted)
-          echo "Response keys: $(echo "$RESPONSE" | jq -r 'keys | join(", ")')"
+          echo "Response top-level keys: $(echo "$RESPONSE" | jq -r 'keys | join(", ")' 2>/dev/null || echo '<unparseable>')"
 
-          # Extract the review text
-          REVIEW_TEXT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // ""')
+          API_ERROR=$(echo "$RESPONSE" | jq -r '.error.message // ""' 2>/dev/null || echo "")
+          REVIEW_JSON=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // ""' 2>/dev/null || echo "")
 
-          # Check for API errors
-          API_ERROR=$(echo "$RESPONSE" | jq -r '.error.message // ""')
-          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "" ] && [ "$API_ERROR" != "null" ]; then
+          # ---- Fail-closed parsing ----
+          # ANY failure path (API error, empty content, malformed JSON, unknown
+          # decision value) results in DECISION=UNKNOWN, which the next step
+          # handles as "comment only — do not approve, do not close, do not merge."
+          DECISION="UNKNOWN"
+          CONFIDENCE="0"
+          FRAUD_TYPE="none"
+          EVIDENCE=""
+          MODEL_SUMMARY=""
+
+          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "null" ]; then
             echo "Groq API error: $API_ERROR"
-            REVIEW_TEXT="Could not generate review: $API_ERROR"
-            echo "action=COMMENT" >> $GITHUB_OUTPUT
-            {
-              echo "body<<REVIEW_EOF"
-              echo "$REVIEW_TEXT"
-              echo "REVIEW_EOF"
-            } >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
-            REVIEW_TEXT="CI checks passed. Auto-review could not generate detailed feedback."
-          fi
-
-          echo "Review generated (${#REVIEW_TEXT} chars)"
-
-          # Parse decision from first line
-          if echo "$REVIEW_TEXT" | grep -qi "REQUEST.CHANGES"; then
-            echo "action=REQUEST_CHANGES" >> $GITHUB_OUTPUT
+            MODEL_SUMMARY="Auto-review failed (API error: $API_ERROR). Leaving PR for human review."
+          elif [ -z "$REVIEW_JSON" ] || [ "$REVIEW_JSON" = "null" ]; then
+            echo "Empty model response"
+            MODEL_SUMMARY="Auto-review returned an empty response. Leaving PR for human review."
+          elif ! echo "$REVIEW_JSON" | jq empty 2>/dev/null; then
+            echo "Model output is not valid JSON. Raw: $REVIEW_JSON"
+            MODEL_SUMMARY="Auto-review returned malformed JSON. Leaving PR for human review."
           else
-            echo "action=APPROVE" >> $GITHUB_OUTPUT
+            DECISION=$(echo "$REVIEW_JSON" | jq -r '.decision // "UNKNOWN"')
+            CONFIDENCE=$(echo "$REVIEW_JSON" | jq -r '.confidence // 0')
+            FRAUD_TYPE=$(echo "$REVIEW_JSON" | jq -r '.fraud_type // "none"')
+            EVIDENCE=$(echo "$REVIEW_JSON" | jq -r '.evidence // ""')
+            MODEL_SUMMARY=$(echo "$REVIEW_JSON" | jq -r '.summary // ""')
+
+            if [ "$DECISION" != "APPROVE" ] && [ "$DECISION" != "FLAG_FRAUD" ]; then
+              echo "Unrecognised decision value: $DECISION — failing closed"
+              DECISION="UNKNOWN"
+              MODEL_SUMMARY="Auto-review returned an unrecognised decision. Leaving PR for human review."
+            fi
           fi
 
-          # Strip the DECISION line and clean up for the review body
-          REVIEW_BODY=$(echo "$REVIEW_TEXT" | sed '/^DECISION:/d' | sed '/^$/N;/^\n$/d')
-          if [ -z "$REVIEW_BODY" ] || [ ${#REVIEW_BODY} -lt 5 ]; then
-            REVIEW_BODY="Looks good. CI checks passed."
-          fi
+          echo "Decision: $DECISION | Confidence: $CONFIDENCE | Fraud type: $FRAUD_TYPE"
 
+          REVIEW_BODY=$(printf '%s\n\n---\n**Auto-review details**\n- Decision: `%s` (confidence: `%s`)\n- Fraud type: `%s`\n- Evidence: %s\n\n_Reviewed by `openai/gpt-oss-120b` via Groq. Auto-merge on APPROVE >= 0.7. Auto-close on FLAG_FRAUD >= 0.85._\n' \
+            "$MODEL_SUMMARY" "$DECISION" "$CONFIDENCE" "$FRAUD_TYPE" "$EVIDENCE")
+
+          echo "decision=$DECISION" >> $GITHUB_OUTPUT
+          echo "confidence=$CONFIDENCE" >> $GITHUB_OUTPUT
+          echo "fraud_type=$FRAUD_TYPE" >> $GITHUB_OUTPUT
           {
             echo "body<<REVIEW_EOF"
             echo "$REVIEW_BODY"
             echo "REVIEW_EOF"
           } >> $GITHUB_OUTPUT
 
-      - name: Submit review as repo owner
-        if: steps.pr.outputs.skip != 'true'
+      - name: Handle pre-flight detected empty PR (auto-close)
+        if: steps.preflight.outputs.auto_fraud == 'true'
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
-          PR_NUM: ${{ steps.pr.outputs.number }}
-          ACTION: ${{ steps.review.outputs.action }}
-          BODY: ${{ steps.review.outputs.body }}
-          PR_AUTHOR: ${{ steps.diff.outputs.author }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ steps.ctx.outputs.author }}
         run: |
-          # Determine who the PAT belongs to
           PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
+          BODY=$(printf '%s\n' \
+            "Auto-review: this PR has an empty or whitespace-only diff. No real code changes detected." \
+            "" \
+            "If you intended to push code, please commit it. If this PR was opened by mistake, no action needed." \
+            "" \
+            "Closing automatically since CI is disabled and there is nothing to review. Open a new PR (or reopen this one) once you have actual changes." \
+            "" \
+            "---" \
+            "_Detected by pre-flight check (\`fraud_type: empty\`). No model call was made._")
 
-          # Ensure body is never empty
-          if [ -z "$BODY" ]; then
-            BODY="CI checks passed. Looks good."
-          fi
-
-          # GitHub does not allow approving your own PR
           if [ "$PR_AUTHOR" = "$PAT_USER" ]; then
-            echo "Skipping formal review: PR author ($PR_AUTHOR) is the reviewer ($PAT_USER)"
             gh pr comment "$PR_NUM" --body "$BODY"
-            exit 0
+          else
+            gh pr review "$PR_NUM" --request-changes --body "$BODY" || \
+              gh pr comment "$PR_NUM" --body "$BODY"
           fi
 
-          # For COMMENT action (API errors), just comment
-          if [ "$ACTION" = "COMMENT" ]; then
-            gh pr comment "$PR_NUM" --body "$BODY"
-            exit 0
-          fi
+          gh pr close "$PR_NUM" --comment "Auto-closed: empty diff." || true
 
-          gh pr review "$PR_NUM" \
-            --"$(echo "$ACTION" | tr '[:upper:]' '[:lower:]' | tr '_' '-')" \
-            --body "$BODY"
-
-      - name: Auto-merge approved PRs
-        if: steps.pr.outputs.skip != 'true' && steps.review.outputs.action == 'APPROVE'
+      - name: Submit review and act on model decision
+        if: steps.preflight.outputs.auto_fraud != 'true'
+        id: act
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
-          PR_NUM: ${{ steps.pr.outputs.number }}
-          PR_TITLE: ${{ steps.diff.outputs.title }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ steps.ctx.outputs.author }}
+          DECISION: ${{ steps.review.outputs.decision }}
+          CONFIDENCE: ${{ steps.review.outputs.confidence }}
+          FRAUD_TYPE: ${{ steps.review.outputs.fraud_type }}
+          BODY: ${{ steps.review.outputs.body }}
         run: |
-          # Collect existing commit bodies, strip any AI/bot co-author lines
+          PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
+          IS_SELF_PR="false"
+          if [ "$PR_AUTHOR" = "$PAT_USER" ]; then
+            IS_SELF_PR="true"
+          fi
+
+          # Asymmetric confidence thresholds:
+          # - Merge (lenient by design):  APPROVE     >= 0.7
+          # - Close (destructive action): FLAG_FRAUD  >= 0.85
+          MERGE_OK=$(awk -v c="$CONFIDENCE" 'BEGIN { print (c+0 >= 0.7) ? "true" : "false" }')
+          CLOSE_OK=$(awk -v c="$CONFIDENCE" 'BEGIN { print (c+0 >= 0.85) ? "true" : "false" }')
+
+          echo "merge_ok=$MERGE_OK" >> $GITHUB_OUTPUT
+          echo "close_ok=$CLOSE_OK" >> $GITHUB_OUTPUT
+
+          if [ -z "$BODY" ]; then
+            BODY="Auto-review produced no body. Manual review required."
+          fi
+
+          case "$DECISION" in
+            APPROVE)
+              if [ "$IS_SELF_PR" = "true" ]; then
+                gh pr comment "$PR_NUM" --body "$BODY"
+              else
+                gh pr review "$PR_NUM" --approve --body "$BODY"
+              fi
+              ;;
+
+            FLAG_FRAUD)
+              if [ "$IS_SELF_PR" = "true" ]; then
+                gh pr comment "$PR_NUM" --body "$BODY"
+              else
+                gh pr review "$PR_NUM" --request-changes --body "$BODY"
+              fi
+
+              if [ "$CLOSE_OK" = "true" ]; then
+                gh pr close "$PR_NUM" --comment "Auto-closed: fraud detected (\`$FRAUD_TYPE\`, confidence \`$CONFIDENCE\`). Reopen with real changes if this was a mistake." || true
+              else
+                gh pr comment "$PR_NUM" --body "Fraud flagged at confidence \`$CONFIDENCE\` (below auto-close threshold of \`0.85\`). Holding open for human review."
+              fi
+              ;;
+
+            *)
+              # UNKNOWN — fail closed: comment only, no merge, no close
+              gh pr comment "$PR_NUM" --body "$BODY"
+              ;;
+          esac
+
+      - name: Auto-merge approved PRs at high confidence
+        if: |
+          steps.preflight.outputs.auto_fraud != 'true'
+          && steps.review.outputs.decision == 'APPROVE'
+          && steps.act.outputs.merge_ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.OWNER_PAT }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ steps.ctx.outputs.title }}
+        run: |
+          # Strip any AI/bot co-author lines from existing commit messages
           COMMIT_BODY=$(gh pr view "$PR_NUM" --json commits \
             --jq '[.commits[].messageBody] | join("\n")' \
             | grep -viE 'co-authored-by:.*(claude|qwen|copilot|github-actions|bot|\[bot\]|gpt|openai|anthropic)' \
             || true)
 
-          # Always add the human co-author
           MERGE_BODY=$(printf '%s\n\nCo-authored-by: Dopey <hello@sshdopey.com>' "$COMMIT_BODY" \
             | sed '/^$/N;/^\n$/d')
 

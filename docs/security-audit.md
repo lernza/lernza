@@ -28,6 +28,15 @@ The three contracts implement a learn-to-earn flow where the frontend orchestrat
 | INFO-01 | quest | Informational | Read-only functions are ungated (by design) |
 | INFO-02 | cross | Informational | Frontend-orchestrated flow creates ordering assumptions |
 
+## OWASP-Style Threat Triage Matrix
+
+| Asset | Primary Threat | Attack Path | Impact | Existing Controls | Additional Mitigation |
+|---|---|---|---|---|---|
+| Quest funds (reward pools in `rewards`) | Unauthorized distribution / pool drainage | Attacker gains quest authority (front-running or compromised key) and calls `distribute_reward` / `refund_pool` | Loss of learner incentives and treasury funds | Authority checks, archived-quest + refund window checks, milestone completion checks before distribution | Add multi-sig admin for production, anomaly alerting on large payouts, and per-quest withdrawal/rate limits |
+| Enrollment data (`quest` enrollees + membership checks) | Unauthorized completion/reward flow for non-enrollees | Missing or bypassed enrollee validation in completion/reward orchestration | Rewards paid to unqualified addresses, integrity loss in learner records | Enrollment APIs + contract-level enrollment storage | Keep strict cross-contract `is_enrollee` checks in milestone verification path and add negative tests for unenrolled addresses |
+| Certificate metadata (`certificate` NFT records) | Forged issuance or unauthorized revocation | Compromised owner path or weak owner-rotation process leads to unauthorized owner-only actions | Trust/reputation damage, invalid completion proofs | Owner-only mint/revoke gates (`Ownable`) | Define enforced owner rotation drills, monitor owner-only txs, and require dual-approval process for certificate admin actions |
+| Admin keys (quest/milestone/rewards/certificate operators) | Key compromise / admin takeover | Secret leakage, endpoint compromise, or CI token exposure | Full control over pause/admin operations and contract upgrade/rotation workflows | Admin auth checks, pause controls, documented operations runbook | HSM-backed keys, mandatory periodic rotation, incident-response SLA, and on-chain monitoring for admin function calls |
+
 ---
 
 ## Findings

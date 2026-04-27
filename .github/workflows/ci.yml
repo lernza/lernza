@@ -1,0 +1,420 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  # ── Detect what changed ──────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            contracts:
+              - 'contracts/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+  # ── Frontend: lint + type-check + build ──────────────────────────
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Type-check & build
+        run: pnpm run build
+
+      - name: Analyze bundle size
+        id: bundle
+        run: |
+          cd dist
+          TOTAL_SIZE=$(du -sh . | cut -f1)
+          ASSETS_SIZE=$(du -sh assets | cut -f1)
+          echo "total_size=$TOTAL_SIZE" >> $GITHUB_OUTPUT
+          echo "assets_size=$ASSETS_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Comment bundle size
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { total_size, assets_size } = process.env;
+            const body = `## 📦 Bundle Size Report\n\n| Metric | Size |\n|--------|------|\n| Total dist | ${total_size} |\n| Assets | ${assets_size} |\n\n_This helps track frontend bundle size changes._`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user?.type === 'Bot' && c.body?.includes('Bundle Size Report')
+            );
+
+            try {
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.log("Failed to post bundle size comment.", error.message);
+            }
+        env:
+          total_size: ${{ steps.bundle.outputs.total_size }}
+          assets_size: ${{ steps.bundle.outputs.assets_size }}
+
+  # ── Contracts: fmt + clippy + test + build WASM ──────────────────
+  # Matrix covers Linux and macOS to catch platform-specific divergence.
+  contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stellar-cli (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - name: Install stellar-cli (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-apple-darwin.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown,wasm32v1-none
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Smoke-check test module syntax
+        run: cargo check --workspace --tests
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets
+
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Build WASM contracts
+        run: stellar contract build
+
+      - name: Check contract WASM sizes (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          MAX_SIZE=$((256 * 1024))
+          FAILED=0
+
+          echo "=== Contract WASM Size Report ==="
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            SIZE=$(stat -c%s "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            NAME=$(basename "$wasm")
+
+            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS 256KB limit)"
+              FAILED=1
+            else
+              echo "OK   $NAME: ${SIZE_KB}KB"
+            fi
+          done
+
+          echo "================================="
+          if [ "$FAILED" -eq 1 ]; then
+            echo "One or more contracts exceed the 256KB Soroban size limit."
+            exit 1
+          fi
+
+      - name: Check contract WASM sizes (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          MAX_SIZE=$((256 * 1024))
+          FAILED=0
+
+          echo "=== Contract WASM Size Report ==="
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            SIZE=$(stat -f%z "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            NAME=$(basename "$wasm")
+
+            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS 256KB limit)"
+              FAILED=1
+            else
+              echo "OK   $NAME: ${SIZE_KB}KB"
+            fi
+          done
+
+          echo "================================="
+          if [ "$FAILED" -eq 1 ]; then
+            echo "One or more contracts exceed the 256KB Soroban size limit."
+            exit 1
+          fi
+
+      - name: Upload WASM artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts-wasm
+          path: target/wasm32v1-none/release/*.wasm
+          retention-days: 14
+
+  # ── WASM size delta comment ───────────────────────────────────────
+  # Builds the WASM on the base branch and the PR branch, computes the
+  # per-contract delta, and posts a summary comment on the PR.
+  wasm-size:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Install stellar-cli
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz -C /usr/local/bin
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32v1-none
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-wasm-size-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-wasm-size-
+
+      # Build base branch WASM
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - name: Build base WASM
+        working-directory: base
+        run: stellar contract build
+
+      - name: Record base WASM sizes
+        working-directory: base
+        run: |
+          mkdir -p /tmp/wasm-sizes
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            NAME=$(basename "$wasm")
+            SIZE=$(stat -c%s "$wasm")
+            echo "$SIZE" > "/tmp/wasm-sizes/base_${NAME}.size"
+          done
+
+      # Build PR branch WASM
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: head
+
+      - name: Build PR WASM
+        working-directory: head
+        run: stellar contract build
+
+      - name: Compute delta and post comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const wasmDir = 'head/target/wasm32v1-none/release';
+            const sizeDir = '/tmp/wasm-sizes';
+
+            let rows = '';
+            let hasFiles = false;
+
+            const wasmFiles = fs.readdirSync(wasmDir).filter(f => f.endsWith('.wasm'));
+            for (const name of wasmFiles) {
+              hasFiles = true;
+              const headSize = fs.statSync(path.join(wasmDir, name)).size;
+              const baseFile = path.join(sizeDir, `base_${name}.size`);
+              let baseSize = null;
+              if (fs.existsSync(baseFile)) {
+                baseSize = parseInt(fs.readFileSync(baseFile, 'utf8').trim(), 10);
+              }
+
+              const headKB = (headSize / 1024).toFixed(2);
+              if (baseSize === null) {
+                rows += `| \`${name}\` | — | ${headKB} KB | new |\n`;
+              } else {
+                const delta = headSize - baseSize;
+                const deltaKB = (Math.abs(delta) / 1024).toFixed(2);
+                const sign = delta > 0 ? '+' : delta < 0 ? '-' : '+/-';
+                const icon = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
+                rows += `| \`${name}\` | ${(baseSize / 1024).toFixed(2)} KB | ${headKB} KB | ${icon} ${sign}${deltaKB} KB |\n`;
+              }
+            }
+
+            if (!hasFiles) return;
+
+            const body = [
+              '## WASM Size Delta',
+              '',
+              '| Contract | Base | PR | Delta |',
+              '|----------|------|----|-------|',
+              rows.trim(),
+              '',
+              '_Release builds (wasm32v1-none) via `stellar contract build`._',
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user?.type === 'Bot' && c.body?.includes('WASM Size Delta')
+            );
+
+            try {
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+              }
+            } catch (error) {
+              console.log('Could not post WASM size comment (fork PR):', error.message);
+            }
+
+  # ── Frontend: E2E tests with Playwright ─────────────────────────
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.12.0
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create .env.local for dev server
+        run: cp .env.example .env.local
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

@@ -1,13 +1,13 @@
 # Support
 
-Thanks for using Lernza — the learn-to-earn platform on Stellar. 🚀
+Thanks for using Lernza — the learn-to-earn platform on Stellar. 
 
 Before opening an issue, please check the resources below. Most questions
 are already answered there.
 
 ---
 
-## 💬 Got a question?
+##  Got a question?
 
 **Please use [GitHub Discussions](https://github.com/lernza/lernza/discussions)** instead of opening an issue.
 
@@ -16,7 +16,7 @@ as issues may be closed and redirected here.
 
 ---
 
-## 📚 Resources
+##  Resources
 
 - **README** — Project overview, setup, and architecture:
   [`README.md`](./README.md)
@@ -29,7 +29,7 @@ as issues may be closed and redirected here.
 
 ---
 
-## 🐛 Found a bug or have a feature request?
+##  Found a bug or have a feature request?
 
 [Open an issue](https://github.com/lernza/lernza/issues/new/choose) and
 use the appropriate template. Please search existing issues first to avoid
@@ -37,7 +37,7 @@ duplicates.
 
 ---
 
-## 🔒 Security issues
+##  Security issues
 
 **Do not open a public issue for security vulnerabilities.**
 Follow the process in [`SECURITY.md`](./SECURITY.md).

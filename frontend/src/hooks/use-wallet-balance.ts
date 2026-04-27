@@ -1,11 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { rewardsClient } from "@/lib/contracts/rewards"
 
-// Stellar Horizon endpoints
 const HORIZON_MAINNET = "https://horizon.stellar.org"
 const HORIZON_TESTNET = "https://horizon-testnet.stellar.org"
-
-// Reward token decimals — Stellar SAC tokens use 7 decimal places by default
 const REWARD_TOKEN_DECIMALS = 7
 
 export interface WalletBalance {
@@ -29,7 +26,6 @@ function formatBalance(raw: string): string {
 }
 
 function formatRewardBalance(raw: bigint, decimals: number): string {
-  // bigint raw units → human-readable (e.g. 50_000_000n with 7 decimals → "5.00")
   const divisor = BigInt(10 ** decimals)
   const whole = raw / divisor
   const fraction = raw % divisor
@@ -37,103 +33,62 @@ function formatRewardBalance(raw: bigint, decimals: number): string {
   return `${whole.toLocaleString()}.${fractionStr}`
 }
 
-/**
- * Fetches XLM balance from Stellar Horizon API and reward token balance
- * from the on-chain rewards contract for a connected wallet address.
- *
- * @param address     - The connected Stellar wallet address (null when disconnected)
- * @param networkName - The current network name from useWallet (e.g. "Testnet", "mainnet")
- */
+interface BalanceResult {
+  xlmBalance: string | null
+  rewardBalance: string | null
+}
+
+async function fetchBalances(address: string, networkName: string | null): Promise<BalanceResult> {
+  const horizonUrl = getHorizonUrl(networkName)
+
+  const [accountResponse, earnings] = await Promise.allSettled([
+    fetch(`${horizonUrl}/accounts/${address}`),
+    rewardsClient.getUserEarnings(address),
+  ])
+
+  let xlmBalance: string | null = null
+  if (accountResponse.status === "fulfilled") {
+    const res = accountResponse.value
+    if (res.ok) {
+      const data = await res.json()
+      const balances: Array<{ asset_type: string; balance: string }> = data.balances ?? []
+      const xlm = balances.find(b => b.asset_type === "native")
+      xlmBalance = xlm ? formatBalance(xlm.balance) : "0.00"
+    } else if (res.status === 404) {
+      xlmBalance = "0.00"
+    }
+  }
+  if (xlmBalance === null) {
+    throw new Error("Could not fetch balance")
+  }
+
+  let rewardBalance: string | null = null
+  if (earnings.status === "fulfilled" && earnings.value > 0n) {
+    rewardBalance = formatRewardBalance(earnings.value, REWARD_TOKEN_DECIMALS)
+  }
+
+  return { xlmBalance, rewardBalance }
+}
+
 export function useWalletBalance(
   address: string | null,
   networkName: string | null
 ): WalletBalance {
-  const [xlmBalance, setXlmBalance] = useState<string | null>(null)
-  const [rewardBalance, setRewardBalance] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const query = useQuery<BalanceResult, Error>({
+    queryKey: ["walletBalance", address, networkName],
+    queryFn: () => fetchBalances(address!, networkName),
+    enabled: Boolean(address),
+    staleTime: 15_000,
+  })
 
-  // Track the latest fetch so stale responses from prior addresses are discarded
-  const fetchIdRef = useRef(0)
+  if (!address) {
+    return { xlmBalance: null, rewardBalance: null, isLoading: false, error: null }
+  }
 
-  const fetchBalances = useCallback(async () => {
-    if (!address) {
-      setXlmBalance(null)
-      setRewardBalance(null)
-      setIsLoading(false)
-      setError(null)
-      return
-    }
-
-    const fetchId = ++fetchIdRef.current
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const horizonUrl = getHorizonUrl(networkName)
-
-      // Run both fetches in parallel for speed
-      const [accountResponse, earnings] = await Promise.allSettled([
-        fetch(`${horizonUrl}/accounts/${address}`),
-        rewardsClient.getUserEarnings(address),
-      ])
-
-      // Guard: if a newer fetch started while we awaited, discard this result
-      if (fetchId !== fetchIdRef.current) return
-
-      // --- XLM balance ---
-      if (accountResponse.status === "fulfilled") {
-        const res = accountResponse.value
-
-        if (res.ok) {
-          const data = await res.json()
-          const balances: Array<{ asset_type: string; balance: string }> = data.balances ?? []
-          const xlm = balances.find(b => b.asset_type === "native")
-          setXlmBalance(xlm ? formatBalance(xlm.balance) : "0.00")
-        } else if (res.status === 404) {
-          // Account exists on ledger but has no funded entry (0 XLM)
-          setXlmBalance("0.00")
-        } else {
-          setXlmBalance(null)
-          setError("Could not fetch balance")
-        }
-      } else {
-        setXlmBalance(null)
-        setError("Could not reach Horizon")
-      }
-
-      // --- Reward token balance ---
-      if (earnings.status === "fulfilled" && earnings.value > 0n) {
-        setRewardBalance(formatRewardBalance(earnings.value, REWARD_TOKEN_DECIMALS))
-      } else {
-        // No earnings yet or contract not configured — silently hide the badge
-        setRewardBalance(null)
-      }
-    } catch {
-      if (fetchId !== fetchIdRef.current) return
-      setXlmBalance(null)
-      setRewardBalance(null)
-      setError("Balance fetch failed")
-    } finally {
-      if (fetchId === fetchIdRef.current) {
-        setIsLoading(false)
-      }
-    }
-  }, [address, networkName])
-
-  useEffect(() => {
-    void fetchBalances()
-  }, [fetchBalances])
-
-  // Clear immediately when wallet disconnects
-  useEffect(() => {
-    if (!address) {
-      setXlmBalance(null)
-      setRewardBalance(null)
-      setError(null)
-      setIsLoading(false)
-    }
-  }, [address])
-
-  return { xlmBalance, rewardBalance, isLoading, error }
+  return {
+    xlmBalance: query.data?.xlmBalance ?? null,
+    rewardBalance: query.data?.rewardBalance ?? null,
+    isLoading: query.isLoading,
+    error: query.error?.message ?? null,
+  }
 }

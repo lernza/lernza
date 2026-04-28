@@ -45,6 +45,10 @@ pub enum DataKey {
     UserEarnings(Address),
     // Global stats
     TotalDistributed,
+    // Total tokens ever funded — Issue #717
+    TotalFunded,
+    // Number of quests funded at least once — Issue #717
+    QuestCount,
     // Total tokens distributed per quest
     QuestDistributed(u32),
     // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
@@ -180,6 +184,29 @@ impl RewardsContract {
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Issue #717 — maintain platform-wide funding stats
+        let total_funded: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalFunded)
+            .unwrap_or(0);
+        let new_total_funded = total_funded.saturating_add(amount);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &new_total_funded);
+
+        // Increment quest count only on first fund for this quest
+        if current == 0 {
+            let quest_count: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestCount)
+                .unwrap_or(0);
+            env.storage()
+                .instance()
+                .set(&DataKey::QuestCount, &(quest_count + 1));
+        }
 
         // Emit quest funding event
         // Event topics: (reward_funded,)
@@ -447,6 +474,131 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
+    }
+
+    /// Return aggregated platform statistics — Issue #717.
+    ///
+    /// Enables a single-call dashboard query instead of N per-contract calls.
+    /// Returns `(total_quests_funded, total_funded, total_distributed)`.
+    pub fn get_platform_stats(env: Env) -> (u32, i128, i128) {
+        let total_quests: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestCount)
+            .unwrap_or(0);
+        let total_funded: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalFunded)
+            .unwrap_or(0);
+        let total_distributed: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDistributed)
+            .unwrap_or(0);
+        (total_quests, total_funded, total_distributed)
+    }
+
+    /// Refund the entire unused pool for a quest — Issue #718.
+    ///
+    /// Convenience wrapper over `refund_pool`: automatically computes the
+    /// maximum refundable amount (pool minus reserved obligations) and
+    /// returns it to the quest authority. Validates:
+    ///   - Quest is `Archived`
+    ///   - 7-day refund window has elapsed
+    ///   - There is actually something to refund
+    pub fn refund_unused_pool(
+        env: Env,
+        authority: Address,
+        quest_id: u32,
+    ) -> Result<i128, Error> {
+        authority.require_auth();
+
+        // Verify authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let stored: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if stored != authority {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify archived + window
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = match quest_client.try_get_quest(&quest_id) {
+            Ok(Ok(q)) => q,
+            Ok(Err(_)) | Err(_) => return Err(Error::QuestLookupFailed),
+        };
+
+        if quest_info.status != QuestStatus::Archived {
+            return Err(Error::QuestNotArchived);
+        }
+        let now = env.ledger().timestamp();
+        if now < quest_info.archived_at + 604_800 {
+            return Err(Error::RefundWindowNotOpen);
+        }
+
+        // Calculate refundable amount
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let total_reserved = milestone_client.get_total_reserved_reward(&quest_id);
+        let distributed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestDistributed(quest_id))
+            .unwrap_or(0_i128);
+        let obligations = total_reserved
+            .checked_sub(distributed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        let pool: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestPool(quest_id))
+            .unwrap_or(0);
+        let refundable = pool
+            .checked_sub(obligations)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        if refundable <= 0 {
+            return Ok(0);
+        }
+
+        // Transfer unused tokens back to authority
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &authority, &refundable);
+
+        // Zero out the pool
+        let new_pool = pool
+            .checked_sub(refundable)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestPool(quest_id), &new_pool);
+        env.storage().persistent().extend_ttl(
+            &DataKey::QuestPool(quest_id),
+            THRESHOLD,
+            BUMP,
+        );
+
+        // Emit event — reuse reward_refunded topic for indexer compatibility
+        env.events().publish(
+            (Symbol::new(&env, "reward_refunded"),),
+            (quest_id, authority, refundable),
+        );
+
+        Ok(refundable)
     }
 }
 

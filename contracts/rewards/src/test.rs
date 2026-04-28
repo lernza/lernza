@@ -1792,3 +1792,125 @@ fn test_refund_pool_respects_reserved_obligations() {
     let token_client = TokenClient::new(&env, &token_addr);
     assert_eq!(token_client.balance(&enrollee), 2_000);
 }
+
+// ── get_refund_window tests (Issue #702) ──────────────────────────────────────
+
+#[test]
+fn test_get_refund_window_not_archived() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Active Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+    // Quest is active; window closed
+    let (open, close) = client.get_refund_window(&q_id);
+    assert_eq!((open, close), (0, 0));
+}
+
+#[test]
+fn test_get_refund_window_archived_before_grace() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+    // Archive the quest; current timestamp becomes archived_at
+    quest_client.archive_quest(&q_id);
+    let archived_at = env.ledger().timestamp();
+
+    let (open, close) = client.get_refund_window(&q_id);
+    assert_eq!(open, archived_at + 604_800);
+    assert_eq!(close, u64::MAX);
+    // Window not yet open because current time < open
+    assert!(env.ledger().timestamp() < open);
+}
+
+#[test]
+fn test_get_refund_window_archived_after_grace() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+    quest_client.archive_quest(&q_id);
+    let after_grace = env.ledger().timestamp() + 604_800 + 1;
+    env.ledger().set_timestamp(after_grace);
+
+    let (open, close) = client.get_refund_window(&q_id);
+    // Window should be open (current time >= open)
+    assert!(env.ledger().timestamp() >= open);
+    assert_eq!(close, u64::MAX);
+}
+
+#[test]
+fn test_get_refund_window_invalid_quest() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    // Quest ID that does not exist
+    let (open, close) = client.get_refund_window(&99999);
+    assert_eq!((open, close), (0, 0));
+}

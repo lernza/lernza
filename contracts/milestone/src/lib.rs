@@ -174,6 +174,9 @@ pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 pub const MAX_BATCH_SIZE: u32 = 20;
 pub const MAX_MILESTONES: u32 = 50;
 
+// IsDataKey implementation — restricts TTL extension to Milestone DataKey only
+impl common::IsDataKey for DataKey {}
+
 #[contract]
 pub struct MilestoneContract;
 

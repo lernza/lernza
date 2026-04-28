@@ -78,6 +78,9 @@ pub enum Error {
 
 // TTL constants moved to common.
 
+// IsDataKey implementation — restricts TTL extension to Rewards DataKey only
+impl common::IsDataKey for DataKey {}
+
 #[contract]
 pub struct RewardsContract;
 
@@ -497,6 +500,45 @@ impl RewardsContract {
             .get(&DataKey::TotalDistributed)
             .unwrap_or(0);
         (total_quests, total_funded, total_distributed)
+    }
+
+    /// Get the refund window for a quest's pool — Issue #702.
+    ///
+    /// Returns a tuple `(open_timestamp, close_timestamp)` in ledger seconds.
+    /// - If the quest is not archived, returns `(0, 0)` indicating the window is closed.
+    /// - Once archived, the window opens at `archived_at + 604_800` (7 days) and
+    ///   remains open indefinitely (`close_timestamp = u64::MAX`).
+    ///
+    /// This is a pure view function: it performs cross-contract reads but does
+    /// not mutate any state.
+    pub fn get_refund_window(env: Env, quest_id: u32) -> (u64, u64) {
+        // Get quest contract address from instance storage
+        let quest_contract_addr = match env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+        {
+            Some(addr) => addr,
+            None => return (0, 0), // contract not properly initialized
+        };
+
+        // Cross-contract call to fetch quest info
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_result = quest_client.try_get_quest(&quest_id);
+        let quest_info = match quest_result {
+            Ok(Ok(q)) => q,
+            _ => return (0, 0), // quest not found or error
+        };
+
+        // Refunds only available after archiving + 7-day grace period
+        if quest_info.status != QuestStatus::Archived {
+            return (0, 0);
+        }
+
+        let open_ts = quest_info.archived_at + 604_800; // 7 days in seconds
+        let close_ts = u64::MAX; // no upper bound
+
+        (open_ts, close_ts)
     }
 
     /// Refund the entire unused pool for a quest — Issue #718.

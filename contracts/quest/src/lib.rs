@@ -116,6 +116,9 @@ fn validate_description(description: &String) -> Result<(), Error> {
     Ok(())
 }
 
+// IsDataKey implementation — restricts TTL extension to Quest DataKey only
+impl common::IsDataKey for DataKey {}
+
 #[contract]
 pub struct QuestContract;
 
@@ -140,7 +143,16 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::VerifiedCreator(creator.clone()), &true);
-        common::extend_persistent_ttl(&env, &DataKey::VerifiedCreator(creator));
+        common::extend_persistent_ttl(&env, &DataKey::VerifiedCreator(creator.clone()));
+        extend_instance_ttl(&env);
+
+        // Emit creator verification event for auditability
+        let ts = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "creator_verified"),),
+            (creator, admin, ts),
+        );
+
         Ok(())
     }
 
@@ -152,6 +164,37 @@ impl QuestContract {
             common::extend_persistent_ttl(&env, &key);
         }
         is_verified
+    }
+
+    /// Revoke a creator's verification. Admin only.
+    ///
+    /// Removes the verification entry from storage entirely. This operation
+    /// is idempotent: calling it on a non-verified address still succeeds.
+    /// Emits an event for auditability.
+    pub fn revoke_creator_verification(
+        env: Env,
+        admin: Address,
+        addr: Address,
+    ) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
+
+        let key = DataKey::VerifiedCreator(addr.clone());
+        // Remove entry if present; idempotent.
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().remove(&key);
+        }
+
+        extend_instance_ttl(&env);
+
+        // Emit revocation event: (addr, revoked_by, timestamp)
+        let ts = env.ledger().timestamp();
+        env.events().publish(
+            (Symbol::new(&env, "creator_verification_revoked"),),
+            (addr, admin, ts),
+        );
+
+        Ok(())
     }
 
     /// Pause state-mutating operations. Admin only.

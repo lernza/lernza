@@ -965,6 +965,76 @@ fn test_admin_verification() {
 }
 
 #[test]
+fn test_revoke_creator_verification() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &creator);
+    assert!(client.is_creator_verified(&creator));
+
+    // Revoke
+    client.revoke_creator_verification(&admin, &creator);
+
+    // State cleared
+    assert!(!client.is_creator_verified(&creator));
+    // Storage entry removed
+    let key = DataKey::VerifiedCreator(creator);
+    assert!(!env.storage().persistent().has(&key));
+}
+
+#[test]
+fn test_revoke_creator_verification_idempotent() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    // Revoke when not verified — should succeed
+    client.revoke_creator_verification(&admin, &creator);
+    assert!(!client.is_creator_verified(&creator));
+
+    // Second revoke also succeeds
+    client.revoke_creator_verification(&admin, &creator);
+    assert!(!client.is_creator_verified(&creator));
+}
+
+#[test]
+fn test_revoke_creator_verification_unauthorized() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &creator);
+
+    let result = client.try_revoke_creator_verification(&attacker, &creator);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Still verified
+    assert!(client.is_creator_verified(&creator));
+}
+
+#[test]
+fn test_revoke_creator_verification_when_paused() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &creator);
+    client.pause(&admin);
+
+    let result = client.try_revoke_creator_verification(&admin, &creator);
+    assert_eq!(result, Err(Ok(Error::Paused)));
+
+    // Verification unchanged
+    assert!(client.is_creator_verified(&creator));
+}
+
+#[test]
 fn test_verified_creator_quest() {
     let (env, client, owner, token) = setup();
     let admin = Address::generate(&env);

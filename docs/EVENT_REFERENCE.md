@@ -104,6 +104,36 @@ Emitted when contract admin is rotated via `transfer_admin`.
 
 ---
 
+### `creator_verified`
+
+Emitted when an admin verifies a creator address via `verify_creator`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("creator_verified"),)` | |
+| `creator` | `Address` | Verified creator address. |
+| `admin` | `Address` | Admin who issued the verification. |
+| `timestamp` | `u64` | Ledger timestamp of the event. |
+
+**Data tuple:** `(creator, admin, timestamp)`
+
+---
+
+### `creator_verification_revoked`
+
+Emitted when an admin revokes a creator's verification via `revoke_creator_verification`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("creator_verification_revoked"),)` | |
+| `addr` | `Address` | Address whose verification was revoked. |
+| `revoked_by` | `Address` | Admin who issued the revocation. |
+| `timestamp` | `u64` | Ledger timestamp of the event. |
+
+**Data tuple:** `(addr, revoked_by, timestamp)`
+
+---
+
 ## Milestone Contract (`contracts/milestone/`)
 
 ### `milestone_created`

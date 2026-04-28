@@ -1,4 +1,5 @@
 import { RouterProvider } from "react-router-dom"
+import { MotionConfig } from "framer-motion"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ThemeProvider } from "@/contexts/theme-context"
 import { router } from "@/routes"
@@ -15,13 +16,15 @@ import { SpeedInsights } from "@vercel/speed-insights/react"
  */
 function App() {
   return (
-    <ThemeProvider>
-      <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
-        <RouterProvider router={router} />
-      </ErrorBoundary>
-      <Analytics />
-      <SpeedInsights />
-    </ThemeProvider>
+    <MotionConfig reducedMotion="user">
+      <ThemeProvider>
+        <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
+          <RouterProvider router={router} />
+        </ErrorBoundary>
+        <Analytics />
+        <SpeedInsights />
+      </ThemeProvider>
+    </MotionConfig>
   )
 }
 

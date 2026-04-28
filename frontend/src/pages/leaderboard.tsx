@@ -1,5 +1,4 @@
 import { useEffect, useCallback } from "react"
-import { useNavigate } from "react-router-dom"
 import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { LoadingState, EmptyState } from "@/components/ui/async-states"
@@ -80,7 +79,6 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 export function Leaderboard() {
-  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<ActiveTab>("earners")
 
   const {
@@ -170,14 +168,10 @@ export function Leaderboard() {
 
       {/* Content */}
       {isLoading && <LoadingState message="Fetching on-chain data…" />}
-      {!isLoading && error && (
-        <SmartError 
-          message={error} 
-          onRetry={refetchActive} 
-        />
-      )}
+      {!isLoading && error && <SmartError message={error} onRetry={refetchActive} />}
       {!isLoading && !error && isEmpty && (
         <EmptyState
+          illustration="leaderboard"
           title="No data yet"
           description="On-chain activity will appear here once quests have enrollees."
         />
@@ -194,7 +188,7 @@ export function Leaderboard() {
               <RankBadge rank={entry.rank} />
               <PrefetchLink
                 to={`/creator/${entry.address}`}
-                className="flex-1 font-mono text-sm font-bold hover:text-primary transition-colors"
+                className="hover:text-primary flex-1 font-mono text-sm font-bold transition-colors"
               >
                 {shortenAddress(entry.address, 6)}
               </PrefetchLink>

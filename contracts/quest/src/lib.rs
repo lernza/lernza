@@ -5,7 +5,8 @@ use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
 };
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
+    Symbol, Vec,
 };
 
 // Quest contract: the entry point for Lernza.
@@ -29,6 +30,12 @@ pub enum DataKey {
     Admin,
     Paused,
     VerifiedCreator(Address),
+    /// Registered invite commitment: SHA-256 hash stored by the quest owner.
+    /// Key: (quest_id, commitment_hash). Value: true.
+    InviteCommitment(u32, BytesN<32>),
+    /// Consumed invite: set after a preimage is successfully redeemed.
+    /// Key: (quest_id, commitment_hash). Value: true.
+    InviteUsed(u32, BytesN<32>),
 }
 
 // QuestInfo moved to common.
@@ -48,6 +55,14 @@ pub enum Error {
     DescriptionTooLong = 10,
     InviteOnly = 11,
     Paused = 12,
+    /// Enrollment is closed because the quest has been archived.
+    EnrollmentClosed = 13,
+    /// Enrollment is rejected because the quest deadline has passed.
+    DeadlineExpired = 14,
+    /// The invite preimage does not match any registered commitment.
+    InvalidInvite = 15,
+    /// The invite code has already been redeemed.
+    InviteAlreadyUsed = 16,
 }
 
 // TTL constants and address validation moved to common.
@@ -379,7 +394,10 @@ impl QuestContract {
         quest.owner.require_auth();
 
         if quest.status == QuestStatus::Archived {
-            return Err(Error::QuestArchived);
+            return Err(Error::EnrollmentClosed);
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
         }
 
         let enrollees = Self::load_enrollees(&env, quest_id);
@@ -422,7 +440,10 @@ impl QuestContract {
 
         let quest = Self::load_quest(&env, quest_id)?;
         if quest.status == QuestStatus::Archived {
-            return Err(Error::QuestArchived);
+            return Err(Error::EnrollmentClosed);
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
         }
         if quest.visibility == Visibility::Private {
             return Err(Error::InviteOnly);
@@ -450,6 +471,160 @@ impl QuestContract {
         // Emit enrollment event
         // Event topics: (enrollee_added,)
         // Event data: (quest_id, enrollee_address)
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_added"),),
+            (quest_id, enrollee.clone()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Register an invite commitment for a private quest. Owner only.
+    ///
+    /// The owner generates a random secret off-chain, computes
+    /// `commitment = SHA-256(preimage)`, and stores the commitment here.
+    /// The raw preimage is shared with the intended enrollee (e.g. via a
+    /// signed link). The contract never sees the preimage until redemption,
+    /// so the invite cannot be front-run by observers of the ledger.
+    ///
+    /// Multiple commitments can be registered for the same quest; each is
+    /// single-use. Registering the same commitment twice is a no-op (idempotent).
+    pub fn register_invite(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        commitment: BytesN<32>,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::EnrollmentClosed);
+        }
+        let key = DataKey::InviteCommitment(quest_id, commitment.clone());
+        env.storage().persistent().set(&key, &true);
+        common::extend_persistent_ttl(&env, &key);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Revoke a previously registered invite commitment. Owner only.
+    ///
+    /// Removes the commitment so the corresponding preimage can no longer be
+    /// used to enroll. Has no effect if the commitment was never registered or
+    /// has already been consumed.
+    pub fn revoke_invite(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        commitment: BytesN<32>,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        let key = DataKey::InviteCommitment(quest_id, commitment);
+        env.storage().persistent().remove(&key);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Check whether an invite commitment is registered and not yet consumed.
+    pub fn is_invite_valid(env: Env, quest_id: u32, commitment: BytesN<32>) -> bool {
+        let registered = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::InviteCommitment(quest_id, commitment.clone()))
+            .unwrap_or(false);
+        let used = env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&DataKey::InviteUsed(quest_id, commitment))
+            .unwrap_or(false);
+        registered && !used
+    }
+
+    /// Allow a learner to self-enroll in a private quest using an invite code.
+    ///
+    /// The enrollee submits the raw `preimage` bytes. The contract hashes them
+    /// with SHA-256 and checks that the resulting commitment was registered by
+    /// the owner and has not been consumed yet. On success the commitment is
+    /// marked as used (preventing replay) and the enrollee is added.
+    ///
+    /// This method also works for public quests — the invite path is simply an
+    /// alternative to `join_quest` when the owner wants single-use codes.
+    pub fn join_quest_with_invite(
+        env: Env,
+        enrollee: Address,
+        quest_id: u32,
+        preimage: Bytes,
+    ) -> Result<(), Error> {
+        enrollee.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::EnrollmentClosed);
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
+        }
+
+        // Derive commitment from the submitted preimage.
+        let commitment: BytesN<32> = env.crypto().sha256(&preimage).into();
+
+        let commitment_key = DataKey::InviteCommitment(quest_id, commitment.clone());
+        let used_key = DataKey::InviteUsed(quest_id, commitment.clone());
+
+        // Commitment must be registered.
+        if !env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&commitment_key)
+            .unwrap_or(false)
+        {
+            return Err(Error::InvalidInvite);
+        }
+
+        // Commitment must not have been consumed already.
+        if env
+            .storage()
+            .persistent()
+            .get::<_, bool>(&used_key)
+            .unwrap_or(false)
+        {
+            return Err(Error::InviteAlreadyUsed);
+        }
+
+        let enrollees = Self::load_enrollees(&env, quest_id);
+
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
+                return Err(Error::QuestFull);
+            }
+        }
+
+        if enrollees.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        // Mark invite as consumed before mutating enrollment state.
+        env.storage().persistent().set(&used_key, &true);
+        common::extend_persistent_ttl(&env, &used_key);
+
+        let mut new_enrollees = enrollees;
+        new_enrollees.push_back(enrollee.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
+
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),

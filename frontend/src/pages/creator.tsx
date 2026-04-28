@@ -6,7 +6,6 @@ import { rewardsClient } from "@/lib/contracts/rewards";
 import { milestoneClient } from "@/lib/contracts/milestone";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { SmartError } from "@/components/error-states";
 import { SkeletonQuestList } from "@/components/ui/skeleton";
 import { formatTokens } from "@/lib/utils";

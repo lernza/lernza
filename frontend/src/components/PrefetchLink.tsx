@@ -28,7 +28,7 @@ export function PrefetchLink({ to, children, ...props }: PrefetchLinkProps) {
           // If .tsx fails, try without extension (for directories with index.tsx or just .ts)
           import(`../pages${pagePath}`).catch(() => {});
         });
-      } catch (e) {
+      } catch {
         // Ignore prefetch errors
       }
     }

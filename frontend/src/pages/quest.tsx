@@ -123,8 +123,10 @@ const questImportSchema = z.object({
 const QUEST_ERROR_MESSAGES: Record<number, string> = {
   4: "You are already enrolled in this quest.",
   7: "This quest is already full.",
-  8: "This quest is archived and no longer accepts new learners.",
+  8: "This quest has been archived.",
   11: "This quest is invite only.",
+  13: "Enrollment is closed for this quest.",
+  14: "This quest's deadline has passed.",
 }
 
 const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
@@ -235,12 +237,24 @@ export function QuestView() {
   const enrolleesData = useEnrollees(questId)
   const poolBalanceData = useRewardPool(questId)
 
-  // Combined loading state
+  // Combined loading state: true on initial load OR while any background
+  // refetch is in-flight (e.g. after a transaction). This keeps the skeleton
+  // as the single source of truth — no stale data flash between a transaction
+  // completing and the updated data arriving.
   const isLoading =
     questData.isLoading ||
     milestonesData.isLoading ||
     enrolleesData.isLoading ||
     poolBalanceData.isLoading
+
+  // Background refetch in-flight (post-transaction). Used to suppress
+  // interactive actions while data is refreshing without re-showing the
+  // full-page skeleton.
+  const isRefetching =
+    questData.isFetching ||
+    milestonesData.isFetching ||
+    enrolleesData.isFetching ||
+    poolBalanceData.isFetching
 
   // Use the first error that exists
   const loadError =
@@ -1244,7 +1258,7 @@ export function QuestView() {
                       variant="danger"
                       size="sm"
                       onClick={() => void handleArchiveQuest()}
-                      disabled={archiveQuestTx.isPending}
+                      disabled={archiveQuestTx.isPending || isRefetching}
                     >
                       {archiveQuestTx.isPending ? "Archiving..." : "Archive Quest"}
                     </Button>
@@ -1257,6 +1271,7 @@ export function QuestView() {
                   onClick={() => void handleEnroll()}
                   disabled={
                     enrollTx.isPending ||
+                    isRefetching ||
                     isEnrolled ||
                     !isSupportedNetwork ||
                     !address ||
@@ -1953,6 +1968,7 @@ export function QuestView() {
                     onClick={() => void handleEnroll()}
                     disabled={
                       enrollTx.isPending ||
+                      isRefetching ||
                       isEnrolled ||
                       !isSupportedNetwork ||
                       !address ||

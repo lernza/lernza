@@ -1,5 +1,5 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env, String};
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -242,7 +242,7 @@ fn test_join_archived_quest_rejected() {
 
     let learner = Address::generate(&env);
     let result = client.try_join_quest(&learner, &0);
-    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
 }
 
 #[test]
@@ -899,7 +899,7 @@ fn test_archived_quest_rejects_new_enrollment() {
     client.archive_quest(&0);
     let enrollee = Address::generate(&env);
     let result = client.try_add_enrollee(&0, &enrollee);
-    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
 }
 
 #[test]
@@ -1257,4 +1257,410 @@ fn test_transfer_admin_unauthorized() {
     // Hacker tries to transfer admin
     let result = client.try_transfer_admin(&hacker, &new_admin);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+// --- EnrollmentClosed / DeadlineExpired tests ---
+
+#[test]
+fn test_join_quest_archived_returns_enrollment_closed() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.archive_quest(&0);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest(&learner, &0);
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
+}
+
+#[test]
+fn test_add_enrollee_archived_returns_enrollment_closed() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.archive_quest(&0);
+
+    let enrollee = Address::generate(&env);
+    let result = client.try_add_enrollee(&0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
+}
+
+#[test]
+fn test_join_quest_past_deadline_returns_deadline_expired() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    // Set ledger time to 1000, then set a deadline that has already passed
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&0, &999);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest(&learner, &0);
+    assert_eq!(result, Err(Ok(Error::DeadlineExpired)));
+}
+
+#[test]
+fn test_add_enrollee_past_deadline_returns_deadline_expired() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&0, &999);
+
+    let enrollee = Address::generate(&env);
+    let result = client.try_add_enrollee(&0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::DeadlineExpired)));
+}
+
+#[test]
+fn test_join_quest_zero_deadline_is_not_expired() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    // deadline = 0 means no deadline; enrollment should succeed
+    let learner = Address::generate(&env);
+    client.join_quest(&learner, &0);
+    assert!(client.is_enrollee(&0, &learner));
+}
+
+#[test]
+fn test_join_quest_future_deadline_succeeds() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&0, &2000);
+
+    let learner = Address::generate(&env);
+    client.join_quest(&learner, &0);
+    assert!(client.is_enrollee(&0, &learner));
+}
+
+#[test]
+fn test_enrollment_closed_is_distinct_from_quest_archived() {
+    // EnrollmentClosed (13) != QuestArchived (8) — different codes for different consumers
+    assert_ne!(Error::EnrollmentClosed as u32, Error::QuestArchived as u32);
+    assert_eq!(Error::EnrollmentClosed as u32, 13);
+    assert_eq!(Error::DeadlineExpired as u32, 14);
+}
+
+// ---------------------------------------------------------------------------
+// Invite code tests
+// ---------------------------------------------------------------------------
+//
+// Design recap:
+//   Owner calls register_invite(quest_id, SHA-256(preimage)).
+//   Enrollee calls join_quest_with_invite(enrollee, quest_id, preimage).
+//   Contract hashes preimage, checks commitment exists + not consumed,
+//   marks consumed, then enrolls.
+
+/// Compute SHA-256 of a byte slice using the Soroban test environment.
+fn sha256_commitment(env: &Env, preimage: &[u8]) -> BytesN<32> {
+    let bytes = Bytes::from_slice(env, preimage);
+    env.crypto().sha256(&bytes).into()
+}
+
+#[test]
+fn test_invite_happy_path_private_quest() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"super-secret-invite-code";
+    let commitment = sha256_commitment(&env, preimage);
+
+    // Owner registers the commitment.
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    // Commitment should be valid before use.
+    assert!(client.is_invite_valid(&quest_id, &commitment));
+
+    // Enrollee redeems the invite.
+    let learner = Address::generate(&env);
+    client.join_quest_with_invite(&learner, &quest_id, &Bytes::from_slice(&env, preimage));
+
+    assert!(client.is_enrollee(&quest_id, &learner));
+    assert_eq!(client.get_enrollees(&quest_id).len(), 1);
+
+    // Commitment is now consumed — no longer valid.
+    assert!(!client.is_invite_valid(&quest_id, &commitment));
+}
+
+#[test]
+fn test_invite_replay_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"one-time-code";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    let learner1 = Address::generate(&env);
+    client.join_quest_with_invite(&learner1, &quest_id, &Bytes::from_slice(&env, preimage));
+    assert!(client.is_enrollee(&quest_id, &learner1));
+
+    // Second enrollee tries to reuse the same preimage — must fail.
+    let learner2 = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner2,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage),
+    );
+    assert_eq!(result, Err(Ok(Error::InviteAlreadyUsed)));
+    assert!(!client.is_enrollee(&quest_id, &learner2));
+}
+
+#[test]
+fn test_invite_wrong_preimage_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"correct-secret";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, b"wrong-secret"),
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInvite)));
+    assert!(!client.is_enrollee(&quest_id, &learner));
+}
+
+#[test]
+fn test_invite_unregistered_commitment_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    // No register_invite call — any preimage should fail.
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, b"any-preimage"),
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInvite)));
+}
+
+#[test]
+fn test_multiple_independent_invites() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage_a = b"invite-for-alice";
+    let preimage_b = b"invite-for-bob";
+    let commitment_a = sha256_commitment(&env, preimage_a);
+    let commitment_b = sha256_commitment(&env, preimage_b);
+
+    client.register_invite(&owner, &quest_id, &commitment_a);
+    client.register_invite(&owner, &quest_id, &commitment_b);
+
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    client.join_quest_with_invite(&alice, &quest_id, &Bytes::from_slice(&env, preimage_a));
+    client.join_quest_with_invite(&bob, &quest_id, &Bytes::from_slice(&env, preimage_b));
+
+    assert!(client.is_enrollee(&quest_id, &alice));
+    assert!(client.is_enrollee(&quest_id, &bob));
+    assert_eq!(client.get_enrollees(&quest_id).len(), 2);
+
+    // Alice's invite is consumed; Bob's is also consumed.
+    assert!(!client.is_invite_valid(&quest_id, &commitment_a));
+    assert!(!client.is_invite_valid(&quest_id, &commitment_b));
+}
+
+#[test]
+fn test_invite_on_archived_quest_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"secret";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    client.archive_quest(&quest_id);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage),
+    );
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
+}
+
+#[test]
+fn test_invite_past_deadline_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"secret";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&quest_id, &999);
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage),
+    );
+    assert_eq!(result, Err(Ok(Error::DeadlineExpired)));
+}
+
+#[test]
+fn test_invite_respects_enrollment_cap() {
+    let (env, client, owner, token) = setup();
+    // Cap of 1 enrollee.
+    let quest_id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Capped Quest"),
+        &String::from_str(&env, "Only one seat"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Private,
+        &Some(1u32),
+    );
+
+    let preimage_a = b"seat-one";
+    let preimage_b = b"seat-two";
+    let commitment_a = sha256_commitment(&env, preimage_a);
+    let commitment_b = sha256_commitment(&env, preimage_b);
+    client.register_invite(&owner, &quest_id, &commitment_a);
+    client.register_invite(&owner, &quest_id, &commitment_b);
+
+    let alice = Address::generate(&env);
+    client.join_quest_with_invite(&alice, &quest_id, &Bytes::from_slice(&env, preimage_a));
+    assert!(client.is_enrollee(&quest_id, &alice));
+
+    let bob = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &bob,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage_b),
+    );
+    assert_eq!(result, Err(Ok(Error::QuestFull)));
+    assert!(!client.is_enrollee(&quest_id, &bob));
+}
+
+#[test]
+fn test_invite_already_enrolled_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage_a = b"first-invite";
+    let preimage_b = b"second-invite";
+    let commitment_a = sha256_commitment(&env, preimage_a);
+    let commitment_b = sha256_commitment(&env, preimage_b);
+    client.register_invite(&owner, &quest_id, &commitment_a);
+    client.register_invite(&owner, &quest_id, &commitment_b);
+
+    let learner = Address::generate(&env);
+    // First redemption succeeds.
+    client.join_quest_with_invite(&learner, &quest_id, &Bytes::from_slice(&env, preimage_a));
+    assert!(client.is_enrollee(&quest_id, &learner));
+
+    // Same address tries a second (different) invite — already enrolled.
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage_b),
+    );
+    assert_eq!(result, Err(Ok(Error::AlreadyEnrolled)));
+}
+
+#[test]
+fn test_register_invite_non_owner_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let commitment = sha256_commitment(&env, b"secret");
+    let impostor = Address::generate(&env);
+    let result = client.try_register_invite(&impostor, &quest_id, &commitment);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_register_invite_archived_quest_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+    client.archive_quest(&quest_id);
+
+    let commitment = sha256_commitment(&env, b"secret");
+    let result = client.try_register_invite(&owner, &quest_id, &commitment);
+    assert_eq!(result, Err(Ok(Error::EnrollmentClosed)));
+}
+
+#[test]
+fn test_revoke_invite_prevents_redemption() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"revocable-code";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+    assert!(client.is_invite_valid(&quest_id, &commitment));
+
+    // Owner revokes before anyone uses it.
+    client.revoke_invite(&owner, &quest_id, &commitment);
+    assert!(!client.is_invite_valid(&quest_id, &commitment));
+
+    let learner = Address::generate(&env);
+    let result = client.try_join_quest_with_invite(
+        &learner,
+        &quest_id,
+        &Bytes::from_slice(&env, preimage),
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidInvite)));
+}
+
+#[test]
+fn test_revoke_invite_non_owner_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let commitment = sha256_commitment(&env, b"secret");
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    let impostor = Address::generate(&env);
+    let result = client.try_revoke_invite(&impostor, &quest_id, &commitment);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_invite_works_on_public_quest() {
+    // Invite path is not restricted to private quests.
+    let (env, client, owner, token) = setup();
+    let quest_id =
+        create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+
+    let preimage = b"public-invite";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    let learner = Address::generate(&env);
+    client.join_quest_with_invite(&learner, &quest_id, &Bytes::from_slice(&env, preimage));
+    assert!(client.is_enrollee(&quest_id, &learner));
+}
+
+#[test]
+fn test_invite_error_codes_are_distinct() {
+    assert_eq!(Error::InvalidInvite as u32, 15);
+    assert_eq!(Error::InviteAlreadyUsed as u32, 16);
+    assert_ne!(Error::InvalidInvite as u32, Error::InviteAlreadyUsed as u32);
+    assert_ne!(Error::InvalidInvite as u32, Error::InviteOnly as u32);
 }

@@ -4,7 +4,7 @@
  */
 export function track(event: string, data = {}) {
   if (typeof window !== "undefined") {
-    // @ts-ignore - va is injected by Vercel Analytics
+    // @ts-expect-error - va is injected by Vercel Analytics
     window.va?.track(event, data);
   }
 }

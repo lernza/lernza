@@ -33,16 +33,20 @@ export function useQuest(id: number) {
   const errMsg = query.error
     ? mapError(
         query.error,
-        contractError("quest", "On-chain quest data is unavailable until the quest contract is configured.")
+        contractError(
+          "quest",
+          "On-chain quest data is unavailable until the quest contract is configured."
+        )
       )
     : null
 
   return {
     data: query.data ?? null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: errMsg,
     isEmpty: !query.data,
-    refetch: () => void query.refetch(),
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
   }
 }
 
@@ -60,16 +64,20 @@ export function useMilestones(questId: number) {
   const errMsg = query.error
     ? mapError(
         query.error,
-        contractError("milestone", "On-chain milestone data is unavailable until the milestone contract is configured.")
+        contractError(
+          "milestone",
+          "On-chain milestone data is unavailable until the milestone contract is configured."
+        )
       )
     : null
 
   return {
     data: query.data ?? null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: errMsg,
     isEmpty: !query.data || query.data.length === 0,
-    refetch: () => void query.refetch(),
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
   }
 }
 
@@ -87,16 +95,20 @@ export function useEnrollees(questId: number) {
   const errMsg = query.error
     ? mapError(
         query.error,
-        contractError("quest", "On-chain enrollee data is unavailable until the quest contract is configured.")
+        contractError(
+          "quest",
+          "On-chain enrollee data is unavailable until the quest contract is configured."
+        )
       )
     : null
 
   return {
     data: query.data ?? null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: errMsg,
     isEmpty: !query.data || query.data.length === 0,
-    refetch: () => void query.refetch(),
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
   }
 }
 
@@ -114,15 +126,19 @@ export function useRewardPool(questId: number) {
   const errMsg = query.error
     ? mapError(
         query.error,
-        contractError("rewards", "On-chain reward pool data is unavailable until the rewards contract is configured.")
+        contractError(
+          "rewards",
+          "On-chain reward pool data is unavailable until the rewards contract is configured."
+        )
       )
     : null
 
   return {
     data: query.data ?? null,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
     error: errMsg,
     isEmpty: !query.data,
-    refetch: () => void query.refetch(),
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
   }
 }

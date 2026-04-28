@@ -55,7 +55,9 @@ export function Dashboard() {
   const navigate = useNavigate()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
-  const [preset, setPreset] = useState<"none" | "ending-soon" | "recently-funded" | "recently-verified">("none")
+  const [preset, setPreset] = useState<
+    "none" | "ending-soon" | "recently-funded" | "recently-verified"
+  >("none")
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
@@ -169,11 +171,11 @@ export function Dashboard() {
 
   const filteredWorkspaces =
     filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
-  
+
   // Apply preset filters
   let presetFilteredWorkspaces = filteredWorkspaces
   const now = Math.floor(Date.now() / 1000)
-  
+
   if (preset === "ending-soon") {
     // Show quests with deadline within 7 days
     const sevenDaysFromNow = now + 7 * 24 * 60 * 60
@@ -188,7 +190,7 @@ export function Dashboard() {
     // Show quests with verified status
     presetFilteredWorkspaces = filteredWorkspaces.filter(ws => ws.verified)
   }
-  
+
   const visibleWorkspaces = presetFilteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
@@ -393,7 +395,7 @@ export function Dashboard() {
                 <button
                   key={p.value}
                   onClick={() => setPreset(p.value)}
-                  className={`border-border px-3 py-1.5 text-xs font-bold transition-all border-[2px] shadow-[2px_2px_0_var(--color-border)] ${
+                  className={`border-border border-[2px] px-3 py-1.5 text-xs font-bold shadow-[2px_2px_0_var(--color-border)] transition-all ${
                     preset === p.value
                       ? "bg-primary"
                       : "bg-background hover:bg-secondary hover:shadow-[3px_3px_0_var(--color-border)]"
@@ -527,15 +529,22 @@ export function Dashboard() {
               <div className="mt-5">
                 <EmptyState
                   variant="quests"
-                  title={preset !== "none" ? `No ${preset.replace("-", " ")} quests` : filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                  illustration="dashboard"
+                  title={
+                    preset !== "none"
+                      ? `No ${preset.replace("-", " ")} quests`
+                      : filter === "all"
+                        ? "No quests yet"
+                        : `No ${filter} quests`
+                  }
                   description={
                     preset !== "none"
                       ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
                       : filter === "all"
-                      ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                      : filter === "owned"
-                        ? "You haven't created any quests yet. Start one to incentivize learners."
-                        : "You haven't enrolled in any quests yet. Browse available quests to get started."
+                        ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                        : filter === "owned"
+                          ? "You haven't created any quests yet. Start one to incentivize learners."
+                          : "You haven't enrolled in any quests yet. Browse available quests to get started."
                   }
                   action={
                     filter === "all" || filter === "owned"

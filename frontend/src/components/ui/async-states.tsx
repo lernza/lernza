@@ -114,6 +114,7 @@ interface EmptyStateProps {
   }
   icon?: React.ComponentType<{ className?: string }>
   variant?: "default" | "compact" | "quests" | "milestones" | "enrollees" | "earnings" | "wallet"
+  illustration?: "dashboard" | "profile" | "leaderboard"
 }
 
 export function EmptyState({
@@ -122,6 +123,7 @@ export function EmptyState({
   action,
   icon: IconComponent,
   variant = "default",
+  illustration,
 }: EmptyStateProps) {
   const getVariantConfig = () => {
     switch (variant) {
@@ -199,6 +201,13 @@ export function EmptyState({
 
   const config = getVariantConfig()
 
+  const getIllustrationSrc = () => {
+    if (!illustration) return null
+    return `/illustrations/empty-${illustration}.svg`
+  }
+
+  const illustrationSrc = getIllustrationSrc()
+
   if (variant === "compact") {
     return (
       <Card className="animate-fade-in-up">
@@ -223,9 +232,20 @@ export function EmptyState({
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-          {config.icon}
-        </div>
+        {illustrationSrc ? (
+          <div className="mb-6">
+            <img
+              src={illustrationSrc}
+              alt=""
+              className="h-32 w-32 sm:h-40 sm:w-40"
+              aria-hidden="true"
+            />
+          </div>
+        ) : (
+          <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+            {config.icon}
+          </div>
+        )}
         <h3 className="mb-2 font-black">{config.title}</h3>
         <p className="text-muted-foreground mb-6 max-w-sm text-sm">{config.description}</p>
         {action && (

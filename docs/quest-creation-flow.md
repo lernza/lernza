@@ -8,18 +8,18 @@ sequenceDiagram
     actor Owner as Quest Owner
     participant FE as Frontend
     participant Wallet as Freighter Wallet
-    participant Quest as Quest Contract (workspace)
+    participant Quest as Quest Contract
     participant Milestone as Milestone Contract
 
     Owner->>FE: Enter quest details and milestone drafts
-    FE->>Wallet: Request signature for create_workspace(owner, name, description, token_addr)
-    Wallet->>Quest: create_workspace(owner, name, description, token_addr)
-    Quest-->>Wallet: workspace_id
-    Wallet-->>FE: Transaction confirmed with workspace_id
+    FE->>Wallet: Request signature for create_quest(owner, name, description, token_addr)
+    Wallet->>Quest: create_quest(owner, name, description, token_addr)
+    Quest-->>Wallet: quest_id
+    Wallet-->>FE: Transaction confirmed with quest_id
 
     loop For each milestone draft
-        FE->>Wallet: Request signature for create_milestone(owner, workspace_id, title, description, reward_amount)
-        Wallet->>Milestone: create_milestone(owner, workspace_id, title, description, reward_amount)
+        FE->>Wallet: Request signature for create_milestone(owner, quest_id, title, description, reward_amount)
+        Wallet->>Milestone: create_milestone(owner, quest_id, title, description, reward_amount)
         Milestone-->>Wallet: milestone_id
         Wallet-->>FE: Milestone created
     end

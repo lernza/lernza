@@ -62,7 +62,7 @@ git clone https://github.com/lernza/lernza.git
 cd lernza
 
 # Smart contracts
-cargo test --workspace      # run the current contract workspace test suite
+cargo test --workspace      # run the contract workspace test suite
 stellar contract build      # Optimized WASM
 
 # Frontend

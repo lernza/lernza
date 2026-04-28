@@ -9,23 +9,23 @@ sequenceDiagram
     actor Learner as Learner
     participant FE as Frontend
     participant Wallet as Freighter Wallet
-    participant Quest as Quest Contract (workspace)
+    participant Quest as Quest Contract
     participant Milestone as Milestone Contract
 
     Owner->>FE: Select learner to enroll in quest
-    FE->>Quest: get_workspace(workspace_id)
+    FE->>Quest: get_quest(quest_id)
     Quest-->>FE: Quest metadata and owner
-    FE->>Wallet: Request signature for add_enrollee(workspace_id, learner)
-    Wallet->>Quest: add_enrollee(workspace_id, learner)
+    FE->>Wallet: Request signature for add_enrollee(quest_id, learner)
+    Wallet->>Quest: add_enrollee(quest_id, learner)
     Quest-->>Wallet: Enrollment recorded
     Wallet-->>FE: Transaction confirmed
-    FE->>Quest: get_enrollees(workspace_id)
+    FE->>Quest: get_enrollees(quest_id)
     Quest-->>FE: Updated enrollee list
 
     Learner->>FE: Open quest page
-    FE->>Quest: is_enrollee(workspace_id, learner)
+    FE->>Quest: is_enrollee(quest_id, learner)
     Quest-->>FE: true
-    FE->>Milestone: get_milestones(workspace_id)
+    FE->>Milestone: get_milestones(quest_id)
     Milestone-->>FE: Milestone list
     FE-->>Learner: Unlock quest details and milestones
 ```

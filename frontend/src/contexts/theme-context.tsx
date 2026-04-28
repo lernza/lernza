@@ -6,7 +6,7 @@ function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "light"
 
   try {
-    const stored = localStorage.getItem("lernza-theme")
+    const stored = localStorage.getItem("theme")
     if (stored === "dark" || stored === "light") return stored
   } catch {
     // Ignore localStorage errors
@@ -25,7 +25,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark")
     try {
-      localStorage.setItem("lernza-theme", theme)
+      localStorage.setItem("theme", theme)
     } catch {
       // localStorage unavailable (sandboxed iframe, private mode quota) - ignore
     }

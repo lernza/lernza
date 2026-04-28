@@ -9,6 +9,7 @@ import { rewardsClient } from "@/lib/contracts/rewards"
 import { formatTokens, shortenAddress } from "@/lib/utils"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
+import { PrefetchLink } from "@/components/PrefetchLink"
 
 type ActiveTab = "earners" | "quests"
 
@@ -191,9 +192,12 @@ export function Leaderboard() {
               className="border-border bg-card flex items-center gap-4 border-[2px] px-4 py-3 shadow-[3px_3px_0_var(--color-border)]"
             >
               <RankBadge rank={entry.rank} />
-              <span className="flex-1 font-mono text-sm font-bold">
+              <PrefetchLink
+                to={`/creator/${entry.address}`}
+                className="flex-1 font-mono text-sm font-bold hover:text-primary transition-colors"
+              >
                 {shortenAddress(entry.address, 6)}
-              </span>
+              </PrefetchLink>
               <span className="border-border bg-background border-[2px] px-2 py-1 text-xs font-black shadow-[2px_2px_0_var(--color-border)]">
                 {formatTokens(entry.totalEarned)}
               </span>
@@ -206,13 +210,10 @@ export function Leaderboard() {
       {!isLoading && !error && !isEmpty && activeTab === "quests" && activeQuests && (
         <ol className="space-y-2">
           {activeQuests.map(entry => (
-            <li
+            <PrefetchLink
               key={entry.id}
+              to={`/quest/${entry.id}`}
               className="border-border bg-card flex cursor-pointer items-center gap-4 border-[2px] px-4 py-3 shadow-[3px_3px_0_var(--color-border)] transition-transform hover:-translate-y-0.5 hover:shadow-[4px_4px_0_var(--color-border)]"
-              onClick={() => navigate(`/quest/${entry.id}`)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={e => e.key === "Enter" && navigate(`/quest/${entry.id}`)}
             >
               <RankBadge rank={entry.rank} />
               <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
@@ -220,7 +221,7 @@ export function Leaderboard() {
                 <Users className="h-3 w-3" />
                 {entry.enrolleeCount}
               </span>
-            </li>
+            </PrefetchLink>
           ))}
         </ol>
       )}

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PrefetchLink } from "@/components/PrefetchLink"
 import { useContractData } from "@/hooks/use-async-data"
 import { EmptyState } from "@/components/ui/async-states"
 import { SkeletonQuestList } from "@/components/ui/skeleton"
@@ -321,7 +322,11 @@ export function Dashboard() {
               <Sparkles className="h-5 w-5" />
               <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
             </div>
-            <h1 className="text-3xl font-black sm:text-4xl">{shortAddress}</h1>
+            <PrefetchLink to={`/creator/${address}`}>
+              <h1 className="hover:text-background/80 text-3xl font-black transition-colors sm:text-4xl">
+                {shortAddress}
+              </h1>
+            </PrefetchLink>
             <p className="mt-1 text-sm font-bold opacity-70">
               You have {personalStats.questsEnrolled} active quests
             </p>
@@ -422,10 +427,9 @@ export function Dashboard() {
                 const isOwned = !!address && ws.owner === address
 
                 return (
-                  <button
+                  <PrefetchLink
                     key={ws.id}
-                    type="button"
-                    onClick={() => navigate(`/quest/${ws.id}`)}
+                    to={`/quest/${ws.id}`}
                     aria-label={`Open quest ${ws.name}`}
                     className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
                   >
@@ -508,7 +512,7 @@ export function Dashboard() {
                         )}
                       </CardContent>
                     </Card>
-                  </button>
+                  </PrefetchLink>
                 )
               })}
             </div>

@@ -2,6 +2,8 @@ import { BrowserRouter } from "react-router-dom"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { ThemeProvider } from "@/contexts/theme-context"
 import { AppShell } from "@/components/app-shell"
+import { Analytics } from "@vercel/analytics/react"
+import { SpeedInsights } from "@vercel/speed-insights/react"
 
 /**
  * Root application component.
@@ -18,6 +20,8 @@ function App() {
       <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
         <BrowserRouter>
           <AppShell />
+          <Analytics />
+          <SpeedInsights />
         </BrowserRouter>
       </ErrorBoundary>
     </ThemeProvider>

@@ -45,6 +45,11 @@ const Leaderboard = lazy(() =>
     /* @vite-chunk-include, webpackChunkName: "page-leaderboard" */ "@/pages/leaderboard"
   ).then(module => ({ default: module.Leaderboard }))
 )
+const CreatorProfile = lazy(() =>
+  import(/* @vite-chunk-include, webpackChunkName: "page-creator" */ "@/pages/creator").then(
+    module => ({ default: module.CreatorProfile })
+  )
+)
 
 // ---------------------------------------------------------------------------
 // Helper: wrap a page element with per-route Suspense + ErrorBoundary so each
@@ -135,6 +140,15 @@ export function AppRouter() {
         element={
           <RouteShell label="Leaderboard">
             <Leaderboard />
+          </RouteShell>
+        }
+      />
+
+      <Route
+        path="/creator/:address"
+        element={
+          <RouteShell label="Creator">
+            <CreatorProfile />
           </RouteShell>
         }
       />

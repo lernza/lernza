@@ -7,6 +7,7 @@ import { useWalletBalance } from "@/hooks/use-wallet-balance"
 import { useTheme } from "@/hooks/use-theme"
 import { useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
+import { PrefetchLink } from "@/components/PrefetchLink"
 
 const NAV_ITEMS = [
   { key: "landing", path: "/", label: "Home" },
@@ -159,9 +160,9 @@ export function Navbar() {
         {/* Desktop nav links */}
         <nav className="hidden items-center gap-1 sm:flex">
           {NAV_ITEMS.map(item => (
-            <button
+            <PrefetchLink
               key={item.key}
-              onClick={() => handleNavigate(item.path)}
+              to={item.path}
               aria-current={activePage === item.key ? "page" : undefined}
               className={cn(
                 "animated-underline focus-visible:ring-ring cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
@@ -171,7 +172,7 @@ export function Navbar() {
               )}
             >
               {item.label}
-            </button>
+            </PrefetchLink>
           ))}
         </nav>
 
@@ -271,19 +272,20 @@ export function Navbar() {
         <div id="mobile-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
           <div className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
-              <button
+              <PrefetchLink
                 key={item.key}
-                onClick={() => handleNavigate(item.path)}
+                to={item.path}
+                onClick={() => setMobileOpen(false)}
                 aria-current={activePage === item.key ? "page" : undefined}
                 className={cn(
-                  "focus-visible:ring-ring w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
+                  "focus-visible:ring-ring block w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
                   activePage === item.key
                     ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
                     : "hover:border-border hover:bg-secondary border-transparent"
                 )}
               >
                 {item.label}
-              </button>
+              </PrefetchLink>
             ))}
 
             {/* Mobile balance display — shown when wallet is connected */}

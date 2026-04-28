@@ -29,6 +29,7 @@ import { formatTokens } from "@/lib/utils"
 import { PersonalProgress } from "./dashboard/personal-progress"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
+import { QuestStatusBadge } from "@/components/quest-status-badge"
 
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))

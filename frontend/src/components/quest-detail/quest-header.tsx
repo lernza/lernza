@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { QuestStatusBadge } from "@/components/quest-status-badge"
 import type { QuestInfo } from "@/lib/contracts/quest"
 
 interface QuestHeaderProps {
@@ -60,8 +61,7 @@ export function QuestHeader({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 bg-success border border-black rounded-full" />
-          <span className="text-xs font-bold uppercase tracking-widest hidden sm:inline">Live</span>
+          <QuestStatusBadge quest={{ status: (quest as any).status, deadline: (quest as any).deadline } as any} />
         </div>
       </div>
 

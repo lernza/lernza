@@ -8,6 +8,7 @@ import {
 import { Check, X, Sparkles, Hand } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { QuestStatusBadge } from "@/components/quest-status-badge";
 import { cn, formatTokens } from "@/lib/utils";
 
 interface SwipeableQuestCardProps {
@@ -164,11 +165,14 @@ export function SwipeableQuestCard({
                   <h3 className="text-xl font-black leading-tight group-hover:text-primary transition-colors">
                     {quest.name}
                   </h3>
-                  {quest.verified && (
-                    <Badge variant="verified" className="border-black p-1">
-                      <Check className="h-3 w-3" />
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <QuestStatusBadge quest={{ status: (quest as any).status, deadline: (quest as any).deadline } as any} />
+                    {quest.verified && (
+                      <Badge variant="verified" className="border-black p-1">
+                        <Check className="h-3 w-3" />
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <p className="text-muted-foreground line-clamp-2 text-sm font-medium">
                   {quest.description}

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import type { WorkspaceInfo as QuestInfo } from "@/lib/contract-types"
+import { QuestStatusBadge } from "@/components/quest-status-badge"
 
 interface QuestStats {
   enrolleeCount: number
@@ -49,12 +50,15 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                 <CardHeader className="p-4 pb-2">
                   <div className="flex items-start justify-between">
                     <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
-                    <Badge
-                      variant="default"
-                      className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
-                    >
-                      Trending
-                    </Badge>
+                    <div className="ml-2 flex items-center gap-2">
+                      <QuestStatusBadge quest={{ status: quest.status, deadline: quest.deadline } as any} />
+                      <Badge
+                        variant="default"
+                        className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
+                      >
+                        Trending
+                      </Badge>
+                    </div>
                     {quest.verified && (
                       <Badge
                         variant="verified"

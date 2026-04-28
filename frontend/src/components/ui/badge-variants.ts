@@ -13,6 +13,10 @@ export const badgeVariants = cva(
         success: "bg-success text-success-foreground shadow-[2px_2px_0_var(--color-border)]",
         warning: "bg-warning text-warning-foreground shadow-[2px_2px_0_var(--color-border)]",
         verified: "bg-[#facc15] text-black shadow-[2px_2px_0_var(--color-border)]",
+        // Quest status variants
+        active: "bg-success text-success-foreground shadow-[2px_2px_0_var(--color-border)]",
+        archived: "bg-muted text-muted-foreground shadow-[2px_2px_0_var(--color-border)]",
+        ended: "bg-destructive text-destructive-foreground shadow-[2px_2px_0_var(--color-border)]",
       },
     },
     defaultVariants: {

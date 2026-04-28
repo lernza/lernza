@@ -1,6 +1,8 @@
-import { useContext } from "react"
-import { ThemeContext } from "@/contexts/theme"
+import { useColorScheme } from "./use-color-scheme"
 
+/**
+ * @deprecated Use useColorScheme instead
+ */
 export function useTheme() {
-  return useContext(ThemeContext)
+  return useColorScheme()
 }

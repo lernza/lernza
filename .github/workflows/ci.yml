@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -23,6 +25,7 @@ jobs:
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -35,6 +38,34 @@ jobs:
               - 'contracts/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
+            docs:
+              - 'docs/**'
+
+  # ── Naming guard: prevent stale workspace references ────────────
+  naming-guard:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for stale workspace references in docs/
+        run: |
+          # Exit with error if '\bworkspace\b' pattern found in docs/
+          # Allowed: cargo commands, ADR (which documents the transition)
+          if grep -rn '\bworkspace\b' docs/ 2>/dev/null | \
+             grep -v 'cargo test --workspace' | \
+             grep -v 'docs/adr/' | \
+             grep -v '\.cargo\|/target\|/node_modules'; then
+            echo "ERROR: Found stale 'workspace' references in docs/"
+            echo ""
+            echo "Please replace 'workspace' with 'quest' in docs/ files."
+            echo "Exceptions:"
+            echo "  - cargo test --workspace commands are allowed"
+            echo "  - docs/adr/ references are allowed (they document the transition)"
+            exit 1
+          fi
+          echo "No stale workspace references found in docs/"
 
   # ── Frontend: lint + type-check + build ──────────────────────────
   frontend:
@@ -236,6 +267,21 @@ jobs:
           name: contracts-wasm
           path: target/wasm32v1-none/release/*.wasm
           retention-days: 14
+
+  # ── Security: cargo-deny advisory check ───────────────────────────
+  # Fails the build if security advisories are detected in dependencies.
+  # See: https://github.com/EmbarkStudios/cargo-deny-action
+  security:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check advisories
+          arguments: --config deny.toml
 
   # ── WASM size delta comment ───────────────────────────────────────
   # Builds the WASM on the base branch and the PR branch, computes the

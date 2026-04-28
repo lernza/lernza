@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, type ChangeEvent } from "react"
+import { useCallback, useMemo, useState, useEffect, lazy, Suspense, type ChangeEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -23,6 +23,7 @@ import {
   Upload,
   Clock,
   Copy,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -47,13 +48,17 @@ import { useToast } from "@/hooks/use-toast"
 import { useTransactionQueue, type TransactionQueuePhase } from "@/hooks/use-transaction-queue"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
-import { QuestMetadata } from "@/components/quest-metadata"
-import {
-  TransactionConfirmDialog,
-  type TransactionDetails,
-} from "@/components/transaction-confirm-dialog"
+import { PageMetadata } from "@/components/page-metadata"
+import { getQuestUrl } from "@/lib/app-url"
+// Lazy-loaded: ships in its own chunk, not the initial bundle
+const TransactionConfirmDialog = lazy(() =>
+  import(/* @vite-chunk-include */ "@/components/transaction-confirm-dialog").then(m => ({
+    default: m.TransactionConfirmDialog,
+  }))
+)
+import type { TransactionDetails } from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
-import { useQuest, useMilestones, useEnrollees, useRewardPool } from "@/hooks/use-quest-data"
+import { useQuest, useMilestones, useEnrollees, useRewardPool, useQuestAuthority } from "@/hooks/use-quest-data"
 import { questClient, QuestStatus, Visibility } from "@/lib/contracts/quest"
 import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone-client"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -120,8 +125,10 @@ const questImportSchema = z.object({
 const QUEST_ERROR_MESSAGES: Record<number, string> = {
   4: "You are already enrolled in this quest.",
   7: "This quest is already full.",
-  8: "This quest is archived and no longer accepts new learners.",
+  8: "This quest has been archived.",
   11: "This quest is invite only.",
+  13: "Enrollment is closed for this quest.",
+  14: "This quest's deadline has passed.",
 }
 
 const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
@@ -231,17 +238,32 @@ export function QuestView() {
   const milestonesData = useMilestones(questId)
   const enrolleesData = useEnrollees(questId)
   const poolBalanceData = useRewardPool(questId)
+  const questAuthorityData = useQuestAuthority(questId)
 
-  // Combined loading state
+  // Combined loading state: true on initial load OR while any background
+  // refetch is in-flight (e.g. after a transaction). This keeps the skeleton
+  // as the single source of truth — no stale data flash between a transaction
+  // completing and the updated data arriving.
   const isLoading =
     questData.isLoading ||
     milestonesData.isLoading ||
     enrolleesData.isLoading ||
-    poolBalanceData.isLoading
+    poolBalanceData.isLoading ||
+    questAuthorityData.isLoading
+
+  // Background refetch in-flight (post-transaction). Used to suppress
+  // interactive actions while data is refreshing without re-showing the
+  // full-page skeleton.
+  const isRefetching =
+    questData.isFetching ||
+    milestonesData.isFetching ||
+    enrolleesData.isFetching ||
+    poolBalanceData.isFetching ||
+    questAuthorityData.isFetching
 
   // Use the first error that exists
   const loadError =
-    questData.error || milestonesData.error || enrolleesData.error || poolBalanceData.error
+    questData.error || milestonesData.error || enrolleesData.error || poolBalanceData.error || questAuthorityData.error
 
   // Refetch function that refreshes all data
 
@@ -292,9 +314,10 @@ export function QuestView() {
       milestonesData.refetch(),
       enrolleesData.refetch(),
       poolBalanceData.refetch(),
+      questAuthorityData.refetch(),
       fetchCompletions(),
     ])
-  }, [questData, milestonesData, enrolleesData, poolBalanceData, fetchCompletions])
+  }, [questData, milestonesData, enrolleesData, poolBalanceData, questAuthorityData, fetchCompletions])
 
   // Get raw data
   const quest = questData.data
@@ -411,8 +434,9 @@ export function QuestView() {
 
   const resetMilestoneForm = useCallback(() => {
     milestoneForm.reset()
+    createMilestoneTx.reset()
     setShowMilestoneForm(false)
-  }, [milestoneForm])
+  }, [createMilestoneTx, milestoneForm])
 
   const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
@@ -1107,10 +1131,10 @@ export function QuestView() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <QuestMetadata
-        questId={questId}
-        questName={quest.name}
-        questDescription={quest.description}
+      <PageMetadata
+        title={`${quest.name} | Lernza`}
+        description={quest.description || "Learn and earn on-chain with Lernza"}
+        canonicalUrl={getQuestUrl(questId)}
       />
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
@@ -1168,6 +1192,28 @@ export function QuestView() {
                   <span className="text-destructive">Countdown {countdownLabel}</span>
                 )}
               </div>
+              {questAuthorityData.data && (
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs font-bold">Funded by:</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(questAuthorityData.data!)
+                      addToast("Address copied to clipboard!", "success")
+                    }}
+                    className="font-mono text-xs font-bold hover:text-primary transition-colors"
+                    title="Click to copy"
+                  >
+                    {truncateAddress(questAuthorityData.data)}
+                  </button>
+                  <PrefetchLink
+                    href={`/profile?address=${questAuthorityData.data}`}
+                    className="text-primary hover:text-primary/80 transition-colors"
+                    title="View creator profile"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </PrefetchLink>
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 flex-wrap gap-3">
               {isOwner ? (
@@ -1230,7 +1276,10 @@ export function QuestView() {
                   <Button
                     size="sm"
                     className="shimmer-on-hover"
-                    onClick={() => setShowMilestoneForm(true)}
+                    onClick={() => {
+                      createMilestoneTx.reset()
+                      setShowMilestoneForm(true)
+                    }}
                     disabled={isExpired}
                   >
                     <Plus className="h-4 w-4" />
@@ -1241,7 +1290,7 @@ export function QuestView() {
                       variant="danger"
                       size="sm"
                       onClick={() => void handleArchiveQuest()}
-                      disabled={archiveQuestTx.isPending}
+                      disabled={archiveQuestTx.isPending || isRefetching}
                     >
                       {archiveQuestTx.isPending ? "Archiving..." : "Archive Quest"}
                     </Button>
@@ -1254,6 +1303,7 @@ export function QuestView() {
                   onClick={() => void handleEnroll()}
                   disabled={
                     enrollTx.isPending ||
+                    isRefetching ||
                     isEnrolled ||
                     !isSupportedNetwork ||
                     !address ||
@@ -1950,6 +2000,7 @@ export function QuestView() {
                     onClick={() => void handleEnroll()}
                     disabled={
                       enrollTx.isPending ||
+                      isRefetching ||
                       isEnrolled ||
                       !isSupportedNetwork ||
                       !address ||
@@ -2062,31 +2113,33 @@ export function QuestView() {
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Transaction Confirmation Dialog */}
-      <TransactionConfirmDialog
-        isOpen={showConfirmDialog}
-        details={pendingTransaction?.details ?? null}
-        onConfirm={() => {
-          const transaction = pendingTransaction
-          setShowConfirmDialog(false)
-          setPendingTransaction(null)
-          if (transaction) {
-            void transaction.execute()
+      {/* Transaction Confirmation Dialog — lazy chunk, invisible fallback */}
+      <Suspense fallback={null}>
+        <TransactionConfirmDialog
+          isOpen={showConfirmDialog}
+          details={pendingTransaction?.details ?? null}
+          onConfirm={() => {
+            const transaction = pendingTransaction
+            setShowConfirmDialog(false)
+            setPendingTransaction(null)
+            if (transaction) {
+              void transaction.execute()
+            }
+          }}
+          onCancel={() => {
+            setShowConfirmDialog(false)
+            setPendingTransaction(null)
+          }}
+          isPending={
+            addEnrolleeTx.isPending ||
+            createMilestoneTx.isPending ||
+            verifyPayoutTx.isPending ||
+            archiveQuestTx.isPending ||
+            removeEnrolleeTx.isPending ||
+            leaveQuestTx.isPending
           }
-        }}
-        onCancel={() => {
-          setShowConfirmDialog(false)
-          setPendingTransaction(null)
-        }}
-        isPending={
-          addEnrolleeTx.isPending ||
-          createMilestoneTx.isPending ||
-          verifyPayoutTx.isPending ||
-          archiveQuestTx.isPending ||
-          removeEnrolleeTx.isPending ||
-          leaveQuestTx.isPending
-        }
-      />
+        />
+      </Suspense>
 
       {/* Import Quest Dialog */}
       {showImportDialog && importedData && (

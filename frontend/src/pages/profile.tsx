@@ -449,8 +449,13 @@ export function Profile() {
             ) : totalEarned === 0n ? (
               <Card className="animate-fade-in-up">
                 <CardContent className="flex flex-col items-center py-12 text-center">
-                  <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                    <Coins className="h-6 w-6" />
+                  <div className="mb-6">
+                    <img
+                      src="/illustrations/empty-profile.svg"
+                      alt=""
+                      className="h-32 w-32 sm:h-40 sm:w-40"
+                      aria-hidden="true"
+                    />
                   </div>
                   <h3 className="mb-2 font-black">No on-chain earnings yet</h3>
                   <p className="text-muted-foreground text-sm">
@@ -722,7 +727,7 @@ export function Profile() {
                     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="group-hover:underline decoration-primary decoration-4 underline-offset-4 truncate text-lg font-black transition-colors">
+                          <h4 className="decoration-primary truncate text-lg font-black decoration-4 underline-offset-4 transition-colors group-hover:underline">
                             {quest.name}
                           </h4>
                           <Badge variant="outline" className="text-[10px] font-bold uppercase">

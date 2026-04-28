@@ -1,13 +1,13 @@
 # Funding Flow
 
-This flow shows the workspace authority funding a quest pool through the rewards contract. The rewards contract then moves tokens through the Stellar asset contract and updates the workspace pool balance.
+This flow shows the quest owner funding a quest pool through the rewards contract. The rewards contract then moves tokens through the Stellar asset contract and updates the quest pool balance.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Authority as Workspace Authority
     participant FE as Frontend
-    participant Quest as Quest Contract (workspace)
+    participant Quest as Quest Contract
     participant Wallet as Freighter Wallet
     participant Rewards as Rewards Contract
     participant Token as Stellar Asset Contract

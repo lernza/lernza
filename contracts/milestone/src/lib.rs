@@ -136,6 +136,7 @@ pub enum Error {
     NotFound = 1,
     Unauthorized = 2,
     AlreadyCompleted = 4,
+    Reserved5 = 5, // reserved for stable ABI; do not reuse
     InvalidAmount = 6,
     OwnerMismatch = 7,
     NotInitialized = 8,
@@ -148,7 +149,9 @@ pub enum Error {
     TitleTooLong = 15,
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
-    Paused = 18,
+    /// Contract is administratively paused; all mutating calls are rejected.
+    /// System band: code 400 is identical across all Lernza contracts.
+    Paused = 400,
     Overflow = 19,
     InvalidInput = 3,
 }
@@ -170,6 +173,9 @@ pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
 pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 pub const MAX_BATCH_SIZE: u32 = 20;
 pub const MAX_MILESTONES: u32 = 50;
+
+// IsDataKey implementation — restricts TTL extension to Milestone DataKey only
+impl common::IsDataKey for DataKey {}
 
 #[contract]
 pub struct MilestoneContract;
@@ -438,6 +444,10 @@ impl MilestoneContract {
 
         if matches!(mode, DistributionMode::Flat) && flat_reward <= 0 {
             return Err(Error::InvalidAmount);
+        }
+
+        if matches!(mode, DistributionMode::Competitive(max_winners) if max_winners == 0) {
+            return Err(Error::InvalidInput);
         }
 
         let mode_key = DataKey::Mode(quest_id);

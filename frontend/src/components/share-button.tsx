@@ -41,6 +41,7 @@ interface ShareButtonProps {
   onToast: (message: string, type?: "success" | "error" | "info" | "warning") => void
   compact?: boolean
   className?: string
+  showCopyOnly?: boolean
 }
 
 export function ShareButton({
@@ -49,6 +50,7 @@ export function ShareButton({
   onToast,
   compact = false,
   className,
+  showCopyOnly = false,
 }: ShareButtonProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<DropdownPosition>({ top: 0, right: 0 })
@@ -252,6 +254,27 @@ export function ShareButton({
 
   const useMobileShare = isMobileWithShareApi()
 
+  // If showCopyOnly is true, render a simple copy button without dropdown
+  if (showCopyOnly) {
+    return (
+      <button
+        onClick={handleCopyLink}
+        aria-label="Copy quest link"
+        className={cn(
+          "border-border flex items-center gap-2 border-[2px] text-sm font-bold",
+          "bg-card text-card-foreground shadow-[3px_3px_0_var(--color-border)]",
+          "neo-press hover:bg-primary cursor-pointer transition-colors",
+          copied && "bg-success",
+          compact ? "h-9 w-9 justify-center" : "px-4 py-2",
+          className
+        )}
+      >
+        {copied ? <Check className="h-4 w-4 shrink-0" /> : <Copy className="h-4 w-4 shrink-0" />}
+        {!compact && <span>{copied ? "Copied!" : "Copy Link"}</span>}
+      </button>
+    )
+  }
+
   const dropdown = open ? (
     <div
       ref={panelRef}
@@ -356,7 +379,6 @@ export function ShareButton({
         <Share2 className="h-4 w-4 shrink-0" />
         {!compact && <span>Share</span>}
       </button>
-
 
       {/* Portal: renders at document.body, escapes all overflow/z-index parents */}
       {typeof document !== "undefined" && createPortal(dropdown, document.body)}

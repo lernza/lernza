@@ -1,0 +1,38 @@
+name: Enforce Push Trigger
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/coverage.yml'
+      - '.github/workflows/enforce-push-trigger.yml'
+
+jobs:
+  enforce-push-trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check CI workflow has push trigger
+        run: |
+          if ! grep -q "push:" .github/workflows/ci.yml; then
+            echo "ERROR: ci.yml is missing 'push:' trigger"
+            exit 1
+          fi
+          if ! grep -A 1 "push:" .github/workflows/ci.yml | grep -q "branches:.*main"; then
+            echo "ERROR: ci.yml push trigger is missing 'branches: [main]'"
+            exit 1
+          fi
+          echo "✓ ci.yml has required push trigger for main branch"
+
+      - name: Check coverage workflow has push trigger
+        run: |
+          if ! grep -q "push:" .github/workflows/coverage.yml; then
+            echo "ERROR: coverage.yml is missing 'push:' trigger"
+            exit 1
+          fi
+          if ! grep -A 1 "push:" .github/workflows/coverage.yml | grep -q "branches:.*main"; then
+            echo "ERROR: coverage.yml push trigger is missing 'branches: [main]'"
+            exit 1
+          fi
+          echo "✓ coverage.yml has required push trigger for main branch"

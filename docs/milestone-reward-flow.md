@@ -1,6 +1,6 @@
 # Milestone Completion and Reward Distribution Flow
 
-This flow shows the frontend coordinating milestone verification and reward payout as two explicit transactions. The contracts stay decoupled, and the frontend carries the workspace ID, milestone ID, learner address, and verified reward amount across steps.
+This flow shows the frontend coordinating milestone verification and reward payout as two explicit transactions. The contracts stay decoupled, and the frontend carries the quest ID, milestone ID, learner address, and verified reward amount across steps.
 
 ```mermaid
 sequenceDiagram
@@ -9,12 +9,12 @@ sequenceDiagram
     actor Owner as Quest Owner
     participant FE as Frontend
     participant Wallet as Freighter Wallet
-    participant Quest as Quest Contract (workspace)
+    participant Quest as Quest Contract
     participant Milestone as Milestone Contract
     participant Rewards as Rewards Contract
     participant Token as Stellar Asset Contract
 
-    Note over Owner,Rewards: In the smooth MVP path, the quest owner is also the funded workspace authority
+    Note over Owner,Rewards: In the smooth MVP path, the quest owner is also the funded quest authority
 
     Learner->>FE: Submit completion proof or request review
     Owner->>FE: Open pending milestone review

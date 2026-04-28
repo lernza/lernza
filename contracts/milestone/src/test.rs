@@ -409,6 +409,20 @@ fn test_flat_mode_fails_with_zero_reward() {
 
     let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(client.get_flat_reward(&q_id), None);
+}
+
+#[test]
+fn test_competitive_mode_fails_with_zero_winners() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let result = client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(0), &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(client.get_flat_reward(&q_id), None);
 }
 
 #[test]

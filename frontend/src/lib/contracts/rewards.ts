@@ -62,6 +62,15 @@ export class RewardsClient {
     return result ? BigInt(result) : 0n
   }
 
+  async getQuestAuthority(questId: number): Promise<string | null> {
+    const result = await this.invokeRead("get_quest_authority", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    if (!result) return null
+    const native = scValToNative(result)
+    return typeof native === "string" ? native : null
+  }
+
   // --- Write Operations ---
 
   async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {

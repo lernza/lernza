@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   motion,
   useMotionValue,
@@ -8,7 +8,7 @@ import {
 import { Check, X, Sparkles, Hand } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { cn, formatTokens } from "@/lib/utils";
+import { formatTokens } from "@/lib/utils";
 
 interface SwipeableQuestCardProps {
   quest: {

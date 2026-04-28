@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect, type ChangeEvent } from "react"
+import { useCallback, useMemo, useState, useEffect, lazy, Suspense, type ChangeEvent } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -48,10 +48,13 @@ import { useTransactionQueue, type TransactionQueuePhase } from "@/hooks/use-tra
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
 import { QuestMetadata } from "@/components/quest-metadata"
-import {
-  TransactionConfirmDialog,
-  type TransactionDetails,
-} from "@/components/transaction-confirm-dialog"
+// Lazy-loaded: ships in its own chunk, not the initial bundle
+const TransactionConfirmDialog = lazy(() =>
+  import(/* @vite-chunk-include */ "@/components/transaction-confirm-dialog").then(m => ({
+    default: m.TransactionConfirmDialog,
+  }))
+)
+import type { TransactionDetails } from "@/components/transaction-confirm-dialog"
 import { useWallet } from "@/hooks/use-wallet"
 import { useQuest, useMilestones, useEnrollees, useRewardPool } from "@/hooks/use-quest-data"
 import { questClient, QuestStatus, Visibility } from "@/lib/contracts/quest"
@@ -2062,31 +2065,33 @@ export function QuestView() {
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Transaction Confirmation Dialog */}
-      <TransactionConfirmDialog
-        isOpen={showConfirmDialog}
-        details={pendingTransaction?.details ?? null}
-        onConfirm={() => {
-          const transaction = pendingTransaction
-          setShowConfirmDialog(false)
-          setPendingTransaction(null)
-          if (transaction) {
-            void transaction.execute()
+      {/* Transaction Confirmation Dialog — lazy chunk, invisible fallback */}
+      <Suspense fallback={null}>
+        <TransactionConfirmDialog
+          isOpen={showConfirmDialog}
+          details={pendingTransaction?.details ?? null}
+          onConfirm={() => {
+            const transaction = pendingTransaction
+            setShowConfirmDialog(false)
+            setPendingTransaction(null)
+            if (transaction) {
+              void transaction.execute()
+            }
+          }}
+          onCancel={() => {
+            setShowConfirmDialog(false)
+            setPendingTransaction(null)
+          }}
+          isPending={
+            addEnrolleeTx.isPending ||
+            createMilestoneTx.isPending ||
+            verifyPayoutTx.isPending ||
+            archiveQuestTx.isPending ||
+            removeEnrolleeTx.isPending ||
+            leaveQuestTx.isPending
           }
-        }}
-        onCancel={() => {
-          setShowConfirmDialog(false)
-          setPendingTransaction(null)
-        }}
-        isPending={
-          addEnrolleeTx.isPending ||
-          createMilestoneTx.isPending ||
-          verifyPayoutTx.isPending ||
-          archiveQuestTx.isPending ||
-          removeEnrolleeTx.isPending ||
-          leaveQuestTx.isPending
-        }
-      />
+        />
+      </Suspense>
 
       {/* Import Quest Dialog */}
       {showImportDialog && importedData && (

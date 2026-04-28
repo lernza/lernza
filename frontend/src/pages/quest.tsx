@@ -47,7 +47,8 @@ import { useToast } from "@/hooks/use-toast"
 import { useTransactionQueue, type TransactionQueuePhase } from "@/hooks/use-transaction-queue"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
-import { QuestMetadata } from "@/components/quest-metadata"
+import { PageMetadata } from "@/components/page-metadata"
+import { getQuestUrl } from "@/lib/app-url"
 // Lazy-loaded: ships in its own chunk, not the initial bundle
 const TransactionConfirmDialog = lazy(() =>
   import(/* @vite-chunk-include */ "@/components/transaction-confirm-dialog").then(m => ({
@@ -414,8 +415,9 @@ export function QuestView() {
 
   const resetMilestoneForm = useCallback(() => {
     milestoneForm.reset()
+    createMilestoneTx.reset()
     setShowMilestoneForm(false)
-  }, [milestoneForm])
+  }, [createMilestoneTx, milestoneForm])
 
   const closeAddEnrollee = useCallback(() => {
     setShowAddEnrollee(false)
@@ -1110,10 +1112,10 @@ export function QuestView() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <QuestMetadata
-        questId={questId}
-        questName={quest.name}
-        questDescription={quest.description}
+      <PageMetadata
+        title={`${quest.name} | Lernza`}
+        description={quest.description || "Learn and earn on-chain with Lernza"}
+        canonicalUrl={getQuestUrl(questId)}
       />
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
@@ -1233,7 +1235,10 @@ export function QuestView() {
                   <Button
                     size="sm"
                     className="shimmer-on-hover"
-                    onClick={() => setShowMilestoneForm(true)}
+                    onClick={() => {
+                      createMilestoneTx.reset()
+                      setShowMilestoneForm(true)
+                    }}
                     disabled={isExpired}
                   >
                     <Plus className="h-4 w-4" />

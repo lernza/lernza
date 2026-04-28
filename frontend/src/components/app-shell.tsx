@@ -1,21 +1,23 @@
-import { useEffect } from "react"
-import { useLocation } from "react-router-dom"
+import { useEffect, type ReactNode } from "react"
+import { Outlet, ScrollRestoration, useLocation } from "react-router-dom"
 import { Navbar } from "@/components/navbar"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { AppRouter } from "@/components/app-router"
 import { useWallet } from "@/hooks/use-wallet"
 import { AlertTriangle, X } from "lucide-react"
 import { useState } from "react"
 
 /**
- * Scroll to top on route change
+ * Focus main content on route change for keyboard users.
  */
-function ScrollToTop() {
-  const { pathname } = useLocation()
+function FocusMainOnNavigation() {
+  const { pathname, search } = useLocation()
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }, [pathname])
+    const main = document.getElementById("main-content")
+    if (main) {
+      main.focus()
+    }
+  }, [pathname, search])
 
   return null
 }
@@ -63,11 +65,15 @@ function NetworkMismatchBanner() {
   )
 }
 
+interface AppShellProps {
+  children?: ReactNode
+}
+
 /**
  * App shell component that provides the main layout structure,
  * navigation, analytics, and routing.
  */
-export function AppShell() {
+export function AppShell({ children }: AppShellProps) {
   return (
     <div className="bg-background text-foreground min-h-screen">
       <a
@@ -76,13 +82,15 @@ export function AppShell() {
       >
         Skip to main content
       </a>
-      <ScrollToTop />
+      <FocusMainOnNavigation />
+      <ScrollRestoration getKey={location => `${location.pathname}${location.search}`} />
       <NetworkMismatchBanner />
       <Navbar />
       <ErrorBoundary>
         <main id="main-content" tabIndex={-1} className="outline-none">
           <h1 className="sr-only">Lernza Platform</h1>
-          <AppRouter />
+          <Outlet />
+          {children}
         </main>
       </ErrorBoundary>
       <ToastViewport />

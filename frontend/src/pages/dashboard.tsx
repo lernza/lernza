@@ -54,6 +54,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
+  const [preset, setPreset] = useState<"none" | "ending-soon" | "recently-funded" | "recently-verified">("none")
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
@@ -167,7 +168,27 @@ export function Dashboard() {
 
   const filteredWorkspaces =
     filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
-  const visibleWorkspaces = filteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
+  
+  // Apply preset filters
+  let presetFilteredWorkspaces = filteredWorkspaces
+  const now = Math.floor(Date.now() / 1000)
+  
+  if (preset === "ending-soon") {
+    // Show quests with deadline within 7 days
+    const sevenDaysFromNow = now + 7 * 24 * 60 * 60
+    presetFilteredWorkspaces = filteredWorkspaces.filter(
+      ws => ws.deadline > 0 && ws.deadline > now && ws.deadline <= sevenDaysFromNow
+    )
+  } else if (preset === "recently-funded") {
+    // Show quests created in the last 30 days
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60
+    presetFilteredWorkspaces = filteredWorkspaces.filter(ws => ws.createdAt >= thirtyDaysAgo)
+  } else if (preset === "recently-verified") {
+    // Show quests with verified status
+    presetFilteredWorkspaces = filteredWorkspaces.filter(ws => ws.verified)
+  }
+  
+  const visibleWorkspaces = presetFilteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -354,6 +375,30 @@ export function Dashboard() {
               </div>
             </div>
 
+            {/* Preset Filter Chips */}
+            <div className="mb-5 flex flex-wrap gap-2">
+              {(
+                [
+                  { value: "none", label: "All" },
+                  { value: "ending-soon", label: "Ending Soon" },
+                  { value: "recently-funded", label: "Recently Funded" },
+                  { value: "recently-verified", label: "Recently Verified" },
+                ] as const
+              ).map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => setPreset(p.value)}
+                  className={`border-border px-3 py-1.5 text-xs font-bold transition-all border-[2px] shadow-[2px_2px_0_var(--color-border)] ${
+                    preset === p.value
+                      ? "bg-primary"
+                      : "bg-background hover:bg-secondary hover:shadow-[3px_3px_0_var(--color-border)]"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
             {loadError && (
               <div className="mb-5">
                 <SmartError message={loadError} onRetry={() => void refetch()} />
@@ -474,13 +519,15 @@ export function Dashboard() {
               </p>
             )}
 
-            {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
+            {presetFilteredWorkspaces.length === 0 && !isLoading && !loadError && (
               <div className="mt-5">
                 <EmptyState
                   variant="quests"
-                  title={filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                  title={preset !== "none" ? `No ${preset.replace("-", " ")} quests` : filter === "all" ? "No quests yet" : `No ${filter} quests`}
                   description={
-                    filter === "all"
+                    preset !== "none"
+                      ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
+                      : filter === "all"
                       ? "Create your first quest to start incentivizing learning with on-chain rewards."
                       : filter === "owned"
                         ? "You haven't created any quests yet. Start one to incentivize learners."

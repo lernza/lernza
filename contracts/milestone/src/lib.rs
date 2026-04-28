@@ -136,6 +136,7 @@ pub enum Error {
     NotFound = 1,
     Unauthorized = 2,
     AlreadyCompleted = 4,
+    Reserved5 = 5, // reserved for stable ABI; do not reuse
     InvalidAmount = 6,
     OwnerMismatch = 7,
     NotInitialized = 8,
@@ -438,6 +439,10 @@ impl MilestoneContract {
 
         if matches!(mode, DistributionMode::Flat) && flat_reward <= 0 {
             return Err(Error::InvalidAmount);
+        }
+
+        if matches!(mode, DistributionMode::Competitive(max_winners) if max_winners == 0) {
+            return Err(Error::InvalidInput);
         }
 
         let mode_key = DataKey::Mode(quest_id);

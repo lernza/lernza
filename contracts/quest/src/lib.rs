@@ -48,6 +48,7 @@ pub enum Error {
     Unauthorized = 2,
     InvalidInput = 3,
     AlreadyEnrolled = 4,
+    Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
     QuestFull = 7,
     QuestArchived = 8,

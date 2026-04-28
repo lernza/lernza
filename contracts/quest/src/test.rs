@@ -1,5 +1,5 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env, String};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, String};
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -1016,6 +1016,46 @@ fn test_pause_blocks_state_changes_until_unpaused() {
     assert!(!client.is_paused());
     client.add_enrollee(&quest_id, &enrollee);
     assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
+fn test_pause_blocks_all_write_endpoints_until_unpaused() {
+    let (env, client, owner, token) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let enrollee = Address::generate(&env);
+    let random_enrollee = Address::generate(&env);
+    let preimage = Bytes::from_array(&env, &[0u8; 32]);
+    let commitment: BytesN<32> = env.crypto().sha256(&preimage).into();
+
+    client.add_enrollee(&quest_id, &enrollee);
+    client.pause(&admin);
+
+    assert_eq!(
+        client.try_update_quest(
+            &quest_id,
+            &owner,
+            &Some(String::from_str(&env, "Paused Quest")),
+            &Some(String::from_str(&env, "Description")),
+            &Some(String::from_str(&env, "Programming")),
+            &Some(Vec::<String>::new(&env)),
+            &Some(Visibility::Private),
+            &Some(10),
+        ),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(client.try_archive_quest(&quest_id), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_add_enrollee(&quest_id, &random_enrollee), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_join_quest(&random_enrollee, &quest_id), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_register_invite(&owner, &quest_id, &commitment), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_revoke_invite(&owner, &quest_id, &commitment), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_join_quest_with_invite(&random_enrollee, &quest_id, &preimage), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_remove_enrollee(&quest_id, &enrollee), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_leave_quest(&enrollee, &quest_id), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_set_deadline(&quest_id, &123456), Err(Ok(Error::Paused)));
+    assert_eq!(client.try_set_visibility(&quest_id, &Visibility::Private), Err(Ok(Error::Paused)));
 }
 
 #[test]

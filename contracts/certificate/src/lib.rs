@@ -38,8 +38,8 @@ pub enum Error {
     AlreadyIssued = 3,
     NotFound = 4,
     InvalidQuest = 5,
-    AlreadyRevoked = 6,  // Issue #720
-    MetadataBaseNotSet = 7,  // Issue #719
+    AlreadyRevoked = 6,     // Issue #720
+    MetadataBaseNotSet = 7, // Issue #719
 }
 
 const BUMP: u32 = 518_400;
@@ -290,13 +290,9 @@ impl CertificateContract {
     /// Trade-off: centralised control — consider moving to IPFS to decentralise.
     #[only_owner]
     pub fn set_metadata_base(env: Env, uri: String) -> Result<(), Error> {
-        env.storage()
-            .instance()
-            .set(&DataKey::MetadataBase, &uri);
-        env.events().publish(
-            (Symbol::new(&env, "metadata_base_updated"),),
-            uri,
-        );
+        env.storage().instance().set(&DataKey::MetadataBase, &uri);
+        env.events()
+            .publish((Symbol::new(&env, "metadata_base_updated"),), uri);
         Ok(())
     }
 

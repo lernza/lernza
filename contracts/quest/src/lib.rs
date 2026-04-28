@@ -54,7 +54,6 @@ pub enum Error {
     NameTooLong = 9,
     DescriptionTooLong = 10,
     InviteOnly = 11,
-    Paused = 12,
     /// Enrollment is closed because the quest has been archived.
     EnrollmentClosed = 13,
     /// Enrollment is rejected because the quest deadline has passed.
@@ -63,6 +62,9 @@ pub enum Error {
     InvalidInvite = 15,
     /// The invite code has already been redeemed.
     InviteAlreadyUsed = 16,
+    /// Contract is administratively paused; all mutating calls are rejected.
+    /// System band: code 400 is identical across all Lernza contracts.
+    Paused = 400,
 }
 
 // TTL constants and address validation moved to common.

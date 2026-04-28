@@ -507,11 +507,7 @@ impl RewardsContract {
     ///   - Quest is `Archived`
     ///   - 7-day refund window has elapsed
     ///   - There is actually something to refund
-    pub fn refund_unused_pool(
-        env: Env,
-        authority: Address,
-        quest_id: u32,
-    ) -> Result<i128, Error> {
+    pub fn refund_unused_pool(env: Env, authority: Address, quest_id: u32) -> Result<i128, Error> {
         authority.require_auth();
 
         // Verify authority
@@ -586,11 +582,9 @@ impl RewardsContract {
         env.storage()
             .persistent()
             .set(&DataKey::QuestPool(quest_id), &new_pool);
-        env.storage().persistent().extend_ttl(
-            &DataKey::QuestPool(quest_id),
-            THRESHOLD,
-            BUMP,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::QuestPool(quest_id), THRESHOLD, BUMP);
 
         // Emit event — reuse reward_refunded topic for indexer compatibility
         env.events().publish(

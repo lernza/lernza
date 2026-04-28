@@ -148,7 +148,9 @@ pub enum Error {
     TitleTooLong = 15,
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
-    Paused = 18,
+    /// Contract is administratively paused; all mutating calls are rejected.
+    /// System band: code 400 is identical across all Lernza contracts.
+    Paused = 400,
     Overflow = 19,
     InvalidInput = 3,
 }

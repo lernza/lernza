@@ -61,6 +61,20 @@ pub enum Error {
     InvalidInvite = 15,
     /// The invite code has already been redeemed.
     InviteAlreadyUsed = 16,
+    /// A soft-archive is already pending on this quest (issue #713).
+    ArchivePending = 17,
+    /// No pending archive to cancel or finalize (issue #713).
+    NoArchivePending = 18,
+    /// The cancel window has already elapsed; cancellation is no longer possible (issue #713).
+    ArchiveWindowClosed = 19,
+    /// The grace period is still open; finalization is not yet allowed (issue #713).
+    ArchiveWindowOpen = 20,
+    /// The maximum number of deadline extensions has been reached (issue #714).
+    ExtensionCapReached = 21,
+    /// No ownership transfer is currently pending on this quest (issue #715).
+    NoTransferPending = 22,
+    /// The caller is not the pending new owner (issue #715).
+    NotPendingOwner = 23,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
     Paused = 400,
@@ -71,6 +85,12 @@ pub const MAX_QUEST_NAME_LEN: u32 = 64;
 pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
+/// 7-day grace period in seconds for the soft-archive flow (issue #713).
+const ARCHIVE_GRACE_PERIOD: u64 = 604_800;
+/// Maximum times a deadline may be extended via extend_deadline (issue #714).
+const MAX_DEADLINE_EXTENSIONS: u32 = 3;
+/// Maximum addresses processed in one bulk-revoke call (issue #716).
+const MAX_BULK_REVOKE: u32 = 50;
 
 fn is_blank_ascii(s: &String) -> bool {
     let len = s.len() as usize;
@@ -195,6 +215,39 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Bulk-revoke creator verifications. Admin only. Capped at 50 addresses per call.
+    ///
+    /// Each address is processed idempotently (no error if already unverified).
+    /// Emits a `creator_verification_revoked` event per revoked address.
+    pub fn revoke_creator_verifications(
+        env: Env,
+        admin: Address,
+        addrs: Vec<Address>,
+    ) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
+
+        if addrs.len() > MAX_BULK_REVOKE {
+            return Err(Error::InvalidInput);
+        }
+
+        let ts = env.ledger().timestamp();
+        for i in 0..addrs.len() {
+            let addr = addrs.get(i).ok_or(Error::InvalidInput)?;
+            let key = DataKey::VerifiedCreator(addr.clone());
+            if env.storage().persistent().has(&key) {
+                env.storage().persistent().remove(&key);
+            }
+            env.events().publish(
+                (Symbol::new(&env, "creator_verification_revoked"),),
+                (addr, admin.clone(), ts),
+            );
+        }
+
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
     /// Pause state-mutating operations. Admin only.
     pub fn pause(env: Env, admin: Address) -> Result<(), Error> {
         Self::require_admin(&env, &admin)?;
@@ -285,6 +338,9 @@ impl QuestContract {
             archived_at: 0,
             max_enrollees,
             verified,
+            pending_archive_at: 0,
+            deadline_extensions: 0,
+            pending_owner: None,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -424,6 +480,92 @@ impl QuestContract {
         // Emit quest archived event
         // Event topics: (quest_archived,)
         // Event data: (quest_id)
+        env.events()
+            .publish((Symbol::new(&env, "quest_archived"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Begin a soft-archive with a 7-day grace period. Owner only.
+    ///
+    /// Records `pending_archive_at = now`. The owner may cancel within 7 days,
+    /// or call `finalize_archive` once the window has elapsed.
+    pub fn request_archive(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+        if quest.pending_archive_at != 0 {
+            return Err(Error::ArchivePending);
+        }
+
+        quest.pending_archive_at = env.ledger().timestamp();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        env.events().publish(
+            (Symbol::new(&env, "archive_requested"),),
+            (quest_id, quest.pending_archive_at),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Cancel a pending archive within the grace period. Owner only.
+    pub fn cancel_archive(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.pending_archive_at == 0 {
+            return Err(Error::NoArchivePending);
+        }
+
+        let now = env.ledger().timestamp();
+        if now >= quest.pending_archive_at + ARCHIVE_GRACE_PERIOD {
+            return Err(Error::ArchiveWindowClosed);
+        }
+
+        quest.pending_archive_at = 0;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        env.events()
+            .publish((Symbol::new(&env, "archive_cancelled"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Finalize a pending archive after the grace period has elapsed. Owner only.
+    pub fn finalize_archive(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.pending_archive_at == 0 {
+            return Err(Error::NoArchivePending);
+        }
+
+        let now = env.ledger().timestamp();
+        if now < quest.pending_archive_at + ARCHIVE_GRACE_PERIOD {
+            return Err(Error::ArchiveWindowOpen);
+        }
+
+        quest.status = QuestStatus::Archived;
+        quest.archived_at = now;
+        quest.pending_archive_at = 0;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
         env.events()
             .publish((Symbol::new(&env, "quest_archived"),), quest_id);
 
@@ -752,6 +894,41 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Extend the quest deadline forward. Owner only.
+    ///
+    /// `new_deadline` must be strictly greater than the current (non-zero) deadline.
+    /// Use `set_deadline` to establish the initial deadline; this function is for
+    /// subsequent extensions and is capped at `MAX_DEADLINE_EXTENSIONS` (3).
+    pub fn extend_deadline(env: Env, quest_id: u32, new_deadline: u64) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+        if quest.deadline == 0 || new_deadline <= quest.deadline {
+            return Err(Error::InvalidInput);
+        }
+        if quest.deadline_extensions >= MAX_DEADLINE_EXTENSIONS {
+            return Err(Error::ExtensionCapReached);
+        }
+
+        quest.deadline = new_deadline;
+        quest.deadline_extensions += 1;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        env.events().publish(
+            (Symbol::new(&env, "deadline_extended"),),
+            (quest_id, new_deadline),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Returns true if the quest has a non-zero deadline that has passed.
     pub fn is_expired(env: Env, quest_id: u32) -> Result<bool, Error> {
         let quest = Self::load_quest(&env, quest_id)?;
@@ -889,6 +1066,100 @@ impl QuestContract {
     pub fn get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32> {
         let quest = Self::load_quest(&env, quest_id).ok()?;
         quest.max_enrollees
+    }
+
+    /// Initiate a two-step ownership transfer. Current owner only.
+    ///
+    /// Sets `pending_owner` to `new_owner`. Calling this a second time
+    /// overwrites any previously pending address (corrects a typo).
+    pub fn initiate_transfer(
+        env: Env,
+        quest_id: u32,
+        new_owner: Address,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        quest.pending_owner = Some(new_owner.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        env.events().publish(
+            (Symbol::new(&env, "transfer_initiated"),),
+            (quest_id, new_owner),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Accept a pending ownership transfer. Pending new owner only.
+    ///
+    /// On success the quest's owner field is updated and the
+    /// `OwnerQuests` index is adjusted for both old and new owners.
+    pub fn accept_transfer(
+        env: Env,
+        quest_id: u32,
+        new_owner: Address,
+    ) -> Result<(), Error> {
+        new_owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+
+        match &quest.pending_owner {
+            None => return Err(Error::NoTransferPending),
+            Some(pending) => {
+                if *pending != new_owner {
+                    return Err(Error::NotPendingOwner);
+                }
+            }
+        }
+
+        let old_owner = quest.owner.clone();
+        quest.owner = new_owner.clone();
+        quest.pending_owner = None;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        Self::remove_id_from_index(&env, DataKey::OwnerQuests(old_owner.clone()), quest_id);
+        Self::add_id_to_index(&env, DataKey::OwnerQuests(new_owner.clone()), quest_id);
+
+        env.events().publish(
+            (Symbol::new(&env, "transfer_completed"),),
+            (quest_id, old_owner, new_owner),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Cancel a pending ownership transfer. Current owner only.
+    pub fn cancel_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.pending_owner.is_none() {
+            return Err(Error::NoTransferPending);
+        }
+
+        quest.pending_owner = None;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        env.events()
+            .publish((Symbol::new(&env, "transfer_cancelled"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
     }
 
     // --- internals ---

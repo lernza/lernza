@@ -674,6 +674,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "deadline_extensions"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "description"
                       },
                       "val": {
@@ -709,6 +717,20 @@
                       "val": {
                         "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "pending_archive_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "pending_owner"
+                      },
+                      "val": "void"
                     },
                     {
                       "key": {

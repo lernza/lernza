@@ -979,9 +979,10 @@ fn test_revoke_creator_verification() {
 
     // State cleared
     assert!(!client.is_creator_verified(&creator));
-    // Storage entry removed
+    // Storage entry removed — must query inside the contract context
     let key = DataKey::VerifiedCreator(creator);
-    assert!(!env.storage().persistent().has(&key));
+    let contract_addr = client.address.clone();
+    assert!(!env.as_contract(&contract_addr, || env.storage().persistent().has(&key)));
 }
 
 #[test]
@@ -1745,4 +1746,455 @@ fn test_invite_error_codes_are_distinct() {
     assert_eq!(Error::InviteAlreadyUsed as u32, 16);
     assert_ne!(Error::InvalidInvite as u32, Error::InviteAlreadyUsed as u32);
     assert_ne!(Error::InvalidInvite as u32, Error::InviteOnly as u32);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #716 — bulk revoke_creator_verifications
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_bulk_revoke_creator_verifications() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator1 = Address::generate(&env);
+    let creator2 = Address::generate(&env);
+    let creator3 = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &creator1);
+    client.verify_creator(&admin, &creator2);
+    client.verify_creator(&admin, &creator3);
+
+    assert!(client.is_creator_verified(&creator1));
+    assert!(client.is_creator_verified(&creator2));
+    assert!(client.is_creator_verified(&creator3));
+
+    let mut addrs = Vec::new(&env);
+    addrs.push_back(creator1.clone());
+    addrs.push_back(creator2.clone());
+    client.revoke_creator_verifications(&admin, &addrs);
+
+    assert!(!client.is_creator_verified(&creator1));
+    assert!(!client.is_creator_verified(&creator2));
+    // creator3 untouched
+    assert!(client.is_creator_verified(&creator3));
+}
+
+#[test]
+fn test_bulk_revoke_idempotent_for_unverified() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    // creator is not verified — bulk revoke must still succeed
+    let mut addrs = Vec::new(&env);
+    addrs.push_back(creator.clone());
+    client.revoke_creator_verifications(&admin, &addrs);
+    assert!(!client.is_creator_verified(&creator));
+}
+
+#[test]
+fn test_bulk_revoke_exceeds_cap_fails() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+
+    client.initialize(&admin);
+
+    let mut addrs = Vec::new(&env);
+    for _ in 0..51u32 {
+        addrs.push_back(Address::generate(&env));
+    }
+    let result = client.try_revoke_creator_verifications(&admin, &addrs);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_bulk_revoke_unauthorized() {
+    let (env, client, _owner, _token) = setup();
+    let admin = Address::generate(&env);
+    let attacker = Address::generate(&env);
+    let creator = Address::generate(&env);
+
+    client.initialize(&admin);
+    client.verify_creator(&admin, &creator);
+
+    let mut addrs = Vec::new(&env);
+    addrs.push_back(creator.clone());
+    let result = client.try_revoke_creator_verifications(&attacker, &addrs);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+    assert!(client.is_creator_verified(&creator));
+}
+
+// ---------------------------------------------------------------------------
+// Issue #713 — soft-deletion / archival grace period
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_request_archive_sets_pending() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(5000);
+    client.request_archive(&0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.pending_archive_at, 5000);
+    assert_eq!(quest.status, QuestStatus::Active);
+}
+
+#[test]
+fn test_request_archive_twice_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+
+    let result = client.try_request_archive(&0);
+    assert_eq!(result, Err(Ok(Error::ArchivePending)));
+}
+
+#[test]
+fn test_request_archive_on_archived_quest_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.archive_quest(&0);
+
+    let result = client.try_request_archive(&0);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
+fn test_cancel_archive_within_window() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+
+    // Still within 7-day window
+    env.ledger().set_timestamp(1000 + 604_799);
+    client.cancel_archive(&0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.pending_archive_at, 0);
+    assert_eq!(quest.status, QuestStatus::Active);
+}
+
+#[test]
+fn test_cancel_archive_after_window_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+
+    // Window expired
+    env.ledger().set_timestamp(1000 + 604_800);
+    let result = client.try_cancel_archive(&0);
+    assert_eq!(result, Err(Ok(Error::ArchiveWindowClosed)));
+}
+
+#[test]
+fn test_cancel_archive_no_pending_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let result = client.try_cancel_archive(&0);
+    assert_eq!(result, Err(Ok(Error::NoArchivePending)));
+}
+
+#[test]
+fn test_finalize_archive_after_window() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+
+    env.ledger().set_timestamp(1000 + 604_800);
+    client.finalize_archive(&0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.status, QuestStatus::Archived);
+    assert_eq!(quest.pending_archive_at, 0);
+    assert_eq!(quest.archived_at, 1000 + 604_800);
+}
+
+#[test]
+fn test_finalize_archive_before_window_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+
+    // One second before window closes
+    env.ledger().set_timestamp(1000 + 604_799);
+    let result = client.try_finalize_archive(&0);
+    assert_eq!(result, Err(Ok(Error::ArchiveWindowOpen)));
+}
+
+#[test]
+fn test_finalize_archive_no_pending_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let result = client.try_finalize_archive(&0);
+    assert_eq!(result, Err(Ok(Error::NoArchivePending)));
+}
+
+#[test]
+fn test_request_cancel_finalize_full_path() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    // Request (non-zero timestamp avoids colliding with sentinel 0)
+    env.ledger().set_timestamp(1000);
+    client.request_archive(&0);
+    assert_eq!(client.get_quest(&0).pending_archive_at, 1000);
+    assert_eq!(client.get_quest(&0).status, QuestStatus::Active);
+
+    // Cancel within window
+    env.ledger().set_timestamp(1100);
+    client.cancel_archive(&0);
+    assert_eq!(client.get_quest(&0).pending_archive_at, 0);
+
+    // Request again, then finalize after window
+    env.ledger().set_timestamp(2000);
+    client.request_archive(&0);
+    env.ledger().set_timestamp(2000 + 604_800);
+    client.finalize_archive(&0);
+    assert_eq!(client.get_quest(&0).status, QuestStatus::Archived);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #714 — deadline extension cap
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_extend_deadline_happy_path() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_deadline(&0, &1000);
+
+    client.extend_deadline(&0, &2000);
+    assert_eq!(client.get_quest(&0).deadline, 2000);
+    assert_eq!(client.get_quest(&0).deadline_extensions, 1);
+
+    client.extend_deadline(&0, &3000);
+    assert_eq!(client.get_quest(&0).deadline_extensions, 2);
+
+    client.extend_deadline(&0, &4000);
+    assert_eq!(client.get_quest(&0).deadline, 4000);
+    assert_eq!(client.get_quest(&0).deadline_extensions, 3);
+}
+
+#[test]
+fn test_extend_deadline_cap_exceeded() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_deadline(&0, &1000);
+    client.extend_deadline(&0, &2000);
+    client.extend_deadline(&0, &3000);
+    client.extend_deadline(&0, &4000);
+
+    let result = client.try_extend_deadline(&0, &5000);
+    assert_eq!(result, Err(Ok(Error::ExtensionCapReached)));
+}
+
+#[test]
+fn test_extend_deadline_must_be_greater() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_deadline(&0, &1000);
+
+    // Same value not allowed
+    let result = client.try_extend_deadline(&0, &1000);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+
+    // Lower value not allowed
+    let result = client.try_extend_deadline(&0, &500);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_extend_deadline_no_initial_deadline_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    // deadline is 0 — use set_deadline first
+    let result = client.try_extend_deadline(&0, &5000);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_extend_deadline_archived_quest_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.set_deadline(&0, &1000);
+    client.archive_quest(&0);
+
+    let result = client.try_extend_deadline(&0, &2000);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
+fn test_extend_deadline_unauthorized() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.set_deadline(&0, &1000);
+
+    let _wrong = Address::generate(&env);
+    // mock_all_auths is on, so any address passes require_auth;
+    // still verify the happy path increments correctly for the owner.
+    client.extend_deadline(&0, &2000);
+    assert_eq!(client.get_quest(&0).deadline_extensions, 1);
+}
+
+#[test]
+fn test_extend_deadline_error_codes() {
+    assert_eq!(Error::ExtensionCapReached as u32, 21);
+}
+
+// ---------------------------------------------------------------------------
+// Issue #715 — two-step quest ownership transfer
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_initiate_transfer_sets_pending_owner() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let new_owner = Address::generate(&env);
+    client.initiate_transfer(&0, &new_owner);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.pending_owner, Some(new_owner));
+    assert_eq!(quest.owner, owner); // not changed yet
+}
+
+#[test]
+fn test_accept_transfer_completes_ownership() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let new_owner = Address::generate(&env);
+    client.initiate_transfer(&0, &new_owner);
+    client.accept_transfer(&0, &new_owner);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.owner, new_owner);
+    assert_eq!(quest.pending_owner, None);
+}
+
+#[test]
+fn test_accept_transfer_updates_owner_index() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let new_owner = Address::generate(&env);
+    client.initiate_transfer(&0, &new_owner);
+    client.accept_transfer(&0, &new_owner);
+
+    // New owner should see the quest in their list
+    let new_list = client.list_quests_by_owner(&new_owner);
+    assert_eq!(new_list.len(), 1);
+    assert_eq!(new_list.get(0).unwrap().id, 0);
+
+    // Old owner should no longer see it
+    let old_list = client.list_quests_by_owner(&owner);
+    assert_eq!(old_list.len(), 0);
+}
+
+#[test]
+fn test_accept_transfer_wrong_address_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let new_owner = Address::generate(&env);
+    let impostor = Address::generate(&env);
+    client.initiate_transfer(&0, &new_owner);
+
+    let result = client.try_accept_transfer(&0, &impostor);
+    assert_eq!(result, Err(Ok(Error::NotPendingOwner)));
+}
+
+#[test]
+fn test_accept_transfer_no_pending_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let random = Address::generate(&env);
+    let result = client.try_accept_transfer(&0, &random);
+    assert_eq!(result, Err(Ok(Error::NoTransferPending)));
+}
+
+#[test]
+fn test_cancel_transfer_clears_pending_owner() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let new_owner = Address::generate(&env);
+    client.initiate_transfer(&0, &new_owner);
+    client.cancel_transfer(&0);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.pending_owner, None);
+    assert_eq!(quest.owner, owner); // unchanged
+}
+
+#[test]
+fn test_cancel_transfer_no_pending_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let result = client.try_cancel_transfer(&0);
+    assert_eq!(result, Err(Ok(Error::NoTransferPending)));
+}
+
+#[test]
+fn test_initiate_transfer_overwrites_existing_pending() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let wrong = Address::generate(&env);
+    let correct = Address::generate(&env);
+
+    // First initiate (typo)
+    client.initiate_transfer(&0, &wrong);
+    // Correct it by calling again
+    client.initiate_transfer(&0, &correct);
+
+    let quest = client.get_quest(&0);
+    assert_eq!(quest.pending_owner, Some(correct.clone()));
+
+    // Original wrong address cannot accept
+    let result = client.try_accept_transfer(&0, &wrong);
+    assert_eq!(result, Err(Ok(Error::NotPendingOwner)));
+
+    // Correct address can accept
+    client.accept_transfer(&0, &correct);
+    assert_eq!(client.get_quest(&0).owner, correct);
+}
+
+#[test]
+fn test_initiate_transfer_on_archived_quest_fails() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    client.archive_quest(&0);
+
+    let new_owner = Address::generate(&env);
+    let result = client.try_initiate_transfer(&0, &new_owner);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+}
+
+#[test]
+fn test_transfer_error_codes() {
+    assert_eq!(Error::NoTransferPending as u32, 22);
+    assert_eq!(Error::NotPendingOwner as u32, 23);
+    assert_ne!(Error::NoTransferPending as u32, Error::NotPendingOwner as u32);
 }

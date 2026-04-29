@@ -56,7 +56,13 @@ const TransactionConfirmDialog = lazy(() =>
     default: m.TransactionConfirmDialog,
   }))
 )
+const ImportQuestDialog = lazy(() =>
+  import(/* @vite-chunk-include */ "@/components/import-quest-dialog").then(m => ({
+    default: m.ImportQuestDialog,
+  }))
+)
 import type { TransactionDetails } from "@/components/transaction-confirm-dialog"
+import type { ImportedQuest } from "@/components/import-quest-dialog"
 import { useWallet } from "@/hooks/use-wallet"
 import { useQuest, useMilestones, useEnrollees, useRewardPool, useQuestAuthority } from "@/hooks/use-quest-data"
 import { questClient, QuestStatus, Visibility } from "@/lib/contracts/quest"
@@ -2141,91 +2147,18 @@ export function QuestView() {
         />
       </Suspense>
 
-      {/* Import Quest Dialog */}
-      {showImportDialog && importedData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => {
-              setShowImportDialog(false)
-              setImportedData(null)
-            }}
-          />
-          <div className="animate-fade-in-up relative z-10 w-full max-w-md px-4">
-            <Card className="border-border overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
-              <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  <span className="text-sm font-black tracking-wider uppercase">Import Quest</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowImportDialog(false)
-                    setImportedData(null)
-                  }}
-                  className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-2"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <CardContent className="space-y-4 p-6">
-                <div>
-                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                    Quest Name
-                  </p>
-                  <p className="mt-1 text-lg font-black">{importedData.name}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                    Description
-                  </p>
-                  <p className="mt-1 text-sm">{importedData.description}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                    Milestones
-                  </p>
-                  <div className="mt-1 space-y-2">
-                    {importedData.milestones.map((ms, i) => (
-                      <div key={i} className="bg-muted/50 rounded-md p-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-bold">{ms.title}</p>
-                            <p className="text-muted-foreground text-xs">{ms.description}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {ms.requiresPrevious && i > 0 && (
-                              <Badge variant="outline">Sequential</Badge>
-                            )}
-                            <Badge>{formatTokens(ms.rewardAmount)} USDC</Badge>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowImportDialog(false)
-                      setImportedData(null)
-                    }}
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handleConfirmImport} className="shimmer-on-hover flex-1">
-                    <Upload className="h-4 w-4" />
-                    Import & Create Quest
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      )}
+      {/* Import Quest Dialog — lazy chunk */}
+      <Suspense fallback={null}>
+        <ImportQuestDialog
+          isOpen={showImportDialog}
+          data={importedData as any} // Cast to any or use explicit type if available
+          onClose={() => {
+            setShowImportDialog(false)
+            setImportedData(null)
+          }}
+          onConfirm={handleConfirmImport}
+        />
+      </Suspense>
     </div>
   )
 }

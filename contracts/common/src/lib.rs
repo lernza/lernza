@@ -64,14 +64,107 @@ pub struct QuestInfo {
     pub verified: bool,
 }
 
+/// Validate that an address string is a valid Stellar contract address.
+/// Checks:
+/// - Exactly 56 characters long
+/// - Starts with 'C' (contract prefix)
+/// - Contains only valid base32 characters (A-Z, 2-7)
+/// - Has valid CRC16 checksum
 pub fn is_contract_address(addr: &Address) -> bool {
     let s = addr.to_string();
+
+    // Length check: Stellar contract addresses are always 56 chars
     if s.len() != 56 {
         return false;
     }
+
     let mut buf = [0u8; 56];
     s.copy_into_slice(&mut buf);
-    buf[0] == b'C'
+
+    // Prefix check: must start with 'C' for contract
+    if buf[0] != b'C' {
+        return false;
+    }
+
+    // Base32 charset check: characters 1-55 must be A-Z or 2-7
+    for i in 1..56 {
+        let c = buf[i];
+        let valid = (c >= b'A' && c <= b'Z') || (c >= b'2' && c <= b'7');
+        if !valid {
+            return false;
+        }
+    }
+
+    // CRC16 checksum validation (Stellar uses CRC-16-CCITT)
+    // The last 2 bytes (characters 54-55) contain the checksum
+    validate_stellar_checksum(&buf)
+}
+
+/// Validate CRC16 checksum for a 56-byte Stellar address buffer.
+/// Stellar uses CRC-16-CCITT (poly 0x1021, init 0, no reflect/xor-out).
+fn validate_stellar_checksum(buf: &[u8; 56]) -> bool {
+    // Decode base32 to bytes for checksum validation
+    // Characters 0-53 (54 chars) = 5 * 54 / 8 = 33.75, round to 34 bytes
+    // Characters 54-55 (2 chars) = checksum (10 bits, padded to 16 bits)
+
+    let mut decoded = [0u8; 35];
+    let mut bits = 0u32;
+    let mut bit_count = 0u32;
+
+    // Decode characters 0-53 from base32
+    for (i, &c) in buf[0..54].iter().enumerate() {
+        let val = match c {
+            b'A'..=b'Z' => (c - b'A') as u32,
+            b'2'..=b'7' => (c - b'2' + 26) as u32,
+            _ => return false,
+        };
+
+        bits = (bits << 5) | val;
+        bit_count += 5;
+
+        if bit_count >= 8 {
+            bit_count -= 8;
+            decoded[(i / 8) + if i % 8 >= 3 { 1 } else { 0 }] = ((bits >> bit_count) & 0xFF) as u8;
+        }
+    }
+
+    // Compute CRC16 over the decoded data
+    let computed_crc = crc16_ccitt(&decoded[0..33]);
+
+    // Decode and verify checksum from last 2 characters
+    let checksum_c1 = match buf[54] {
+        b'A'..=b'Z' => buf[54] - b'A',
+        b'2'..=b'7' => buf[54] - b'2' + 26,
+        _ => return false,
+    } as u16;
+
+    let checksum_c2 = match buf[55] {
+        b'A'..=b'Z' => buf[55] - b'A',
+        b'2'..=b'7' => buf[55] - b'2' + 26,
+        _ => return false,
+    } as u16;
+
+    // Reconstruct checksum value (10 bits, left-justified in 16 bits)
+    let encoded_checksum = (checksum_c1 << 11) | (checksum_c2 << 6);
+    let stored_checksum = (encoded_checksum >> 6) & 0x3FF;
+
+    computed_crc == stored_checksum
+}
+
+/// Compute CRC-16-CCITT for Stellar address validation.
+/// Polynomial: 0x1021, Initial: 0x0000, No reflect, No final XOR.
+fn crc16_ccitt(data: &[u8]) -> u16 {
+    let mut crc = 0u32;
+    for &byte in data {
+        crc ^= (byte as u32) << 8;
+        for _ in 0..8 {
+            crc <<= 1;
+            if crc & 0x10000 != 0 {
+                crc ^= 0x1021;
+            }
+        }
+    }
+    (crc & 0xFFFF) as u16
 }
 
 pub fn extend_instance_ttl(env: &Env) {

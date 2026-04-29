@@ -300,6 +300,21 @@ A malicious or buggy frontend can violate these assumptions. The findings above 
 
 ---
 
+### INFO-03 — Pause Flag Is Write-Only (By Design)
+
+**Contract:** `contracts/quest/src/lib.rs`
+**Severity:** Informational
+
+The `pause` flag, when set by the quest admin, blocks all state-mutating operations (`create_enrollment`, `archive_quest`, etc.) but does **not** block read-only views (`get_quest`, `list_public_quests`, `is_enrollee`, etc.). This is intentional: read paths are safe by design and provide value even during pause windows.
+
+**Design intent:** In the event of a critical vulnerability or exploit, admins can halt enrollment and completion workflows to prevent further damage while still allowing read queries and frontend indexing.
+
+**Threat model:** If future threat analysis requires suppressing read paths (e.g., to prevent indexer DoS or data exfiltration during an incident), a `pause_reads` flag can be added as a separate admin control.
+
+**Status:** Documented. No action required for current threat model. Re-evaluate if threat model changes to include read-side protection.
+
+---
+
 ## Summary of Recommendations
 
 | Priority | Action |

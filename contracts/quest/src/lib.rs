@@ -1,6 +1,4 @@
 #![no_std]
-#![allow(deprecated)]
-#![allow(clippy::too_many_arguments)]
 use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
 };

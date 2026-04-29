@@ -49,6 +49,24 @@ export default defineConfig([
         'warn',
         { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
       ],
+      // Ban legacy "workspace" identifiers — use "quest" equivalents instead.
+      // The only allowed file is the redirect shim that bridges /workspace/:id → /quest/:id.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Identifier[name=/[Ww]orkspace/]',
+          message:
+            'The "workspace" identifier is deprecated. Use the "quest" equivalent instead. ' +
+            'Only src/components/workspace-redirect.tsx is exempt.',
+        },
+      ],
+    },
+  },
+  // Allow-list: the redirect shim is the sole permitted home for workspace identifiers.
+  {
+    files: ['src/components/workspace-redirect.tsx'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 ])

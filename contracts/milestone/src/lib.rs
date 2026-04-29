@@ -51,12 +51,12 @@ pub enum DataKey {
     Completed(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Count of completions per enrollee per quest
     EnrolleeCompletions(u32, Address),
-    // Distribution mode per workspace
+    // Distribution mode per quest
     Mode(u32),
     // Flat reward per milestone (Flat mode only)
     FlatReward(u32),
     // Total unique completions per milestone (Competitive mode)
-    MilestoneCompletionCount(u32, u32), // (workspace_id, milestone_id)
+    MilestoneCompletionCount(u32, u32), // (quest_id, milestone_id)
     // Completion timestamp
     CompletionTime(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Total earnings per enrollee per quest
@@ -416,7 +416,7 @@ impl MilestoneContract {
         Ok(())
     }
 
-    /// Set the reward distribution mode for a workspace. Owner only.
+    /// Set the reward distribution mode for a quest. Owner only.
     /// For Flat mode, flat_reward is the equal reward paid per milestone (must be > 0).
     /// For Custom and Competitive modes, flat_reward is ignored (pass 0).
     pub fn set_distribution_mode(

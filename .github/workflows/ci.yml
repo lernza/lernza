@@ -44,12 +44,13 @@ jobs:
   # ── Naming guard: prevent stale workspace references ────────────
   naming-guard:
     needs: changes
-    if: needs.changes.outputs.docs == 'true'
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Check for stale workspace references in docs/
+        if: needs.changes.outputs.docs == 'true'
         run: |
           # Exit with error if '\bworkspace\b' pattern found in docs/
           # Allowed: cargo commands, ADR (which documents the transition)
@@ -66,6 +67,43 @@ jobs:
             exit 1
           fi
           echo "No stale workspace references found in docs/"
+
+      - name: Check for stale workspace references in code
+        run: |
+          # Fail if a bare-word 'workspace' (case-sensitive, regex \bworkspace\b)
+          # appears in Rust contract source or TypeScript frontend source
+          # outside the small intentional allowlist below.
+          #
+          # Allowlisted (legitimate post-rename surface):
+          #   - frontend/src/components/workspace-redirect.tsx — backward-compat
+          #     redirect component for old /workspace/:id URLs.
+          #   - The single line in routes.tsx that imports WorkspaceRedirect and
+          #     the route definition `path: "workspace/:id"` that wires it up.
+          #   - frontend/src/lib/mock-data.test.ts — test descriptions still use
+          #     the word "workspace" because the underlying constant is still
+          #     MOCK_WORKSPACES (rename tracked separately).
+          #
+          # Anything else — comments, doc-comments, identifiers, string literals,
+          # event symbols, log lines — should use "quest" naming.
+          MATCHES=$(grep -rEn --include='*.rs' --include='*.ts' --include='*.tsx' \
+              '\bworkspace\b' contracts/ frontend/src/ 2>/dev/null \
+            | grep -v '/components/workspace-redirect\.tsx:' \
+            | grep -v '/routes\.tsx:.*workspace-redirect' \
+            | grep -v '/routes\.tsx:.*"workspace/:id"' \
+            | grep -v '/lib/mock-data\.test\.ts:' || true)
+          if [ -n "$MATCHES" ]; then
+            echo "ERROR: Found stale 'workspace' references in contract/frontend source:"
+            echo ""
+            echo "$MATCHES"
+            echo ""
+            echo "Replace 'workspace' with 'quest' in code. The few intentional"
+            echo "uses (the legacy /workspace/:id redirect and MOCK_WORKSPACES"
+            echo "test descriptions) are allowlisted in this job — extend the"
+            echo "allowlist in .github/workflows/ci.yml only if you are adding"
+            echo "another deliberate backward-compat surface."
+            exit 1
+          fi
+          echo "No stale workspace references found in contracts/ or frontend/src/"
 
   # ── Frontend: lint + type-check + build ──────────────────────────
   frontend:

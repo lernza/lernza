@@ -684,7 +684,7 @@ function Step3Review({
 
   const handleCreate = () => {
     // Quest and milestones were already created on-chain by handleFund.
-    // Navigate to the new quest's workspace page.
+    // Navigate to the new quest's detail page.
     if (questId !== null) {
       onComplete(questId)
     }
@@ -835,14 +835,14 @@ function Step3Review({
               )}
             </Button>
 
-            {/* Navigate to quest workspace button — enabled once fund tx succeeds */}
+            {/* Navigate to quest detail page — enabled once fund tx succeeds */}
             <Button
               onClick={handleCreate}
               disabled={!isFunded || questId === null}
               className="shimmer-on-hover w-full"
             >
               <Sparkles className="h-4 w-4" />
-              View Quest Workspace
+              View Quest
             </Button>
 
             {isFunded && questId !== null && (
@@ -888,7 +888,7 @@ function Step3Review({
             )}
             {isFunded && questId !== null && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Quest created and pool funded! Click above to open your quest workspace.
+                Quest created and pool funded! Click above to open your quest.
               </p>
             )}
           </div>

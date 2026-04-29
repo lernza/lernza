@@ -162,7 +162,7 @@ export const MOCK_PLATFORM_STATS: PlatformStats = {
   tokensDistributed: 125000,
 }
 
-// We can just reuse some of the existing workspaces for trending
+// We can just reuse some of the existing quests for trending
 export const MOCK_TRENDING_QUESTS = [MOCK_WORKSPACES[1], MOCK_WORKSPACES[0]]
 
 export const MOCK_RECENT_ACTIVITY: ActivityEvent[] = [

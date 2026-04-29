@@ -96,7 +96,7 @@ export const router = createBrowserRouter(
           element: (
             <RouteShell label="Quest">
               <WalletRequiredRoute
-                area="Workspace"
+                area="Quest"
                 description="Connect your wallet to open quest detail pages and interact with learner progress."
               >
                 <QuestView />

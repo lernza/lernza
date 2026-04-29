@@ -30,3 +30,9 @@ frontend/src/lib/contracts/generated/
 
 contracts/quest/test_snapshots/test/*
 frontend/.vercel
+
+# Root-level node_modules — never track (#669)
+node_modules/
+
+# Windows installer binaries (#668)
+*.exe

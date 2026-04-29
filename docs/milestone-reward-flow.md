@@ -18,18 +18,18 @@ sequenceDiagram
 
     Learner->>FE: Submit completion proof or request review
     Owner->>FE: Open pending milestone review
-    FE->>Quest: is_enrollee(workspace_id, learner)
+    FE->>Quest: is_enrollee(quest_id, learner)
     Quest-->>FE: true
-    FE->>Milestone: is_completed(workspace_id, milestone_id, learner)
+    FE->>Milestone: is_completed(quest_id, milestone_id, learner)
     Milestone-->>FE: false
-    FE->>Wallet: Request owner signature for verify_completion(owner, workspace_id, milestone_id, learner)
-    Wallet->>Milestone: verify_completion(owner, workspace_id, milestone_id, learner)
+    FE->>Wallet: Request owner signature for verify_completion(owner, quest_id, milestone_id, learner)
+    Wallet->>Milestone: verify_completion(owner, quest_id, milestone_id, learner)
     Milestone-->>Wallet: reward_amount
     Wallet-->>FE: Verification confirmed with reward_amount
-    FE->>Rewards: get_pool_balance(workspace_id)
+    FE->>Rewards: get_pool_balance(quest_id)
     Rewards-->>FE: Available balance
-    FE->>Wallet: Request authority signature for distribute_reward(authority, workspace_id, learner, reward_amount)
-    Wallet->>Rewards: distribute_reward(authority, workspace_id, learner, reward_amount)
+    FE->>Wallet: Request authority signature for distribute_reward(authority, quest_id, milestone_id, learner, reward_amount)
+    Wallet->>Rewards: distribute_reward(authority, quest_id, milestone_id, learner, reward_amount)
     Rewards->>Token: transfer(rewards_contract, learner, reward_amount)
     Token-->>Rewards: Transfer succeeds
     Rewards-->>Wallet: Pool debited and earnings updated

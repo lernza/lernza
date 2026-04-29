@@ -199,6 +199,14 @@ Emitted by the milestone contract when a learner completes all milestones in a q
 
 ## Rewards Contract (`contracts/rewards/`)
 
+> **Indexer migration note (workspace → quest).** Earlier deployments of the rewards contract (pre-PR #412 / commit `1bcc507`) used `workspace_*` naming for the public surface. The current contract emits **only the `reward_funded` / `reward_distributed` / `reward_refunded` events documented below — `workspace_*` event symbols never existed in any released build.** Indexers should:
+>
+> - Filter on `Symbol("reward_funded" | "reward_distributed" | "reward_refunded")`. No backwards-compatible aliases are emitted; nothing to migrate at the event topic layer.
+> - Update any function-call references the indexer reads from operation envelopes: `fund_workspace` → `fund_quest`, parameter `workspace_id` → `quest_id`.
+> - Update storage-key probes if the indexer reads `DataKey` ledger entries directly: `WorkspaceAuthority(u32)` → `QuestAuthority(u32)`, `WorkspacePool(u32)` → `QuestPool(u32)`.
+>
+> Old testnet deployments still on the pre-rename WASM should be redeployed; the on-chain interface is incompatible.
+
 ### `reward_funded`
 
 Emitted when a quest pool is funded via `fund_quest`.

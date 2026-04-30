@@ -3,6 +3,8 @@ name: Coverage
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -19,7 +21,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -30,7 +32,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Cache cargo
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -49,10 +51,15 @@ jobs:
             -- --test-threads=1
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v5
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+          comment: true
+          override_pr: ${{ github.event.pull_request.number }}
+          threshold: 1%
+          codecov_yml_path: .github/codecov.yml
 
       - name: Post coverage comment on PR
         if: github.event_name == 'pull_request'

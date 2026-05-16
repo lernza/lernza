@@ -1,5 +1,7 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, String};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, String,
+};
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -1117,15 +1119,42 @@ fn test_pause_blocks_all_write_endpoints_until_unpaused() {
         Err(Ok(Error::Paused))
     );
     assert_eq!(client.try_archive_quest(&quest_id), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_add_enrollee(&quest_id, &random_enrollee), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_join_quest(&random_enrollee, &quest_id), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_register_invite(&owner, &quest_id, &commitment), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_revoke_invite(&owner, &quest_id, &commitment), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_join_quest_with_invite(&random_enrollee, &quest_id, &preimage), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_remove_enrollee(&quest_id, &enrollee), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_leave_quest(&enrollee, &quest_id), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_set_deadline(&quest_id, &123456), Err(Ok(Error::Paused)));
-    assert_eq!(client.try_set_visibility(&quest_id, &Visibility::Private), Err(Ok(Error::Paused)));
+    assert_eq!(
+        client.try_add_enrollee(&quest_id, &random_enrollee),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_join_quest(&random_enrollee, &quest_id),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_register_invite(&owner, &quest_id, &commitment),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_revoke_invite(&owner, &quest_id, &commitment),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_join_quest_with_invite(&random_enrollee, &quest_id, &preimage),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_remove_enrollee(&quest_id, &enrollee),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_leave_quest(&enrollee, &quest_id),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_set_deadline(&quest_id, &123456),
+        Err(Ok(Error::Paused))
+    );
+    assert_eq!(
+        client.try_set_visibility(&quest_id, &Visibility::Private),
+        Err(Ok(Error::Paused))
+    );
 }
 
 #[test]

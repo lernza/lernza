@@ -3,46 +3,46 @@ import { createBrowserRouter } from "react-router-dom"
 import { AppShell } from "@/components/app-shell"
 import { WalletRequiredRoute } from "@/components/wallet-required-route"
 import { PageSkeleton } from "@/components/page-skeleton"
-import { WorkspaceRedirect } from "@/components/workspace-redirect"
+import { QuestRedirect } from "@/components/workspace-redirect"
 import { ErrorBoundary } from "@/components/error-boundary"
 
 const Landing = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-landing" */ "@/pages/landing").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-landing" */ "./pages/landing").then(
     module => ({ default: module.Landing })
   )
 )
 const Dashboard = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-dashboard" */ "@/pages/dashboard").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-dashboard" */ "./pages/dashboard").then(
     module => ({ default: module.Dashboard })
   )
 )
 const QuestView = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-quest" */ "@/pages/quest").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-quest" */ "./pages/quest").then(
     module => ({ default: module.QuestView })
   )
 )
 const Profile = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-profile" */ "@/pages/profile").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-profile" */ "./pages/profile").then(
     module => ({ default: module.Profile })
   )
 )
 const NotFound = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-not-found" */ "@/pages/not-found").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-not-found" */ "./pages/not-found").then(
     module => ({ default: module.NotFound })
   )
 )
 const CreateQuest = lazy(() =>
   import(
-    /* @vite-chunk-include, webpackChunkName: "page-create-quest" */ "@/pages/create-quest"
+    /* @vite-chunk-include, webpackChunkName: "page-create-quest" */ "./pages/create-quest"
   ).then(module => ({ default: module.CreateQuest }))
 )
 const Leaderboard = lazy(() =>
   import(
-    /* @vite-chunk-include, webpackChunkName: "page-leaderboard" */ "@/pages/leaderboard"
+    /* @vite-chunk-include, webpackChunkName: "page-leaderboard" */ "./pages/leaderboard"
   ).then(module => ({ default: module.Leaderboard }))
 )
 const CreatorProfile = lazy(() =>
-  import(/* @vite-chunk-include, webpackChunkName: "page-creator" */ "@/pages/creator").then(
+  import(/* @vite-chunk-include, webpackChunkName: "page-creator" */ "./pages/creator").then(
     module => ({ default: module.CreatorProfile })
   )
 )
@@ -106,7 +106,7 @@ export const router = createBrowserRouter(
         },
         {
           path: "workspace/:id",
-          element: <WorkspaceRedirect />,
+          element: <QuestRedirect />,
         },
         {
           path: "profile",

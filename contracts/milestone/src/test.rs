@@ -1,5 +1,5 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, Env, String, Vec};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -7,6 +7,12 @@ extern crate quest;
 use certificate::CertificateContract;
 use common::Visibility;
 use quest::{QuestContract, QuestContractClient};
+
+#[contract]
+struct DummyToken;
+
+#[contractimpl]
+impl DummyToken {}
 
 fn setup() -> (
     Env,
@@ -39,15 +45,16 @@ fn setup() -> (
 }
 
 /// Create a quest owned by `owner` and return its auto-incremented ID.
-/// The token address is a random throwaway — milestone logic never reads it.
+/// The token address is a throwaway contract — milestone logic never reads it.
 fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Address) -> u32 {
+    let token_contract_id = env.register(DummyToken, ());
     quest_client.create_quest(
         owner,
         &String::from_str(env, "Quest"),
         &String::from_str(env, "Quest description"),
         &String::from_str(env, "Programming"),
         &Vec::<String>::new(env),
-        &Address::generate(env),
+        &token_contract_id,
         &Visibility::Public,
         &None,
     )

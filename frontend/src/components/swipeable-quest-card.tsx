@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   motion,
   useMotionValue,
@@ -9,7 +9,8 @@ import { Check, X, Sparkles, Hand } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QuestStatusBadge } from "@/components/quest-status-badge";
-import { cn, formatTokens } from "@/lib/utils";
+import type { QuestStatus } from "@/lib/contract-types";
+import { formatTokens } from "@/lib/utils";
 
 interface SwipeableQuestCardProps {
   quest: {
@@ -19,6 +20,8 @@ interface SwipeableQuestCardProps {
     rewardAmount: bigint
     isEnrolled: boolean
     verified?: boolean
+    status: QuestStatus
+    deadline: number
   }
   onEnroll: (id: number) => Promise<void>
   onDismiss: (id: number) => void
@@ -170,7 +173,7 @@ export function SwipeableQuestCard({
                     {quest.name}
                   </h3>
                   <div className="flex items-center gap-2">
-                    <QuestStatusBadge quest={{ status: (quest as any).status, deadline: (quest as any).deadline } as any} />
+                    <QuestStatusBadge quest={{ status: quest.status, deadline: quest.deadline }} />
                     {quest.verified && (
                       <Badge variant="verified" className="border-black p-1">
                         <Check className="h-3 w-3" />

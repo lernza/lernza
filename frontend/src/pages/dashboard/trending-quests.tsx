@@ -51,7 +51,7 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                   <div className="flex items-start justify-between">
                     <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
                     <div className="ml-2 flex items-center gap-2">
-                      <QuestStatusBadge quest={{ status: quest.status, deadline: quest.deadline } as any} />
+                      <QuestStatusBadge quest={{ status: quest.status, deadline: quest.deadline }} />
                       <Badge
                         variant="default"
                         className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"

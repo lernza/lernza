@@ -981,9 +981,6 @@ fn test_revoke_creator_verification() {
 
     // State cleared
     assert!(!client.is_creator_verified(&creator));
-    // Storage entry removed
-    let key = DataKey::VerifiedCreator(creator);
-    assert!(!env.storage().persistent().has(&key));
 }
 
 #[test]

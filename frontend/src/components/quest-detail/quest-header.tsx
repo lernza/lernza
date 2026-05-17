@@ -61,7 +61,7 @@ export function QuestHeader({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <QuestStatusBadge quest={{ status: (quest as any).status, deadline: (quest as any).deadline } as any} />
+          <QuestStatusBadge quest={{ status: quest.status, deadline: quest.deadline }} />
         </div>
       </div>
 

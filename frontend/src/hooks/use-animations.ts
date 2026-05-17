@@ -51,8 +51,8 @@ export function useTypewriter(text: string, speed = 35, active = true) {
 
   useEffect(() => {
     if (!active) return
-    setDisplayed("")
     let i = 0
+    const resetTimeout = window.setTimeout(() => setDisplayed(""), 0)
     const interval = setInterval(() => {
       if (i < text.length) {
         setDisplayed(text.slice(0, i + 1))
@@ -61,7 +61,10 @@ export function useTypewriter(text: string, speed = 35, active = true) {
         clearInterval(interval)
       }
     }, speed)
-    return () => clearInterval(interval)
+    return () => {
+      window.clearTimeout(resetTimeout)
+      clearInterval(interval)
+    }
   }, [text, speed, active])
 
   return active ? displayed : ""

@@ -30,7 +30,9 @@ export function useAsyncData<T>(
   // fetcher function identity changes (which happens every render since
   // callers pass inline arrow functions).
   const fetcherRef = useRef(fetcher)
-  fetcherRef.current = fetcher
+  useEffect(() => {
+    fetcherRef.current = fetcher
+  }, [fetcher])
 
   // Track whether a fetch is already in-flight to prevent overlapping calls.
   const inflightRef = useRef(false)

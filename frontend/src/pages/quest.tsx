@@ -214,16 +214,7 @@ export function QuestView() {
   // Import quest state
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [isImportingFile, setIsImportingFile] = useState(false)
-  const [importedData, setImportedData] = useState<{
-    name: string
-    description: string
-    milestones: Array<{
-      title: string
-      description: string
-      rewardAmount: number
-      requiresPrevious: boolean
-    }>
-  } | null>(null)
+  const [importedData, setImportedData] = useState<ImportedQuest | null>(null)
 
   const milestoneForm = useForm<MilestoneFormInput, undefined, MilestoneFormValues>({
     resolver: zodResolver(milestoneFormSchema),
@@ -2151,7 +2142,7 @@ export function QuestView() {
       <Suspense fallback={null}>
         <ImportQuestDialog
           isOpen={showImportDialog}
-          data={importedData as any} // Cast to any or use explicit type if available
+          data={importedData}
           onClose={() => {
             setShowImportDialog(false)
             setImportedData(null)

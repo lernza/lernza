@@ -23,7 +23,7 @@ import { useWallet } from "@/hooks/use-wallet"
 import { questClient, type QuestInfo } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import type { WorkspaceInfo } from "@/lib/contract-types"
+import type { LegacyQuestInfo } from "@/lib/contract-types"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
@@ -38,7 +38,7 @@ const DASHBOARD_QUEST_PAGE_SIZE = 12
 const TRENDING_QUEST_LIMIT = 2
 const RECENT_ACTIVITY_LIMIT = 5
 
-function toWorkspaceInfo(quest: QuestInfo): WorkspaceInfo {
+function toLegacyQuestInfo(quest: QuestInfo): LegacyQuestInfo {
   return {
     id: quest.id,
     owner: quest.owner,
@@ -47,6 +47,8 @@ function toWorkspaceInfo(quest: QuestInfo): WorkspaceInfo {
     token_addr: quest.tokenAddr,
     created_at: quest.createdAt,
     visibility: quest.visibility,
+    status: quest.status,
+    deadline: quest.deadline,
     max_enrollees: quest.maxEnrollees,
     verified: quest.verified,
   }
@@ -170,29 +172,29 @@ export function Dashboard() {
     userEarnings = 0n,
   } = dashboardData || {}
 
-  const filteredWorkspaces =
+  const filteredQuests =
     filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
 
   // Apply preset filters
-  let presetFilteredWorkspaces = filteredWorkspaces
+  let presetFilteredQuests = filteredQuests
   const now = Math.floor(Date.now() / 1000)
 
   if (preset === "ending-soon") {
     // Show quests with deadline within 7 days
     const sevenDaysFromNow = now + 7 * 24 * 60 * 60
-    presetFilteredWorkspaces = filteredWorkspaces.filter(
+    presetFilteredQuests = filteredQuests.filter(
       ws => ws.deadline > 0 && ws.deadline > now && ws.deadline <= sevenDaysFromNow
     )
   } else if (preset === "recently-funded") {
     // Show quests created in the last 30 days
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60
-    presetFilteredWorkspaces = filteredWorkspaces.filter(ws => ws.createdAt >= thirtyDaysAgo)
+    presetFilteredQuests = filteredQuests.filter(ws => ws.createdAt >= thirtyDaysAgo)
   } else if (preset === "recently-verified") {
     // Show quests with verified status
-    presetFilteredWorkspaces = filteredWorkspaces.filter(ws => ws.verified)
+    presetFilteredQuests = filteredQuests.filter(ws => ws.verified)
   }
 
-  const visibleWorkspaces = presetFilteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
+  const visibleQuests = presetFilteredQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -211,7 +213,7 @@ export function Dashboard() {
   const trendingQuests = [...publicQuests]
     .sort((a, b) => (questStats[b.id]?.enrolleeCount || 0) - (questStats[a.id]?.enrolleeCount || 0))
     .slice(0, TRENDING_QUEST_LIMIT)
-    .map(toWorkspaceInfo)
+    .map(toLegacyQuestInfo)
 
   const recentActivity = accessibleQuests
     .slice()
@@ -416,7 +418,7 @@ export function Dashboard() {
             {isLoading && <SkeletonQuestList className="mb-5" count={3} />}
 
             <div className="relative grid gap-5">
-              {visibleWorkspaces.map((ws, i) => {
+              {visibleQuests.map((ws, i) => {
                 const stats = questStats[ws.id] || {
                   enrolleeCount: 0,
                   milestoneCount: 0,
@@ -520,13 +522,13 @@ export function Dashboard() {
               })}
             </div>
 
-            {filteredWorkspaces.length > visibleWorkspaces.length && !isLoading && !loadError && (
+            {filteredQuests.length > visibleQuests.length && !isLoading && !loadError && (
               <p className="text-muted-foreground mt-4 text-xs font-bold">
-                Showing the first {visibleWorkspaces.length} quests to keep dashboard loading fast.
+                Showing the first {visibleQuests.length} quests to keep dashboard loading fast.
               </p>
             )}
 
-            {presetFilteredWorkspaces.length === 0 && !isLoading && !loadError && (
+            {presetFilteredQuests.length === 0 && !isLoading && !loadError && (
               <div className="mt-5">
                 <EmptyState
                   variant="quests"

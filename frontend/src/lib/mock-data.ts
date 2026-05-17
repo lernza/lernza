@@ -1,7 +1,7 @@
-import type { WorkspaceInfo, MilestoneInfo } from "./contract-types"
-import { Visibility } from "./contract-types"
+import type { LegacyQuestInfo, MilestoneInfo } from "./contract-types"
+import { QuestStatus, Visibility } from "./contract-types"
 
-export interface WorkspaceStats {
+export interface QuestStats {
   enrolleeCount: number
   milestoneCount: number
   poolBalance: number
@@ -20,7 +20,7 @@ export interface UserStats {
   milestonesCompleted: number
 }
 
-export const MOCK_WORKSPACES: WorkspaceInfo[] = [
+export const MOCK_QUESTS: LegacyQuestInfo[] = [
   {
     id: 0,
     owner: "GBXR...K2YQ",
@@ -30,6 +30,8 @@ export const MOCK_WORKSPACES: WorkspaceInfo[] = [
     token_addr: "USDC...STELLAR",
     created_at: 1710000000,
     visibility: Visibility.Public,
+    status: QuestStatus.Active,
+    deadline: 0,
     verified: false,
   },
   {
@@ -41,6 +43,8 @@ export const MOCK_WORKSPACES: WorkspaceInfo[] = [
     token_addr: "USDC...STELLAR",
     created_at: 1709500000,
     visibility: Visibility.Public,
+    status: QuestStatus.Active,
+    deadline: 0,
     verified: false,
   },
   {
@@ -51,11 +55,13 @@ export const MOCK_WORKSPACES: WorkspaceInfo[] = [
     token_addr: "USDC...STELLAR",
     created_at: 1709800000,
     visibility: Visibility.Public,
+    status: QuestStatus.Active,
+    deadline: 0,
     verified: false,
   },
 ]
 
-export const MOCK_WORKSPACE_STATS: Record<number, WorkspaceStats> = {
+export const MOCK_QUEST_STATS: Record<number, QuestStats> = {
   0: { enrolleeCount: 3, milestoneCount: 5, poolBalance: 2500 },
   1: { enrolleeCount: 8, milestoneCount: 10, poolBalance: 10000 },
   2: { enrolleeCount: 5, milestoneCount: 4, poolBalance: 1200 },
@@ -163,7 +169,7 @@ export const MOCK_PLATFORM_STATS: PlatformStats = {
 }
 
 // We can just reuse some of the existing quests for trending
-export const MOCK_TRENDING_QUESTS = [MOCK_WORKSPACES[1], MOCK_WORKSPACES[0]]
+export const MOCK_TRENDING_QUESTS = [MOCK_QUESTS[1], MOCK_QUESTS[0]]
 
 export const MOCK_RECENT_ACTIVITY: ActivityEvent[] = [
   {

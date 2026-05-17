@@ -105,7 +105,7 @@ export type TotalDistributed = bigint
 
 // ─── Legacy Types (to be migrated) ───────────────────────────────────────────
 
-export interface WorkspaceInfo {
+export interface LegacyQuestInfo {
   id: number
   owner: string
   name: string
@@ -113,6 +113,8 @@ export interface WorkspaceInfo {
   token_addr: string
   created_at: number
   visibility: Visibility
+  status: QuestStatus
+  deadline: number
   max_enrollees?: number
   verified: boolean
 }

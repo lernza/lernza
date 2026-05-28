@@ -1,0 +1,62 @@
+name: Template Check
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  push:
+    paths:
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - 'frontend/package.json'
+      - 'Cargo.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-checklist-commands:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check cargo workspace is valid
+        run: |
+          if ! grep -q '^\[workspace\]' Cargo.toml; then
+            echo "ERROR: Cargo.toml does not define a workspace. 'cargo test --workspace' in PR template is stale."
+            exit 1
+          fi
+          if ! grep -q 'members' Cargo.toml; then
+            echo "ERROR: Cargo.toml workspace has no members. 'cargo test --workspace' in PR template is stale."
+            exit 1
+          fi
+          echo "OK: Cargo.toml defines a workspace with members."
+
+      - name: Check cargo fmt is available
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Verify rustfmt is installed
+        run: |
+          if ! cargo fmt --version > /dev/null 2>&1; then
+            echo "ERROR: cargo fmt is not available. 'cargo fmt --all -- --check' in PR template is stale."
+            exit 1
+          fi
+          echo "OK: cargo fmt is available."
+
+      - name: Check pnpm scripts exist in frontend/package.json
+        run: |
+          FAILED=0
+
+          for script in build lint; do
+            if ! jq -e --arg s "$script" '.scripts[$s]' frontend/package.json > /dev/null 2>&1; then
+              echo "ERROR: 'pnpm $script' is listed in the PR template but the script '$script' does not exist in frontend/package.json."
+              FAILED=1
+            else
+              echo "OK: 'pnpm $script' exists in frontend/package.json."
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            exit 1
+          fi

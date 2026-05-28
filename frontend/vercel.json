@@ -1,3 +1,8 @@
 {
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "^/(|dashboard|profile|leaderboard|quest/create)$", "dest": "/index.html" },
+    { "src": "^/(quest|creator|workspace)/.+$", "dest": "/index.html" },
+    { "src": "/(.*)", "dest": "/index.html", "status": 404 }
+  ]
 }

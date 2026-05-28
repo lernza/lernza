@@ -9,7 +9,7 @@ sequenceDiagram
     actor Learner as Learner
     participant FE as Frontend
     participant Wallet as Freighter Wallet
-    participant Quest as Quest Contract (workspace)
+    participant Quest as Quest Contract
     participant Milestone as Milestone Contract
 
     Owner->>FE: Select learner to enroll in quest

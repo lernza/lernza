@@ -1,0 +1,21 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dashboard empty state illustration -->
+  <rect x="40" y="60" width="120" height="80" fill="#F5F5F4" stroke="#000" stroke-width="3"/>
+  <rect x="37" y="57" width="120" height="80" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  
+  <!-- Grid lines -->
+  <line x1="60" y1="77" x2="137" y2="77" stroke="#000" stroke-width="2"/>
+  <line x1="60" y1="97" x2="137" y2="97" stroke="#000" stroke-width="2"/>
+  <line x1="60" y1="117" x2="137" y2="117" stroke="#000" stroke-width="2"/>
+  
+  <!-- Empty boxes -->
+  <rect x="60" y="82" width="15" height="10" fill="#fff" stroke="#000" stroke-width="2"/>
+  <rect x="60" y="102" width="15" height="10" fill="#fff" stroke="#000" stroke-width="2"/>
+  
+  <!-- Sparkle -->
+  <circle cx="100" cy="40" r="8" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  <line x1="100" y1="28" x2="100" y2="32" stroke="#000" stroke-width="2"/>
+  <line x1="100" y1="48" x2="100" y2="52" stroke="#000" stroke-width="2"/>
+  <line x1="88" y1="40" x2="92" y2="40" stroke="#000" stroke-width="2"/>
+  <line x1="108" y1="40" x2="112" y2="40" stroke="#000" stroke-width="2"/>
+</svg>

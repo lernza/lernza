@@ -1,34 +1,28 @@
 #![no_std]
-#![allow(deprecated)]
+use common::{
+    extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
+};
 use soroban_sdk::{
-    contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, token,
-    Address, Env, String,
+    contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
+    Symbol,
 };
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Visibility {
-    Public = 0,
-    Private = 1,
-}
-
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct QuestInfo {
-    pub id: u32,
-    pub owner: Address,
-    pub name: String,
-    pub description: String,
-    pub category: String,
-    pub tags: soroban_sdk::Vec<String>,
-    pub token_addr: Address,
-    pub created_at: u64,
-    pub visibility: Visibility,
-}
+// Visibility, QuestStatus, and QuestInfo moved to common.
 
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
+}
+
+#[contractclient(name = "MilestoneClient")]
+pub trait MilestoneContractTrait {
+    fn is_completed(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool;
+    fn get_milestone_reward(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+    ) -> Result<i128, soroban_sdk::Val>;
+    fn get_total_reserved_reward(env: Env, quest_id: u32) -> i128;
 }
 
 // Rewards contract: holds token pools per quest and distributes rewards.
@@ -43,6 +37,7 @@ pub trait QuestContractTrait {
 pub enum DataKey {
     TokenAddr,
     QuestContractAddr,
+    MilestoneContractAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
     // Token balance allocated to a quest
@@ -51,34 +46,58 @@ pub enum DataKey {
     UserEarnings(Address),
     // Global stats
     TotalDistributed,
+    // Total tokens ever funded — Issue #717
+    TotalFunded,
+    // Number of quests funded at least once — Issue #717
+    QuestCount,
+    // Total tokens distributed per quest
+    QuestDistributed(u32),
+    // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
+    PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
 }
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 1,
-    NotInitialized = 2,
-    Unauthorized = 3,
+    AlreadyInitialized = 99, // moved away from standard range
+    NotInitialized = 100,      // moved away from standard range
+    Unauthorized = 2,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
+    QuestLookupFailed = 7,
+    MilestoneNotCompleted = 8,
+    MilestoneContractNotInitialized = 9,
+    ArithmeticOverflow = 10,
+    AlreadyPaid = 11,
+    InvalidToken = 12,
+    RewardAmountMismatch = 13,
+    QuestNotArchived = 14,
+    RefundWindowNotOpen = 15,
+    NotFound = 1,
+    InvalidInput = 3,
+    Paused = 400,
 }
 
-const BUMP: u32 = 518_400;
-const THRESHOLD: u32 = 120_960;
+// TTL constants moved to common.
+
+// IsDataKey implementation — restricts TTL extension to Rewards DataKey only
+impl common::IsDataKey for DataKey {}
 
 #[contract]
 pub struct RewardsContract;
 
 #[contractimpl]
 impl RewardsContract {
-    /// Initialize with the token contract address (SAC for the reward token)
-    /// and the quest contract address for ownership verification.
+    /// Initialize with the token contract address (SAC for the reward token),
+    /// the quest contract address for ownership verification,
+    /// and the milestone contract address for completion verification.
     pub fn initialize(
         env: Env,
         token_addr: Address,
         quest_contract_addr: Address,
+        milestone_contract_addr: Address,
     ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
@@ -91,8 +110,11 @@ impl RewardsContract {
             .set(&DataKey::QuestContractAddr, &quest_contract_addr);
         env.storage()
             .instance()
+            .set(&DataKey::MilestoneContractAddr, &milestone_contract_addr);
+        env.storage()
+            .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         Ok(())
     }
 
@@ -101,11 +123,11 @@ impl RewardsContract {
     pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
 
-        // Security Fix: Verify that the funder is the quest owner
+        // Security Fix: Verify that the funder is the quest owner using direct contract invocation
         let quest_contract_addr = env
             .storage()
             .instance()
@@ -114,13 +136,32 @@ impl RewardsContract {
 
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id);
+        let quest_info_result = quest_client.try_get_quest(&quest_id);
+        let quest_info = match quest_info_result {
+            Ok(Ok(quest)) => quest,
+            Ok(Err(_)) => return Err(Error::QuestLookupFailed),
+            Err(_) => return Err(Error::QuestLookupFailed),
+        };
 
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);
         }
 
         let token_addr = Self::get_token(&env)?;
+
+        // Verify the quest's configured token matches the rewards contract's token.
+        // Prevents a mismatch where a quest advertises token A but rewards are paid in token B.
+        if quest_info.token_addr != token_addr {
+            return Err(Error::InvalidToken);
+        }
+
+        // Validate that token_addr points to a live SAC contract.
+        // A non-contract address or an address without a token interface
+        // will cause try_symbol() to fail, rejecting the funding early.
+        let token_client = token::Client::new(&env, &token_addr);
+        if token_client.try_symbol().is_err() {
+            return Err(Error::InvalidToken);
+        }
 
         // If quest already has an authority, only they can add more funds
         let auth_key = DataKey::QuestAuthority(quest_id);
@@ -134,30 +175,51 @@ impl RewardsContract {
             }
         } else {
             env.storage().persistent().set(&auth_key, &funder);
-            env.storage()
-                .persistent()
-                .extend_ttl(&auth_key, THRESHOLD, BUMP);
+            common::extend_persistent_ttl(&env, &auth_key);
         }
 
         // Transfer tokens from funder to this contract
-        let client = token::Client::new(&env, &token_addr);
-        client.transfer(&funder, &env.current_contract_address(), &amount);
+        token_client.transfer(&funder, &env.current_contract_address(), &amount);
 
         // Credit the quest pool
         let pool_key = DataKey::QuestPool(quest_id);
         let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&pool_key, &(current + amount));
+        let new_pool = current
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
+        // Issue #717 — maintain platform-wide funding stats
+        let total_funded: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalFunded)
+            .unwrap_or(0);
+        let new_total_funded = total_funded.saturating_add(amount);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &new_total_funded);
+
+        // Increment quest count only on first fund for this quest
+        if current == 0 {
+            let quest_count: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestCount)
+                .unwrap_or(0);
+            env.storage()
+                .instance()
+                .set(&DataKey::QuestCount, &(quest_count + 1));
+        }
+
         // Emit quest funding event
-        // Event topics: (reward, funded)
+        // Event topics: (reward_funded,)
         // Event data: (quest_id, funder, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("funded")),
+            (Symbol::new(&env, "reward_funded"),),
             (quest_id, funder, amount),
         );
 
@@ -165,18 +227,26 @@ impl RewardsContract {
     }
 
     /// Distribute reward tokens to an enrollee. Authority only.
-    /// Called after milestone verification.
+    /// Requires milestone completion verification before payment.
+    /// Idempotent: a second call for the same (quest, milestone, enrollee) returns AlreadyPaid.
     pub fn distribute_reward(
         env: Env,
         authority: Address,
         quest_id: u32,
+        milestone_id: u32,
         enrollee: Address,
         amount: i128,
     ) -> Result<(), Error> {
         authority.require_auth();
 
-        if amount <= 0 {
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
+        }
+
+        // Idempotency check: reject duplicate payouts for (quest, milestone, enrollee)
+        let payout_key = DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&payout_key) {
+            return Err(Error::AlreadyPaid);
         }
 
         // Verify authority
@@ -188,6 +258,30 @@ impl RewardsContract {
             .ok_or(Error::QuestNotFunded)?;
         if stored != authority {
             return Err(Error::Unauthorized);
+        }
+        if authority == enrollee {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify milestone completion before allowing reward distribution
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::MilestoneContractNotInitialized)?;
+
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        if !milestone_client.is_completed(&quest_id, &milestone_id, &enrollee) {
+            return Err(Error::MilestoneNotCompleted);
+        }
+
+        // Validate amount matches the milestone's configured reward to prevent
+        // the authority from over- or under-paying relative to what was promised.
+        match milestone_client.try_get_milestone_reward(&quest_id, &milestone_id) {
+            Ok(Ok(expected)) if expected > 0 && amount != expected => {
+                return Err(Error::RewardAmountMismatch);
+            }
+            _ => {} // Proceed if milestone not found or amount matches
         }
 
         // Check pool balance
@@ -203,20 +297,24 @@ impl RewardsContract {
         client.transfer(&env.current_contract_address(), &enrollee, &amount);
 
         // Update pool balance
-        env.storage().persistent().set(&pool_key, &(pool - amount));
+        let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
+        // Record payout for idempotency (prevents duplicate payouts on retry)
+        env.storage().persistent().set(&payout_key, &amount);
+        common::extend_persistent_ttl(&env, &payout_key);
+
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());
         let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&earn_key, &(earned + amount));
-        env.storage()
-            .persistent()
-            .extend_ttl(&earn_key, THRESHOLD, BUMP);
+        let new_earned = earned
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&earn_key, &new_earned);
+        common::extend_persistent_ttl(&env, &earn_key);
 
         // Update global total
         let total: i128 = env
@@ -224,17 +322,130 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalDistributed)
             .unwrap_or(0);
+        let new_total = total.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
         env.storage()
             .instance()
-            .set(&DataKey::TotalDistributed, &(total + amount));
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+            .set(&DataKey::TotalDistributed, &new_total);
+
+        // Update quest specific total distributed
+        let q_dist_key = DataKey::QuestDistributed(quest_id);
+        let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&q_dist_key, &(q_total + amount));
+        common::extend_persistent_ttl(&env, &q_dist_key);
+
+        extend_instance_ttl(&env);
 
         // Emit reward distribution event
-        // Event topics: (reward, distributed)
-        // Event data: (quest_id, enrollee, amount)
+        // Event topics: (reward_distributed,)
+        // Event data: (quest_id, milestone_id, enrollee, amount)
         env.events().publish(
-            (symbol_short!("reward"), symbol_short!("paid")),
-            (quest_id, enrollee, amount),
+            (Symbol::new(&env, "reward_distributed"),),
+            (quest_id, milestone_id, enrollee, amount),
+        );
+
+        Ok(())
+    }
+
+    /// Withdraw unallocated tokens from a quest's reward pool back to the authority.
+    /// The quest must be archived before funds can be withdrawn to prevent withdrawing
+    /// from an active quest that still has pending milestones.
+    pub fn refund_pool(
+        env: Env,
+        authority: Address,
+        quest_id: u32,
+        amount: i128,
+    ) -> Result<(), Error> {
+        authority.require_auth();
+
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Verify authority matches the stored quest authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let stored: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if stored != authority {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify the quest is archived before allowing refund
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = match quest_client.try_get_quest(&quest_id) {
+            Ok(Ok(quest)) => quest,
+            Ok(Err(_)) => return Err(Error::QuestLookupFailed),
+            Err(_) => return Err(Error::QuestLookupFailed),
+        };
+
+        if quest_info.status != QuestStatus::Archived {
+            return Err(Error::QuestNotArchived);
+        }
+
+        // 7-day grace period (604,800 seconds)
+        let now = env.ledger().timestamp();
+        if now < quest_info.archived_at + 604_800 {
+            return Err(Error::RefundWindowNotOpen);
+        }
+
+        // Calculate reserved obligations
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let total_reserved = milestone_client.get_total_reserved_reward(&quest_id);
+        let quest_distributed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestDistributed(quest_id))
+            .unwrap_or(0);
+
+        let obligations = total_reserved
+            .checked_sub(quest_distributed)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        // Check pool has sufficient balance after reserving obligations
+        let pool_key = DataKey::QuestPool(quest_id);
+        let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
+
+        let refundable = pool
+            .checked_sub(obligations)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        if amount > refundable {
+            return Err(Error::InsufficientPool);
+        }
+
+        // Transfer tokens from contract back to authority
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &authority, &amount);
+
+        // Update pool balance
+        let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
+        env.storage()
+            .persistent()
+            .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Emit refund event
+        // Event topics: (reward_refunded,)
+        // Event data: (quest_id, authority, amount)
+        env.events().publish(
+            (Symbol::new(&env, "reward_refunded"),),
+            (quest_id, authority, amount),
         );
 
         Ok(())
@@ -271,6 +482,165 @@ impl RewardsContract {
             .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
     }
+
+    /// Return aggregated platform statistics — Issue #717.
+    ///
+    /// Enables a single-call dashboard query instead of N per-contract calls.
+    /// Returns `(total_quests_funded, total_funded, total_distributed)`.
+    pub fn get_platform_stats(env: Env) -> (u32, i128, i128) {
+        let total_quests: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestCount)
+            .unwrap_or(0);
+        let total_funded: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalFunded)
+            .unwrap_or(0);
+        let total_distributed: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDistributed)
+            .unwrap_or(0);
+        (total_quests, total_funded, total_distributed)
+    }
+
+    /// Get the refund window for a quest's pool — Issue #702.
+    ///
+    /// Returns a tuple `(open_timestamp, close_timestamp)` in ledger seconds.
+    /// - If the quest is not archived, returns `(0, 0)` indicating the window is closed.
+    /// - Once archived, the window opens at `archived_at + 604_800` (7 days) and
+    ///   remains open indefinitely (`close_timestamp = u64::MAX`).
+    ///
+    /// This is a pure view function: it performs cross-contract reads but does
+    /// not mutate any state.
+    pub fn get_refund_window(env: Env, quest_id: u32) -> (u64, u64) {
+        // Get quest contract address from instance storage
+        let quest_contract_addr = match env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+        {
+            Some(addr) => addr,
+            None => return (0, 0), // contract not properly initialized
+        };
+
+        // Cross-contract call to fetch quest info
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_result = quest_client.try_get_quest(&quest_id);
+        let quest_info = match quest_result {
+            Ok(Ok(q)) => q,
+            _ => return (0, 0), // quest not found or error
+        };
+
+        // Refunds only available after archiving + 7-day grace period
+        if quest_info.status != QuestStatus::Archived {
+            return (0, 0);
+        }
+
+        let open_ts = quest_info.archived_at + 604_800; // 7 days in seconds
+        let close_ts = u64::MAX; // no upper bound
+
+        (open_ts, close_ts)
+    }
+
+    /// Refund the entire unused pool for a quest — Issue #718.
+    ///
+    /// Convenience wrapper over `refund_pool`: automatically computes the
+    /// maximum refundable amount (pool minus reserved obligations) and
+    /// returns it to the quest authority. Validates:
+    ///   - Quest is `Archived`
+    ///   - 7-day refund window has elapsed
+    ///   - There is actually something to refund
+    pub fn refund_unused_pool(env: Env, authority: Address, quest_id: u32) -> Result<i128, Error> {
+        authority.require_auth();
+
+        // Verify authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let stored: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if stored != authority {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify archived + window
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = match quest_client.try_get_quest(&quest_id) {
+            Ok(Ok(q)) => q,
+            Ok(Err(_)) | Err(_) => return Err(Error::QuestLookupFailed),
+        };
+
+        if quest_info.status != QuestStatus::Archived {
+            return Err(Error::QuestNotArchived);
+        }
+        let now = env.ledger().timestamp();
+        if now < quest_info.archived_at + 604_800 {
+            return Err(Error::RefundWindowNotOpen);
+        }
+
+        // Calculate refundable amount
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let total_reserved = milestone_client.get_total_reserved_reward(&quest_id);
+        let distributed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestDistributed(quest_id))
+            .unwrap_or(0_i128);
+        let obligations = total_reserved
+            .checked_sub(distributed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        let pool: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestPool(quest_id))
+            .unwrap_or(0);
+        let refundable = pool
+            .checked_sub(obligations)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        if refundable <= 0 {
+            return Ok(0);
+        }
+
+        // Transfer unused tokens back to authority
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &authority, &refundable);
+
+        // Zero out the pool
+        let new_pool = pool
+            .checked_sub(refundable)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestPool(quest_id), &new_pool);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::QuestPool(quest_id), THRESHOLD, BUMP);
+
+        // Emit event — reuse reward_refunded topic for indexer compatibility
+        env.events().publish(
+            (Symbol::new(&env, "reward_refunded"),),
+            (quest_id, authority, refundable),
+        );
+
+        Ok(refundable)
+    }
 }
 
+#[cfg(test)]
 mod test;

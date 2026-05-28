@@ -1,15 +1,12 @@
 #![no_std]
-#![allow(deprecated)]
 
+use common::{ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_PAUSED, ERR_UNAUTHORIZED};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
 use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base, NonFungibleToken};
-
-#[cfg(test)]
-mod test;
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -28,18 +25,23 @@ pub enum DataKey {
     CertificateMetadata(u32),       // token_id -> metadata
     QuestCertificate(u32, Address), // quest_id -> recipient -> token_id
     UserCertificates(Address),      // user -> Vec<token_id>
-    NextCertificateId,
+    MetadataBase,                   // Issue #719: base URI for tokenURI resolution
+    RevokedCertificate(u32),        // Issue #720: tombstone for revoked token_ids
 }
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotOwner = 1,
-    NotAuthorized = 2,
-    AlreadyIssued = 3,
-    NotFound = 4,
+    NotOwner = 10,
+    Unauthorized = 2,
+    AlreadyIssued = 20,
+    NotFound = 1,
     InvalidQuest = 5,
+    AlreadyRevoked = 6,     // Issue #720
+    MetadataBaseNotSet = 7, // Issue #719
+    InvalidInput = 3,
+    Paused = 400,
 }
 
 const BUMP: u32 = 518_400;
@@ -63,10 +65,6 @@ impl CertificateContract {
         // Set the contract owner
         ownable::set_owner(&env, &owner);
 
-        // Initialize next certificate ID
-        env.storage()
-            .instance()
-            .set(&DataKey::NextCertificateId, &1u32);
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
     }
 
@@ -87,12 +85,8 @@ impl CertificateContract {
             return Err(Error::AlreadyIssued);
         }
 
-        // Get next certificate ID
-        let next_id: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::NextCertificateId)
-            .unwrap_or(1);
+        // Mint the NFT first to get the canonical token_id
+        let token_id = Base::sequential_mint(&env, &recipient);
 
         // Create metadata
         let metadata = CertificateMetadata {
@@ -104,15 +98,15 @@ impl CertificateContract {
             recipient: recipient.clone(),
         };
 
-        // Store metadata
-        let metadata_key = DataKey::CertificateMetadata(next_id);
+        // Store metadata at the canonical token_id
+        let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().set(&metadata_key, &metadata);
         env.storage()
             .persistent()
             .extend_ttl(&metadata_key, THRESHOLD, BUMP);
 
         // Store quest -> recipient -> token_id mapping
-        env.storage().persistent().set(&cert_key, &next_id);
+        env.storage().persistent().set(&cert_key, &token_id);
         env.storage()
             .persistent()
             .extend_ttl(&cert_key, THRESHOLD, BUMP);
@@ -124,26 +118,19 @@ impl CertificateContract {
             .persistent()
             .get(&user_key)
             .unwrap_or(Vec::new(&env));
-        certificates.push_back(next_id);
+        certificates.push_back(token_id);
         env.storage().persistent().set(&user_key, &certificates);
         env.storage()
             .persistent()
             .extend_ttl(&user_key, THRESHOLD, BUMP);
 
-        // Update next certificate ID
-        env.storage()
-            .instance()
-            .set(&DataKey::NextCertificateId, &(next_id + 1));
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 
-        // Mint the NFT to the recipient
-        let token_id = Base::sequential_mint(&env, &recipient);
-
         // Emit certificate minted event
-        // Event topics: (cert, minted)
+        // Event topics: (certificate_minted,)
         // Event data: (token_id, quest_id, recipient, quest_name)
         env.events().publish(
-            (symbol_short!("cert"), symbol_short!("minted")),
+            (Symbol::new(&env, "certificate_minted"),),
             (token_id, quest_id, recipient, quest_name),
         );
 
@@ -189,6 +176,7 @@ impl CertificateContract {
         quest_category: String,
         recipient: Address,
     ) -> Result<u32, Error> {
+        Self::require_not_paused(&env)?;
         // Get contract owner (will be the milestone contract)
         let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
 
@@ -227,7 +215,27 @@ impl CertificateContract {
 
     /// Revoke a certificate (owner only, for exceptional cases)
     #[only_owner]
-    pub fn revoke_certificate(env: Env, token_id: u32) -> Result<(), Error> {
+    /// Revoke a certificate for fraud or disqualification — Issue #720.
+    ///
+    /// Owner-only. `caller` must match the stored contract owner.
+    /// Removes all Lernza metadata and mappings, sets a `RevokedCertificate`
+    /// tombstone, burns the NFT, and emits `certificate_revoked`.
+    pub fn revoke_certificate(env: Env, caller: Address, token_id: u32) -> Result<(), Error> {
+        caller.require_auth();
+        let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
+        if caller != owner {
+            return Err(Error::NotOwner);
+        }
+
+        // Prevent double-revoke
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::RevokedCertificate(token_id))
+        {
+            return Err(Error::AlreadyRevoked);
+        }
+
         let metadata = Self::get_certificate_metadata(env.clone(), token_id)?;
 
         // Remove from user's certificate list
@@ -261,15 +269,60 @@ impl CertificateContract {
         let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().remove(&metadata_key);
 
-        // Burn the NFT
+        // Mark as revoked (tombstone) — Issue #720
+        env.storage()
+            .persistent()
+            .set(&DataKey::RevokedCertificate(token_id), &true);
+
+        // Burn the NFT — caller (owner) already authorized above
         Base::burn(&env, &metadata.recipient, token_id);
 
         // Emit revocation event
+        // Event topics: (certificate_revoked,)
+        // Event data: (token_id, quest_id, recipient)
         env.events().publish(
-            (symbol_short!("cert"), symbol_short!("revoked")),
+            (Symbol::new(&env, "certificate_revoked"),),
             (token_id, metadata.quest_id, metadata.recipient),
         );
 
+        Ok(())
+    }
+
+    /// Update the base URI used to resolve certificate metadata — Issue #719.
+    /// Owner-only so existing tokenIds still resolve after a host migration.
+    /// Trade-off: centralised control — consider moving to IPFS to decentralise.
+    #[only_owner]
+    pub fn set_metadata_base(env: Env, uri: String) -> Result<(), Error> {
+        env.storage().instance().set(&DataKey::MetadataBase, &uri);
+        env.events()
+            .publish((Symbol::new(&env, "metadata_base_updated"),), uri);
+        Ok(())
+    }
+
+    /// Return the current metadata base URI — Issue #719.
+    pub fn get_metadata_base(env: Env) -> Result<String, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::MetadataBase)
+            .ok_or(Error::MetadataBaseNotSet)
+    }
+
+    /// Check whether a certificate has been revoked — Issue #720.
+    pub fn is_revoked(env: Env, token_id: u32) -> bool {
+        env.storage()
+            .persistent()
+            .has(&DataKey::RevokedCertificate(token_id))
+    }
+
+    fn require_not_paused(env: &Env) -> Result<(), Error> {
+        if env
+            .storage()
+            .instance()
+            .get(&Symbol::new(env, "paused"))
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
         Ok(())
     }
 }
@@ -287,3 +340,6 @@ impl NonFungibleBurnable for CertificateContract {}
 #[default_impl]
 #[contractimpl]
 impl Ownable for CertificateContract {}
+
+#[cfg(test)]
+mod test;

@@ -10,9 +10,11 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+common = { path = "../common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+proptest = "1"
 
 [features]
 testutils = []

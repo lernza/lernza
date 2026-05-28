@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSP Test - Lernza</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .warning { color: #ffc107; }
+        .info { color: #17a2b8; }
+    </style>
+</head>
+<body>
+    <h1>Content Security Policy Test</h1>
+    
+    <div class="test-section">
+        <h2>Security Headers Check</h2>
+        <p>This page tests the CSP headers configured in netlify.toml</p>
+        
+        <div id="results">
+            <p>Checking security headers...</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Allowed Resources Test</h2>
+        <p>Testing that allowed resources load correctly:</p>
+        
+        <!-- Test Google Fonts (allowed) -->
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        
+        <!-- Test Vercel Analytics (allowed with nonce) -->
+        <script nonce="test-nonce">
+            console.log('Testing nonce-based script execution');
+        </script>
+        
+        <!-- Test inline style (allowed with unsafe-inline) -->
+        <div style="background: #e3f2fd; padding: 10px; border-radius: 4px;">
+            This should have a blue background (inline style test)
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Blocked Resources Test</h2>
+        <p>These should be blocked by CSP:</p>
+        
+        <!-- Test external script (should be blocked) -->
+        <script src="https://evil.example.com/malicious.js"></script>
+        
+        <!-- Test inline script without nonce (should be blocked) -->
+        <script>
+            console.log('This should be blocked - no nonce');
+        </script>
+        
+        <!-- Test external font (should be blocked) -->
+        <link href="https://untrusted-fonts.com/font.css" rel="stylesheet">
+    </div>
+
+    <script>
+        // Test security headers
+        fetch(window.location.href)
+            .then(response => response.headers.forEach((value, name) => {
+                console.log(`${name}: ${value}`);
+            }))
+            .then(() => {
+                // Check for specific security headers
+                const results = document.getElementById('results');
+                results.innerHTML = `
+                    <h3>Security Headers Detected:</h3>
+                    <p>Check browser console for detailed header information</p>
+                    <p class="info">Look for Content-Security-Policy header in Network tab</p>
+                `;
+            })
+            .catch(error => {
+                console.error('Error checking headers:', error);
+            });
+
+        // Monitor CSP violations
+        document.addEventListener('securitypolicyviolation', (e) => {
+            console.error('CSP Violation:', {
+                blockedURI: e.blockedURI,
+                violatedDirective: e.violatedDirective,
+                originalPolicy: e.originalPolicy,
+                referrer: e.referrer,
+                sample: e.sample,
+                sourceFile: e.sourceFile,
+                lineNumber: e.lineNumber,
+                columnNumber: e.columnNumber
+            });
+        });
+    </script>
+</body>
+</html>

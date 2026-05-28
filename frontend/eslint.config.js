@@ -1,9 +1,11 @@
 import js from "@eslint/js"
 import globals from "globals"
+import react from "eslint-plugin-react"
 import reactHooks from "eslint-plugin-react-hooks"
 import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
 import prettier from "eslint-config-prettier"
+import unusedImports from "eslint-plugin-unused-imports"
 import { defineConfig, globalIgnores } from "eslint/config"
 
 export default defineConfig([
@@ -20,6 +22,20 @@ export default defineConfig([
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+    },
+    plugins: {
+      react,
+      "unused-imports": unusedImports,
+    },
+    settings: {
+      react: {
+        version: "detect",
+      },
     },
     rules: {
       'react-refresh/only-export-components': [
@@ -27,6 +43,38 @@ export default defineConfig([
         { allowConstantExport: true },
       ],
       '@typescript-eslint/no-explicit-any': 'error',
+      'react/no-danger': 'error',
+      'unused-imports/no-unused-imports': 'error',
+      'unused-imports/no-unused-vars': [
+        'warn',
+        { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
+      ],
+      // The React Compiler rules from eslint-plugin-react-hooks@6 surface design
+      // notes ("we couldn't auto-memoize this", "setState in effect is a smell").
+      // Keep them visible as warnings rather than errors — they're guidance about
+      // optimization and patterns, not correctness bugs that should fail CI.
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/purity': 'warn',
+      'react-hooks/refs': 'warn',
+      // Ban legacy "workspace" identifiers — use "quest" equivalents instead.
+      // The only allowed file is the redirect shim that bridges /workspace/:id → /quest/:id.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Identifier[name=/[Ww]orkspace/]',
+          message:
+            'The "workspace" identifier is deprecated. Use the "quest" equivalent instead. ' +
+            'Only src/components/workspace-redirect.tsx is exempt.',
+        },
+      ],
+    },
+  },
+  // Allow-list: the redirect shim is the sole permitted home for workspace identifiers.
+  {
+    files: ['src/components/workspace-redirect.tsx'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 ])

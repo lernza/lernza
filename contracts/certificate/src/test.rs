@@ -1,182 +1,149 @@
-use soroban_sdk::{Address, Env, String, Vec};
+use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
-use crate::{CertificateContract, CertificateMetadata, DataKey, Error, BUMP, THRESHOLD};
+use crate::{CertificateContract, CertificateContractClient, Error};
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use soroban_sdk::testutils::Address as TestAddress;
-    use stellar_access::ownable::Ownable;
+fn setup() -> (Env, CertificateContractClient<'static>, Address) {
+    let env = Env::default();
+    env.mock_all_auths();
+    let owner = Address::generate(&env);
+    let contract_id = env.register(CertificateContract, (owner.clone(),));
+    let client = CertificateContractClient::new(&env, &contract_id);
+    (env, client, owner)
+}
 
-    #[test]
-    fn test_certificate_minting() {
-        let env = Env::default();
-        let contract_id = env.register(CertificateContract, ());
-        let owner = Address::generate(&env);
-        let recipient = Address::generate(&env);
+#[test]
+fn test_certificate_minting() {
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
 
-        env.as_contract(&contract_id, || {
-            // Initialize contract
-            CertificateContract::__constructor(env.clone(), owner.clone());
+    let quest_name = String::from_str(&env, "Introduction to Rust");
+    let quest_category = String::from_str(&env, "Programming");
+    let quest_id = 1u32;
 
-            // Mint certificate
-            let quest_name = String::from_str(&env, "Introduction to Rust");
-            let quest_category = String::from_str(&env, "Programming");
-            let quest_id = 1u32;
+    let token_id =
+        client.mint_certificate(&quest_id, &quest_name, &quest_category, &recipient, &owner);
 
-            let token_id = CertificateContract::mint_certificate(
-                env.clone(),
-                quest_id,
-                quest_name.clone(),
-                quest_category.clone(),
-                recipient.clone(),
-                owner.clone(),
-            )
-            .unwrap();
+    let metadata = client.get_certificate_metadata(&token_id);
+    assert_eq!(metadata.quest_id, quest_id);
+    assert_eq!(metadata.quest_name, quest_name);
+    assert_eq!(metadata.quest_category, quest_category);
+    assert_eq!(metadata.recipient, recipient);
+    assert_eq!(metadata.issuer, owner);
 
-            // Verify certificate exists
-            let metadata =
-                CertificateContract::get_certificate_metadata(env.clone(), token_id).unwrap();
-            assert_eq!(metadata.quest_id, quest_id);
-            assert_eq!(metadata.quest_name, quest_name);
-            assert_eq!(metadata.quest_category, quest_category);
-            assert_eq!(metadata.recipient, recipient);
-            assert_eq!(metadata.issuer, owner);
+    let user_certs = client.get_user_certificates(&recipient);
+    assert_eq!(user_certs.len(), 1);
+    assert_eq!(user_certs.get(0).unwrap(), token_id);
 
-            // Verify user has certificate
-            let user_certs =
-                CertificateContract::get_user_certificates(env.clone(), recipient.clone());
-            assert_eq!(user_certs.len(), 1);
-            assert_eq!(user_certs.get(0).unwrap(), token_id);
+    let quest_cert = client.get_quest_certificate(&quest_id, &recipient);
+    assert_eq!(quest_cert, token_id);
+}
 
-            // Verify quest mapping exists
-            let quest_cert =
-                CertificateContract::get_quest_certificate(env.clone(), quest_id, recipient)
-                    .unwrap();
-            assert_eq!(quest_cert, token_id);
-        });
+#[test]
+fn test_duplicate_certificate_prevention() {
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+    let quest_id = 1u32;
+
+    client.mint_certificate(
+        &quest_id,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+        &owner,
+    );
+
+    let result = client.try_mint_certificate(
+        &quest_id,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+        &owner,
+    );
+    assert_eq!(result, Err(Ok(Error::AlreadyIssued)));
+}
+
+#[test]
+fn test_certificate_revocation() {
+    // Issue #720 — revoke_certificate is now owner-only and emits certificate_revoked.
+    // Use a fresh env for revocation so the owner auth frame is not already consumed.
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+    let quest_id = 1u32;
+
+    let token_id = client.mint_certificate(
+        &quest_id,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+        &owner,
+    );
+
+    client.revoke_certificate(&owner, &token_id);
+
+    // Metadata is gone
+    let result = client.try_get_certificate_metadata(&token_id);
+    assert_eq!(result, Err(Ok(Error::NotFound)));
+
+    // User's certificate list is cleared
+    let user_certs = client.get_user_certificates(&recipient);
+    assert_eq!(user_certs.len(), 0);
+
+    // Tombstone marks it as revoked
+    assert!(client.is_revoked(&token_id));
+
+    // Double-revoke returns AlreadyRevoked
+    let double = client.try_revoke_certificate(&owner, &token_id);
+    assert_eq!(double, Err(Ok(Error::AlreadyRevoked)));
+}
+
+#[test]
+fn test_user_certificate_details() {
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+
+    let cert1_id = client.mint_certificate(
+        &1u32,
+        &String::from_str(&env, "Quest 1"),
+        &String::from_str(&env, "Category 1"),
+        &recipient,
+        &owner,
+    );
+
+    let cert2_id = client.mint_certificate(
+        &2u32,
+        &String::from_str(&env, "Quest 2"),
+        &String::from_str(&env, "Category 2"),
+        &recipient,
+        &owner,
+    );
+
+    let details = client.get_user_certificate_details(&recipient);
+    assert_eq!(details.len(), 2);
+
+    let mut cert_ids = Vec::new(&env);
+    for i in 0..details.len() {
+        if let Some((id, _)) = details.get(i) {
+            cert_ids.push_back(id);
+        }
     }
+    assert!(cert_ids.contains(cert1_id));
+    assert!(cert_ids.contains(cert2_id));
+}
 
-    #[test]
-    fn test_duplicate_certificate_prevention() {
-        let env = Env::default();
-        let contract_id = env.register(CertificateContract, ());
-        let owner = Address::generate(&env);
-        let recipient = Address::generate(&env);
+#[test]
+fn test_set_and_get_metadata_base() {
+    // Issue #719 — set_metadata_base allows owner to update the metadata URI.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "ipfs://bafybei.../");
+    client.set_metadata_base(&uri);
+    let stored = client.get_metadata_base();
+    assert_eq!(stored, uri);
+}
 
-        env.as_contract(&contract_id, || {
-            // Initialize contract
-            CertificateContract::__constructor(env.clone(), owner.clone());
-
-            // Mint first certificate
-            let quest_id = 1u32;
-            let _token_id = CertificateContract::mint_certificate(
-                env.clone(),
-                quest_id,
-                String::from_str(&env, "Test Quest"),
-                String::from_str(&env, "Test"),
-                recipient.clone(),
-                owner.clone(),
-            )
-            .unwrap();
-
-            // Try to mint duplicate certificate
-            let result = CertificateContract::mint_certificate(
-                env.clone(),
-                quest_id,
-                String::from_str(&env, "Test Quest"),
-                String::from_str(&env, "Test"),
-                recipient.clone(),
-                owner.clone(),
-            );
-
-            assert_eq!(result, Err(Error::AlreadyIssued));
-        });
-    }
-
-    #[test]
-    fn test_certificate_revocation() {
-        let env = Env::default();
-        let contract_id = env.register(CertificateContract, ());
-        let owner = Address::generate(&env);
-        let recipient = Address::generate(&env);
-
-        env.as_contract(&contract_id, || {
-            // Initialize contract
-            CertificateContract::__constructor(env.clone(), owner.clone());
-
-            // Mint certificate
-            let quest_id = 1u32;
-            let token_id = CertificateContract::mint_certificate(
-                env.clone(),
-                quest_id,
-                String::from_str(&env, "Test Quest"),
-                String::from_str(&env, "Test"),
-                recipient.clone(),
-                owner.clone(),
-            )
-            .unwrap();
-
-            // Revoke certificate
-            CertificateContract::revoke_certificate(env.clone(), token_id).unwrap();
-
-            // Verify certificate no longer exists
-            let result = CertificateContract::get_certificate_metadata(env.clone(), token_id);
-            assert_eq!(result, Err(Error::NotFound));
-
-            // Verify user no longer has certificate
-            let user_certs =
-                CertificateContract::get_user_certificates(env.clone(), recipient.clone());
-            assert_eq!(user_certs.len(), 0);
-        });
-    }
-
-    #[test]
-    fn test_user_certificate_details() {
-        let env = Env::default();
-        let contract_id = env.register(CertificateContract, ());
-        let owner = Address::generate(&env);
-        let recipient = Address::generate(&env);
-
-        env.as_contract(&contract_id, || {
-            // Initialize contract
-            CertificateContract::__constructor(env.clone(), owner.clone());
-
-            // Mint multiple certificates
-            let cert1_id = CertificateContract::mint_certificate(
-                env.clone(),
-                1u32,
-                String::from_str(&env, "Quest 1"),
-                String::from_str(&env, "Category 1"),
-                recipient.clone(),
-                owner.clone(),
-            )
-            .unwrap();
-
-            let cert2_id = CertificateContract::mint_certificate(
-                env.clone(),
-                2u32,
-                String::from_str(&env, "Quest 2"),
-                String::from_str(&env, "Category 2"),
-                recipient.clone(),
-                owner.clone(),
-            )
-            .unwrap();
-
-            // Get user certificate details
-            let details =
-                CertificateContract::get_user_certificate_details(env.clone(), recipient.clone());
-            assert_eq!(details.len(), 2);
-
-            // Verify details contain both certificates
-            let mut cert_ids = Vec::new(&env);
-            for i in 0..details.len() {
-                if let Some((id, _)) = details.get(i) {
-                    cert_ids.push_back(id);
-                }
-            }
-            assert!(cert_ids.contains(&cert1_id));
-            assert!(cert_ids.contains(&cert2_id));
-        });
-    }
+#[test]
+fn test_get_metadata_base_not_set_returns_error() {
+    // Issue #719 — get_metadata_base returns MetadataBaseNotSet when unset.
+    let (_env, client, _owner) = setup();
+    let result = client.try_get_metadata_base();
+    assert_eq!(result, Err(Ok(Error::MetadataBaseNotSet)));
 }

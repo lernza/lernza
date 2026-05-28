@@ -20,6 +20,16 @@ Open [http://localhost:5173](http://localhost:5173)
 | `pnpm lint`    | Run ESLint                       |
 | `pnpm preview` | Preview production build locally |
 
+## Public Assets (Deployment)
+
+These files in `frontend/public/` are required for correct branding and link previews:
+
+- `favicon.svg` (browser tab icon; `frontend/index.html` includes a tiny inline fallback)
+- `og-image.png` (Open Graph + Twitter share image)
+- `logo.svg`, `robots.txt`, `sitemap.xml` (SEO/branding assets)
+
+Builds validate the required asset set via `pnpm run validate:assets` (runs automatically before `pnpm build`).
+
 ## Design System
 
 Neo-brutalist design with:
@@ -55,3 +65,18 @@ src/
 ## Wallet
 
 Uses [Freighter](https://freighter.app) (`@stellar/freighter-api`) for wallet connection. Switch to **Testnet** in Freighter settings before connecting.
+
+## Data Sources (Current State)
+
+The frontend currently uses a **mixed data model**:
+
+- **On-chain contract reads** are already used in some views (for example, dashboard and profile fetch data through the generated contract clients).
+- **Mock data** from `src/lib/mock-data.ts` is still used in `src/pages/quest.tsx` for quest detail rendering and local UI state.
+
+This means mock data is **not** fully replaced in production yet.
+
+## Planned Migration to Live Contract Data
+
+The remaining migration work is to remove `mock-data.ts` usage from quest detail flows and source all quest/milestone/enrollee/completion state from contract reads.
+
+Until that migration is complete, treat `mock-data.ts` as an active compatibility layer rather than development-only scaffolding.

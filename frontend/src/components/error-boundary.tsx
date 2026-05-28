@@ -6,6 +6,8 @@ interface ErrorBoundaryProps {
   children: ReactNode
   fallback?: (error: Error, reset: () => void) => ReactNode
   githubRepo?: string
+  /** Short label surfaced in the primary CTA, e.g. "Quest", "Dashboard". */
+  routeLabel?: string
 }
 
 interface ErrorBoundaryState {
@@ -96,9 +98,11 @@ interface FallbackProps {
   onReset: () => void
   onReload: () => void
   githubRepo: string
+  /** Short label for the primary CTA button, e.g. "Quest", "Dashboard". */
+  routeLabel?: string
 }
 
-function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo }: FallbackProps) {
+function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo, routeLabel }: FallbackProps) {
   const kind = classifyError(error)
   const copy = ERROR_COPY[kind]
 
@@ -252,7 +256,8 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo }: Fa
                 ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "4px 4px 0 #000"
               }}
             >
-              <RotateCcw size={14} style={{ marginRight: 6 }} /> RESET VIEW
+              <RotateCcw size={14} style={{ marginRight: 6 }} />
+              {routeLabel ? `RELOAD ${routeLabel.toUpperCase()}` : "RESET VIEW"}
             </button>
 
             <button
@@ -385,7 +390,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   override render() {
     const { error, errorInfo } = this.state
-    const { children, fallback, githubRepo = GITHUB_REPO } = this.props
+    const { children, fallback, githubRepo = GITHUB_REPO, routeLabel } = this.props
 
     if (error) {
       if (fallback) return fallback(error, this.reset)
@@ -397,6 +402,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           onReset={this.reset}
           onReload={this.reload}
           githubRepo={githubRepo}
+          routeLabel={routeLabel}
         />
       )
     }

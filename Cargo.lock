@@ -248,6 +248,7 @@ dependencies = [
 name = "certificate"
 version = "0.0.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
  "stellar-macros",

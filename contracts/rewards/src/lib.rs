@@ -1,5 +1,7 @@
 #![no_std]
-use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
+use common::{
+    extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
+};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
     Symbol,
@@ -58,9 +60,9 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 1,
-    NotInitialized = 2,
-    Unauthorized = 3,
+    AlreadyInitialized = 99, // moved away from standard range
+    NotInitialized = 100,      // moved away from standard range
+    Unauthorized = 2,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
@@ -73,6 +75,9 @@ pub enum Error {
     RewardAmountMismatch = 13,
     QuestNotArchived = 14,
     RefundWindowNotOpen = 15,
+    NotFound = 1,
+    InvalidInput = 3,
+    Paused = 400,
 }
 
 // TTL constants moved to common.

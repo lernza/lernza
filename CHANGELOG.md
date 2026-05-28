@@ -5,6 +5,7 @@
 ### ⚠ BREAKING CHANGES
 
 * **contracts:** The `workspace` identifier has been renamed to `quest` across all contracts, frontend code, and URLs. The `/workspace/:id` route now redirects to `/quest/:id` via a compatibility shim (`WorkspaceRedirect`). The shim and all `workspace` aliases will be removed on **2026-09-01**. Integrators must migrate any direct references to `WorkspaceInfo`, `MOCK_WORKSPACES`, or `/workspace/` paths to their `quest`-prefixed equivalents before that date.
+* **milestone:** `verify_completion` now fails with `FlatRewardNotConfigured` (error 18) if a quest is in `Flat` distribution mode but no flat reward amount has been set. This prevents silent fallback to per-milestone configured rewards which may be inconsistent in flat mode.
 
 ## [0.3.0](https://github.com/lernza/lernza/compare/v0.2.3...v0.3.0) (2026-03-27)
 

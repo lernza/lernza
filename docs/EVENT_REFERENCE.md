@@ -155,6 +155,9 @@ Emitted when a milestone is created via `create_milestone` or `create_milestones
 
 Emitted when an owner verifies a learner's completion via `verify_completion`.
 
+> [!NOTE]
+> In **Competitive** mode, this event is still emitted even if the `max_winners` cap has been reached. In that case, the learner is marked as completed but receives a reward of `0`. The specific reward amount paid is tracked by the `reward_distributed` event in the Rewards contract.
+
 | Field | Type | Description |
 |:------|:-----|:------------|
 | **Topics** | `(Symbol("milestone_completed"),)` | |

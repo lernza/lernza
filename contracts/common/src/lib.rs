@@ -28,6 +28,7 @@ pub const MAX_REWARD_AMOUNT: i128 = 1_000_000_000_000_000; // 10^15
 pub const ERR_NOT_FOUND: u32 = 1;
 pub const ERR_UNAUTHORIZED: u32 = 2;
 pub const ERR_INVALID_INPUT: u32 = 3;
+pub const ERR_PAUSED: u32 = 400;
 
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

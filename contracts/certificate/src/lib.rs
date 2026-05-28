@@ -1,5 +1,6 @@
 #![no_std]
 
+use common::{ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_PAUSED, ERR_UNAUTHORIZED};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
@@ -32,13 +33,15 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotOwner = 1,
-    NotAuthorized = 2,
-    AlreadyIssued = 3,
-    NotFound = 4,
+    NotOwner = 10,
+    Unauthorized = 2,
+    AlreadyIssued = 20,
+    NotFound = 1,
     InvalidQuest = 5,
     AlreadyRevoked = 6,     // Issue #720
     MetadataBaseNotSet = 7, // Issue #719
+    InvalidInput = 3,
+    Paused = 400,
 }
 
 const BUMP: u32 = 518_400;
@@ -173,6 +176,7 @@ impl CertificateContract {
         quest_category: String,
         recipient: Address,
     ) -> Result<u32, Error> {
+        Self::require_not_paused(&env)?;
         // Get contract owner (will be the milestone contract)
         let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
 
@@ -308,6 +312,18 @@ impl CertificateContract {
         env.storage()
             .persistent()
             .has(&DataKey::RevokedCertificate(token_id))
+    }
+
+    fn require_not_paused(env: &Env) -> Result<(), Error> {
+        if env
+            .storage()
+            .instance()
+            .get(&Symbol::new(env, "paused"))
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
+        Ok(())
     }
 }
 

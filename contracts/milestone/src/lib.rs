@@ -1038,6 +1038,42 @@ impl MilestoneContract {
         }
     }
 
+    /// Get quest info and verify ownership in a single call.
+    /// This caches the result to avoid redundant cross-contract calls within the same transaction.
+    ///
+    /// Returns the QuestInfo if the caller is the owner, or an error otherwise.
+    ///
+    /// # Usage
+    /// When a function needs both ownership verification and quest data:
+    /// ```ignore
+    /// let quest = Self::get_quest_and_verify_owner(&env, quest_id, &owner)?;
+    /// // Now reuse quest_info for all subsequent operations
+    /// ```
+    fn get_quest_and_verify_owner(
+        env: &Env,
+        quest_id: u32,
+        claimed_owner: &Address,
+    ) -> Result<QuestInfo, Error> {
+        // Get quest contract address
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+
+        // Cross-contract call to fetch quest info (single call, cached result)
+        let quest_client = QuestClient::new(env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+
+        // Verify the caller is the owner
+        if quest_info.owner != *claimed_owner {
+            return Err(Error::OwnerMismatch);
+        }
+
+        // Return the cached result for reuse in the same transaction
+        Ok(quest_info)
+    }
+
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {
         // Get quest contract address
         let quest_contract_addr: Address = env

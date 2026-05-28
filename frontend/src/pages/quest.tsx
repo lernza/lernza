@@ -279,41 +279,52 @@ export function QuestView() {
   const [completions, setCompletions] = useState<CompletionRecord[]>(EMPTY_COMPLETIONS)
 
   // Fetch completions when milestones and enrollees are available
-  const fetchCompletions = useCallback(async () => {
-    if (milestonesData.data && enrolleesData.data) {
-      try {
-        const ms = milestonesData.data
-        const en = enrolleesData.data
-        const completionEntries = await Promise.all(
-          en.flatMap(enrollee =>
-            ms.map(async milestone => {
-              const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
-              return completed
-                ? ({
-                    milestoneId: milestone.id,
-                    enrollee,
-                    completed: true,
-                  } satisfies CompletionRecord)
-                : null
-            })
-          )
-        )
-
-        const filteredCompletions = completionEntries.filter(
-          (entry): entry is CompletionRecord => entry !== null
-        )
-        setCompletions(filteredCompletions)
-      } catch {
-        // silently ignore completion fetch errors
-      }
-    } else {
-      setCompletions(EMPTY_COMPLETIONS)
-    }
-  }, [questId, milestonesData.data, enrolleesData.data])
+  // Wrapped in AbortController to cancel on dependency changes or unmount
 
   useEffect(() => {
-    fetchCompletions()
-  }, [fetchCompletions])
+    const controller = new AbortController()
+    
+    const performFetch = async () => {
+      if (milestonesData.data && enrolleesData.data) {
+        try {
+          const ms = milestonesData.data
+          const en = enrolleesData.data
+          const completionEntries = await Promise.all(
+            en.flatMap(enrollee =>
+              ms.map(async milestone => {
+                if (controller.signal.aborted) return null
+                const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
+                return completed
+                  ? ({
+                      milestoneId: milestone.id,
+                      enrollee,
+                      completed: true,
+                    } satisfies CompletionRecord)
+                  : null
+              })
+            )
+          )
+
+          if (!controller.signal.aborted) {
+            const filteredCompletions = completionEntries.filter(
+              (entry): entry is CompletionRecord => entry !== null
+            )
+            setCompletions(filteredCompletions)
+          }
+        } catch {
+          // silently ignore completion fetch errors
+        }
+      } else {
+        setCompletions(EMPTY_COMPLETIONS)
+      }
+    }
+
+    performFetch()
+
+    return () => {
+      controller.abort()
+    }
+  }, [questId, milestonesData.data, enrolleesData.data])
 
   // Refetch function that refreshes all data
   const refetch = useCallback(async () => {
@@ -323,16 +334,8 @@ export function QuestView() {
       enrolleesData.refetch(),
       poolBalanceData.refetch(),
       questAuthorityData.refetch(),
-      fetchCompletions(),
     ])
-  }, [
-    questData,
-    milestonesData,
-    enrolleesData,
-    poolBalanceData,
-    questAuthorityData,
-    fetchCompletions,
-  ])
+  }, [questData, milestonesData, enrolleesData, poolBalanceData, questAuthorityData])
 
   // Get raw data
   const quest = questData.data

@@ -1,7 +1,5 @@
 #![no_std]
-use common::{
-    extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
-};
+use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
     Symbol,
@@ -61,7 +59,7 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     AlreadyInitialized = 99, // moved away from standard range
-    NotInitialized = 100,      // moved away from standard range
+    NotInitialized = 100,    // moved away from standard range
     Unauthorized = 2,
     InsufficientPool = 4,
     InvalidAmount = 5,

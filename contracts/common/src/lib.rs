@@ -67,12 +67,31 @@ pub struct QuestInfo {
 
 /// Validate that an address is a Stellar contract address (not an account).
 ///
+/// **Validation Strategy (ADR-006):**
+/// This function performs lightweight validation to distinguish contract addresses
+/// (C-prefixed) from account addresses (G-prefixed). It does NOT perform CRC-16
+/// checksum validation, as we delegate cryptographic integrity checks to the
+/// soroban-sdk's XDR boundary.
+///
+/// **What this function checks:**
+/// - Length is exactly 56 characters
+/// - First character is 'C' (contract prefix)
+/// - All characters use valid base32 charset (A-Z, 2-7)
+///
+/// **What this function does NOT check:**
+/// - CRC-16-XMODEM checksum validity
+/// - Whether the address corresponds to an actual deployed contract
+///
+/// **Rationale:**
 /// Soroban's host already guarantees that any `Address` it hands a contract
 /// is structurally well-formed — it was deserialized from XDR and round-trips
-/// to a valid StrKey. The only thing the contract needs to enforce is that the
-/// caller did not pass an account (G-prefixed) address where a contract
-/// (C-prefixed) address is required. Length + prefix + base32 charset together
-/// distinguish the two and reject obvious garbage.
+/// to a valid StrKey. Invalid contract addresses will fail during actual
+/// contract invocations, providing clear error feedback without requiring
+/// complex validation logic here.
+///
+/// **Usage:**
+/// Use this function when you need to ensure callers pass contract addresses
+/// rather than account addresses for operations that require contract interaction.
 pub fn is_contract_address(addr: &Address) -> bool {
     let s = addr.to_string();
 

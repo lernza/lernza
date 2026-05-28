@@ -17,6 +17,7 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 quest = { path = "../quest" }
 certificate = { path = "../certificate" }
 proptest = "1"
+testutils = { path = "../testutils" }
 
 [features]
 testutils = []

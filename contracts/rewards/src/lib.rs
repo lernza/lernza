@@ -176,6 +176,12 @@ impl RewardsContract {
         } else {
             env.storage().persistent().set(&auth_key, &funder);
             common::extend_persistent_ttl(&env, &auth_key);
+
+            // Emit authority assignment event for indexers to track refund authority
+            env.events().publish(
+                (Symbol::new(&env, "reward_authority_assigned"),),
+                (quest_id, funder.clone()),
+            );
         }
 
         // Transfer tokens from funder to this contract

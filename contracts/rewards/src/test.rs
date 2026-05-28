@@ -180,6 +180,96 @@ fn test_fund_quest_adds_to_existing() {
 }
 
 #[test]
+fn test_fund_quest_assigns_authority_on_first_funding() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let stored_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    assert_eq!(stored_authority, owner);
+}
+
+#[test]
+fn test_fund_quest_additional_funding_keeps_same_authority() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &3_000);
+    let initial_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    client.fund_quest(&owner, &q_id, &2_000);
+    let stored_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    assert_eq!(initial_authority, owner);
+    assert_eq!(stored_authority, owner);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+#[test]
 fn test_fund_invalid_amount() {
     let (
         env,

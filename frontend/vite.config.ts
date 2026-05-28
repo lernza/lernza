@@ -39,21 +39,8 @@ export default defineConfig({
         // Pre-cache all Vite-generated assets (JS chunks, CSS, HTML).
         globPatterns: ["**/*.{js,css,html,svg,woff2}"],
 
-        // Runtime caching for fonts delivered via CDN (e.g. Google Fonts).
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-cache",
-              expiration: {
-                maxEntries: 20,
-                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        // Runtime caching for Stellar RPC/Horizon API calls.
+        runtimeCaching: [],
 
         // Skip waiting so updated SW activates immediately after the old one
         // is no longer controlling any clients.
@@ -71,8 +58,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-") || id.includes("node_modules/victory-")) return "vendor-charts";
+          if (id.includes("node_modules/framer-motion")) return "vendor-motion";
           if (id.includes("landing.tsx")) return "page-landing";
           if (id.includes("dashboard.tsx") && !id.includes("dashboard/")) return "page-dashboard";
+          if (id.includes("pages/dashboard/")) return "page-dashboard-sub";
           if (id.includes("quest.tsx")) return "page-quest";
           if (id.includes("profile.tsx")) return "page-profile";
           if (id.includes("create-quest.tsx")) return "page-create-quest";

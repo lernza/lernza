@@ -1,4 +1,5 @@
-import { rpc, Transaction } from "@stellar/stellar-sdk"
+import { rpc } from "@stellar/stellar-sdk/rpc"
+import { Transaction } from "@stellar/stellar-sdk/minimal"
 import { signTransaction, getNetworkDetails, getPublicKey } from "@stellar/freighter-api"
 
 export const SOROBAN_RPC_URL =

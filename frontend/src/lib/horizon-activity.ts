@@ -1,4 +1,5 @@
-import { scValToNative, xdr } from "@stellar/stellar-sdk"
+import { scValToNative, xdr } from "@stellar/stellar-sdk/minimal"
+import { env } from "@/lib/env"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
 import { questClient } from "@/lib/contracts/quest"
 
@@ -46,7 +47,7 @@ interface HorizonOperationRecord {
 }
 
 function getHorizonBaseUrl(): string {
-  return import.meta.env.VITE_HORIZON_URL || DEFAULT_HORIZON_URL
+  return env.VITE_HORIZON_URL ?? DEFAULT_HORIZON_URL
 }
 
 function getExplorerBaseUrl(): string {

@@ -27,17 +27,25 @@ import {
 } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
 
-// Sub-components
-import { PlatformStats } from "./dashboard/platform-stats"
-import { PersonalProgress } from "./dashboard/personal-progress"
-import { TrendingQuests } from "./dashboard/trending-quests"
-import { RecentActivity } from "./dashboard/recent-activity"
-
-// Lazy-loaded chart
+// Sub-components — all lazy to keep page-dashboard chunk lean
+const PlatformStats = React.lazy(() =>
+  import("./dashboard/platform-stats").then(m => ({ default: m.PlatformStats }))
+)
+const PersonalProgress = React.lazy(() =>
+  import("./dashboard/personal-progress").then(m => ({ default: m.PersonalProgress }))
+)
+const TrendingQuests = React.lazy(() =>
+  import("./dashboard/trending-quests").then(m => ({ default: m.TrendingQuests }))
+)
+const RecentActivity = React.lazy(() =>
+  import("./dashboard/recent-activity").then(m => ({ default: m.RecentActivity }))
+)
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 
 // The first two quests share the same owner — treat them as "owned"
 const MOCK_OWNER = "GBXR...K2YQ"
+
+const SubFallback = () => <div className="bg-muted border-border h-24 animate-pulse border-[3px]" />
 
 interface DashboardProps {
   onSelectQuest: (id: number) => void
@@ -51,7 +59,6 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
   if (!connected) {
     return (
       <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
-        {/* Background elements */}
         <div className="bg-grid-dots pointer-events-none absolute inset-0" />
         <div
           className="bg-primary border-border animate-float absolute top-[10%] left-[8%] h-20 w-20 rotate-12 border-[3px] opacity-[0.08] shadow-[4px_4px_0_var(--color-border)]"
@@ -71,9 +78,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
         />
 
         <div className="relative mx-auto max-w-lg px-4">
-          {/* Card container */}
           <div className="bg-background border-border animate-scale-in overflow-hidden border-[3px] shadow-[8px_8px_0_var(--color-border)]">
-            {/* Yellow header strip */}
             <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
               <span className="text-xs font-black tracking-wider uppercase">Dashboard</span>
               <div className="flex items-center gap-1.5">
@@ -102,7 +107,6 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
                 Connect Wallet
               </Button>
 
-              {/* Mini feature list */}
               <div className="border-border animate-fade-in-up stagger-4 mt-8 border-t-[2px] pt-6">
                 <div className="flex flex-wrap justify-center gap-4">
                   {[
@@ -122,7 +126,6 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
             </div>
           </div>
 
-          {/* Decorative accent blocks */}
           <div className="bg-primary border-border animate-fade-in-up stagger-5 absolute -top-4 -right-4 hidden h-10 w-10 rotate-12 border-[2px] shadow-[3px_3px_0_var(--color-border)] sm:block" />
           <div className="bg-success border-border animate-fade-in-up stagger-6 absolute -bottom-3 -left-3 hidden h-8 w-8 -rotate-6 border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:block" />
         </div>
@@ -130,7 +133,6 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
     )
   }
 
-  // Apply filter
   const filteredQuests = MOCK_QUESTS.filter(ws => {
     if (filter === "owned") return ws.owner === MOCK_OWNER
     if (filter === "enrolled") return ws.owner !== MOCK_OWNER
@@ -165,15 +167,17 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
       </div>
 
       {/* Platform Stats Overview */}
-      <PlatformStats stats={MOCK_PLATFORM_STATS} />
+      <Suspense fallback={<SubFallback />}>
+        <PlatformStats stats={MOCK_PLATFORM_STATS} />
+      </Suspense>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* Left Column (Personal Stats, Chart, Quests) */}
+        {/* Left Column */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
-          {/* Personal Stats */}
-          <PersonalProgress stats={MOCK_USER_STATS} />
+          <Suspense fallback={<SubFallback />}>
+            <PersonalProgress stats={MOCK_USER_STATS} />
+          </Suspense>
 
-          {/* Earnings Chart (Lazy Loaded) */}
           <Suspense
             fallback={
               <div className="bg-muted border-border h-[250px] animate-pulse border-[3px] shadow-[6px_6px_0_var(--color-border)]" />
@@ -326,10 +330,14 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
           </div>
         </div>
 
-        {/* Right Column (Trending & Recent Activity) */}
+        {/* Right Column */}
         <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={onSelectQuest} />
-          <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
+          <Suspense fallback={<SubFallback />}>
+            <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={onSelectQuest} />
+          </Suspense>
+          <Suspense fallback={<SubFallback />}>
+            <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
+          </Suspense>
         </div>
       </div>
     </div>

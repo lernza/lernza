@@ -1,3 +1,4 @@
+import "@/lib/env" // validate env at boot — throws immediately on malformed values
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClientProvider } from "@tanstack/react-query"

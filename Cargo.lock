@@ -918,6 +918,7 @@ dependencies = [
  "proptest",
  "quest",
  "soroban-sdk",
+ "testutils",
 ]
 
 [[package]]
@@ -1068,6 +1069,7 @@ dependencies = [
  "common",
  "proptest",
  "soroban-sdk",
+ "testutils",
 ]
 
 [[package]]
@@ -1198,8 +1200,10 @@ dependencies = [
  "certificate",
  "common",
  "milestone",
+ "proptest",
  "quest",
  "soroban-sdk",
+ "testutils",
 ]
 
 [[package]]
@@ -1724,6 +1728,18 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys",
+]
+
+[[package]]
+name = "testutils"
+version = "0.0.0"
+dependencies = [
+ "certificate",
+ "common",
+ "milestone",
+ "quest",
+ "rewards",
+ "soroban-sdk",
 ]
 
 [[package]]

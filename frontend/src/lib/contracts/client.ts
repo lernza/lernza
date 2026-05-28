@@ -19,6 +19,47 @@ export interface TransactionLifecycleHandlers {
   onSubmitted?: (txHash: string) => void
 }
 
+export interface TransactionTimebounds {
+  minTime: number // Unix timestamp in seconds
+  maxTime: number // Unix timestamp in seconds
+}
+
+/**
+ * Check if a transaction's timebounds are still valid
+ * Returns true if the transaction can still be submitted
+ */
+export function isTransactionTimeboundsValid(timebounds: TransactionTimebounds): boolean {
+  const now = Math.floor(Date.now() / 1000) // Convert to Unix timestamp in seconds
+  
+  // Check if current time is within the valid range
+  if (now < timebounds.minTime) {
+    return false // Too early
+  }
+  
+  if (timebounds.maxTime > 0 && now > timebounds.maxTime) {
+    return false // Too late (maxTime of 0 means no upper limit)
+  }
+  
+  return true
+}
+
+/**
+ * Get timebounds from a transaction
+ */
+export function getTransactionTimebounds(tx: Transaction): TransactionTimebounds | null {
+  try {
+    const timebounds = tx.timebounds
+    if (!timebounds) return null
+    
+    return {
+      minTime: parseInt(timebounds.minTime, 10),
+      maxTime: parseInt(timebounds.maxTime, 10),
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Common helper to wait for transaction completion
  */
@@ -38,12 +79,32 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
 
 /**
  * Signs and submits a transaction using Freighter
+ * Validates transaction timebounds before submission
  */
 export async function signAndSubmit(
   tx: Transaction,
   handlers: TransactionLifecycleHandlers = {}
 ): Promise<TransactionResult> {
   try {
+    // Check transaction timebounds before proceeding
+    const timebounds = getTransactionTimebounds(tx)
+    if (timebounds && !isTransactionTimeboundsValid(timebounds)) {
+      const now = Math.floor(Date.now() / 1000)
+      let errorMsg = "Transaction timebounds are invalid"
+      
+      if (now < timebounds.minTime) {
+        errorMsg = `Transaction is not yet valid. Valid from ${new Date(timebounds.minTime * 1000).toISOString()}`
+      } else if (timebounds.maxTime > 0 && now > timebounds.maxTime) {
+        errorMsg = `Transaction has expired. Valid until ${new Date(timebounds.maxTime * 1000).toISOString()}`
+      }
+      
+      return {
+        status: "FAILED",
+        txHash: "",
+        error: errorMsg,
+      }
+    }
+
     const net = await getNetworkDetails()
     if (net.networkPassphrase && net.networkPassphrase !== NETWORK_PASSPHRASE) {
       throw new Error(`Freighter is on the wrong network. Expected: Testnet.`)

@@ -12,6 +12,8 @@ import {
   server,
   signAndSubmit,
   NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
   type TransactionLifecycleHandlers,
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
@@ -147,7 +149,11 @@ export class RewardsClient {
         .setTimeout(30)
         .build()
 
-      const response = await server.simulateTransaction(tx)
+      const response = await withTimeout(
+        server.simulateTransaction(tx),
+        RPC_TIMEOUT_MS,
+        `RPC timeout: ${method}`
+      )
 
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
@@ -161,7 +167,11 @@ export class RewardsClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await server.getAccount(source)
+    const account = await withTimeout(
+      server.getAccount(source),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: getAccount"
+    )
 
     const tx = new TransactionBuilder(account, {
       fee: "10000",
@@ -171,7 +181,11 @@ export class RewardsClient {
       .setTimeout(30)
       .build()
 
-    return await server.prepareTransaction(tx)
+    return await withTimeout(
+      server.prepareTransaction(tx),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: prepareTransaction"
+    )
   }
 }
 

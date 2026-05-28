@@ -467,10 +467,12 @@ impl QuestContract {
 
         // Emit enrollee added event
         // Event topics: (enrollee_added,)
-        // Event data: (quest_id, enrollee_address)
+        // Event data: (quest_id, enrollee, actor, timestamp, join_mode)
+        let timestamp = env.ledger().timestamp();
+        let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone()),
+            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
         );
 
         Self::bump(&env, quest_id);
@@ -514,10 +516,12 @@ impl QuestContract {
 
         // Emit enrollment event
         // Event topics: (enrollee_added,)
-        // Event data: (quest_id, enrollee_address)
+        // Event data: (quest_id, enrollee, actor, timestamp, join_mode)
+        let timestamp = env.ledger().timestamp();
+        let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone()),
+            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
         );
 
         Self::bump(&env, quest_id);
@@ -672,6 +676,7 @@ impl QuestContract {
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
+        );
         );
 
         Self::bump(&env, quest_id);

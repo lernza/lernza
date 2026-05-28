@@ -1,16 +1,6 @@
 import { Clock, Plus, Target, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { PrefetchLink } from "@/components/PrefetchLink"
-
-type ActivityAction = "enrolled" | "completed" | "created"
-
-interface ActivityEvent {
-  id: string
-  user: string
-  action: ActivityAction
-  questName: string
-  timestamp: number
-}
+import type { ActivityEvent } from "@/lib/mock-data"
 
 interface RecentActivityProps {
   activities: ActivityEvent[]
@@ -47,12 +37,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
                   </div>
                   <div>
                     <p className="text-sm">
-                      <PrefetchLink
-                        to={`/creator/${activity.user}`}
-                        className="font-bold hover:text-primary transition-colors"
-                      >
-                        {activity.user.slice(0, 4)}...{activity.user.slice(-4)}
-                      </PrefetchLink>{" "}
+                      <span className="font-bold">{activity.user}</span>{" "}
                       {isEnrolled
                         ? "enrolled in"
                         : isCompleted

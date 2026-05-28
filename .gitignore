@@ -1,45 +1,24 @@
 # Rust
-target/
-contracts/**/test_snapshots/
-
-# Rust backup files produced by rustfmt
-*.rs.bk
+target
 
 # Stellar
 .soroban
 .stellar
 
 # Frontend
-node_modules/
-frontend/node_modules/
-frontend/dist/
-frontend/.vercel/
-
-# TypeScript incremental build info
-*.tsbuildinfo
+frontend/node_modules
+frontend/dist
 
 # OS
 .DS_Store
 
 # IDE
-.idea/
-.vscode/
-.claude/
+.idea
+.vscode
 
 # Environment
 .env
 .env.local
 pr.md
 issue.md
-
-# Log files and CI output dumps
-*.log
-clippy_output.txt
-
-# Windows installer binaries
-*.exe
-
-# Generated contract bindings (regenerated from WASM via pnpm generate:bindings)
-frontend/src/lib/contracts/generated/
-
-contracts/quest/test_snapshots/test/*
+prerror.md

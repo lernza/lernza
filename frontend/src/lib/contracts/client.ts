@@ -1,5 +1,5 @@
 import { rpc, Transaction } from "@stellar/stellar-sdk"
-import { signTransaction, getNetworkDetails } from "@stellar/freighter-api"
+import { signTransaction, getNetworkDetails, getPublicKey } from "@stellar/freighter-api"
 
 export const SOROBAN_RPC_URL =
   import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
@@ -117,9 +117,18 @@ export async function signAndSubmit(
     if (typeof result === "object" && result !== null && "signedTxXdr" in result) {
       const { signedTxXdr } = result
       // Convert to Transaction Envelope XDR string for safety
-      const submitResponse = await server.sendTransaction(
-        new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
-      )
+      const signedTx = new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
+      
+      const currentAddress = await getPublicKey()
+      if (signedTx.source !== currentAddress) {
+        return {
+          status: "FAILED",
+          txHash: "",
+          error: "Account changed after signing. Please re-confirm.",
+        }
+      }
+
+      const submitResponse = await server.sendTransaction(signedTx)
 
       // The sendTransaction status was wrongly check for SUCCESS previously.
       // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
@@ -140,6 +149,24 @@ export async function signAndSubmit(
             txHash: submitResponse.hash,
             error: "Transaction failed after submission",
           }
+        }
+      } else if (submitResponse.status === "DUPLICATE") {
+        return {
+          status: "FAILED",
+          txHash: submitResponse.hash,
+          error: "This transaction is a duplicate. Please wait a moment or try again.",
+        }
+      } else if (submitResponse.status === "TRY_AGAIN_LATER") {
+        return {
+          status: "FAILED",
+          txHash: submitResponse.hash,
+          error: "Network is busy. Please try again later.",
+        }
+      } else if (submitResponse.status === "ERROR") {
+        return {
+          status: "FAILED",
+          txHash: submitResponse.hash,
+          error: "Transaction error. Please contact support or check your inputs.",
         }
       } else {
         return {

@@ -1,5 +1,4 @@
 import React, { useState, Suspense } from "react"
-import { useNavigate } from "react-router-dom"
 import {
   Plus,
   Users,
@@ -8,208 +7,46 @@ import {
   ChevronRight,
   Wallet,
   Sparkles,
+  Search,
   LayoutDashboard,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { PrefetchLink } from "@/components/PrefetchLink"
-import { useContractData } from "@/hooks/use-async-data"
-import { EmptyState } from "@/components/ui/async-states"
-import { SkeletonQuestList } from "@/components/ui/skeleton"
-import { SmartError } from "@/components/error-states"
 import { useWallet } from "@/hooks/use-wallet"
-import { questClient } from "@/lib/contracts/quest"
-import { milestoneClient } from "@/lib/contracts/milestone"
-import { rewardsClient } from "@/lib/contracts/rewards"
+import {
+  MOCK_QUESTS,
+  MOCK_MILESTONES,
+  MOCK_COMPLETIONS,
+  MOCK_PLATFORM_STATS,
+  MOCK_TRENDING_QUESTS,
+  MOCK_USER_STATS,
+  MOCK_RECENT_ACTIVITY,
+  MOCK_EARNINGS_HISTORY,
+} from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
+import { PlatformStats } from "./dashboard/platform-stats"
 import { PersonalProgress } from "./dashboard/personal-progress"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
 
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
-const DASHBOARD_QUEST_PAGE_SIZE = 12
-const TRENDING_QUEST_LIMIT = 2
-const RECENT_ACTIVITY_LIMIT = 5
 
-export function Dashboard() {
-  const navigate = useNavigate()
-  const { connected, connect, shortAddress, address } = useWallet()
+// The first two quests share the same owner — treat them as "owned"
+const MOCK_OWNER = "GBXR...K2YQ"
+
+interface DashboardProps {
+  onSelectQuest: (id: number) => void
+  onCreateQuest: () => void
+}
+
+export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps) {
+  const { connected, connect, shortAddress } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
-  const [preset, setPreset] = useState<
-    "none" | "ending-soon" | "recently-funded" | "recently-verified"
-  >("none")
-
-  // Dashboard data stays refetchable so error-state retry can reload the full view.
-  const {
-    data: dashboardData,
-    isLoading,
-    error: loadError,
-    refetch,
-  } = useContractData(
-    "dashboard",
-    async () => {
-      const publicQuests = await questClient.listPublicQuests(0, DASHBOARD_QUEST_PAGE_SIZE)
-      const [ownedQuests, enrolledQuests] = address
-        ? await Promise.all([
-            questClient.listQuestsByOwner(address),
-            questClient.listQuestsByEnrollee(address),
-          ])
-        : [[], []]
-
-      const accessibleQuests = Array.from(
-        new Map(
-          [...publicQuests, ...ownedQuests, ...enrolledQuests].map(
-            quest => [quest.id, quest] as const
-          )
-        ).values()
-      )
-
-      const previewQuests = Array.from(
-        new Map(
-          [
-            ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-          ].map(quest => [quest.id, quest] as const)
-        ).values()
-      )
-
-      const statsEntries = await Promise.all(
-        previewQuests.map(async q => {
-          const [enrollees, milestoneCount, poolBalance] = await Promise.all([
-            questClient.getEnrollees(q.id),
-            milestoneClient.getMilestoneCount(q.id),
-            rewardsClient.getPoolBalance(q.id),
-          ])
-
-          return [
-            q.id,
-            {
-              enrolleeCount: enrollees.length,
-              milestoneCount: milestoneCount,
-              poolBalance:
-                poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
-                  ? Number.MAX_SAFE_INTEGER
-                  : Number(poolBalance),
-            },
-          ] as const
-        })
-      )
-
-      const questStats = Object.fromEntries(
-        statsEntries.map(([id, stats]) => [
-          id,
-          {
-            enrolleeCount: stats.enrolleeCount,
-            milestoneCount: stats.milestoneCount,
-            poolBalance: stats.poolBalance,
-          },
-        ])
-      )
-      let questCompletions: Record<number, number> = {}
-      let userEarnings = 0n
-      if (address) {
-        const [completionEntries, earnings] = await Promise.all([
-          Promise.all(
-            previewQuests.map(async q => {
-              const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
-              return [q.id, completed] as const
-            })
-          ),
-          rewardsClient.getUserEarnings(address),
-        ])
-        questCompletions = Object.fromEntries(completionEntries)
-        userEarnings = earnings
-      }
-
-      return {
-        publicQuests,
-        ownedQuests,
-        enrolledQuests,
-        accessibleQuests,
-        questStats,
-        questCompletions,
-        userEarnings,
-      }
-    },
-    {
-      enabled: connected,
-      dependencies: [connected, address],
-    }
-  )
-
-  // Extract data or use defaults
-  const {
-    publicQuests = [],
-    ownedQuests = [],
-    enrolledQuests = [],
-    accessibleQuests = [],
-    questStats = {},
-    questCompletions = {},
-    userEarnings = 0n,
-  } = dashboardData || {}
-
-  const filteredQuests =
-    filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
-
-  // Apply preset filters
-  let presetFilteredQuests = filteredQuests
-  const now = Math.floor(Date.now() / 1000)
-
-  if (preset === "ending-soon") {
-    const sevenDaysFromNow = now + 7 * 24 * 60 * 60
-    presetFilteredQuests = filteredQuests.filter(
-      q => q.deadline > 0 && q.deadline > now && q.deadline <= sevenDaysFromNow
-    )
-  } else if (preset === "recently-funded") {
-    const thirtyDaysAgo = now - 30 * 24 * 60 * 60
-    presetFilteredQuests = filteredQuests.filter(q => q.createdAt >= thirtyDaysAgo)
-  } else if (preset === "recently-verified") {
-    presetFilteredQuests = filteredQuests.filter(q => q.verified)
-  }
-
-  const visibleQuests = presetFilteredQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
-
-  const ownedCount = ownedQuests.length
-  const enrolledCount = enrolledQuests.length
-  const milestonesCompleted = (Object.values(questCompletions) as number[]).reduce(
-    (sum: number, count: number) => sum + count,
-    0
-  )
-
-  const personalStats = {
-    totalEarned: Number(userEarnings),
-    questsOwned: ownedCount,
-    questsEnrolled: enrolledCount,
-    milestonesCompleted,
-  }
-
-  const trendingQuests = [...publicQuests]
-    .sort((a, b) => (questStats[b.id]?.enrolleeCount || 0) - (questStats[a.id]?.enrolleeCount || 0))
-    .slice(0, TRENDING_QUEST_LIMIT)
-
-  const recentActivity = accessibleQuests
-    .slice()
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, RECENT_ACTIVITY_LIMIT)
-    .map(ws => ({
-      id: `created-${ws.id}`,
-      user: ws.owner,
-      action: "created" as const,
-      questName: ws.name,
-      timestamp: ws.createdAt * 1000,
-    }))
-
-  const currentMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date())
-  const earningsHistory = [
-    { date: "Start", amount: 0 },
-    { date: currentMonth, amount: Number(userEarnings) },
-  ]
 
   if (!connected) {
     return (
@@ -293,7 +130,13 @@ export function Dashboard() {
     )
   }
 
-  // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
+  // Apply filter
+  const filteredQuests = MOCK_QUESTS.filter(ws => {
+    if (filter === "owned") return ws.owner === MOCK_OWNER
+    if (filter === "enrolled") return ws.owner !== MOCK_OWNER
+    return true
+  })
+
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
       {/* Welcome banner */}
@@ -305,18 +148,14 @@ export function Dashboard() {
               <Sparkles className="h-5 w-5" />
               <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
             </div>
-            <PrefetchLink to={`/creator/${address}`}>
-              <h1 className="hover:text-background/80 text-3xl font-black transition-colors sm:text-4xl">
-                {shortAddress}
-              </h1>
-            </PrefetchLink>
+            <h1 className="text-3xl font-black sm:text-4xl">{shortAddress}</h1>
             <p className="mt-1 text-sm font-bold opacity-70">
-              You have {personalStats.questsEnrolled} active quests
+              You have {MOCK_USER_STATS.questsEnrolled} active quests
             </p>
           </div>
           <Button
             variant="secondary"
-            onClick={() => navigate("/quest/create")}
+            onClick={onCreateQuest}
             className="shimmer-on-hover group flex-shrink-0"
           >
             <Plus className="h-4 w-4" />
@@ -325,13 +164,14 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Platform Stats Overview removed as requested */}
+      {/* Platform Stats Overview */}
+      <PlatformStats stats={MOCK_PLATFORM_STATS} />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
           {/* Personal Stats */}
-          <PersonalProgress stats={personalStats} />
+          <PersonalProgress stats={MOCK_USER_STATS} />
 
           {/* Earnings Chart (Lazy Loaded) */}
           <Suspense
@@ -339,7 +179,7 @@ export function Dashboard() {
               <div className="bg-muted border-border h-[250px] animate-pulse border-[3px] shadow-[6px_6px_0_var(--color-border)]" />
             }
           >
-            <EarningsChart data={earningsHistory} />
+            <EarningsChart data={MOCK_EARNINGS_HISTORY} />
           </Suspense>
 
           {/* Your Quests Section */}
@@ -363,192 +203,133 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Preset Filter Chips */}
-            <div className="mb-5 flex flex-wrap gap-2">
-              {(
-                [
-                  { value: "none", label: "All" },
-                  { value: "ending-soon", label: "Ending Soon" },
-                  { value: "recently-funded", label: "Recently Funded" },
-                  { value: "recently-verified", label: "Recently Verified" },
-                ] as const
-              ).map(p => (
-                <button
-                  key={p.value}
-                  onClick={() => setPreset(p.value)}
-                  className={`border-border border-[2px] px-3 py-1.5 text-xs font-bold shadow-[2px_2px_0_var(--color-border)] transition-all ${
-                    preset === p.value
-                      ? "bg-primary"
-                      : "bg-background hover:bg-secondary hover:shadow-[3px_3px_0_var(--color-border)]"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {loadError && (
-              <div className="mb-5">
-                <SmartError message={loadError} onRetry={() => void refetch()} />
-              </div>
-            )}
-
-            {isLoading && <SkeletonQuestList className="mb-5" count={3} />}
-
             <div className="relative grid gap-5">
-              {visibleQuests.map((quest, i) => {
-                const stats = questStats[quest.id] || {
-                  enrolleeCount: 0,
-                  milestoneCount: 0,
-                  poolBalance: 0,
-                }
-                const totalMilestones = stats.milestoneCount
-                const completedCount = questCompletions[quest.id] || 0
-                const totalReward = stats.poolBalance
-                const earnedReward =
-                  totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
-                const isOwned = !!address && quest.owner === address
+              {filteredQuests.map((ws, i) => {
+                const milestones = MOCK_MILESTONES[ws.id] || []
+                const completions = MOCK_COMPLETIONS[ws.id] || []
+                const totalMilestones = milestones.length
+                const completedCount = new Set(
+                  completions.filter(c => c.completed).map(c => c.milestoneId)
+                ).size
+                const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
+                const earnedReward = milestones
+                  .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
+                  .reduce((sum, m) => sum + m.rewardAmount, 0)
+                const isOwned = ws.owner === MOCK_OWNER
 
                 return (
-                  <PrefetchLink
-                    key={quest.id}
-                    to={`/quest/${quest.id}`}
-                    aria-label={`Open quest ${quest.name}`}
-                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
+                  <Card
+                    key={ws.id}
+                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1}`}
+                    onClick={() => onSelectQuest(ws.id)}
                   >
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="mb-1 flex items-center gap-3">
-                              <CardTitle className="group-hover:text-primary text-base transition-colors">
-                                {quest.name}
-                              </CardTitle>
-                              {completedCount === totalMilestones && totalMilestones > 0 && (
-                                <Badge variant="success" className="gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Complete
-                                </Badge>
-                              )}
-                              <Badge
-                                variant={isOwned ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {isOwned ? "Owner" : "Enrolled"}
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="mb-1 flex items-center gap-3">
+                            <CardTitle className="group-hover:text-primary text-base transition-colors">
+                              {ws.name}
+                            </CardTitle>
+                            {completedCount === totalMilestones && totalMilestones > 0 && (
+                              <Badge variant="success" className="gap-1">
+                                <Sparkles className="h-3 w-3" />
+                                Complete
                               </Badge>
-                            </div>
-                            <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
-                              {quest.description}
-                            </p>
-                          </div>
-                          <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
-                            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-                          <Badge variant="secondary" className="gap-1">
-                            <Users className="h-3 w-3" />
-                            {quest.maxEnrollees ? (
-                              <>
-                                {stats.enrolleeCount}/{quest.maxEnrollees} enrolled (
-                                {Math.max(0, quest.maxEnrollees - stats.enrolleeCount)} left)
-                              </>
-                            ) : (
-                              <>{stats.enrolleeCount} enrolled</>
                             )}
-                          </Badge>
-                          <Badge variant="secondary" className="gap-1">
-                            <Target className="h-3 w-3" />
-                            {stats.milestoneCount} milestones
-                          </Badge>
-                          <Badge variant="default" className="gap-1">
-                            <Coins className="h-3 w-3" />
-                            {formatTokens(stats.poolBalance)} USDC
-                          </Badge>
+                            <Badge
+                              variant={isOwned ? "default" : "secondary"}
+                              className="text-[10px]"
+                            >
+                              {isOwned ? "Owner" : "Enrolled"}
+                            </Badge>
+                          </div>
+                          <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                            {ws.description}
+                          </p>
                         </div>
+                        <div className="bg-secondary border-border group-hover:bg-primary ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] transition-all group-hover:shadow-[2px_2px_0_var(--color-border)]">
+                          <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                        <Badge variant="secondary" className="gap-1">
+                          <Users className="h-3 w-3" />
+                          {ws.enrolleeCount} enrolled
+                        </Badge>
+                        <Badge variant="secondary" className="gap-1">
+                          <Target className="h-3 w-3" />
+                          {ws.milestoneCount} milestones
+                        </Badge>
+                        <Badge variant="default" className="gap-1">
+                          <Coins className="h-3 w-3" />
+                          {formatTokens(ws.poolBalance)} USDC
+                        </Badge>
+                      </div>
 
-                        {totalMilestones > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={completedCount}
-                                max={totalMilestones}
-                                className="flex-1"
-                              />
-                              <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                                {completedCount}/{totalMilestones}
+                      {totalMilestones > 0 && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Progress
+                              value={completedCount}
+                              max={totalMilestones}
+                              className="flex-1"
+                            />
+                            <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
+                              {completedCount}/{totalMilestones}
+                            </span>
+                          </div>
+                          {earnedReward > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-muted-foreground text-xs font-bold">
+                                Earned so far
+                              </span>
+                              <span className="text-xs font-black text-green-700">
+                                +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
                               </span>
                             </div>
-                            {earnedReward > 0 && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground text-xs font-bold">
-                                  Earned so far
-                                </span>
-                                <span className="text-xs font-black text-green-700">
-                                  +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </PrefetchLink>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>
 
-            {filteredQuests.length > visibleQuests.length && !isLoading && !loadError && (
-              <p className="text-muted-foreground mt-4 text-xs font-bold">
-                Showing the first {visibleQuests.length} quests to keep dashboard loading fast.
-              </p>
-            )}
-
-            {presetFilteredQuests.length === 0 && !isLoading && !loadError && (
-              <div className="mt-5">
-                <EmptyState
-                  variant="quests"
-                  illustration="dashboard"
-                  title={
-                    preset !== "none"
-                      ? `No ${preset.replace("-", " ")} quests`
-                      : filter === "all"
-                        ? "No quests yet"
-                        : `No ${filter} quests`
-                  }
-                  description={
-                    preset !== "none"
-                      ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
-                      : filter === "all"
-                        ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                        : filter === "owned"
-                          ? "You haven't created any quests yet. Start one to incentivize learners."
-                          : "You haven't enrolled in any quests yet. Browse available quests to get started."
-                  }
-                  action={
-                    filter === "all" || filter === "owned"
-                      ? {
-                          label: "Create Quest",
-                          onClick: () => navigate("/quest/create"),
-                        }
-                      : undefined
-                  }
-                />
-              </div>
+            {filteredQuests.length === 0 && (
+              <Card className="animate-fade-in-up mt-5">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="bg-primary border-border mb-6 flex h-16 w-16 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+                    <Search className="h-6 w-6" />
+                  </div>
+                  <h3 className="mb-2 text-lg font-black">
+                    {filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                  </h3>
+                  <p className="text-muted-foreground mb-6 max-w-sm text-sm">
+                    {filter === "all"
+                      ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                      : filter === "owned"
+                        ? "You haven't created any quests yet. Start one to incentivize learners."
+                        : "You haven't enrolled in any quests yet. Browse available quests to get started."}
+                  </p>
+                  {filter === "all" || filter === "owned" ? (
+                    <Button onClick={onCreateQuest} className="shimmer-on-hover">
+                      <Plus className="h-4 w-4" />
+                      Create Quest
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>
 
         {/* Right Column (Trending & Recent Activity) */}
         <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests
-            quests={trendingQuests}
-            statsByQuest={questStats}
-            onSelectQuest={id => navigate(`/quest/${id}`)}
-          />
-          <RecentActivity activities={recentActivity} />
+          <TrendingQuests quests={MOCK_TRENDING_QUESTS} onSelectQuest={onSelectQuest} />
+          <RecentActivity activities={MOCK_RECENT_ACTIVITY} />
         </div>
       </div>
     </div>

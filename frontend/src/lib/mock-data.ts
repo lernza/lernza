@@ -1,38 +1,23 @@
-import { Visibility, QuestStatus } from "./contract-types"
+// Mock data for UI development. Replaced by contract calls in production.
 
-// ─── Mock-data types ─────────────────────────────────────────────────────────
-// These mirror the real contract types but use plain `number` for reward
-// amounts (the real on-chain types use `bigint`). They exist only to feed
-// fixtures during local development.
-
-export interface MockQuestInfo {
+export interface Quest {
   id: number
   owner: string
   name: string
   description: string
-  category: string
-  tags: string[]
   tokenAddr: string
+  enrolleeCount: number
+  milestoneCount: number
+  poolBalance: number
   createdAt: number
-  visibility: Visibility
-  status: QuestStatus
-  deadline: number
-  maxEnrollees?: number
-  verified: boolean
 }
 
-export interface MockMilestoneInfo {
+export interface Milestone {
   id: number
   questId: number
   title: string
   description: string
   rewardAmount: number
-}
-
-export interface QuestStats {
-  enrolleeCount: number
-  milestoneCount: number
-  poolBalance: number
 }
 
 export interface MilestoneCompletion {
@@ -48,54 +33,45 @@ export interface UserStats {
   milestonesCompleted: number
 }
 
-// ─── Fixtures ────────────────────────────────────────────────────────────────
-
-const makeQuest = (
-  partial: Pick<MockQuestInfo, "id" | "owner" | "name" | "description" | "createdAt">
-): MockQuestInfo => ({
-  category: "Programming",
-  tags: [],
-  tokenAddr: "USDC...STELLAR",
-  visibility: Visibility.Public,
-  status: QuestStatus.Active,
-  deadline: 0,
-  verified: false,
-  ...partial,
-})
-
-export const MOCK_QUESTS: MockQuestInfo[] = [
-  makeQuest({
+export const MOCK_QUESTS: Quest[] = [
+  {
     id: 0,
     owner: "GBXR...K2YQ",
     name: "Learn to Code with Alex",
     description:
       "Teaching my brother the fundamentals of programming. From basic syntax to deploying a real application.",
+    tokenAddr: "USDC...STELLAR",
+    enrolleeCount: 3,
+    milestoneCount: 5,
+    poolBalance: 2500,
     createdAt: 1710000000,
-  }),
-  makeQuest({
+  },
+  {
     id: 1,
     owner: "GBXR...K2YQ",
     name: "Stellar Development Bootcamp",
     description:
       "A structured path to becoming a Stellar developer. Smart contracts, Soroban, DeFi.",
+    tokenAddr: "USDC...STELLAR",
+    enrolleeCount: 8,
+    milestoneCount: 10,
+    poolBalance: 10000,
     createdAt: 1709500000,
-  }),
-  makeQuest({
+  },
+  {
     id: 2,
     owner: "GCMN...P8TL",
     name: "Design Fundamentals",
     description: "Learn UI/UX design principles. From Figma basics to shipping a design system.",
+    tokenAddr: "USDC...STELLAR",
+    enrolleeCount: 5,
+    milestoneCount: 4,
+    poolBalance: 1200,
     createdAt: 1709800000,
-  }),
+  },
 ]
 
-export const MOCK_QUEST_STATS: Record<number, QuestStats> = {
-  0: { enrolleeCount: 3, milestoneCount: 5, poolBalance: 2500 },
-  1: { enrolleeCount: 8, milestoneCount: 10, poolBalance: 10000 },
-  2: { enrolleeCount: 5, milestoneCount: 4, poolBalance: 1200 },
-}
-
-export const MOCK_MILESTONES: Record<number, MockMilestoneInfo[]> = {
+export const MOCK_MILESTONES: Record<number, Milestone[]> = {
   0: [
     {
       id: 0,
@@ -196,7 +172,7 @@ export const MOCK_PLATFORM_STATS: PlatformStats = {
   tokensDistributed: 125000,
 }
 
-// Reuse some existing quests for trending fixtures.
+// We can just reuse some of the existing quests for trending
 export const MOCK_TRENDING_QUESTS = [MOCK_QUESTS[1], MOCK_QUESTS[0]]
 
 export const MOCK_RECENT_ACTIVITY: ActivityEvent[] = [

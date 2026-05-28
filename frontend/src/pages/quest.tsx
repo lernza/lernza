@@ -1,1143 +1,66 @@
-import { useCallback, useMemo, useState, useEffect, lazy, Suspense, type ChangeEvent } from "react"
-import { useNavigate, useParams } from "react-router-dom"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
+import { useState } from "react"
 import {
   ArrowLeft,
+  Plus,
+  Users,
+  Target,
+  Coins,
   CheckCircle2,
+  Circle,
+  UserPlus,
+  Sparkles,
   ChevronDown,
   ChevronUp,
-  Circle,
-  Coins,
-  Check,
-  Loader2,
-  Lock,
-  Plus,
-  Sparkles,
-  Target,
-  UserPlus,
-  Users,
-  X,
-  Download,
-  Upload,
-  Clock,
-  Copy,
-  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { FieldError, FormLabel } from "@/components/ui/form-field"
-import { SmartError, QuestNotFound } from "@/components/error-states"
-import { Skeleton, SkeletonMilestoneList, SkeletonStatsRow } from "@/components/ui/skeleton"
-import {
-  cn,
-  formatDeadlineDate,
-  formatDeadlineLabel,
-  formatTokens,
-  getSecondsRemaining,
-  isExpiredDeadline,
-  isExpiringSoon,
-  setPageMeta,
-  resetPageMeta,
-} from "@/lib/utils"
 import { useInView, useCountUp } from "@/hooks/use-animations"
+import { MOCK_QUESTS, MOCK_MILESTONES, MOCK_ENROLLEES, MOCK_COMPLETIONS } from "@/lib/mock-data"
+import { formatTokens } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { useTransactionQueue, type TransactionQueuePhase } from "@/hooks/use-transaction-queue"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
-import { PageMetadata } from "@/components/page-metadata"
-import { getQuestUrl } from "@/lib/app-url"
-// Lazy-loaded: ships in its own chunk, not the initial bundle
-const TransactionConfirmDialog = lazy(() =>
-  import(/* @vite-chunk-include */ "@/components/transaction-confirm-dialog").then(m => ({
-    default: m.TransactionConfirmDialog,
-  }))
-)
-const ImportQuestDialog = lazy(() =>
-  import(/* @vite-chunk-include */ "@/components/import-quest-dialog").then(m => ({
-    default: m.ImportQuestDialog,
-  }))
-)
-import type { TransactionDetails } from "@/components/transaction-confirm-dialog"
-import type { ImportedQuest } from "@/components/import-quest-dialog"
-import { PrefetchLink } from "@/components/PrefetchLink"
-import { useWallet } from "@/hooks/use-wallet"
-import {
-  useQuest,
-  useMilestones,
-  useEnrollees,
-  useRewardPool,
-  useQuestAuthority,
-} from "@/hooks/use-quest-data"
-import { questClient, QuestStatus, Visibility } from "@/lib/contracts/quest"
-import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone-client"
-import { rewardsClient } from "@/lib/contracts/rewards"
-import { useTransactionAction } from "@/hooks/use-transaction-action"
-import { validateQuestId, isValidQuestId } from "@/lib/quest-validation"
-import { QuestValidationError } from "@/components/quest-validation-states"
 
-const milestoneFormSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-  description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
-  rewardAmount: z
-    .string()
-    .min(1, "Reward amount is required")
-    .refine(v => Number.isFinite(Number(v)) && Number(v) >= 0, "Must be a non-negative number"),
-  requiresPrevious: z.boolean().default(false),
-})
-type MilestoneFormValues = z.infer<typeof milestoneFormSchema>
-type MilestoneFormInput = z.input<typeof milestoneFormSchema>
-
-const enrolleeFormSchema = z.object({
-  address: z
-    .string()
-    .min(1, "Stellar address is required")
-    .regex(/^G[A-Z2-7]{55}$/, "Must be a valid Stellar public key (starts with G)"),
-})
-type EnrolleeFormValues = z.infer<typeof enrolleeFormSchema>
+interface QuestViewProps {
+  questId: number
+  onBack: () => void
+}
 
 type Tab = "milestones" | "enrollees"
 
-interface CompletionRecord {
-  milestoneId: number
-  enrollee: string
-  completed: true
-}
-
-type QuestPendingTransactionType = "enroll" | "add_enrollee" | "verify_payout"
-
-interface QuestPendingTransactionMeta {
-  enrollee?: string
-  milestoneId?: number
-  amount?: bigint
-}
-
-const EMPTY_MILESTONES: MilestoneInfo[] = []
-const EMPTY_ENROLLEES: string[] = []
-const EMPTY_COMPLETIONS: CompletionRecord[] = []
-const MAX_IMPORT_FILE_SIZE_BYTES = 1024 * 1024
-//
-const questImportSchema = z.object({
-  name: z.string().min(1, "Name is required").max(64, "Max 64 characters"),
-  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
-  milestones: z
-    .array(
-      z.object({
-        title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-        description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
-        rewardAmount: z.number().positive("Must be greater than 0"),
-        requiresPrevious: z.boolean().default(false),
-      })
-    )
-    .min(1, "At least one milestone is required"),
-})
-
-const QUEST_ERROR_MESSAGES: Record<number, string> = {
-  4: "You are already enrolled in this quest.",
-  7: "This quest is already full.",
-  8: "This quest has been archived.",
-  11: "This quest is invite only.",
-  13: "Enrollment is closed for this quest.",
-  14: "This quest's deadline has passed.",
-}
-
-const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
-  12: "This learner is not enrolled in the quest.",
-  14: "Complete previous milestone first.",
-}
-
-function getContractErrorCode(message: string): number | null {
-  const match = message.match(/Error\(Contract, #(\d+)\)/)
-  return match ? Number(match[1]) : null
-}
-
-function mapContractError(message: string, knownMessages: Record<number, string>): string {
-  const code = getContractErrorCode(message)
-  return code && knownMessages[code] ? knownMessages[code] : message
-}
-
-function toSafeNumber(value: bigint): number {
-  return value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value)
-}
-
-function formatCountdown(deadline: number, nowMs: number): string {
-  const remaining = getSecondsRemaining(deadline, nowMs)
-  const hours = Math.floor(remaining / 3600)
-  const minutes = Math.floor((remaining % 3600) / 60)
-  const seconds = remaining % 60
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds
-    .toString()
-    .padStart(2, "0")}`
-}
-
-// Helper function to truncate addresses
-const truncateAddress = (address: string) => {
-  if (!address) return ""
-  return `${address.slice(0, 6)}...${address.slice(-4)}`
-}
-
-function getPendingLabel(phase: TransactionQueuePhase): string {
-  return phase === "confirming" ? "Confirming..." : "Awaiting Signature..."
-}
-
-export function QuestView() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-
-  // Call all hooks BEFORE any conditional returns
+export function QuestView({ questId, onBack }: QuestViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
   const [expandedMilestone, setExpandedMilestone] = useState<number | null>(null)
-  const [showAddEnrollee, setShowAddEnrollee] = useState(false)
-  const [addPhase, setAddPhase] = useState<"idle" | "submitting" | "done" | "error">("idle")
-  const [showMilestoneForm, setShowMilestoneForm] = useState(false)
 
+  const ws = MOCK_QUESTS.find(w => w.id === questId)
+  const milestones = MOCK_MILESTONES[questId] || []
+  const enrollees = MOCK_ENROLLEES[questId] || []
+  const completions = MOCK_COMPLETIONS[questId] || []
   const { toasts, addToast, removeToast } = useToast()
-  const { address, isSupportedNetwork } = useWallet()
-
-  const addEnrolleeTx = useTransactionAction()
-  const enrollTx = useTransactionAction()
-  const createMilestoneTx = useTransactionAction()
-  const verifyPayoutTx = useTransactionAction()
-  const removeEnrolleeTx = useTransactionAction()
-  const leaveQuestTx = useTransactionAction()
-  const archiveQuestTx = useTransactionAction()
-  const transactionQueue = useTransactionQueue<
-    QuestPendingTransactionType,
-    QuestPendingTransactionMeta
-  >()
-  const [nowMs, setNowMs] = useState(Date.now())
-
-  // Transaction confirmation dialog state
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
-  const [pendingTransaction, setPendingTransaction] = useState<{
-    type: "create_milestone" | "verify_payout" | "archive_quest" | "remove_enrollee" | "leave_quest"
-    details: TransactionDetails
-    execute: () => Promise<void>
-  } | null>(null)
-
-  // Import quest state
-  const [showImportDialog, setShowImportDialog] = useState(false)
-  const [isImportingFile, setIsImportingFile] = useState(false)
-  const [importedData, setImportedData] = useState<ImportedQuest | null>(null)
-
-  const milestoneForm = useForm<MilestoneFormInput, undefined, MilestoneFormValues>({
-    resolver: zodResolver(milestoneFormSchema),
-    defaultValues: { title: "", description: "", rewardAmount: "", requiresPrevious: false },
-  })
-
-  const enrolleeForm = useForm<EnrolleeFormValues>({
-    resolver: zodResolver(enrolleeFormSchema),
-    defaultValues: { address: "" },
-  })
-
-  // Validate quest ID
-  const validationState = validateQuestId(id)
-
-  // Use individual hooks for quest data - must be called before any returns
-  const questId = isValidQuestId(validationState) ? validationState.questId : -1
-  const questData = useQuest(questId)
-  const milestonesData = useMilestones(questId)
-  const enrolleesData = useEnrollees(questId)
-  const poolBalanceData = useRewardPool(questId)
-  const questAuthorityData = useQuestAuthority(questId)
-
-  // Combined loading state: true on initial load OR while any background
-  // refetch is in-flight (e.g. after a transaction). This keeps the skeleton
-  // as the single source of truth — no stale data flash between a transaction
-  // completing and the updated data arriving.
-  const isLoading =
-    questData.isLoading ||
-    milestonesData.isLoading ||
-    enrolleesData.isLoading ||
-    poolBalanceData.isLoading ||
-    questAuthorityData.isLoading
-
-  // Background refetch in-flight (post-transaction). Used to suppress
-  // interactive actions while data is refreshing without re-showing the
-  // full-page skeleton.
-  const isRefetching =
-    questData.isFetching ||
-    milestonesData.isFetching ||
-    enrolleesData.isFetching ||
-    poolBalanceData.isFetching ||
-    questAuthorityData.isFetching
-
-  // Use the first error that exists
-  const loadError =
-    questData.error ||
-    milestonesData.error ||
-    enrolleesData.error ||
-    poolBalanceData.error ||
-    questAuthorityData.error
-
-  // Refetch function that refreshes all data
-
-  // Completions data - needs to be fetched separately since it depends on both milestones and enrollees
-  const [completions, setCompletions] = useState<CompletionRecord[]>(EMPTY_COMPLETIONS)
-
-  // Fetch completions when milestones and enrollees are available
-  const fetchCompletions = useCallback(async () => {
-    if (milestonesData.data && enrolleesData.data) {
-      try {
-        const ms = milestonesData.data
-        const en = enrolleesData.data
-        const completionEntries = await Promise.all(
-          en.flatMap(enrollee =>
-            ms.map(async milestone => {
-              const completed = await milestoneClient.isCompleted(questId, milestone.id, enrollee)
-              return completed
-                ? ({
-                    milestoneId: milestone.id,
-                    enrollee,
-                    completed: true,
-                  } satisfies CompletionRecord)
-                : null
-            })
-          )
-        )
-
-        const filteredCompletions = completionEntries.filter(
-          (entry): entry is CompletionRecord => entry !== null
-        )
-        setCompletions(filteredCompletions)
-      } catch {
-        // silently ignore completion fetch errors
-      }
-    } else {
-      setCompletions(EMPTY_COMPLETIONS)
-    }
-  }, [questId, milestonesData.data, enrolleesData.data])
-
-  useEffect(() => {
-    fetchCompletions()
-  }, [fetchCompletions])
-
-  // Refetch function that refreshes all data
-  const refetch = useCallback(async () => {
-    await Promise.all([
-      questData.refetch(),
-      milestonesData.refetch(),
-      enrolleesData.refetch(),
-      poolBalanceData.refetch(),
-      questAuthorityData.refetch(),
-      fetchCompletions(),
-    ])
-  }, [
-    questData,
-    milestonesData,
-    enrolleesData,
-    poolBalanceData,
-    questAuthorityData,
-    fetchCompletions,
-  ])
-
-  // Get raw data
-  const quest = questData.data
-  const milestones = milestonesData.data ?? EMPTY_MILESTONES
-  const baseEnrollees = enrolleesData.data ?? EMPTY_ENROLLEES
-  const basePoolBalance = poolBalanceData.data ?? BigInt(0)
-
-  const pendingEnrollmentTransactions = useMemo(
-    () =>
-      transactionQueue.transactions.filter(
-        transaction =>
-          (transaction.type === "enroll" || transaction.type === "add_enrollee") &&
-          transaction.meta.enrollee
-      ),
-    [transactionQueue.transactions]
-  )
-  const pendingVerificationTransactions = useMemo(
-    () =>
-      transactionQueue.transactions.filter(
-        transaction => transaction.type === "verify_payout" && transaction.meta.enrollee
-      ),
-    [transactionQueue.transactions]
-  )
-
-  const enrollees = useMemo(() => {
-    const merged = [...baseEnrollees]
-    for (const transaction of pendingEnrollmentTransactions) {
-      const enrollee = transaction.meta.enrollee
-      if (enrollee && !merged.includes(enrollee)) {
-        merged.push(enrollee)
-      }
-    }
-    return merged
-  }, [baseEnrollees, pendingEnrollmentTransactions])
-
-  const completionsWithOptimisticUpdates = useMemo(() => {
-    const merged = [...completions]
-    for (const transaction of pendingVerificationTransactions) {
-      const enrollee = transaction.meta.enrollee
-      const milestoneId = transaction.meta.milestoneId
-      if (
-        enrollee &&
-        milestoneId !== undefined &&
-        !merged.some(
-          completion => completion.enrollee === enrollee && completion.milestoneId === milestoneId
-        )
-      ) {
-        merged.push({
-          milestoneId,
-          enrollee,
-          completed: true,
-        })
-      }
-    }
-    return merged
-  }, [completions, pendingVerificationTransactions])
-
-  const poolBalance =
-    basePoolBalance -
-    pendingVerificationTransactions.reduce(
-      (sum, transaction) => sum + (transaction.meta.amount ?? 0n),
-      0n
-    )
-
-  const pendingEnrollmentPhaseByAddress = new Map<string, TransactionQueuePhase>()
-  for (const transaction of pendingEnrollmentTransactions) {
-    if (transaction.meta.enrollee) {
-      pendingEnrollmentPhaseByAddress.set(transaction.meta.enrollee, transaction.phase)
-    }
-  }
-
-  const isOwner = !!address && quest?.owner === address
-  const isEnrolled = !!address && enrollees.includes(address)
-  const isArchived = quest?.status === QuestStatus.Archived
-  const isExpired = quest ? isExpiredDeadline(quest.deadline, nowMs) : false
-  const expiringSoon = quest ? isExpiringSoon(quest.deadline, nowMs) : false
-  const deadlineLabel = quest ? formatDeadlineLabel(quest.deadline, nowMs) : "No deadline"
-  const deadlineDate = quest && quest.deadline > 0 ? formatDeadlineDate(quest.deadline) : null
-  const countdownLabel = quest && expiringSoon ? formatCountdown(quest.deadline, nowMs) : null
-
-  const viewerCompletedMilestoneIds = new Set(
-    completionsWithOptimisticUpdates
-      .filter(completion => completion.enrollee === address)
-      .map(completion => completion.milestoneId)
-  )
-  const completedMilestones = isOwner
-    ? new Set(completionsWithOptimisticUpdates.map(completion => completion.milestoneId)).size
-    : viewerCompletedMilestoneIds.size
-  const earnedReward = isOwner
-    ? 0
-    : milestones
-        .filter(milestone => viewerCompletedMilestoneIds.has(milestone.id))
-        .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
-
-  const isComplete = completedMilestones === milestones.length && milestones.length > 0
 
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  // We need to call useCountUp before any conditional returns
+  const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
+  const completedMilestones = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
+    .size
+  const isComplete = completedMilestones === milestones.length && milestones.length > 0
+  const earnedReward = milestones
+    .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
+    .reduce((sum, m) => sum + m.rewardAmount, 0)
+
   const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)
-  const poolBalanceCount = useCountUp(toSafeNumber(poolBalance), 800, statsInView)
+  const poolBalance = useCountUp(ws?.poolBalance ?? 0, 800, statsInView)
+  const totalRewardCount = useCountUp(totalReward, 800, statsInView)
 
-  // Calculate totalReward early so we can use it in useCountUp
-  const totalRewardEarly = milestones.reduce(
-    (sum, milestone) => sum + toSafeNumber(milestone.rewardAmount),
-    0
-  )
-  const totalRewardCount = useCountUp(totalRewardEarly, 800, statsInView)
-  const selfEnrollmentPhase = address ? pendingEnrollmentPhaseByAddress.get(address) : undefined
-
-  // Define all callbacks BEFORE any conditional returns
-
-  const resetMilestoneForm = useCallback(() => {
-    milestoneForm.reset()
-    createMilestoneTx.reset()
-    setShowMilestoneForm(false)
-  }, [createMilestoneTx, milestoneForm])
-
-  const closeAddEnrollee = useCallback(() => {
-    setShowAddEnrollee(false)
-    enrolleeForm.reset()
-    addEnrolleeTx.reset()
-    setAddPhase("idle")
-  }, [addEnrolleeTx, enrolleeForm])
-
-  // Update page title and OG/Twitter meta tags when quest data is available.
-  // resetPageMeta runs as cleanup so navigating away restores the site defaults.
-  useEffect(() => {
-    if (!quest) return
-    setPageMeta(
-      `Quest: ${quest.name} on Lernza`,
-      quest.description ||
-        "Complete milestones and earn token rewards on the Lernza learn-to-earn platform."
-    )
-    return resetPageMeta
-  }, [quest])
-
-  useEffect(() => {
-    const deadline = quest?.deadline
-    if (!deadline || deadline <= 0 || isExpiredDeadline(deadline)) {
-      return
-    }
-
-    const interval = window.setInterval(
-      () => {
-        setNowMs(Date.now())
-      },
-      expiringSoon ? 1000 : 60_000
-    )
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [expiringSoon, quest?.deadline])
-
-  const isMilestoneCompletedBy = useCallback(
-    (milestoneId: number, enrollee: string) =>
-      completionsWithOptimisticUpdates.some(
-        completion =>
-          completion.completed &&
-          completion.milestoneId === milestoneId &&
-          completion.enrollee === enrollee
-      ),
-    [completionsWithOptimisticUpdates]
-  )
-
-  const isMilestoneUnlockedForEnrollee = useCallback(
-    (milestone: MilestoneInfo, enrollee: string) =>
-      !milestone.requiresPrevious ||
-      milestone.id === 0 ||
-      isMilestoneCompletedBy(milestone.id - 1, enrollee),
-    [isMilestoneCompletedBy]
-  )
-
-  const getEligibleEnrollees = useCallback(
-    (milestone: MilestoneInfo) =>
-      enrollees.filter(
-        enrollee =>
-          !isMilestoneCompletedBy(milestone.id, enrollee) &&
-          isMilestoneUnlockedForEnrollee(milestone, enrollee)
-      ),
-    [enrollees, isMilestoneCompletedBy, isMilestoneUnlockedForEnrollee]
-  )
-
-  const getQuestErrorMessage = useCallback(
-    (message: string) => mapContractError(message, QUEST_ERROR_MESSAGES),
-    []
-  )
-
-  const getMilestoneErrorMessage = useCallback(
-    (message: string) => mapContractError(message, MILESTONE_ERROR_MESSAGES),
-    []
-  )
-
-  const handleCreateMilestone = useCallback(
-    async (values: MilestoneFormValues) => {
-      if (!address) {
-        addToast("Connect your wallet first.", "error")
-        return
-      }
-      if (isArchived || isExpired) {
-        addToast("Archived or expired quests cannot be changed.", "error")
-        return
-      }
-
-      const reward = Number(values.rewardAmount)
-
-      setPendingTransaction({
-        type: "create_milestone",
-        details: {
-          actionName: "Create Milestone",
-          fromAddress: address,
-          estimatedFee: "0.002",
-          tokenAmount: BigInt(reward),
-          tokenSymbol: "USDC",
-          description: `Create milestone "${values.title}" with ${reward} USDC reward.`,
-        },
-        execute: async () => {
-          try {
-            await createMilestoneTx.run(async () => {
-              const result = await milestoneClient.createMilestone(
-                address,
-                questId,
-                values.title,
-                values.description,
-                BigInt(reward),
-                values.requiresPrevious && milestones.length > 0
-              )
-              if (result.status !== "SUCCESS") {
-                throw new Error(
-                  getMilestoneErrorMessage(result.error ?? "Transaction failed. Please try again.")
-                )
-              }
-              return result
-            })
-
-            await refetch()
-            addToast("Milestone created successfully!", "success")
-            resetMilestoneForm()
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : "Unknown error"
-            addToast(`Failed to create milestone: ${message}`, "error")
-          }
-        },
-      })
-      setShowConfirmDialog(true)
-    },
-    [
-      address,
-      addToast,
-      createMilestoneTx,
-      getMilestoneErrorMessage,
-      milestones.length,
-      questId,
-      refetch,
-      resetMilestoneForm,
-      isArchived,
-      isExpired,
-    ]
-  )
-
-  const handleAddEnrollee = useCallback(
-    async (values: EnrolleeFormValues) => {
-      if (!address) {
-        addToast("Connect your wallet first.", "error")
-        return
-      }
-      if (isArchived || isExpired) {
-        addToast("Archived or expired quests do not accept new learners.", "error")
-        return
-      }
-
-      setAddPhase("submitting")
-      const queuedTransactionId = transactionQueue.enqueue({
-        type: "add_enrollee",
-        label: "Add enrollee",
-        phase: "signing",
-        meta: { enrollee: values.address },
-      })
-
-      try {
-        await addEnrolleeTx.run(async ({ onSubmitted }) => {
-          const result = await questClient.addEnrollee(address, questId, values.address, {
-            onSubmitted: txHash => {
-              transactionQueue.update(queuedTransactionId, {
-                phase: "confirming",
-                txHash,
-              })
-              onSubmitted?.(txHash)
-            },
-          })
-          if (result.status !== "SUCCESS") {
-            throw new Error(
-              getQuestErrorMessage(result.error ?? "Transaction failed. Please try again.")
-            )
-          }
-          return result
-        })
-
-        await refetch()
-        transactionQueue.remove(queuedTransactionId)
-        setAddPhase("done")
-        addToast("Enrollee added successfully.", "success")
-        setTimeout(closeAddEnrollee, 1500)
-      } catch (err: unknown) {
-        transactionQueue.remove(queuedTransactionId)
-        setAddPhase("error")
-        const message = err instanceof Error ? err.message : "Transaction failed. Please try again."
-        enrolleeForm.setError("address", { message })
-      }
-    },
-    [
-      address,
-      addEnrolleeTx,
-      addToast,
-      closeAddEnrollee,
-      enrolleeForm,
-      getQuestErrorMessage,
-      isArchived,
-      isExpired,
-      questId,
-      refetch,
-      transactionQueue,
-    ]
-  )
-
-  const handleEnroll = useCallback(async () => {
-    if (!address) {
-      addToast("Connect your wallet first.", "error")
-      return
-    }
-    if (isArchived || isExpired) {
-      addToast("This quest is no longer accepting enrollments.", "info")
-      return
-    }
-
-    const queuedTransactionId = transactionQueue.enqueue({
-      type: "enroll",
-      label: "Enroll in quest",
-      phase: "signing",
-      meta: { enrollee: address },
-    })
-
-    try {
-      await enrollTx.run(async ({ onSubmitted }) => {
-        const result = await questClient.joinQuest(address, questId, {
-          onSubmitted: txHash => {
-            transactionQueue.update(queuedTransactionId, {
-              phase: "confirming",
-              txHash,
-            })
-            onSubmitted?.(txHash)
-          },
-        })
-        if (result.status !== "SUCCESS") {
-          throw new Error(getQuestErrorMessage(result.error ?? "Enrollment failed."))
-        }
-        return result
-      })
-
-      await refetch()
-      transactionQueue.remove(queuedTransactionId)
-      addToast("Enrollment confirmed.", "success")
-    } catch (err: unknown) {
-      transactionQueue.remove(queuedTransactionId)
-      const message =
-        err instanceof Error
-          ? getQuestErrorMessage(err.message)
-          : "Enrollment failed. Please try again."
-      addToast(message, quest?.visibility === Visibility.Private ? "info" : "error")
-    }
-  }, [
-    address,
-    addToast,
-    enrollTx,
-    getQuestErrorMessage,
-    isArchived,
-    isExpired,
-    quest?.visibility,
-    questId,
-    refetch,
-    transactionQueue,
-  ])
-
-  const handleVerifyAndPayout = useCallback(
-    async (milestone: MilestoneInfo) => {
-      if (!address) {
-        addToast("Connect your wallet first.", "error")
-        return
-      }
-      if (isArchived || isExpired) {
-        addToast("Archived or expired quests cannot verify completions.", "info")
-        return
-      }
-
-      const eligibleEnrollees = getEligibleEnrollees(milestone)
-      const blockedBySequence =
-        milestone.requiresPrevious &&
-        enrollees.some(
-          enrollee =>
-            !isMilestoneCompletedBy(milestone.id, enrollee) &&
-            !isMilestoneUnlockedForEnrollee(milestone, enrollee)
-        )
-
-      if (eligibleEnrollees.length === 0) {
-        addToast(
-          blockedBySequence
-            ? "Complete previous milestone first."
-            : "All eligible learners are already verified for this milestone.",
-          "info"
-        )
-        return
-      }
-
-      const target = eligibleEnrollees[0]
-      setPendingTransaction({
-        type: "verify_payout",
-        details: {
-          actionName: "Verify & Payout",
-          fromAddress: address,
-          toAddress: target,
-          estimatedFee: "0.003",
-          tokenAmount: milestone.rewardAmount,
-          tokenSymbol: "USDC",
-          description: `Verify completion and distribute ${formatTokens(toSafeNumber(milestone.rewardAmount))} USDC to ${truncateAddress(target)}.`,
-        },
-        execute: async () => {
-          const queuedTransactionId = transactionQueue.enqueue({
-            type: "verify_payout",
-            label: "Verify completion",
-            phase: "signing",
-            meta: {
-              enrollee: target,
-              milestoneId: milestone.id,
-              amount: milestone.rewardAmount,
-            },
-          })
-          try {
-            const result = await verifyPayoutTx.run(async ({ onSubmitted }) => {
-              const verifyResult = await milestoneClient.verifyCompletion(
-                address,
-                questId,
-                milestone.id,
-                target,
-                {
-                  onSubmitted: txHash => {
-                    transactionQueue.update(queuedTransactionId, {
-                      phase: "confirming",
-                      txHash,
-                    })
-                    onSubmitted?.(txHash)
-                  },
-                }
-              )
-              if (verifyResult.status !== "SUCCESS") {
-                throw new Error(
-                  getMilestoneErrorMessage(verifyResult.error ?? "Milestone verification failed.")
-                )
-              }
-
-              const payoutAmount = verifyResult.rewardAmount ?? milestone.rewardAmount
-              const payoutResult = await rewardsClient.distributeReward(
-                address,
-                questId,
-                milestone.id,
-                target,
-                payoutAmount,
-                {
-                  onSubmitted: txHash => {
-                    transactionQueue.update(queuedTransactionId, {
-                      phase: "confirming",
-                      txHash,
-                    })
-                    onSubmitted?.(txHash)
-                  },
-                }
-              )
-              if (payoutResult.status !== "SUCCESS") {
-                throw new Error(payoutResult.error ?? "Reward distribution failed.")
-              }
-
-              return { ...payoutResult, payoutAmount }
-            })
-
-            await refetch()
-            transactionQueue.remove(queuedTransactionId)
-            addToast(
-              `Completion verified! ${formatTokens(toSafeNumber(result.payoutAmount))} USDC paid out to learner.`,
-              "success"
-            )
-          } catch (err: unknown) {
-            transactionQueue.remove(queuedTransactionId)
-            const message = err instanceof Error ? err.message : "Verification failed."
-            addToast(message, "error")
-          }
-        },
-      })
-      setShowConfirmDialog(true)
-    },
-    [
-      address,
-      addToast,
-      enrollees,
-      getEligibleEnrollees,
-      getMilestoneErrorMessage,
-      isMilestoneCompletedBy,
-      isMilestoneUnlockedForEnrollee,
-      questId,
-      refetch,
-      transactionQueue,
-      verifyPayoutTx,
-      isArchived,
-      isExpired,
-    ]
-  )
-
-  const handleArchiveQuest = useCallback(async () => {
-    if (!address) {
-      addToast("Connect your wallet first.", "error")
-      return
-    }
-    if (isArchived) {
-      addToast("This quest is already archived.", "info")
-      return
-    }
-
-    setPendingTransaction({
-      type: "archive_quest",
-      details: {
-        actionName: "Archive Quest",
-        fromAddress: address,
-        estimatedFee: "0.001",
-        description:
-          "Archiving a quest is irreversible. It will disable new enrollments and milestone creation forever. Existing progress and historical data will remain visible.",
-      },
-      execute: async () => {
-        try {
-          await archiveQuestTx.run(async () => {
-            const result = await questClient.archiveQuest(address, questId)
-            if (result.status !== "SUCCESS") {
-              throw new Error(result.error ?? "Could not archive quest.")
-            }
-            return result
-          })
-
-          await refetch()
-          addToast("Quest archived. Historical data remains visible.", "success")
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : "Could not archive quest."
-          addToast(message, "error")
-        }
-      },
-    })
-    setShowConfirmDialog(true)
-  }, [address, addToast, archiveQuestTx, isArchived, questId, refetch])
-
-  const handleRemoveEnrollee = useCallback(
-    async (enrollee: string) => {
-      if (!address) {
-        addToast("Connect your wallet first.", "error")
-        return
-      }
-
-      setPendingTransaction({
-        type: "remove_enrollee",
-        details: {
-          actionName: "Remove Enrollee",
-          fromAddress: address,
-          toAddress: enrollee,
-          estimatedFee: "0.001",
-          description: `Remove learner ${truncateAddress(enrollee)} from this quest. They will lose access to progress tracking until re-enrolled.`,
-        },
-        execute: async () => {
-          try {
-            await removeEnrolleeTx.run(async () => {
-              const result = await questClient.removeEnrollee(address, questId, enrollee)
-              if (result.status !== "SUCCESS") {
-                throw new Error(getQuestErrorMessage(result.error ?? "Could not remove enrollee."))
-              }
-              return result
-            })
-
-            await refetch()
-            addToast("Enrollee removed successfully.", "success")
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : "Could not remove enrollee."
-            addToast(message, "error")
-          }
-        },
-      })
-      setShowConfirmDialog(true)
-    },
-    [address, addToast, getQuestErrorMessage, questId, refetch, removeEnrolleeTx]
-  )
-
-  const handleLeaveQuest = useCallback(async () => {
-    if (!address) {
-      addToast("Connect your wallet first.", "error")
-      return
-    }
-
-    if (!isEnrolled) {
-      addToast("You are not enrolled in this quest.", "info")
-      return
-    }
-
-    if (earnedReward > 0) {
-      addToast("You cannot leave this quest after rewards have been paid out.", "info")
-      return
-    }
-
-    setPendingTransaction({
-      type: "leave_quest",
-      details: {
-        actionName: "Leave Quest",
-        fromAddress: address,
-        estimatedFee: "0.001",
-        description:
-          "Are you sure you want to leave this quest? Your progress will be cleared from the active enrollee list.",
-      },
-      execute: async () => {
-        try {
-          await leaveQuestTx.run(async () => {
-            const result = await questClient.leaveQuest(address, questId)
-            if (result.status !== "SUCCESS") {
-              throw new Error(getQuestErrorMessage(result.error ?? "Could not leave quest."))
-            }
-            return result
-          })
-
-          await refetch()
-          addToast("You left the quest successfully.", "success")
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : "Could not leave quest."
-          addToast(message, "error")
-        }
-      },
-    })
-    setShowConfirmDialog(true)
-  }, [
-    address,
-    addToast,
-    earnedReward,
-    getQuestErrorMessage,
-    isEnrolled,
-    leaveQuestTx,
-    questId,
-    refetch,
-  ])
-
-  const handleExportQuest = useCallback(() => {
-    if (!quest) {
-      return
-    }
-
-    const exportData = {
-      name: quest.name,
-      description: quest.description,
-      milestones: milestones.map(milestone => ({
-        title: milestone.title,
-        description: milestone.description,
-        rewardAmount: toSafeNumber(milestone.rewardAmount),
-        requiresPrevious: milestone.requiresPrevious,
-      })),
-    }
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-
-    link.href = url
-    link.download = `${quest.name.toLowerCase().replace(/\s+/g, "-")}-quest-template.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-
-    addToast("Quest exported successfully!", "success")
-  }, [addToast, milestones, quest])
-
-  const handleDuplicateQuest = useCallback(() => {
-    if (!quest) {
-      return
-    }
-
-    const PREFIX = "Copy of "
-    const MAX_NAME = 64
-    const rawName = `${PREFIX}${quest.name}`
-    const clonedName = rawName.length > MAX_NAME ? rawName.slice(0, MAX_NAME) : rawName
-
-    const duplicateData = {
-      name: clonedName,
-      description: quest.description,
-      milestones: milestones.map(milestone => ({
-        title: milestone.title,
-        description: milestone.description,
-        rewardAmount: toSafeNumber(milestone.rewardAmount),
-        requiresPrevious: milestone.requiresPrevious,
-      })),
-    }
-
-    localStorage.setItem("lernza:imported-quest", JSON.stringify(duplicateData))
-    navigate("/quest/create")
-  }, [milestones, navigate, quest])
-
-  const handleImportFile = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      if (!file) {
-        return
-      }
-
-      if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
-        addToast("Quest JSON files must be 1 MB or smaller.", "error")
-        event.target.value = ""
-        return
-      }
-
-      try {
-        setIsImportingFile(true)
-        const text = await file.text()
-        const data = JSON.parse(text)
-        setImportedData(questImportSchema.parse(data))
-        setShowImportDialog(true)
-      } catch (err: unknown) {
-        if (err instanceof z.ZodError) {
-          const messages = err.issues.map(issue => issue.message).join(", ")
-          addToast(`Invalid JSON: ${messages}`, "error")
-        } else if (err instanceof SyntaxError) {
-          addToast("Invalid JSON format. Please check the file.", "error")
-        } else {
-          const message = err instanceof Error ? err.message : "Unknown error"
-          addToast(`Failed to import quest: ${message}`, "error")
-        }
-      } finally {
-        setIsImportingFile(false)
-        event.target.value = ""
-      }
-    },
-    [addToast]
-  )
-
-  const handleConfirmImport = useCallback(() => {
-    if (!importedData) {
-      return
-    }
-
-    localStorage.setItem("lernza:imported-quest", JSON.stringify(importedData))
-    navigate("/quest/create")
-    setShowImportDialog(false)
-    setImportedData(null)
-    addToast("Quest data loaded. Complete the creation process.", "success")
-  }, [addToast, importedData, navigate])
-
-  // Show validation error if ID is invalid - AFTER all hooks
-  if (!isValidQuestId(validationState)) {
-    return <QuestValidationError state={validationState} />
-  }
-
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="mb-8">
-          <Skeleton className="mb-4 h-8 w-48" />
-          <Skeleton className="mb-6 h-12 w-96" />
-          <Skeleton className="h-4 w-full max-w-2xl" />
-        </div>
-
-        <SkeletonStatsRow className="mb-8" />
-
-        <div className="mb-8">
-          <Skeleton className="mb-4 h-6 w-32" />
-          <SkeletonMilestoneList count={3} />
-        </div>
-
-        <div className="flex justify-center">
-          <Skeleton className="h-10 w-32" />
-        </div>
-      </div>
-    )
-  }
-
-  if (loadError) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
-        <SmartError
-          message={loadError}
-          onRetry={() => void refetch()}
-          onBack={() => navigate("/dashboard")}
-          questId={typeof questId === "number" ? questId : undefined}
-        />
-      </div>
-    )
-  }
-
-  if (!quest) {
+  if (!ws) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <QuestNotFound
-          questId={typeof questId === "number" ? questId : undefined}
-          onBack={() => navigate("/dashboard")}
-        />
-        <Button variant="outline" onClick={() => navigate("/dashboard")} className="mt-4">
+        <h2 className="mb-4 text-2xl font-black">Quest not found</h2>
+        <Button variant="outline" onClick={onBack}>
           Go back
         </Button>
       </div>
@@ -1146,24 +69,23 @@ export function QuestView() {
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <PageMetadata
-        title={`${quest.name} | Lernza`}
-        description={quest.description || "Learn and earn on-chain with Lernza"}
-        canonicalUrl={getQuestUrl(questId)}
-      />
+      {/* Background */}
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
+      {/* Back button */}
       <button
-        onClick={() => navigate("/dashboard")}
+        onClick={onBack}
         className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
       >
-        <div className="border-border bg-background neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)] transition-colors hover:shadow-[3px_3px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]">
+        <div className="border-border bg-background neo-press group-hover:bg-primary flex h-7 w-7 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-colors hover:shadow-[3px_3px_0_var(--color-border)] active:shadow-[1px_1px_0_var(--color-border)]">
           <ArrowLeft className="h-3.5 w-3.5" />
         </div>
         Back to Dashboard
       </button>
 
+      {/* Quest header card */}
       <div className="bg-background border-border animate-fade-in-up relative mb-8 overflow-hidden border-[3px] shadow-[6px_6px_0_var(--color-border)]">
+        {/* Header bar */}
         <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-3">
           <div className="flex items-center gap-3">
             <span className="text-xs font-black tracking-wider uppercase">Quest Details</span>
@@ -1173,11 +95,6 @@ export function QuestView() {
                 Complete
               </Badge>
             )}
-            {isArchived && <Badge variant="outline">Archived</Badge>}
-            {isExpired && <Badge variant="outline">Expired</Badge>}
-            <Badge variant={quest.visibility === Visibility.Public ? "default" : "outline"}>
-              {quest.visibility === Visibility.Public ? "Public" : "Invite Only"}
-            </Badge>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="bg-success border-border h-2.5 w-2.5 border" />
@@ -1189,305 +106,25 @@ export function QuestView() {
           <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
           <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
-                {quest.verified && (
-                  <Badge variant="verified" className="gap-1 border-black">
-                    <Check className="h-3 w-3" />
-                  </Badge>
-                )}
-              </div>
-              <p className="text-muted-foreground mt-1 max-w-xl text-sm">{quest.description}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
-                <Badge variant={isExpired ? "outline" : "secondary"}>{deadlineLabel}</Badge>
-                {deadlineDate && (
-                  <span className="text-muted-foreground">Deadline: {deadlineDate}</span>
-                )}
-                {countdownLabel && (
-                  <span className="text-destructive">Countdown {countdownLabel}</span>
-                )}
-              </div>
-              {questAuthorityData.data && (
-                <div className="mt-4 flex items-center gap-2">
-                  <span className="text-muted-foreground text-xs font-bold">Funded by:</span>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(questAuthorityData.data!)
-                      addToast("Address copied to clipboard!", "success")
-                    }}
-                    className="hover:text-primary font-mono text-xs font-bold transition-colors"
-                    title="Click to copy"
-                  >
-                    {truncateAddress(questAuthorityData.data)}
-                  </button>
-                  <PrefetchLink
-                    to={`/profile?address=${questAuthorityData.data}`}
-                    className="text-primary hover:text-primary/80 transition-colors"
-                    title="View creator profile"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </PrefetchLink>
-                </div>
-              )}
+              <h1 className="text-2xl font-black sm:text-3xl">{ws.name}</h1>
+              <p className="text-muted-foreground mt-1 max-w-xl text-sm">{ws.description}</p>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-3">
-              {isOwner ? (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={handleExportQuest}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export Template
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={handleDuplicateQuest}
-                  >
-                    <Copy className="h-4 w-4" />
-                    Duplicate
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shimmer-on-hover"
-                    disabled={isImportingFile}
-                    onClick={() => document.getElementById("quest-import-file-input")?.click()}
-                  >
-                    {isImportingFile ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Importing...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        Import Template
-                      </>
-                    )}
-                  </Button>
-                  <input
-                    id="quest-import-file-input"
-                    type="file"
-                    accept="application/json"
-                    className="hidden"
-                    disabled={isImportingFile}
-                    onChange={event => void handleImportFile(event)}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={() => setShowAddEnrollee(current => !current)}
-                    disabled={isArchived || isExpired}
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    {quest.visibility === Visibility.Private ? "Invite Learner" : "Add Enrollee"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={() => {
-                      createMilestoneTx.reset()
-                      setShowMilestoneForm(true)
-                    }}
-                    disabled={isExpired}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Milestone
-                  </Button>
-                  {!isArchived && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => void handleArchiveQuest()}
-                      disabled={archiveQuestTx.isPending || isRefetching}
-                    >
-                      {archiveQuestTx.isPending ? "Archiving..." : "Archive Quest"}
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <Button
-                  size="sm"
-                  className="shimmer-on-hover"
-                  onClick={() => void handleEnroll()}
-                  disabled={
-                    enrollTx.isPending ||
-                    isRefetching ||
-                    isEnrolled ||
-                    !isSupportedNetwork ||
-                    !address ||
-                    isArchived ||
-                    isExpired
-                  }
-                  title={
-                    !isSupportedNetwork
-                      ? "Switch Freighter to Testnet to continue."
-                      : isArchived
-                        ? "Archived quests are read-only."
-                        : isExpired
-                          ? "Expired quests no longer accept enrollments."
-                          : quest.visibility === Visibility.Private && !isEnrolled
-                            ? "Invite only"
-                            : undefined
-                  }
-                >
-                  {selfEnrollmentPhase ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {getPendingLabel(selfEnrollmentPhase)}
-                    </>
-                  ) : isEnrolled ? (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      Already Enrolled
-                    </>
-                  ) : isArchived ? (
-                    <>
-                      <Lock className="h-4 w-4" />
-                      Archived
-                    </>
-                  ) : isExpired ? (
-                    <>
-                      <Clock className="h-4 w-4" />
-                      Expired
-                    </>
-                  ) : quest.visibility === Visibility.Private ? (
-                    <>
-                      <Lock className="h-4 w-4" />
-                      Invite Only
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="h-4 w-4" />
-                      Enroll
-                    </>
-                  )}
-                </Button>
-              )}
-              <ShareButton questId={questId} questName={quest.name} onToast={addToast} />
+            <div className="flex flex-shrink-0 gap-3">
+              <Button variant="outline" size="sm" className="shimmer-on-hover">
+                <UserPlus className="h-4 w-4" />
+                Add Enrollee
+              </Button>
+              <Button size="sm" className="shimmer-on-hover">
+                <Plus className="h-4 w-4" />
+                Add Milestone
+              </Button>
+              <ShareButton questId={questId} questName={ws.name} onToast={addToast} />
             </div>
           </div>
-          {!isOwner && quest.visibility === Visibility.Private && !isEnrolled && (
-            <p className="text-muted-foreground relative mt-4 text-xs font-bold">
-              This quest is invite only. If you try to enroll, the contract will reject it.
-            </p>
-          )}
-          {(isArchived || isExpired) && (
-            <p className="text-muted-foreground relative mt-3 text-xs font-bold">
-              {isArchived
-                ? "This quest has been archived. Historical progress stays visible, but new enrollments are blocked."
-                : "This quest deadline has passed. Enrollment and completion actions are disabled."}
-            </p>
-          )}
         </div>
       </div>
 
-      {transactionQueue.transactions.length > 0 && (
-        <div className="bg-secondary border-border mb-6 border-[3px] p-4 shadow-[4px_4px_0_var(--color-border)]">
-          <p className="mb-2 text-xs font-black tracking-wider uppercase">Pending Transactions</p>
-          <div className="space-y-2">
-            {transactionQueue.transactions.map(transaction => (
-              <div
-                key={transaction.id}
-                className="border-border bg-background flex items-center justify-between border-2 px-3 py-2 text-xs font-bold"
-              >
-                <span>{transaction.label}</span>
-                <span>{getPendingLabel(transaction.phase)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {showAddEnrollee && isOwner && (
-        <form
-          onSubmit={enrolleeForm.handleSubmit(handleAddEnrollee)}
-          className="animate-fade-in-up bg-background border-border mb-8 border-[3px] shadow-[4px_4px_0_var(--color-border)]"
-        >
-          <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-3">
-            <div className="flex items-center gap-2">
-              <UserPlus className="h-4 w-4" />
-              <span className="text-sm font-black tracking-wider uppercase">Add Enrollee</span>
-            </div>
-            <button
-              type="button"
-              onClick={closeAddEnrollee}
-              disabled={addPhase === "submitting"}
-              className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border-2 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="space-y-4 p-5">
-            <div>
-              <FormLabel htmlFor="enrollee-address-1" required>
-                Stellar Address
-              </FormLabel>
-              <input
-                id="enrollee-address-1"
-                {...enrolleeForm.register("address")}
-                placeholder="G..."
-                disabled={addPhase === "submitting" || addPhase === "done"}
-                className={cn(
-                  "border-border bg-background w-full border-2 px-4 py-2.5 font-mono text-sm font-medium transition-shadow focus:shadow-[3px_3px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
-                  enrolleeForm.formState.errors.address && "border-destructive"
-                )}
-              />
-              <FieldError message={enrolleeForm.formState.errors.address?.message} />
-            </div>
-            {!isSupportedNetwork && (
-              <p className="text-destructive text-xs font-bold">
-                Switch Freighter to Testnet to continue.
-              </p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                type="submit"
-                disabled={
-                  addEnrolleeTx.isPending ||
-                  addPhase === "done" ||
-                  !isSupportedNetwork ||
-                  isArchived ||
-                  isExpired
-                }
-                className="shimmer-on-hover"
-              >
-                {addEnrolleeTx.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {addEnrolleeTx.isConfirming ? "Confirming..." : "Awaiting Signature..."}
-                  </>
-                ) : addPhase === "done" ? (
-                  <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    Added!
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-4 w-4" />
-                    Add Enrollee
-                  </>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                onClick={closeAddEnrollee}
-                disabled={addEnrolleeTx.isPending}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </form>
-      )}
-
+      {/* Stats row */}
       <div ref={statsRef} className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           {
@@ -1505,7 +142,7 @@ export function QuestView() {
           {
             icon: Coins,
             label: "Pool Balance",
-            value: formatTokens(poolBalanceCount),
+            value: formatTokens(poolBalance),
             bg: "bg-primary",
           },
           {
@@ -1514,16 +151,16 @@ export function QuestView() {
             value: formatTokens(totalRewardCount),
             bg: "bg-success",
           },
-        ].map((stat, index) => (
+        ].map((stat, i) => (
           <div
             key={stat.label}
             className={`reveal-up ${statsInView ? "in-view" : ""}`}
-            style={{ transitionDelay: `${index * 100}ms` }}
+            style={{ transitionDelay: `${i * 100}ms` }}
           >
             <Card className="neo-lift hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
               <CardContent className="flex items-center gap-3 p-4">
                 <div
-                  className={`h-10 w-10 ${stat.bg} border-border flex shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]`}
+                  className={`h-10 w-10 ${stat.bg} border-border flex flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]`}
                 >
                   <stat.icon className="h-4 w-4" />
                 </div>
@@ -1537,15 +174,14 @@ export function QuestView() {
         ))}
       </div>
 
+      {/* Progress section */}
       {milestones.length > 0 && (
         <div className="animate-fade-in-up stagger-3 mb-8">
           <div className="bg-background border-border border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-black">
-                {isOwner ? "Quest Progress" : "Your Progress"}
-              </span>
+              <span className="text-sm font-black">Overall Progress</span>
               <div className="flex items-center gap-3">
-                {earnedReward > 0 && !isOwner && (
+                {earnedReward > 0 && (
                   <span className="text-xs font-bold text-green-700">
                     +{formatTokens(earnedReward)} USDC earned
                   </span>
@@ -1560,12 +196,13 @@ export function QuestView() {
         </div>
       )}
 
+      {/* Tabs */}
       <div className="border-border mb-6 flex gap-0 border-b-[3px]" ref={contentRef}>
         {(["milestones", "enrollees"] as Tab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`-mb-0.75 cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider uppercase transition-all ${
+            className={`-mb-[3px] cursor-pointer border-[3px] border-b-0 px-6 py-3 text-sm font-black tracking-wider capitalize uppercase transition-all ${
               activeTab === tab
                 ? "border-border bg-primary shadow-[2px_-2px_0_var(--color-border)]"
                 : "hover:bg-secondary border-transparent"
@@ -1579,129 +216,7 @@ export function QuestView() {
         ))}
       </div>
 
-      {showMilestoneForm && isOwner && (
-        <form
-          onSubmit={milestoneForm.handleSubmit(handleCreateMilestone)}
-          className="animate-fade-in-up mb-6"
-        >
-          <Card>
-            <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-5 py-2.5">
-              <span className="text-xs font-black tracking-wider uppercase">New Milestone</span>
-              <button
-                type="button"
-                onClick={resetMilestoneForm}
-                className="flex h-5 w-5 cursor-pointer items-center justify-center transition-opacity hover:opacity-70"
-                aria-label="Close form"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <CardContent className="space-y-4 p-5">
-              <div>
-                <FormLabel htmlFor="milestone-title-1" required>
-                  Title
-                </FormLabel>
-                <input
-                  id="milestone-title-1"
-                  {...milestoneForm.register("title")}
-                  type="text"
-                  placeholder="e.g. Complete Module 1"
-                  maxLength={100}
-                  className={cn(
-                    "border-border bg-background w-full border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
-                    milestoneForm.formState.errors.title && "border-destructive"
-                  )}
-                  disabled={createMilestoneTx.isPending}
-                />
-                <FieldError message={milestoneForm.formState.errors.title?.message} />
-              </div>
-              <div>
-                <FormLabel htmlFor="milestone-desc-1" required>
-                  Description
-                </FormLabel>
-                <textarea
-                  id="milestone-desc-1"
-                  {...milestoneForm.register("description")}
-                  placeholder="Describe what the learner needs to accomplish..."
-                  rows={3}
-                  maxLength={500}
-                  className={cn(
-                    "border-border bg-background w-full resize-none border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
-                    milestoneForm.formState.errors.description && "border-destructive"
-                  )}
-                  disabled={createMilestoneTx.isPending}
-                />
-                <FieldError message={milestoneForm.formState.errors.description?.message} />
-              </div>
-              <div>
-                <FormLabel htmlFor="milestone-reward-1" required>
-                  Reward (tokens)
-                </FormLabel>
-                <input
-                  id="milestone-reward-1"
-                  {...milestoneForm.register("rewardAmount")}
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="100"
-                  className={cn(
-                    "border-border bg-background w-full border-2 px-3 py-2 text-sm font-bold shadow-[2px_2px_0_var(--color-border)] transition-shadow outline-none focus:shadow-[3px_3px_0_var(--color-border)]",
-                    milestoneForm.formState.errors.rewardAmount && "border-destructive"
-                  )}
-                  disabled={createMilestoneTx.isPending}
-                />
-                <FieldError message={milestoneForm.formState.errors.rewardAmount?.message} />
-              </div>
-              <label className="flex items-start gap-3 text-sm font-bold">
-                <input
-                  {...milestoneForm.register("requiresPrevious")}
-                  type="checkbox"
-                  disabled={createMilestoneTx.isPending || milestones.length === 0}
-                  className="mt-1 h-4 w-4 accent-black"
-                />
-                <span>
-                  Require previous milestone first
-                  <span className="text-muted-foreground block text-xs font-medium">
-                    {milestones.length === 0
-                      ? "The first milestone is always unlocked."
-                      : "Learners must complete the previous milestone before this one can be verified."}
-                  </span>
-                </span>
-              </label>
-              <div className="flex gap-3 pt-1">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={createMilestoneTx.isPending || isExpired}
-                  className="shimmer-on-hover"
-                >
-                  {createMilestoneTx.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Submitting...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4" />
-                      Create Milestone
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  onClick={resetMilestoneForm}
-                  disabled={createMilestoneTx.isPending}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </form>
-      )}
-
+      {/* Milestones tab */}
       {activeTab === "milestones" && (
         <div className="space-y-4">
           {milestones.length === 0 ? (
@@ -1714,199 +229,102 @@ export function QuestView() {
                 <p className="text-muted-foreground mb-4 text-sm">
                   Add milestones to define learning goals.
                 </p>
-                {isOwner && (
-                  <Button
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={() => setShowMilestoneForm(true)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Milestone
-                  </Button>
-                )}
+                <Button size="sm" className="shimmer-on-hover">
+                  <Plus className="h-4 w-4" />
+                  Add Milestone
+                </Button>
               </CardContent>
             </Card>
           ) : (
-            milestones.map((milestone, index) => {
-              const completedBy = completionsWithOptimisticUpdates
-                .filter(
-                  completion => completion.milestoneId === milestone.id && completion.completed
-                )
-                .map(completion => completion.enrollee)
-              const isCompleted = completedBy.length > 0
-              const isExpanded = expandedMilestone === milestone.id
-              const pendingVerificationForMilestone = pendingVerificationTransactions.find(
-                transaction => transaction.meta.milestoneId === milestone.id
-              )
-              const verifyingPhase = pendingVerificationForMilestone?.phase
-              const isVerifying = Boolean(verifyingPhase)
-              const eligibleEnrollees = getEligibleEnrollees(milestone)
-              const lockedForViewer =
-                !isOwner &&
-                !!address &&
-                milestone.requiresPrevious &&
-                milestone.id > 0 &&
-                !viewerCompletedMilestoneIds.has(milestone.id) &&
-                !viewerCompletedMilestoneIds.has(milestone.id - 1)
-              const lockedForOwner =
-                isOwner &&
-                milestone.requiresPrevious &&
-                eligibleEnrollees.length === 0 &&
-                enrollees.some(
-                  enrollee =>
-                    !isMilestoneCompletedBy(milestone.id, enrollee) &&
-                    !isMilestoneUnlockedForEnrollee(milestone, enrollee)
-                )
-              const isLocked = lockedForViewer || lockedForOwner
+            milestones.map((ms, i) => {
+              const isCompleted = completions.some(c => c.milestoneId === ms.id && c.completed)
+              const completedBy = completions
+                .filter(c => c.milestoneId === ms.id && c.completed)
+                .map(c => c.enrollee)
+              const isExpanded = expandedMilestone === ms.id
 
               return (
                 <div
-                  key={milestone.id}
+                  key={ms.id}
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
+                  style={{ transitionDelay: `${i * 100}ms` }}
                 >
-                  <button
-                    type="button"
-                    aria-label={`${isExpanded ? "Collapse" : "Expand"} milestone ${milestone.title}`}
-                    onClick={() => setExpandedMilestone(isExpanded ? null : milestone.id)}
-                    className="focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none"
+                  <Card
+                    className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
+                      isCompleted ? "border-success" : ""
+                    }`}
+                    onClick={() => setExpandedMilestone(isExpanded ? null : ms.id)}
                   >
-                    <Card
-                      className={`neo-lift group cursor-pointer transition-all hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] ${
-                        isCompleted ? "border-success" : ""
-                      }`}
-                    >
-                      <CardContent className="p-5">
-                        <div className="flex items-start gap-4">
-                          <div
-                            className={`border-border mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
-                              isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
-                            }`}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle2 className="h-4 w-4" />
-                            ) : (
-                              <Circle className="text-muted-foreground h-4 w-4" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="mb-2 flex flex-wrap items-center gap-2">
-                                  <span className="text-muted-foreground text-xs font-bold">
-                                    Milestone {milestone.id + 1}
-                                  </span>
-                                  {milestone.requiresPrevious && (
-                                    <Badge variant="outline" className="gap-1">
-                                      Sequential
-                                    </Badge>
-                                  )}
-                                  {isLocked && (
-                                    <Badge
-                                      variant="outline"
-                                      className="gap-1"
-                                      title="Complete previous milestone first"
-                                    >
-                                      <Lock className="h-3 w-3" />
-                                      Locked
-                                    </Badge>
-                                  )}
-                                </div>
-                                <h3
-                                  className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
-                                >
-                                  {milestone.title}
-                                </h3>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-2">
-                                <Badge variant={isCompleted ? "success" : "default"}>
-                                  {formatTokens(toSafeNumber(milestone.rewardAmount))} USDC
-                                </Badge>
-                                {isExpanded ? (
-                                  <ChevronUp className="text-muted-foreground h-4 w-4" />
-                                ) : (
-                                  <ChevronDown className="text-muted-foreground h-4 w-4" />
-                                )}
-                              </div>
-                            </div>
-
-                            {isExpanded && (
-                              <div className="animate-fade-in-up mt-3">
-                                <p className="text-muted-foreground mb-3 text-sm">
-                                  {milestone.description}
-                                </p>
-                                {completedBy.length > 0 && (
-                                  <div className="mb-3">
-                                    <p className="text-muted-foreground mb-2 text-xs font-bold">
-                                      Completed by:
-                                    </p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {completedBy.map(enrollee => (
-                                        <span
-                                          key={enrollee}
-                                          className="bg-success/10 border-border border-[1.5px] px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_var(--color-border)]"
-                                        >
-                                          {enrollee}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                                {isLocked && (
-                                  <p
-                                    className="text-muted-foreground mb-3 text-xs font-bold"
-                                    title="Complete previous milestone first"
-                                  >
-                                    Complete previous milestone first.
-                                  </p>
-                                )}
-                                {isOwner && enrollees.length > 0 && (
-                                  <Button
-                                    variant={verifyPayoutTx.isFailure ? "danger" : "outline"}
-                                    size="sm"
-                                    className="shimmer-on-hover"
-                                    disabled={
-                                      isVerifying ||
-                                      !isSupportedNetwork ||
-                                      eligibleEnrollees.length === 0 ||
-                                      isArchived ||
-                                      isExpired
-                                    }
-                                    title={
-                                      isArchived
-                                        ? "Archived quests are read-only."
-                                        : isExpired
-                                          ? "Expired quests cannot verify completions."
-                                          : eligibleEnrollees.length === 0 &&
-                                              milestone.requiresPrevious
-                                            ? "Complete previous milestone first"
-                                            : undefined
-                                    }
-                                    onClick={event => {
-                                      event.stopPropagation()
-                                      void handleVerifyAndPayout(milestone)
-                                    }}
-                                  >
-                                    {isVerifying ? (
-                                      <>
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        {getPendingLabel(verifyingPhase ?? "signing")}
-                                      </>
-                                    ) : (
-                                      <>
-                                        <CheckCircle2 className="h-3.5 w-3.5" />
-                                        Verify & Payout
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-4">
+                        <div
+                          className={`border-border mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] transition-all duration-300 ${
+                            isCompleted ? "bg-success" : "bg-background group-hover:bg-secondary"
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-4 w-4" />
+                          ) : (
+                            <Circle className="text-muted-foreground h-4 w-4" />
+                          )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <h3
+                              className={`font-black ${isCompleted ? "text-muted-foreground" : ""}`}
+                            >
+                              {ms.title}
+                            </h3>
+                            <div className="flex flex-shrink-0 items-center gap-2">
+                              <Badge variant={isCompleted ? "success" : "default"}>
+                                {ms.rewardAmount} USDC
+                              </Badge>
+                              {isExpanded ? (
+                                <ChevronUp className="text-muted-foreground h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="text-muted-foreground h-4 w-4" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Expanded content */}
+                          {isExpanded && (
+                            <div className="animate-fade-in-up mt-3">
+                              <p className="text-muted-foreground mb-3 text-sm">{ms.description}</p>
+                              {completedBy.length > 0 && (
+                                <div className="mb-3">
+                                  <p className="text-muted-foreground mb-2 text-xs font-bold">
+                                    Completed by:
+                                  </p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {completedBy.map(addr => (
+                                      <span
+                                        key={addr}
+                                        className="bg-success/10 border-border border-[1.5px] px-2 py-1 font-mono text-xs font-bold shadow-[1px_1px_0_var(--color-border)]"
+                                      >
+                                        {addr}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {!isCompleted && enrollees.length > 0 && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="shimmer-on-hover"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Verify Completion
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               )
             })
@@ -1914,79 +332,9 @@ export function QuestView() {
         </div>
       )}
 
+      {/* Enrollees tab */}
       {activeTab === "enrollees" && (
         <div className="space-y-4">
-          {isOwner && quest.visibility === Visibility.Private && (
-            <div className="animate-fade-in-up bg-background border-border mb-6 border-[3px] p-5 shadow-[4px_4px_0_var(--color-border)]">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  <span className="text-sm font-black tracking-wider uppercase">
-                    Invite Learner
-                  </span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const token = btoa(JSON.stringify({ id: questId, invited: true }))
-                    const link = `${window.location.origin}/quest/${questId}?invite=${token}`
-                    navigator.clipboard.writeText(link)
-                    addToast("Invite link copied to clipboard!", "success")
-                  }}
-                  className="gap-2"
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  Copy Invite Link
-                </Button>
-              </div>
-
-              <form
-                onSubmit={enrolleeForm.handleSubmit(handleAddEnrollee)}
-                className="flex flex-col gap-3 sm:flex-row sm:items-end"
-              >
-                <div className="flex-1">
-                  <FormLabel htmlFor="enrollee-address-2" required>
-                    Stellar Address
-                  </FormLabel>
-                  <input
-                    id="enrollee-address-2"
-                    {...enrolleeForm.register("address")}
-                    placeholder="G..."
-                    disabled={addPhase === "submitting"}
-                    className={cn(
-                      "border-border bg-background w-full border-2 px-3 py-2 font-mono text-sm font-medium transition-shadow focus:shadow-[2px_2px_0_var(--color-border)] focus:outline-none disabled:opacity-50",
-                      enrolleeForm.formState.errors.address && "border-destructive"
-                    )}
-                  />
-                  <FieldError message={enrolleeForm.formState.errors.address?.message} />
-                </div>
-                <Button
-                  type="submit"
-                  disabled={addEnrolleeTx.isPending || !isSupportedNetwork}
-                  className="shimmer-on-hover h-10.5"
-                >
-                  {addEnrolleeTx.isPending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {addEnrolleeTx.isConfirming ? "Confirming..." : "Awaiting Signature..."}
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="h-4 w-4" />
-                      Invite
-                    </>
-                  )}
-                </Button>
-              </form>
-              {!isSupportedNetwork && (
-                <p className="text-destructive mt-2 text-xs font-bold">
-                  Switch Freighter to Testnet to continue.
-                </p>
-              )}
-            </div>
-          )}
-
           {enrollees.length === 0 ? (
             <Card className="animate-fade-in-up">
               <CardContent className="flex flex-col items-center py-12 text-center">
@@ -1994,67 +342,41 @@ export function QuestView() {
                   <Users className="h-6 w-6" />
                 </div>
                 <h3 className="mb-2 font-black">No enrollees yet</h3>
-                <p className="text-muted-foreground mb-4 text-sm">
-                  {isOwner
-                    ? "Add learners to this quest."
-                    : "Be the first learner to join this quest."}
-                </p>
-                {isOwner ? (
-                  <Button
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={() => setShowAddEnrollee(true)}
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Add Enrollee
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    className="shimmer-on-hover"
-                    onClick={() => void handleEnroll()}
-                    disabled={
-                      enrollTx.isPending ||
-                      isRefetching ||
-                      isEnrolled ||
-                      !isSupportedNetwork ||
-                      !address ||
-                      isArchived ||
-                      isExpired
-                    }
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    {isEnrolled ? "Already Enrolled" : "Enroll"}
-                  </Button>
-                )}
+                <p className="text-muted-foreground mb-4 text-sm">Add learners to this quest.</p>
+                <Button size="sm" className="shimmer-on-hover">
+                  <UserPlus className="h-4 w-4" />
+                  Add Enrollee
+                </Button>
               </CardContent>
             </Card>
           ) : (
-            enrollees.map((enrollee, index) => {
-              const completed = completionsWithOptimisticUpdates.filter(
-                completion => completion.enrollee === enrollee && completion.completed
-              ).length
+            enrollees.map((addr, i) => {
+              const completed = completions.filter(c => c.enrollee === addr && c.completed).length
               const earned = milestones
-                .filter(milestone => isMilestoneCompletedBy(milestone.id, enrollee))
-                .reduce((sum, milestone) => sum + toSafeNumber(milestone.rewardAmount), 0)
+                .filter(m =>
+                  completions.some(
+                    c => c.enrollee === addr && c.milestoneId === m.id && c.completed
+                  )
+                )
+                .reduce((sum, m) => sum + m.rewardAmount, 0)
               const isAllDone = completed === milestones.length && milestones.length > 0
 
               return (
                 <div
-                  key={enrollee}
+                  key={addr}
                   className={`reveal-up ${contentInView ? "in-view" : ""}`}
-                  style={{ transitionDelay: `${index * 100}ms` }}
+                  style={{ transitionDelay: `${i * 100}ms` }}
                 >
                   <Card className="neo-lift group hover:shadow-[7px_7px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)]">
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-2 font-mono text-sm font-black shadow-[2px_2px_0_var(--color-border)] transition-shadow group-hover:shadow-[3px_3px_0_var(--color-border)]">
-                            {enrollee.slice(0, 2)}
+                          <div className="bg-primary border-border flex h-10 w-10 items-center justify-center border-[2px] font-mono text-sm font-black shadow-[2px_2px_0_var(--color-border)] transition-shadow group-hover:shadow-[3px_3px_0_var(--color-border)]">
+                            {addr.slice(0, 2)}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="font-mono text-sm font-bold">{enrollee}</p>
+                              <p className="font-mono text-sm font-bold">{addr}</p>
                               {isAllDone && <Sparkles className="text-primary h-3.5 w-3.5" />}
                             </div>
                             <p className="text-muted-foreground text-xs font-bold">
@@ -2069,51 +391,6 @@ export function QuestView() {
                           <p className="text-muted-foreground mt-1 text-xs font-bold">earned</p>
                         </div>
                       </div>
-                      {isOwner && (
-                        <div className="mt-3 flex justify-end">
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            disabled={removeEnrolleeTx.isPending}
-                            onClick={() => void handleRemoveEnrollee(enrollee)}
-                          >
-                            {removeEnrolleeTx.isPending ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Removing...
-                              </>
-                            ) : (
-                              "Remove"
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                      {!isOwner && enrollee === address && (
-                        <div className="mt-3 flex flex-col items-end gap-2">
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            disabled={leaveQuestTx.isPending || earned > 0}
-                            onClick={() => void handleLeaveQuest()}
-                          >
-                            {leaveQuestTx.isPending ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Leaving...
-                              </>
-                            ) : earned > 0 ? (
-                              "Rewards Received"
-                            ) : (
-                              "Leave Quest"
-                            )}
-                          </Button>
-                          {earned > 0 && (
-                            <p className="text-muted-foreground text-xs font-bold">
-                              Rewards have already been paid to this wallet.
-                            </p>
-                          )}
-                        </div>
-                      )}
                       {milestones.length > 0 && (
                         <Progress value={completed} max={milestones.length} className="mt-4" />
                       )}
@@ -2125,49 +402,7 @@ export function QuestView() {
           )}
         </div>
       )}
-
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-
-      {/* Transaction Confirmation Dialog — lazy chunk, invisible fallback */}
-      <Suspense fallback={null}>
-        <TransactionConfirmDialog
-          isOpen={showConfirmDialog}
-          details={pendingTransaction?.details ?? null}
-          onConfirm={() => {
-            const transaction = pendingTransaction
-            setShowConfirmDialog(false)
-            setPendingTransaction(null)
-            if (transaction) {
-              void transaction.execute()
-            }
-          }}
-          onCancel={() => {
-            setShowConfirmDialog(false)
-            setPendingTransaction(null)
-          }}
-          isPending={
-            addEnrolleeTx.isPending ||
-            createMilestoneTx.isPending ||
-            verifyPayoutTx.isPending ||
-            archiveQuestTx.isPending ||
-            removeEnrolleeTx.isPending ||
-            leaveQuestTx.isPending
-          }
-        />
-      </Suspense>
-
-      {/* Import Quest Dialog — lazy chunk */}
-      <Suspense fallback={null}>
-        <ImportQuestDialog
-          isOpen={showImportDialog}
-          data={importedData}
-          onClose={() => {
-            setShowImportDialog(false)
-            setImportedData(null)
-          }}
-          onConfirm={handleConfirmImport}
-        />
-      </Suspense>
     </div>
   )
 }

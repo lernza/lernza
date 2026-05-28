@@ -151,10 +151,12 @@ impl QuestContract {
 
         // Emit enrollee added event
         // Event topics: (quest, enrollee_added)
-        // Event data: (quest_id, enrollee_address)
+        // Event data: (quest_id, enrollee_address, actor, timestamp, join_mode)
+        let timestamp = env.ledger().timestamp();
+        let join_mode = symbol_short!("owner");
         env.events().publish(
             (symbol_short!("quest"), symbol_short!("add_enr")),
-            (quest_id, &enrollee),
+            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
         );
 
         Self::bump(&env, quest_id);

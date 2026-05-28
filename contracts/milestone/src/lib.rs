@@ -1,7 +1,5 @@
 #![no_std]
-use common::{
-    extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
-};
+use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, Address, Env, String,
     Symbol, Vec,
@@ -47,6 +45,8 @@ pub enum DataKey {
     CertificateContract,
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
+    // Explicit milestone count per quest (O(1) lookup, survives gaps from deletes)
+    MilestoneCount(u32),
     // Milestone data
     Milestone(u32, u32), // (quest_id, milestone_id)
     // Completion flag
@@ -293,6 +293,14 @@ impl MilestoneContract {
         env.storage().persistent().set(&ms_key, &milestone);
         env.storage().persistent().set(&next_key, &(id + 1));
 
+        // Increment explicit milestone count
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        env.storage()
+            .persistent()
+            .set(&count_key, &(current_count + 1));
+        Self::bump_ms(&env, &count_key);
+
         // Emit milestone creation event
         // Event topics: (milestone_created,)
         // Event data: (milestone_id, quest_id, reward_amount)
@@ -364,6 +372,14 @@ impl MilestoneContract {
             let ms_key = DataKey::Milestone(quest_id, id);
             env.storage().persistent().set(&ms_key, &ms_info);
             env.storage().persistent().set(&next_key, &(id + 1));
+
+            // Increment explicit milestone count
+            let count_key = DataKey::MilestoneCount(quest_id);
+            let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+            env.storage()
+                .persistent()
+                .set(&count_key, &(current_count + 1));
+            Self::bump_ms(&env, &count_key);
 
             // Emit milestone creation event
             env.events().publish(
@@ -899,7 +915,7 @@ impl MilestoneContract {
     pub fn get_milestone_count(env: Env, quest_id: u32) -> u32 {
         env.storage()
             .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
+            .get(&DataKey::MilestoneCount(quest_id))
             .unwrap_or(0)
     }
 
@@ -1198,18 +1214,11 @@ impl MilestoneContract {
 
     /// Get total number of milestones for a quest
     fn get_quest_milestone_count(env: Env, quest_id: u32) -> Result<u32, Error> {
-        let mut count = 0;
-        let mut current_id = 0;
-
-        loop {
-            let key = DataKey::Milestone(quest_id, current_id);
-            if !env.storage().persistent().has(&key) {
-                break;
-            }
-            count += 1;
-            current_id += 1;
-        }
-
+        let count = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MilestoneCount(quest_id))
+            .unwrap_or(0);
         Ok(count)
     }
 }

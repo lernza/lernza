@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 5,
+    "address": 6,
     "nonce": 0
   },
   "auth": [
@@ -86,7 +86,7 @@
                   "u32": 0
                 },
                 {
-                  "string": "Task"
+                  "string": "Unclaimed Task"
                 },
                 {
                   "string": "Description"
@@ -107,8 +107,6 @@
         }
       ]
     ],
-    [],
-    [],
     []
   ],
   "ledger": {
@@ -599,7 +597,7 @@
                         "symbol": "title"
                       },
                       "val": {
-                        "string": "Task"
+                        "string": "Unclaimed Task"
                       }
                     }
                   ]

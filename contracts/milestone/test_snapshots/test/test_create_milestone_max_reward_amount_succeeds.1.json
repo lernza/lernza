@@ -86,15 +86,15 @@
                   "u32": 0
                 },
                 {
-                  "string": "Task"
+                  "string": "Valid Title"
                 },
                 {
-                  "string": "Description"
+                  "string": "Valid description"
                 },
                 {
                   "i128": {
                     "hi": 0,
-                    "lo": 100
+                    "lo": 1000000000000000
                   }
                 },
                 {
@@ -106,10 +106,7 @@
           "sub_invocations": []
         }
       ]
-    ],
-    [],
-    [],
-    []
+    ]
   ],
   "ledger": {
     "protocol_version": 22,
@@ -556,7 +553,7 @@
                         "symbol": "description"
                       },
                       "val": {
-                        "string": "Description"
+                        "string": "Valid description"
                       }
                     },
                     {
@@ -590,7 +587,7 @@
                       "val": {
                         "i128": {
                           "hi": 0,
-                          "lo": 100
+                          "lo": 1000000000000000
                         }
                       }
                     },
@@ -599,7 +596,7 @@
                         "symbol": "title"
                       },
                       "val": {
-                        "string": "Task"
+                        "string": "Valid Title"
                       }
                     }
                   ]
@@ -986,5 +983,39 @@
       ]
     ]
   },
-  "events": []
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "milestone_created"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "u32": 0
+                },
+                {
+                  "u32": 0
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 1000000000000000
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    }
+  ]
 }

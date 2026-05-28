@@ -1461,3 +1461,57 @@ fn test_get_quest_completion_rate() {
     // Current rate: 4/4 = 100%
     assert_eq!(client.get_quest_completion_rate(&q_id, &4), 100);
 }
+
+#[test]
+fn test_create_milestone_0_cannot_require_previous() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Attempting to create milestone 0 with requires_previous=true
+    let result = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "MS0"),
+        &String::from_str(&env, "Desc"),
+        &100,
+        &true,
+    );
+
+    // Should fail with InvalidInput
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_create_milestones_batch_0_cannot_require_previous() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut batch = Vec::new(&env);
+    batch.push_back(MilestoneInput {
+        title: String::from_str(&env, "MS0"),
+        description: String::from_str(&env, "Desc"),
+        reward_amount: 100,
+        requires_previous: true,
+    });
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &batch);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_verify_completion_fails_if_flat_reward_missing() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    // Set mode to Flat manually in storage without setting FlatReward
+    env.as_contract(&client.address, || {
+        env.storage().persistent().set(&DataKey::Mode(q_id), &DistributionMode::Flat);
+    });
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
+}

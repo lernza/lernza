@@ -1,5 +1,7 @@
 #![no_std]
-use common::{extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
+use common::{
+    extend_instance_ttl, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
+};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, Address, Env, String,
     Symbol, Vec,
@@ -55,8 +57,8 @@ pub enum DataKey {
     Mode(u32),
     // Flat reward per milestone (Flat mode only)
     FlatReward(u32),
-    // Total unique completions per milestone (Competitive mode)
-    MilestoneCompletionCount(u32, u32), // (quest_id, milestone_id)
+    // Total completions ever verified for a milestone (includes users who may have unenrolled)
+    MilestoneCompletionTotal(u32, u32), // (quest_id, milestone_id)
     // Completion timestamp
     CompletionTime(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Total earnings per enrollee per quest
@@ -148,6 +150,7 @@ pub enum Error {
     TitleTooLong = 15,
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
+    FlatRewardNotConfigured = 18,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
     Paused = 400,
@@ -269,6 +272,9 @@ impl MilestoneContract {
 
         let next_key = DataKey::NextMilestoneId(quest_id);
         let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+        if id == 0 && requires_previous {
+            return Err(Error::InvalidInput);
+        }
 
         if id >= MAX_MILESTONES {
             return Err(Error::InvalidInput);
@@ -280,7 +286,7 @@ impl MilestoneContract {
             title,
             description,
             reward_amount,
-            requires_previous: requires_previous && id > 0,
+            requires_previous,
         };
 
         let ms_key = DataKey::Milestone(quest_id, id);
@@ -342,13 +348,17 @@ impl MilestoneContract {
             let next_key = DataKey::NextMilestoneId(quest_id);
             let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
 
+            if id == 0 && ms.requires_previous {
+                return Err(Error::InvalidInput);
+            }
+
             let ms_info = MilestoneInfo {
                 id,
                 quest_id,
                 title: ms.title,
                 description: ms.description,
                 reward_amount: ms.reward_amount,
-                requires_previous: ms.requires_previous && id > 0,
+                requires_previous: ms.requires_previous,
             };
 
             let ms_key = DataKey::Milestone(quest_id, id);
@@ -549,9 +559,9 @@ impl MilestoneContract {
                 .storage()
                 .persistent()
                 .get(&DataKey::FlatReward(quest_id))
-                .unwrap_or(milestone.reward_amount),
+                .ok_or(Error::FlatRewardNotConfigured)?,
             DistributionMode::Competitive(max_winners) => {
-                let cnt_key = DataKey::MilestoneCompletionCount(quest_id, milestone_id);
+                let cnt_key = DataKey::MilestoneCompletionTotal(quest_id, milestone_id);
                 let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
                 env.storage().persistent().set(&cnt_key, &(cnt + 1));
                 env.storage()
@@ -801,9 +811,9 @@ impl MilestoneContract {
                     .storage()
                     .persistent()
                     .get(&DataKey::FlatReward(quest_id))
-                    .unwrap_or(milestone.reward_amount),
+                    .ok_or(Error::FlatRewardNotConfigured)?,
                 DistributionMode::Competitive(max_winners) => {
-                    let cnt_key = DataKey::MilestoneCompletionCount(quest_id, milestone_id);
+                    let cnt_key = DataKey::MilestoneCompletionTotal(quest_id, milestone_id);
                     let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
                     env.storage().persistent().set(&cnt_key, &(cnt + 1));
                     env.storage()

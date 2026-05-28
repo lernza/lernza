@@ -1,8 +1,8 @@
 import { scValToNative, xdr } from "@stellar/stellar-sdk"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
 import { questClient } from "@/lib/contracts/quest"
+import { clientEnv } from "@/lib/env"
 
-const DEFAULT_HORIZON_URL = "https://horizon-testnet.stellar.org"
 const PAGE_SIZE = 10
 
 export type WalletActivityType = "enrolled" | "completed" | "rewarded" | "left"
@@ -46,7 +46,7 @@ interface HorizonOperationRecord {
 }
 
 function getHorizonBaseUrl(): string {
-  return import.meta.env.VITE_HORIZON_URL || DEFAULT_HORIZON_URL
+  return clientEnv.horizonUrl
 }
 
 function getExplorerBaseUrl(): string {

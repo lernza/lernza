@@ -4,6 +4,7 @@ use certificate::{CertificateContract, CertificateContractClient};
 use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
+use testutils::setup_rewards;
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -23,46 +24,7 @@ fn setup() -> (
     CertificateContractClient<'static>, // certificate client
     Address,                            // certificate contract address
 ) {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    // Deploy test SAC token
-    let token_admin = Address::generate(&env);
-    let token_contract = env.register_stellar_asset_contract_v2(token_admin.clone());
-    let token_addr = token_contract.address();
-
-    // Deploy quest contract directly from crate logic (no WASM needed in test)
-    let quest_id = env.register(QuestContract, ());
-    let quest_client = QuestContractClient::new(&env, &quest_id);
-
-    // Deploy milestone contract first to get its address for certificate ownership
-    let milestone_id = env.register(MilestoneContract, ());
-    let milestone_client = MilestoneContractClient::new(&env, &milestone_id);
-
-    // Deploy certificate contract with milestone contract as owner
-    let certificate_id = env.register(CertificateContract, (milestone_id.clone(),));
-    let certificate_client = CertificateContractClient::new(&env, &certificate_id);
-
-    let admin = Address::generate(&env);
-    milestone_client.initialize(&admin, &quest_id, &certificate_id);
-
-    // Deploy rewards contract
-    let contract_id = env.register(RewardsContract, ());
-    let client = RewardsContractClient::new(&env, &contract_id);
-    client.initialize(&token_addr, &quest_id, &milestone_id);
-
-    (
-        env,
-        client,
-        contract_id,
-        token_addr,
-        quest_client,
-        quest_id,
-        milestone_client,
-        milestone_id,
-        certificate_client,
-        certificate_id,
-    )
+    setup_rewards()
 }
 
 #[test]
@@ -98,7 +60,8 @@ fn test_initialize_twice_fails() {
         _certificate_id,
     ) = setup();
     let fake_token = Address::generate(&env);
-    let result = client.try_initialize(&fake_token, &quest_id, &milestone_id);
+    let fake_admin = Address::generate(&env);
+    let result = client.try_initialize(&fake_admin, &fake_token, &quest_id, &milestone_id);
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
@@ -176,6 +139,96 @@ fn test_fund_quest_adds_to_existing() {
     client.fund_quest(&owner, &q_id, &3_000);
     client.fund_quest(&owner, &q_id, &2_000);
 
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+#[test]
+fn test_fund_quest_assigns_authority_on_first_funding() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let stored_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    assert_eq!(stored_authority, owner);
+}
+
+#[test]
+fn test_fund_quest_additional_funding_keeps_same_authority() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &3_000);
+    let initial_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    client.fund_quest(&owner, &q_id, &2_000);
+    let stored_authority: Address = env
+        .storage()
+        .persistent()
+        .get(&DataKey::QuestAuthority(q_id))
+        .unwrap();
+
+    assert_eq!(initial_authority, owner);
+    assert_eq!(stored_authority, owner);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
 }
 
@@ -1913,4 +1966,154 @@ fn test_get_refund_window_invalid_quest() {
     // Quest ID that does not exist
     let (open, close) = client.get_refund_window(&99999);
     assert_eq!((open, close), (0, 0));
+}
+
+// Tests for configurable refund grace period (Issue #882)
+
+#[test]
+fn test_default_refund_grace_period() {
+    let (
+        _env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    
+    // Default should be 7 days (604,800 seconds)
+    assert_eq!(client.get_refund_grace_period(), 604_800);
+}
+
+#[test]
+fn test_set_refund_grace_period() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    
+    let admin = Address::generate(&env);
+    
+    // Set to 3 days (259,200 seconds)
+    client.set_refund_grace_period(&admin, &259_200);
+    assert_eq!(client.get_refund_grace_period(), 259_200);
+    
+    // Set to 14 days (1,209,600 seconds)
+    client.set_refund_grace_period(&admin, &1_209_600);
+    assert_eq!(client.get_refund_grace_period(), 1_209_600);
+}
+
+#[test]
+fn test_set_refund_grace_period_unauthorized() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    
+    let unauthorized = Address::generate(&env);
+    let result = client.try_set_refund_grace_period(&unauthorized, &259_200);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_refund_with_custom_grace_period() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    
+    let admin = Address::generate(&env);
+    let owner = Address::generate(&env);
+    
+    // Set custom grace period to 1 day (86,400 seconds)
+    client.set_refund_grace_period(&admin, &86_400);
+    
+    // Create and fund a quest
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+    
+    client.fund_quest(&owner, &q_id, &10_000);
+    
+    // Archive the quest
+    quest_client.archive_quest(&q_id);
+    
+    // Try to refund before grace period (should fail)
+    let result = client.try_refund_pool(&owner, &q_id, &5_000);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+    
+    // Advance time by 1 day + 1 second
+    env.ledger().set_timestamp(env.ledger().timestamp() + 86_400 + 1);
+    
+    // Now refund should work
+    client.refund_pool(&owner, &q_id, &5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+}
+
+#[test]
+fn test_pause_blocks_grace_period_updates() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    
+    let admin = Address::generate(&env);
+    
+    // Pause the contract
+    client.pause(&admin);
+    assert!(client.is_paused());
+    
+    // Try to update grace period while paused (should fail)
+    let result = client.try_set_refund_grace_period(&admin, &259_200);
+    assert_eq!(result, Err(Ok(Error::Paused)));
+    
+    // Unpause and try again (should work)
+    client.unpause(&admin);
+    assert!(!client.is_paused());
+    
+    client.set_refund_grace_period(&admin, &259_200);
+    assert_eq!(client.get_refund_grace_period(), 259_200);
 }

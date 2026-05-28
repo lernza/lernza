@@ -52,6 +52,12 @@ pub enum DataKey {
     QuestDistributed(u32),
     // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
     PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Configurable refund grace period in seconds — Issue #882
+    RefundGracePeriod,
+    // Admin address for configuration updates
+    Admin,
+    // Pause state for admin operations
+    Paused,
 }
 
 #[contracterror]
@@ -90,9 +96,11 @@ pub struct RewardsContract;
 impl RewardsContract {
     /// Initialize with the token contract address (SAC for the reward token),
     /// the quest contract address for ownership verification,
-    /// and the milestone contract address for completion verification.
+    /// the milestone contract address for completion verification,
+    /// and the admin address for configuration updates.
     pub fn initialize(
         env: Env,
+        admin: Address,
         token_addr: Address,
         quest_contract_addr: Address,
         milestone_contract_addr: Address,
@@ -100,6 +108,9 @@ impl RewardsContract {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
         }
+        env.storage()
+            .instance()
+            .set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TokenAddr, &token_addr);
@@ -112,6 +123,13 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::TotalDistributed, &0_i128);
+        // Default refund grace period: 7 days (604,800 seconds)
+        env.storage()
+            .instance()
+            .set(&DataKey::RefundGracePeriod, &604_800_u64);
+        env.storage()
+            .instance()
+            .set(&DataKey::Paused, &false);
         extend_instance_ttl(&env);
         Ok(())
     }
@@ -174,6 +192,12 @@ impl RewardsContract {
         } else {
             env.storage().persistent().set(&auth_key, &funder);
             common::extend_persistent_ttl(&env, &auth_key);
+
+            // Emit authority assignment event for indexers to track refund authority
+            env.events().publish(
+                (Symbol::new(&env, "reward_authority_assigned"),),
+                (quest_id, funder.clone()),
+            );
         }
 
         // Transfer tokens from funder to this contract
@@ -390,9 +414,10 @@ impl RewardsContract {
             return Err(Error::QuestNotArchived);
         }
 
-        // 7-day grace period (604,800 seconds)
+        // Check grace period using configurable value
+        let grace_period = Self::get_refund_grace_period(env.clone());
         let now = env.ledger().timestamp();
-        if now < quest_info.archived_at + 604_800 {
+        if now < quest_info.archived_at + grace_period {
             return Err(Error::RefundWindowNotOpen);
         }
 
@@ -473,6 +498,88 @@ impl RewardsContract {
             .unwrap_or(0)
     }
 
+    /// Update the refund grace period. Admin only.
+    /// The grace period is the time (in seconds) that must elapse after a quest
+    /// is archived before refunds become available.
+    pub fn set_refund_grace_period(
+        env: Env,
+        admin: Address,
+        grace_period_seconds: u64,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+        
+        // Check if paused
+        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+            return Err(Error::Paused);
+        }
+
+        // Verify admin
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        if stored_admin != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::RefundGracePeriod, &grace_period_seconds);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Get the current refund grace period in seconds.
+    pub fn get_refund_grace_period(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::RefundGracePeriod)
+            .unwrap_or(604_800) // Default to 7 days
+    }
+
+    /// Pause the contract. Admin only.
+    /// When paused, configuration updates are blocked.
+    pub fn pause(env: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        if stored_admin != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage().instance().set(&DataKey::Paused, &true);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Unpause the contract. Admin only.
+    pub fn unpause(env: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotInitialized)?;
+        if stored_admin != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage().instance().set(&DataKey::Paused, &false);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Check if the contract is paused.
+    pub fn is_paused(env: Env) -> bool {
+        env.storage().instance().get(&DataKey::Paused).unwrap_or(false)
+    }
+
     /// Get the reward token address.
     pub fn get_token(env: &Env) -> Result<Address, Error> {
         env.storage()
@@ -508,7 +615,7 @@ impl RewardsContract {
     ///
     /// Returns a tuple `(open_timestamp, close_timestamp)` in ledger seconds.
     /// - If the quest is not archived, returns `(0, 0)` indicating the window is closed.
-    /// - Once archived, the window opens at `archived_at + 604_800` (7 days) and
+    /// - Once archived, the window opens at `archived_at + grace_period` and
     ///   remains open indefinitely (`close_timestamp = u64::MAX`).
     ///
     /// This is a pure view function: it performs cross-contract reads but does
@@ -532,12 +639,13 @@ impl RewardsContract {
             _ => return (0, 0), // quest not found or error
         };
 
-        // Refunds only available after archiving + 7-day grace period
+        // Refunds only available after archiving + configurable grace period
         if quest_info.status != QuestStatus::Archived {
             return (0, 0);
         }
 
-        let open_ts = quest_info.archived_at + 604_800; // 7 days in seconds
+        let grace_period = Self::get_refund_grace_period(env);
+        let open_ts = quest_info.archived_at + grace_period;
         let close_ts = u64::MAX; // no upper bound
 
         (open_ts, close_ts)
@@ -580,8 +688,9 @@ impl RewardsContract {
         if quest_info.status != QuestStatus::Archived {
             return Err(Error::QuestNotArchived);
         }
+        let grace_period = Self::get_refund_grace_period(env.clone());
         let now = env.ledger().timestamp();
-        if now < quest_info.archived_at + 604_800 {
+        if now < quest_info.archived_at + grace_period {
             return Err(Error::RefundWindowNotOpen);
         }
 

@@ -7,6 +7,7 @@ extern crate quest;
 use certificate::CertificateContract;
 use common::Visibility;
 use quest::{QuestContract, QuestContractClient};
+use testutils::{setup_milestone, create_quest, create_milestone};
 
 fn setup() -> (
     Env,
@@ -14,43 +15,13 @@ fn setup() -> (
     QuestContractClient<'static>,
     Address, // milestone admin / default quest owner
 ) {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    // Register quest contract
-    let quest_contract_id = env.register(QuestContract, ());
-    let quest_client = QuestContractClient::new(&env, &quest_contract_id);
-
-    // Register milestone contract
-    let milestone_contract_id = env.register(MilestoneContract, ());
-    let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
-
-    let admin = Address::generate(&env);
-
-    // Register certificate contract with milestone contract as owner,
-    // so cross-contract minting from milestone passes auth checks.
-    let certificate_contract_id =
-        env.register(CertificateContract, (milestone_contract_id.clone(),));
-
-    // Initialize milestone contract with quest + certificate contract addresses
-    milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
-
-    (env, milestone_client, quest_client, admin)
+    setup_milestone()
 }
 
 /// Create a quest owned by `owner` and return its auto-incremented ID.
 /// The token address is a random throwaway — milestone logic never reads it.
 fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Address) -> u32 {
-    quest_client.create_quest(
-        owner,
-        &String::from_str(env, "Quest"),
-        &String::from_str(env, "Quest description"),
-        &String::from_str(env, "Programming"),
-        &Vec::<String>::new(env),
-        &Address::generate(env),
-        &Visibility::Public,
-        &None,
-    )
+    testutils::create_quest(env, quest_client, owner)
 }
 
 /// Create a milestone inside an existing quest and return its auto-incremented ID.
@@ -62,14 +33,7 @@ fn create_ms(
     title: &str,
     reward: i128,
 ) -> u32 {
-    milestone_client.create_milestone(
-        owner,
-        &quest_id,
-        &String::from_str(env, title),
-        &String::from_str(env, "Description"),
-        &reward,
-        &false,
-    )
+    testutils::create_milestone(env, milestone_client, owner, quest_id, title, reward)
 }
 
 #[test]

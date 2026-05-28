@@ -935,7 +935,17 @@ impl MilestoneContract {
     }
 
     /// Get full progress details for an enrollee in a quest.
-    pub fn get_enrollee_progress(env: Env, quest_id: u32, enrollee: Address) -> EnrolleeProgress {
+    pub fn get_enrollee_progress(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+        offset: u32,
+        limit: u32,
+    ) -> EnrolleeProgress {
+        if limit == 0 || limit > 100 {
+            panic!("unbounded range");
+        }
+
         let completions: u32 = env
             .storage()
             .persistent()
@@ -953,7 +963,8 @@ impl MilestoneContract {
             .unwrap_or(0);
 
         let mut completion_details = Vec::new(&env);
-        for i in 0..total_milestones {
+        let end = (offset + limit).min(total_milestones);
+        for i in offset..end {
             if env
                 .storage()
                 .persistent()

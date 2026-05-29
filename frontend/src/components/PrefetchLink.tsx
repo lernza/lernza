@@ -1,25 +1,44 @@
+import { useCallback, type ReactNode } from "react"
 import { Link, type LinkProps } from "react-router-dom"
-import type { ReactNode } from "react"
+
+// Static map of route paths → their lazy import functions.
+// PrefetchLink calls the matching import on hover so the chunk is cached
+// before the user actually clicks.
+const routeImports: Record<string, () => Promise<unknown>> = {
+  "/": () => import("../pages/landing"),
+  "/dashboard": () => import("../pages/dashboard"),
+  "/quest/create": () => import("../pages/create-quest"),
+  "/profile": () => import("../pages/profile"),
+  "/leaderboard": () => import("../pages/leaderboard"),
+}
+
+// Dynamic segments (/quest/:id, /creator/:address) share a prefix match.
+const prefixImports: [string, () => Promise<unknown>][] = [
+  ["/quest/", () => import("../pages/quest")],
+  ["/creator/", () => import("../pages/creator")],
+]
+
+function getRouteImport(to: string): (() => Promise<unknown>) | undefined {
+  if (routeImports[to]) return routeImports[to]
+  for (const [prefix, fn] of prefixImports) {
+    if (to.startsWith(prefix)) return fn
+  }
+  return undefined
+}
 
 interface PrefetchLinkProps extends LinkProps {
   to: string
   children: ReactNode
 }
 
-/**
- * Thin wrapper around react-router-dom's <Link>. Historically this hooked the
- * onMouseEnter handler to call `import(\`../pages${path}\`)` and warm up the
- * lazy route chunk, but Vite 8 / Rolldown can't statically analyze a template
- * literal import — it leaves the call as a runtime fetch that 404s in
- * production. With routing now bundled as a single chunk (see routes.tsx),
- * there's nothing to prefetch, so this component just renders a Link.
- *
- * Kept as a separate component so existing call sites don't have to change
- * when we restore real route-level code splitting and prefetching.
- */
 export function PrefetchLink({ to, children, ...props }: PrefetchLinkProps) {
+  const handleMouseEnter = useCallback(() => {
+    const fn = getRouteImport(to)
+    if (fn) fn()
+  }, [to])
+
   return (
-    <Link to={to} {...props}>
+    <Link to={to} onMouseEnter={handleMouseEnter} {...props}>
       {children}
     </Link>
   )

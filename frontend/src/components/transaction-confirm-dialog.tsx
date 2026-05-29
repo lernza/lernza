@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { X, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -109,7 +110,7 @@ export function TransactionConfirmDialog({
 
   if (!isOpen || !details) return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
@@ -252,6 +253,7 @@ export function TransactionConfirmDialog({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

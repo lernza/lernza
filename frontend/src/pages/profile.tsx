@@ -30,6 +30,7 @@ export function Profile() {
   const stats = MOCK_USER_STATS
   const [copied, setCopied] = useState(false)
 
+  // Stable handler — state resets live in event handlers, not effects.
   const handleCopy = () => {
     if (address) {
       navigator.clipboard.writeText(address)

@@ -65,7 +65,7 @@ export default defineConfig({
           if (id.includes("pages/dashboard/")) return "page-dashboard-sub";
           if (id.includes("quest.tsx")) return "page-quest";
           if (id.includes("profile.tsx")) return "page-profile";
-          if (id.includes("create-quest.tsx")) return "page-create-quest";
+          if (id.includes("create-quest")) return "page-create-quest";
           if (id.includes("leaderboard.tsx")) return "page-leaderboard";
           if (id.includes("transaction-confirm-dialog.tsx")) return "dialog-transaction";
         },

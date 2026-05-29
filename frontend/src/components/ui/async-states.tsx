@@ -351,3 +351,19 @@ export function ContractUnavailable({
     </Card>
   )
 }
+
+// ─── Preload Illustrations ─────────────────────────────────────────────────────
+if (typeof document !== "undefined") {
+  const preloads = [
+    "/illustrations/empty-dashboard.svg",
+    "/illustrations/empty-profile.svg",
+    "/illustrations/empty-leaderboard.svg",
+  ]
+  preloads.forEach((src) => {
+    const link = document.createElement("link")
+    link.rel = "prefetch"
+    link.as = "image"
+    link.href = src
+    document.head.appendChild(link)
+  })
+}

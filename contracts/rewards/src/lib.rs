@@ -224,7 +224,7 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalFunded)
             .unwrap_or(0);
-        let new_total_funded = total_funded.saturating_add(amount);
+        let new_total_funded = total_funded.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
         env.storage()
             .instance()
             .set(&DataKey::TotalFunded, &new_total_funded);
@@ -472,10 +472,10 @@ impl RewardsContract {
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
-        // Keep the aggregate counters in sync with the refund (issue #864).
-        // The instance-storage `TotalDistributed` is a fast read; we
+        // Keep the aggregate counters in sync with the refund.
+        // The instance-storage `TotalFunded` is a fast read; we
         // decrement it so reads after a refund don't show stale "money in
-        // user hands" totals. `QuestRefunded(quest_id)` is the persistent
+        // platform" totals. `QuestRefunded(quest_id)` is the persistent
         // authoritative aggregate that always equals the sum of refunds for
         // this quest.
         Self::record_refund(&env, quest_id, amount)?;
@@ -491,23 +491,23 @@ impl RewardsContract {
         Ok(())
     }
 
-    /// Decrement the instance-storage `TotalDistributed` counter and bump
+    /// Decrement the instance-storage `TotalFunded` counter and bump
     /// the persistent `QuestRefunded` aggregate by the refunded amount.
     /// Called from both `refund_pool` and `refund_unused_pool` so the
-    /// counters stay consistent across every refund path. See issue #864.
+    /// counters stay consistent across every refund path.
     fn record_refund(env: &Env, quest_id: u32, amount: i128) -> Result<(), Error> {
         let total: i128 = env
             .storage()
             .instance()
-            .get(&DataKey::TotalDistributed)
+            .get(&DataKey::TotalFunded)
             .unwrap_or(0);
         // Saturate at 0 — the instance counter must never go negative even
-        // if a refund-without-prior-distribute happens (the invariant is
+        // if a refund-without-prior-fund happens (the invariant is
         // re-established by the persistent QuestRefunded aggregate).
-        let new_total = total.saturating_sub(amount);
+        let new_total = core::cmp::max(0, total.checked_sub(amount).unwrap_or(0));
         env.storage()
             .instance()
-            .set(&DataKey::TotalDistributed, &new_total);
+            .set(&DataKey::TotalFunded, &new_total);
 
         let q_refunded_key = DataKey::QuestRefunded(quest_id);
         let q_refunded: i128 = env.storage().persistent().get(&q_refunded_key).unwrap_or(0);

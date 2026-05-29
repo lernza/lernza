@@ -42,6 +42,7 @@ impl Ctx {
         let admin = Address::generate(&env);
         MilestoneContractClient::new(&env, &milestone_id).initialize(&admin, &quest_id, &cert_id);
         RewardsContractClient::new(&env, &rewards_id).initialize(
+            &admin,
             &token_addr,
             &quest_id,
             &milestone_id,

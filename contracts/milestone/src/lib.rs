@@ -71,6 +71,8 @@ pub enum DataKey {
     ApprovalCount(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Peer approvals tracking
     PeerApproval(u32, u32, Address, Address), // (quest_id, milestone_id, enrollee, peer)
+    // List of approvers for cleanup
+    Approvers(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Total rewards reserved (verified + pending review) for a quest
     TotalReservedReward(u32),
 }
@@ -866,6 +868,13 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&approval_key, THRESHOLD, BUMP);
 
+        // Track approver for cleanup
+        let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
+        let mut approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+        approvers.push_back(peer.clone());
+        env.storage().persistent().set(&approvers_key, &approvers);
+        env.storage().persistent().extend_ttl(&approvers_key, THRESHOLD, BUMP);
+
         // Increment approval count
         let count_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
         let current_approvals: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
@@ -920,6 +929,16 @@ impl MilestoneContract {
 
             // Remove pending submission
             env.storage().persistent().remove(&submit_key);
+
+            // Clean up PeerApproval tombstones and tracking
+            let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
+            let approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+            for approver in approvers.iter() {
+                let p_key = DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), approver);
+                env.storage().persistent().remove(&p_key);
+            }
+            env.storage().persistent().remove(&approvers_key);
+            env.storage().persistent().remove(&count_key);
 
             // Increment enrollee's completion count for this quest
             let enrollee_count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());

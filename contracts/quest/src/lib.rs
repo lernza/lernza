@@ -686,7 +686,6 @@ impl QuestContract {
             (Symbol::new(&env, "enrollee_added"),),
             (quest_id, enrollee.clone()),
         );
-        );
 
         Self::bump(&env, quest_id);
         Ok(())

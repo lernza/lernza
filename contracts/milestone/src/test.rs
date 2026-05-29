@@ -1,5 +1,5 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+use soroban_sdk::{testutils::Address as _, testutils::Events, Address, Env, String, Vec};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -7,7 +7,7 @@ extern crate quest;
 use certificate::CertificateContract;
 use common::Visibility;
 use quest::{QuestContract, QuestContractClient};
-use testutils::{setup_milestone, create_quest, create_milestone};
+use testutils::setup_milestone;
 
 fn setup() -> (
     Env,
@@ -15,13 +15,43 @@ fn setup() -> (
     QuestContractClient<'static>,
     Address, // milestone admin / default quest owner
 ) {
-    setup_milestone()
+    let env = Env::default();
+    env.mock_all_auths();
+
+    // Register quest contract
+    let quest_contract_id = env.register(QuestContract, ());
+    let quest_client = QuestContractClient::new(&env, &quest_contract_id);
+
+    // Register milestone contract
+    let milestone_contract_id = env.register(MilestoneContract, ());
+    let milestone_client = MilestoneContractClient::new(&env, &milestone_contract_id);
+
+    let admin = Address::generate(&env);
+
+    // Register certificate contract with milestone contract as owner,
+    // so cross-contract minting from milestone passes auth checks.
+    let certificate_contract_id =
+        env.register(CertificateContract, (milestone_contract_id.clone(),));
+
+    // Initialize milestone contract with quest + certificate contract addresses
+    milestone_client.initialize(&admin, &quest_contract_id, &certificate_contract_id);
+
+    (env, milestone_client, quest_client, admin)
 }
 
 /// Create a quest owned by `owner` and return its auto-incremented ID.
 /// The token address is a random throwaway — milestone logic never reads it.
 fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Address) -> u32 {
-    testutils::create_quest(env, quest_client, owner)
+    quest_client.create_quest(
+        owner,
+        &String::from_str(env, "Quest"),
+        &String::from_str(env, "Quest description"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
+        &Address::generate(env),
+        &Visibility::Public,
+        &None,
+    )
 }
 
 /// Create a milestone inside an existing quest and return its auto-incremented ID.
@@ -33,7 +63,14 @@ fn create_ms(
     title: &str,
     reward: i128,
 ) -> u32 {
-    testutils::create_milestone(env, milestone_client, owner, quest_id, title, reward)
+    milestone_client.create_milestone(
+        owner,
+        &quest_id,
+        &String::from_str(env, title),
+        &String::from_str(env, "Description"),
+        &reward,
+        &false,
+    )
 }
 
 #[test]
@@ -1632,11 +1669,10 @@ fn test_set_distribution_mode_emits_event() {
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "M1", 100);
 
-    let before = env.events().all().len();
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
-    let after = env.events().all().len();
+    let after = env.events().all();
     assert!(
-        after > before,
+        after.len() > 0,
         "set_distribution_mode should publish a distribution_mode_set event"
     );
 }

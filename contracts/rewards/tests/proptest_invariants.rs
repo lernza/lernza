@@ -50,6 +50,8 @@ proptest! {
         ) = setup_rewards();
         
         let owner = Address::generate(&env);
+        let sac = soroban_sdk::token::StellarAssetClient::new(&env, &token_addr);
+        sac.mint(&owner, &1_000_000);
         
         // Create a quest
         let q_id = quest_client.create_quest(
@@ -201,6 +203,8 @@ proptest! {
         ) = setup_rewards();
         
         let owner = Address::generate(&env);
+        let sac = soroban_sdk::token::StellarAssetClient::new(&env, &token_addr);
+        sac.mint(&owner, &1_000_000);
         
         // Create a quest
         let q_id = quest_client.create_quest(

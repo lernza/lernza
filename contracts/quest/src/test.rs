@@ -2,10 +2,16 @@ use super::*;
 use soroban_sdk::{
     testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, String,
 };
-use testutils::{setup_quest, create_quest_helper};
+use testutils::setup_quest;
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
-    setup_quest()
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(QuestContract, ());
+    let client = QuestContractClient::new(&env, &contract_id);
+    let owner = Address::generate(&env);
+    let token = Address::generate(&env);
+    (env, client, owner, token)
 }
 
 fn create_quest_helper(
@@ -14,7 +20,16 @@ fn create_quest_helper(
     owner: &Address,
     token: &Address,
 ) -> u32 {
-    testutils::create_quest_helper(env, client, owner, token)
+    client.create_quest(
+        owner,
+        &String::from_str(env, "My Quest"),
+        &String::from_str(env, "Teaching my brother to code"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
+        token,
+        &Visibility::Public,
+        &None,
+    )
 }
 
 fn create_quest_with_visibility(

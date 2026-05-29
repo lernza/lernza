@@ -936,7 +936,50 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "bool": true
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "distribution_mode"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "symbol": "Custom"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "flat_reward"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 0
+                        }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "reward_amount"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 100
+                        }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "submitted_at"
+                      },
+                      "val": {
+                        "u64": 0
+                      }
+                    }
+                  ]
                 }
               }
             },

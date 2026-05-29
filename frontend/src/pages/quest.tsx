@@ -22,6 +22,7 @@ import { formatTokens } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
+import { Breadcrumb } from "@/components/ui/breadcrumb"
 
 interface QuestViewProps {
   questId: number
@@ -78,6 +79,8 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Background */}
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
+
+      <Breadcrumb items={[{ label: "Quests", onClick: onBack }, { label: ws.title }]} />
 
       {/* Back button */}
       <button

@@ -34,6 +34,17 @@
 
     <title>Lernza — Learn. Earn. On-chain.</title>
 
+    <!-- Critical hero CSS inlined to unblock first paint (issue #925) -->
+    <style>
+      *,::before,::after{box-sizing:border-box}
+      body{margin:0;background:#fff;color:#0a0a0a;font-family:Inter,system-ui,sans-serif}
+      #root{min-height:100dvh}
+      .hero-section{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5rem 1.5rem;text-align:center;background:#FACC15}
+      .hero-heading{font-size:clamp(2rem,6vw,4rem);font-weight:900;line-height:1.1;margin:0 0 1rem}
+      .hero-sub{font-size:1.125rem;max-width:42ch;margin:0 auto 2rem}
+      .hero-cta{display:inline-flex;align-items:center;gap:.5rem;padding:.75rem 1.75rem;font-weight:700;border:3px solid #0a0a0a;box-shadow:4px 4px 0 #0a0a0a;background:#0a0a0a;color:#FACC15;cursor:pointer;text-decoration:none}
+    </style>
+
     <!-- Font preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

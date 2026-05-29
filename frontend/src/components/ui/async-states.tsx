@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 // ─── Loading States ─────────────────────────────────────────────────────────────
 
 interface LoadingStateProps {
-  message?: string
+  /** Contextual message — callers must provide one (e.g. "Fetching quests", "Confirming transaction"). */
+  message: string
   variant?: "default" | "compact" | "inline"
 }
 
-export function LoadingState({ message = "Loading...", variant = "default" }: LoadingStateProps) {
+export function LoadingState({ message, variant = "default" }: LoadingStateProps) {
   if (variant === "inline") {
     return (
       <div className="flex items-center gap-2 text-sm font-bold">
@@ -280,7 +281,8 @@ export function EmptyState(props: EmptyStateProps) {
     return (
       <Card className="animate-fade-in-up">
         <CardContent className="flex items-center gap-3 py-4">
-          <div className="bg-primary border-border flex h-8 w-8 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
+          {/* compact: h-10 w-10 container, icon h-6 w-6 — 1.6× ratio matching standalone */}
+          <div className="bg-primary border-border flex h-10 w-10 shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
             {config.icon}
           </div>
           <div className="flex-1">

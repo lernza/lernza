@@ -14,6 +14,11 @@
   --color-card-foreground: #000000;
   --color-border: #000000;
   --color-input: #000000;
+  /* Shadow scale tokens (#927) — neo-brutalist offset shadows by semantic role */
+  --shadow-sm: 2px 2px 0 var(--color-border);   /* badges, chips */
+  --shadow-md: 4px 4px 0 var(--color-border);   /* buttons, inputs */
+  --shadow-lg: 6px 6px 0 var(--color-border);   /* cards, panels */
+  --shadow-xl: 8px 8px 0 var(--color-border);   /* dialogs, modals */
   --color-ring: #facc15;
   --color-accent: #facc15;
   --color-accent-foreground: #000000;

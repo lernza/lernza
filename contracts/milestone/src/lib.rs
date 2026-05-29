@@ -130,6 +130,23 @@ pub struct MilestoneInput {
     pub requires_previous: bool,
 }
 
+/// Snapshot of the distribution parameters recorded at submission time.
+/// Used at approval time so the enrollee is paid under the rules in effect
+/// when they submitted, not whatever the owner has reconfigured since
+/// (see issue #863).
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingSubmissionSnapshot {
+    pub distribution_mode: DistributionMode,
+    /// Per-milestone reward at submission time. Used for the Custom and
+    /// Competitive (winner) cases.
+    pub reward_amount: i128,
+    /// Flat reward at submission time. Only meaningful when
+    /// `distribution_mode == Flat`; zero otherwise.
+    pub flat_reward: i128,
+    pub submitted_at: u64,
+}
+
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
@@ -155,6 +172,10 @@ pub enum Error {
     /// System band: code 400 is identical across all Lernza contracts.
     Paused = 400,
     Overflow = 19,
+    /// The cross-contract call to mint a quest-completion certificate
+    /// failed. The whole transaction rolls back so milestone state stays
+    /// consistent with the certificate state (see issues #860, #869).
+    CertificateMintFailed = 20,
     InvalidInput = 3,
 }
 
@@ -554,7 +575,8 @@ impl MilestoneContract {
 
         // Increment total reserved reward if this completion wasn't already pending review
         let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
-        if !env.storage().persistent().has(&submit_key) {
+        let had_pending = env.storage().persistent().has(&submit_key);
+        if !had_pending {
             let reserved_key = DataKey::TotalReservedReward(quest_id);
             let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
             env.storage()
@@ -562,7 +584,40 @@ impl MilestoneContract {
                 .set(&reserved_key, &(current_reserved + milestone.reward_amount));
         }
 
-        // Determine reward based on distribution mode
+        // Predict whether this completion finishes the quest. We need the
+        // answer BEFORE writing the comp_key so we can attempt the
+        // certificate mint first (#860): if the cross-contract mint fails,
+        // the whole transaction reverts and the milestone state is never
+        // observed in the "completed but no cert" intermediate. Combined
+        // with the try_mint inside maybe_mint_certificate (#869), any mint
+        // error is surfaced as `Error::CertificateMintFailed`.
+        let current_completions: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
+            .unwrap_or(0);
+        let next_completion_count = current_completions
+            .checked_add(1)
+            .ok_or(Error::Overflow)?;
+        Self::maybe_mint_certificate(
+            env.clone(),
+            quest_id,
+            enrollee.clone(),
+            next_completion_count,
+        )?;
+
+        // Mark completed FIRST — this acts as the de-duplication tombstone
+        // so any further code paths in this function (in particular the
+        // Competitive cnt bump below) and any defensive re-check observe a
+        // consistent "already completed" state for (quest, milestone,
+        // enrollee). See issue #859.
+        env.storage().persistent().set(&comp_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&comp_key, THRESHOLD, BUMP);
+
+        // Determine reward based on distribution mode. The Competitive
+        // counter bump happens AFTER the comp_key tombstone is in place.
         let mode: DistributionMode = env
             .storage()
             .persistent()
@@ -591,12 +646,6 @@ impl MilestoneContract {
             }
         };
 
-        // Mark completed
-        env.storage().persistent().set(&comp_key, &true);
-        env.storage()
-            .persistent()
-            .extend_ttl(&comp_key, THRESHOLD, BUMP);
-
         // Store completion timestamp
         let time_key = DataKey::CompletionTime(quest_id, milestone_id, enrollee.clone());
         env.storage()
@@ -608,8 +657,9 @@ impl MilestoneContract {
 
         // Increment enrollee's completion count for this quest
         let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
-        let count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        env.storage().persistent().set(&count_key, &(count + 1));
+        env.storage()
+            .persistent()
+            .set(&count_key, &next_completion_count);
         env.storage()
             .persistent()
             .extend_ttl(&count_key, THRESHOLD, BUMP);
@@ -632,9 +682,6 @@ impl MilestoneContract {
             (Symbol::new(&env, "milestone_completed"),),
             (quest_id, milestone_id, enrollee.clone()),
         );
-
-        // Check if this completes the quest and mint certificate if so
-        Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
 
         Ok(reward)
     }
@@ -687,8 +734,26 @@ impl MilestoneContract {
             return Err(Error::NotEnrolled);
         }
 
-        // Mark as submitted for review
-        env.storage().persistent().set(&submit_key, &true);
+        // Snapshot the distribution-mode parameters at submission time so
+        // the approval flow is paid under the rules the enrollee signed up
+        // for. See issue #863.
+        let current_mode: DistributionMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom);
+        let current_flat_reward: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::FlatReward(quest_id))
+            .unwrap_or(0);
+        let snapshot = PendingSubmissionSnapshot {
+            distribution_mode: current_mode,
+            reward_amount: milestone.reward_amount,
+            flat_reward: current_flat_reward,
+            submitted_at: env.ledger().timestamp(),
+        };
+        env.storage().persistent().set(&submit_key, &snapshot);
 
         // Increment total reserved reward for pending review
         let reserved_key = DataKey::TotalReservedReward(quest_id);
@@ -791,7 +856,40 @@ impl MilestoneContract {
         if new_approvals >= required_approvals {
             Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
 
-            // Auto-complete the milestone
+            // Load the snapshot taken at submission time. Reward computation
+            // uses these snapshotted parameters rather than re-reading the
+            // current Mode / FlatReward, so a distribution-mode change by
+            // the owner between submission and approval cannot retroactively
+            // alter what the enrollee earns. See issue #863.
+            let snapshot: PendingSubmissionSnapshot = env
+                .storage()
+                .persistent()
+                .get(&submit_key)
+                .ok_or(Error::NotSubmitted)?;
+
+            // Predict whether this approval closes out the quest and try the
+            // certificate mint FIRST. With try_mint_quest_certificate, a
+            // mint failure becomes `Error::CertificateMintFailed` and the
+            // whole transaction reverts — leaving the milestone untouched
+            // for a clean retry. See issues #860 and #869.
+            let current_completions: u32 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
+                .unwrap_or(0);
+            let next_completion_count = current_completions
+                .checked_add(1)
+                .ok_or(Error::Overflow)?;
+            Self::maybe_mint_certificate(
+                env.clone(),
+                quest_id,
+                enrollee.clone(),
+                next_completion_count,
+            )?;
+
+            // Auto-complete the milestone — comp_key is written BEFORE the
+            // Competitive cnt bump below to serve as the de-duplication
+            // tombstone (#859).
             env.storage().persistent().set(&comp_key, &true);
             env.storage()
                 .persistent()
@@ -802,32 +900,22 @@ impl MilestoneContract {
 
             // Increment enrollee's completion count for this quest
             let enrollee_count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
-            let count: u32 = env
-                .storage()
-                .persistent()
-                .get(&enrollee_count_key)
-                .unwrap_or(0);
             env.storage()
                 .persistent()
-                .set(&enrollee_count_key, &(count + 1));
+                .set(&enrollee_count_key, &next_completion_count);
             env.storage()
                 .persistent()
                 .extend_ttl(&enrollee_count_key, THRESHOLD, BUMP);
 
-            // Determine reward based on distribution mode
-            let mode: DistributionMode = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Mode(quest_id))
-                .unwrap_or(DistributionMode::Custom);
-
-            let reward = match mode {
-                DistributionMode::Custom => milestone.reward_amount,
-                DistributionMode::Flat => env
-                    .storage()
-                    .persistent()
-                    .get(&DataKey::FlatReward(quest_id))
-                    .ok_or(Error::FlatRewardNotConfigured)?,
+            // Determine reward based on the SNAPSHOTTED distribution mode.
+            let reward = match snapshot.distribution_mode {
+                DistributionMode::Custom => snapshot.reward_amount,
+                DistributionMode::Flat => {
+                    if snapshot.flat_reward <= 0 {
+                        return Err(Error::FlatRewardNotConfigured);
+                    }
+                    snapshot.flat_reward
+                }
                 DistributionMode::Competitive(max_winners) => {
                     let cnt_key = DataKey::MilestoneCompletionTotal(quest_id, milestone_id);
                     let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
@@ -836,7 +924,7 @@ impl MilestoneContract {
                         .persistent()
                         .extend_ttl(&cnt_key, THRESHOLD, BUMP);
                     if cnt < max_winners {
-                        milestone.reward_amount
+                        snapshot.reward_amount
                     } else {
                         0
                     }
@@ -850,9 +938,6 @@ impl MilestoneContract {
                 (Symbol::new(&env, "peer_approved"),),
                 (milestone_id, quest_id, enrollee.clone(), peer, reward),
             );
-
-            // Check if this completes the quest and mint certificate if so
-            Self::check_and_mint_certificate(env.clone(), quest_id, enrollee)?;
 
             Ok(Some(reward))
         } else {
@@ -1166,53 +1251,71 @@ impl MilestoneContract {
         }
     }
 
-    /// Check if user has completed all milestones for a quest and mint certificate if so
-    fn check_and_mint_certificate(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
-        // Get total number of milestones for this quest
+    /// Attempt the quest-completion certificate mint if the supplied
+    /// `next_completion_count` would equal or exceed the milestone count
+    /// for the quest. Designed to be called **before** the milestone is
+    /// marked Completed so that:
+    ///
+    /// - If the certificate contract panics or returns Err, this function
+    ///   emits a `certificate_mint_failed` event and returns
+    ///   `Error::CertificateMintFailed`, causing the whole transaction
+    ///   (including the would-be milestone completion) to revert. The
+    ///   user can re-trigger the verification once the certificate
+    ///   contract is recoverable. (issues #860, #869)
+    /// - If the mint succeeds, a `certificate_minted` event is emitted
+    ///   and the caller proceeds to commit the milestone.
+    /// - If this completion doesn't yet finish the quest, no mint is
+    ///   attempted and `Ok(())` is returned.
+    fn maybe_mint_certificate(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+        next_completion_count: u32,
+    ) -> Result<(), Error> {
         let total_milestones = Self::get_quest_milestone_count(env.clone(), quest_id)?;
-
-        // Get number of completed milestones for this user
-        let completed_count =
-            Self::get_enrollee_completions(env.clone(), quest_id, enrollee.clone());
-
-        // If user has completed all milestones, mint certificate
-        if completed_count >= total_milestones {
-            // Get quest info
-            let quest_contract_addr: Address = env
-                .storage()
-                .instance()
-                .get(&DataKey::QuestContract)
-                .ok_or(Error::NotInitialized)?;
-
-            let quest_client = QuestClient::new(&env, &quest_contract_addr);
-            let quest_info = quest_client.get_quest(&quest_id);
-
-            // Get certificate contract address
-            let certificate_contract_addr: Address = env
-                .storage()
-                .instance()
-                .get(&DataKey::CertificateContract)
-                .ok_or(Error::NotInitialized)?;
-
-            // Create certificate client
-            let certificate_client = CertificateClient::new(&env, &certificate_contract_addr);
-
-            // Mint certificate
-            certificate_client.mint_quest_certificate(
-                &quest_id,
-                &quest_info.name,
-                &quest_info.category,
-                &enrollee,
-            );
-
-            // Emit certificate minted event
-            env.events().publish(
-                (Symbol::new(&env, "certificate_minted"),),
-                (quest_id, enrollee),
-            );
+        if total_milestones == 0 || next_completion_count < total_milestones {
+            return Ok(());
         }
 
-        Ok(())
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+
+        let certificate_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::CertificateContract)
+            .ok_or(Error::NotInitialized)?;
+        let certificate_client = CertificateClient::new(&env, &certificate_contract_addr);
+
+        // `try_mint_quest_certificate` returns `Result<Result<u32, Val>,
+        // InvokeError>` — both Err shapes are treated as mint failure.
+        match certificate_client.try_mint_quest_certificate(
+            &quest_id,
+            &quest_info.name,
+            &quest_info.category,
+            &enrollee,
+        ) {
+            Ok(Ok(_)) => {
+                env.events().publish(
+                    (Symbol::new(&env, "certificate_minted"),),
+                    (quest_id, enrollee),
+                );
+                Ok(())
+            }
+            _ => {
+                // Surface the failure so any indexer / frontend can react.
+                env.events().publish(
+                    (Symbol::new(&env, "certificate_mint_failed"),),
+                    (quest_id, enrollee),
+                );
+                Err(Error::CertificateMintFailed)
+            }
+        }
     }
 
     /// Get total reserved reward (verified + pending review) for a quest.

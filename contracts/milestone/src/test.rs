@@ -1481,3 +1481,88 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
     let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
     assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
 }
+
+// --- Snapshot distribution mode at submission (issue #863) ---
+
+#[test]
+fn test_approval_uses_snapshot_when_mode_changed_mid_flow() {
+    // Submission happens under Flat=50. Owner switches to Custom (which
+    // would pay the milestone's reward_amount of 200) before the peer
+    // approval lands. The enrollee must still be paid the snapshotted Flat
+    // reward (50), not 200, because that's what they signed up for.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 200);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &0);
+
+    // Owner reconfigures distribution mode AFTER submission.
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
+
+    let result = client.approve_completion(&peer, &q_id, &0, &enrollee);
+    // Snapshot reward (Flat=50), NOT the new Custom reward (200).
+    assert_eq!(result, Some(50));
+}
+
+#[test]
+fn test_approval_under_competitive_uses_snapshot_reward_amount() {
+    // Snapshot also captures the milestone reward_amount at submission
+    // time. Even if the milestone is later considered under a different
+    // mode (Competitive here), the snapshot value is paid.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &0);
+
+    // First (only) winner gets the milestone reward.
+    let result = client.approve_completion(&peer, &q_id, &0, &enrollee);
+    assert_eq!(result, Some(100));
+}
+
+// --- Competitive distribution invariant (issue #859) ---
+
+#[test]
+fn test_competitive_max_winners_one_does_not_double_pay() {
+    // In Competitive(max_winners=1) the FIRST enrollee gets the reward and
+    // any subsequent enrollee gets 0 — the comp_key tombstone must be in
+    // place before the cnt bump so a same-enrollee retry returns
+    // AlreadyCompleted rather than double-paying.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+    quest_client.add_enrollee(&q_id, &e2);
+    quest_client.add_enrollee(&q_id, &e3);
+
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 100);
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e2), 0);
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e3), 0);
+
+    // A retry for the same enrollee + milestone must NOT bump the cnt or
+    // pay again.
+    let retry = client.try_verify_completion(&owner, &q_id, &0, &e1);
+    assert_eq!(retry, Err(Ok(Error::AlreadyCompleted)));
+}

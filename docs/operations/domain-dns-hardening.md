@@ -61,3 +61,16 @@ dig +dnssec lernza.com A
 ### Rollback
 
 If DNSSEC causes resolution failures, disable at the registrar first (remove DS record), then at the DNS provider. Allow 24–48 hours for TTL expiry before re-enabling.
+
+## Two-Factor Authentication
+
+Require hardware-backed 2FA (FIDO2/WebAuthn or YubiKey) on:
+
+| Account | Minimum 2FA | Notes |
+|:--------|:------------|:------|
+| Domain registrar | Hardware key | Disable SMS fallback |
+| DNS provider | Hardware key | Separate key from registrar |
+| Vercel/hosting | Hardware key | Restrict team member roles |
+| Certificate authority (if manual) | Hardware key | Prefer provider-managed certs |
+
+Backup codes must be stored offline in a team safe, not in the same password manager as account passwords.

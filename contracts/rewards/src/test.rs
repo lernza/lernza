@@ -2117,3 +2117,58 @@ fn test_pause_blocks_grace_period_updates() {
     client.set_refund_grace_period(&admin, &259_200);
     assert_eq!(client.get_refund_grace_period(), 259_200);
 }
+// --- TotalDistributed / TotalRefunded sync (issue #864) ---
+
+#[test]
+fn test_refund_pool_decrements_total_distributed() {
+    // Fund a pool, archive the quest, advance time past the grace window,
+    // then refund some of the pool. The instance-storage `TotalDistributed`
+    // counter must decrement by the refunded amount, and the persistent
+    // `get_quest_refunded` aggregate must reflect the refund.
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Refund counter test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    // No payouts have happened — TotalDistributed is still 0.
+    assert_eq!(client.get_total_distributed(), 0);
+    assert_eq!(client.get_quest_refunded(&q_id), 0);
+
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    client.refund_pool(&owner, &q_id, &2_000);
+
+    // TotalDistributed saturates at 0 (no prior distribute) and
+    // QuestRefunded reflects the refunded amount.
+    assert_eq!(client.get_total_distributed(), 0);
+    assert_eq!(client.get_quest_refunded(&q_id), 2_000);
+
+    client.refund_pool(&owner, &q_id, &1_500);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_500);
+}

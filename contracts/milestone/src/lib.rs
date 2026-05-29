@@ -196,6 +196,10 @@ pub const MAX_MILESTONE_TITLE_LEN: u32 = 128;
 pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 pub const MAX_BATCH_SIZE: u32 = 20;
 pub const MAX_MILESTONES: u32 = 50;
+/// Maximum window size accepted by `get_quest_completion_rate`. Callers must
+/// supply an explicit `limit <= MAX_COMPLETION_RATE_PAGE` so a single call
+/// can never iterate an unbounded enrollee set. See issue #865.
+pub const MAX_COMPLETION_RATE_PAGE: u32 = 100;
 
 // IsDataKey implementation — restricts TTL extension to Milestone DataKey only
 impl common::IsDataKey for DataKey {}
@@ -502,13 +506,32 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&mode_key, THRESHOLD, BUMP);
 
-        if matches!(mode, DistributionMode::Flat) {
+        let flat_for_event = if matches!(mode, DistributionMode::Flat) {
             let flat_key = DataKey::FlatReward(quest_id);
             env.storage().persistent().set(&flat_key, &flat_reward);
             env.storage()
                 .persistent()
                 .extend_ttl(&flat_key, THRESHOLD, BUMP);
-        }
+            flat_reward
+        } else {
+            0
+        };
+
+        // Emit a distribution-mode-set event so indexers and frontends can
+        // detect mode changes and warn enrolled learners that the reward
+        // rules have shifted. See issue #868.
+        // Topic: ("distribution_mode_set",)
+        // Data: (quest_id, mode, flat_reward_or_zero, actor, timestamp)
+        env.events().publish(
+            (Symbol::new(&env, "distribution_mode_set"),),
+            (
+                quest_id,
+                mode,
+                flat_for_event,
+                owner,
+                env.ledger().timestamp(),
+            ),
+        );
 
         Ok(())
     }
@@ -1080,42 +1103,62 @@ impl MilestoneContract {
         }
     }
 
-    /// Get quest completion rate (% of enrollees who completed all milestones).
-    pub fn get_quest_completion_rate(env: Env, quest_id: u32, total_enrollees: u32) -> i128 {
-        if total_enrollees == 0 {
-            return 0;
+    /// Paginated quest completion rate (issue #865).
+    ///
+    /// Returns the percentage of enrollees in the window
+    /// `enrollees[offset .. offset + limit]` that have completed every
+    /// milestone for the quest. The previous unbounded version iterated
+    /// every enrollee on every call, which became a DOS vector for quests
+    /// with thousands of enrollees.
+    ///
+    /// Bounded by `MAX_COMPLETION_RATE_PAGE`: callers that pass `limit`
+    /// above that cap are rejected with `Error::InvalidInput`. Pass
+    /// `limit == 0` to also be rejected; callers must opt in to a window.
+    pub fn get_quest_completion_rate(
+        env: Env,
+        quest_id: u32,
+        offset: u32,
+        limit: u32,
+    ) -> Result<i128, Error> {
+        if limit == 0 || limit > MAX_COMPLETION_RATE_PAGE {
+            return Err(Error::InvalidInput);
         }
 
-        let total_milestones = match Self::get_quest_milestone_count(env.clone(), quest_id) {
-            Ok(count) => count,
-            Err(_) => return 0,
-        };
-
+        let total_milestones = Self::get_quest_milestone_count(env.clone(), quest_id)?;
         if total_milestones == 0 {
-            return 0;
+            return Ok(0);
         }
 
-        // Get quest contract address
         let quest_contract_addr: Address = env
             .storage()
             .instance()
             .get(&DataKey::QuestContract)
-            .expect("Quest contract NOT INITIALIZED");
-
-        // Cross-contract call to get enrollees
+            .ok_or(Error::NotInitialized)?;
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let enrollees = quest_client.get_enrollees(&quest_id);
 
+        let total = enrollees.len();
+        if offset >= total {
+            return Ok(0);
+        }
+        let end = offset.saturating_add(limit).min(total);
+
+        let mut window_size = 0u32;
         let mut fully_completed = 0u32;
-        for enrollee in enrollees.iter() {
+        for i in offset..end {
+            let enrollee = enrollees.get(i).expect("index in bounds by construction");
             let completions = Self::get_enrollee_completions(env.clone(), quest_id, enrollee);
             if completions >= total_milestones {
                 fully_completed += 1;
             }
+            window_size += 1;
         }
 
-        // Return percentage (0-100)
-        (fully_completed as i128 * 100) / total_enrollees as i128
+        if window_size == 0 {
+            return Ok(0);
+        }
+
+        Ok((fully_completed as i128 * 100) / window_size as i128)
     }
 
     /// Get total earned for an enrollee in a quest.

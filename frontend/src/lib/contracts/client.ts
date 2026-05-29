@@ -47,6 +47,43 @@ export interface TransactionResult {
 
 export interface TransactionLifecycleHandlers {
   onSubmitted?: (txHash: string) => void
+  /** Called for user-visible failures (e.g. network mismatch). Wire to a toast in the UI. */
+  onError?: (message: string) => void
+}
+
+export const NETWORK_MISMATCH_MESSAGE =
+  "Freighter network changed after signing. Switch back to the app network before submitting."
+
+const MAX_SUBMIT_ATTEMPTS = 5
+const SUBMIT_BACKOFF_MS = 500
+
+function getExpectedNetworkLabel(): string {
+  if (NETWORK_PASSPHRASE.toLowerCase().includes("public")) return "Mainnet"
+  if (NETWORK_PASSPHRASE.toLowerCase().includes("test")) return "Testnet"
+  return "the configured network"
+}
+
+function freighterNetworkMatches(passphrase?: string | null): boolean {
+  return !passphrase || passphrase === NETWORK_PASSPHRASE
+}
+
+async function submitTransactionWithRetry(
+  signedTx: Transaction
+): Promise<rpc.Api.SendTransactionResponse> {
+  let lastResponse: rpc.Api.SendTransactionResponse | undefined
+
+  for (let attempt = 0; attempt < MAX_SUBMIT_ATTEMPTS; attempt++) {
+    lastResponse = await server.sendTransaction(signedTx)
+    if (lastResponse.status !== "TRY_AGAIN_LATER") {
+      return lastResponse
+    }
+    if (attempt < MAX_SUBMIT_ATTEMPTS - 1) {
+      const delayMs = SUBMIT_BACKOFF_MS * 2 ** attempt
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+    }
+  }
+
+  return lastResponse!
 }
 
 export interface TransactionTimebounds {
@@ -60,16 +97,16 @@ export interface TransactionTimebounds {
  */
 export function isTransactionTimeboundsValid(timebounds: TransactionTimebounds): boolean {
   const now = Math.floor(Date.now() / 1000) // Convert to Unix timestamp in seconds
-  
+
   // Check if current time is within the valid range
   if (now < timebounds.minTime) {
     return false // Too early
   }
-  
+
   if (timebounds.maxTime > 0 && now > timebounds.maxTime) {
     return false // Too late (maxTime of 0 means no upper limit)
   }
-  
+
   return true
 }
 
@@ -80,7 +117,7 @@ export function getTransactionTimebounds(tx: Transaction): TransactionTimebounds
   try {
     const timebounds = tx.timebounds
     if (!timebounds) return null
-    
+
     return {
       minTime: parseInt(timebounds.minTime, 10),
       maxTime: parseInt(timebounds.maxTime, 10),
@@ -137,13 +174,13 @@ export async function signAndSubmit(
     if (timebounds && !isTransactionTimeboundsValid(timebounds)) {
       const now = Math.floor(Date.now() / 1000)
       let errorMsg = "Transaction timebounds are invalid"
-      
+
       if (now < timebounds.minTime) {
         errorMsg = `Transaction is not yet valid. Valid from ${new Date(timebounds.minTime * 1000).toISOString()}`
       } else if (timebounds.maxTime > 0 && now > timebounds.maxTime) {
         errorMsg = `Transaction has expired. Valid until ${new Date(timebounds.maxTime * 1000).toISOString()}`
       }
-      
+
       return {
         status: "FAILED",
         txHash: "",
@@ -151,9 +188,15 @@ export async function signAndSubmit(
       }
     }
 
-    const net = await getNetworkDetails()
-    if (net.networkPassphrase && net.networkPassphrase !== NETWORK_PASSPHRASE) {
-      throw new Error(`Freighter is on the wrong network. Expected: Testnet.`)
+    const netBeforeSign = await getNetworkDetails()
+    if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
+      const message = `Freighter is on the wrong network. Expected: ${getExpectedNetworkLabel()}.`
+      handlers.onError?.(message)
+      return {
+        status: "FAILED",
+        txHash: "",
+        error: message,
+      }
     }
 
     const result = await signTransaction(tx.toXDR(), {
@@ -164,17 +207,29 @@ export async function signAndSubmit(
       const { signedTxXdr } = result
       // Convert to Transaction Envelope XDR string for safety
       const signedTx = new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
-      
-      const currentAddress = await getPublicKey()
-      if (signedTx.source !== currentAddress) {
+
+      const netAfterSign = await getNetworkDetails()
+      if (!freighterNetworkMatches(netAfterSign.networkPassphrase)) {
+        handlers.onError?.(NETWORK_MISMATCH_MESSAGE)
         return {
           status: "FAILED",
           txHash: "",
-          error: "Account changed after signing. Please re-confirm.",
+          error: NETWORK_MISMATCH_MESSAGE,
         }
       }
 
-      const submitResponse = await server.sendTransaction(signedTx)
+      const currentAddress = await getPublicKey()
+      if (signedTx.source !== currentAddress) {
+        const message = "Account changed after signing. Please re-confirm."
+        handlers.onError?.(message)
+        return {
+          status: "FAILED",
+          txHash: "",
+          error: message,
+        }
+      }
+
+      const submitResponse = await submitTransactionWithRetry(signedTx)
 
       // The sendTransaction status was wrongly check for SUCCESS previously.
       // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
@@ -203,10 +258,12 @@ export async function signAndSubmit(
           error: "This transaction is a duplicate. Please wait a moment or try again.",
         }
       } else if (submitResponse.status === "TRY_AGAIN_LATER") {
+        const message = "Network is busy. Please try again later."
+        handlers.onError?.(message)
         return {
           status: "FAILED",
           txHash: submitResponse.hash,
-          error: "Network is busy. Please try again later.",
+          error: message,
         }
       } else if (submitResponse.status === "ERROR") {
         return {

@@ -204,9 +204,10 @@ function parseActivityRecord(
 
 export async function fetchWalletActivity(
   address: string,
-  cursor?: string | null
+  cursor?: string | null,
+  signal?: AbortSignal
 ): Promise<WalletActivityPage> {
-  const response = await fetch(buildOperationsUrl(address, cursor))
+  const response = await fetch(buildOperationsUrl(address, cursor), { signal })
   if (!response.ok) {
     throw new Error(`Failed to load wallet activity (${response.status})`)
   }

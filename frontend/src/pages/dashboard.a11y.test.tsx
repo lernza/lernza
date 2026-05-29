@@ -7,6 +7,50 @@ vi.mock("./dashboard/earnings-chart", () => ({
   default: () => null,
 }))
 
+vi.mock("@/lib/contracts/client", () => ({
+  NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org",
+  RPC_TIMEOUT_MS: 15000,
+  server: {},
+  withTimeout: <T,>(promise: Promise<T>) => promise,
+}))
+
+vi.mock("@/hooks/use-token-metadata", () => ({
+  useTokenMetadata: () => ({ metadata: null, isLoading: false, error: null }),
+}))
+
+vi.mock("@/hooks/use-quest-stats", () => ({
+  useQuestStatsMap: () => ({
+    statsByQuestId: {
+      7: { enrolleeCount: 4, milestoneCount: 0, poolBalance: 0 },
+      8: { enrolleeCount: 1, milestoneCount: 0, poolBalance: 25 },
+    },
+    isLoading: false,
+    isFetching: false,
+    error: null,
+  }),
+}))
+
+vi.mock("@/lib/contracts/quest", () => ({
+  questClient: {
+    listPublicQuests: vi.fn(),
+    listQuestsByOwner: vi.fn(),
+    listQuestsByEnrollee: vi.fn(),
+  },
+}))
+
+vi.mock("@/lib/contracts/milestone", () => ({
+  milestoneClient: {
+    getEnrolleeCompletions: vi.fn(),
+  },
+}))
+
+vi.mock("@/lib/contracts/rewards", () => ({
+  rewardsClient: {
+    getUserEarnings: vi.fn(),
+  },
+}))
+
 vi.mock("@/hooks/use-async-data", () => ({
   useContractData: () => ({
     data: {
@@ -64,20 +108,9 @@ vi.mock("@/hooks/use-async-data", () => ({
           maxEnrollees: 10,
         },
       ],
-      questStats: {
-        7: {
-          enrolleeCount: 4,
-          milestoneCount: 0,
-          poolBalance: 0,
-        },
-        8: {
-          enrolleeCount: 1,
-          milestoneCount: 0,
-          poolBalance: 25,
-        },
-      },
-      questMilestones: {},
-      questCompletions: {},
+      previewQuestIds: [7, 8],
+      questCompletions: { 7: 0, 8: 0 },
+      userEarnings: 0n,
     },
     isLoading: false,
     error: null,

@@ -1,7 +1,5 @@
 #![no_std]
-use common::{
-    extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
-};
+use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, Env,
     Symbol,
@@ -52,6 +50,10 @@ pub enum DataKey {
     QuestCount,
     // Total tokens distributed per quest
     QuestDistributed(u32),
+    // Total tokens refunded per quest. Authoritative persistent aggregate
+    // kept in sync with refund_pool / refund_unused_pool so the instance
+    // counter `TotalDistributed` stays consistent — issue #864.
+    QuestRefunded(u32),
     // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
     PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Configurable refund grace period in seconds — Issue #882
@@ -67,7 +69,7 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     AlreadyInitialized = 99, // moved away from standard range
-    NotInitialized = 100,      // moved away from standard range
+    NotInitialized = 100,    // moved away from standard range
     Unauthorized = 2,
     InsufficientPool = 4,
     InvalidAmount = 5,
@@ -315,21 +317,26 @@ impl RewardsContract {
             return Err(Error::InsufficientPool);
         }
 
-        // Transfer tokens to enrollee
-        let token_addr = Self::get_token(&env)?;
-        let client = token::Client::new(&env, &token_addr);
-        client.transfer(&env.current_contract_address(), &enrollee, &amount);
+        // Record payout for idempotency BEFORE the token transfer. If the
+        // transfer subsequently panics or reverts, the whole transaction
+        // rolls back together with the PayoutRecord write — so on retry we
+        // see no record and try again. If the transfer succeeds the record
+        // is durable, blocking any duplicate payout. See issue #861.
+        env.storage().persistent().set(&payout_key, &amount);
+        common::extend_persistent_ttl(&env, &payout_key);
 
-        // Update pool balance
+        // Update pool balance to reflect the upcoming transfer.
         let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
         env.storage().persistent().set(&pool_key, &new_pool);
         env.storage()
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
-        // Record payout for idempotency (prevents duplicate payouts on retry)
-        env.storage().persistent().set(&payout_key, &amount);
-        common::extend_persistent_ttl(&env, &payout_key);
+        // Transfer tokens to enrollee. A panic here reverts the whole tx
+        // including the PayoutRecord + pool writes above.
+        let token_addr = Self::get_token(&env)?;
+        let client = token::Client::new(&env, &token_addr);
+        client.transfer(&env.current_contract_address(), &enrollee, &amount);
 
         // Track user earnings
         let earn_key = DataKey::UserEarnings(enrollee.clone());
@@ -465,6 +472,14 @@ impl RewardsContract {
             .persistent()
             .extend_ttl(&pool_key, THRESHOLD, BUMP);
 
+        // Keep the aggregate counters in sync with the refund (issue #864).
+        // The instance-storage `TotalDistributed` is a fast read; we
+        // decrement it so reads after a refund don't show stale "money in
+        // user hands" totals. `QuestRefunded(quest_id)` is the persistent
+        // authoritative aggregate that always equals the sum of refunds for
+        // this quest.
+        Self::record_refund(&env, quest_id, amount)?;
+
         // Emit refund event
         // Event topics: (reward_refunded,)
         // Event data: (quest_id, authority, amount)
@@ -473,6 +488,34 @@ impl RewardsContract {
             (quest_id, authority, amount),
         );
 
+        Ok(())
+    }
+
+    /// Decrement the instance-storage `TotalDistributed` counter and bump
+    /// the persistent `QuestRefunded` aggregate by the refunded amount.
+    /// Called from both `refund_pool` and `refund_unused_pool` so the
+    /// counters stay consistent across every refund path. See issue #864.
+    fn record_refund(env: &Env, quest_id: u32, amount: i128) -> Result<(), Error> {
+        let total: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDistributed)
+            .unwrap_or(0);
+        // Saturate at 0 — the instance counter must never go negative even
+        // if a refund-without-prior-distribute happens (the invariant is
+        // re-established by the persistent QuestRefunded aggregate).
+        let new_total = total.saturating_sub(amount);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &new_total);
+
+        let q_refunded_key = DataKey::QuestRefunded(quest_id);
+        let q_refunded: i128 = env.storage().persistent().get(&q_refunded_key).unwrap_or(0);
+        let new_refunded = q_refunded
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&q_refunded_key, &new_refunded);
+        common::extend_persistent_ttl(env, &q_refunded_key);
         Ok(())
     }
 
@@ -741,6 +784,9 @@ impl RewardsContract {
             .persistent()
             .extend_ttl(&DataKey::QuestPool(quest_id), THRESHOLD, BUMP);
 
+        // Keep aggregate counters in sync — issue #864.
+        Self::record_refund(&env, quest_id, refundable)?;
+
         // Emit event — reuse reward_refunded topic for indexer compatibility
         env.events().publish(
             (Symbol::new(&env, "reward_refunded"),),
@@ -748,6 +794,17 @@ impl RewardsContract {
         );
 
         Ok(refundable)
+    }
+
+    /// Persistent per-quest aggregate of refunded tokens. The instance
+    /// counter `TotalDistributed` is the fast read; this is the
+    /// authoritative source of truth that survives across contract
+    /// upgrades.
+    pub fn get_quest_refunded(env: Env, quest_id: u32) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::QuestRefunded(quest_id))
+            .unwrap_or(0)
     }
 }
 

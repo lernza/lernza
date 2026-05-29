@@ -2,49 +2,82 @@ import { Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
+import { useTokenMetadata } from "@/hooks/use-token-metadata"
+import type { QuestInfo } from "@/lib/contracts/quest"
 import type { Quest } from "@/lib/mock-data"
+import type { QuestStatSummary } from "@/hooks/use-quest-stats"
 
 interface TrendingQuestsProps {
-  quests: Quest[]
+  quests: QuestInfo[] | Quest[]
+  statsByQuest?: Record<number, Pick<QuestStatSummary, "enrolleeCount" | "poolBalance">>
   onSelectQuest: (id: number) => void
 }
 
-export function TrendingQuests({ quests, onSelectQuest }: TrendingQuestsProps) {
+export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: TrendingQuestsProps) {
+  const tokenAddress =
+    import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
+  const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
+
+  const formatRewardAmount = (amount: number) => {
+    return tokenMetadata
+      ? formatTokens(amount, tokenMetadata.decimals, tokenMetadata.symbol)
+      : formatTokens(amount)
+  }
+
   return (
     <div>
       <h2 className="mb-4 flex items-center gap-2 text-xl font-black">
         <Sparkles className="h-5 w-5" /> Trending Quests
       </h2>
       <div className="space-y-4">
-        {quests.map(quest => (
-          <Card
-            key={quest.id}
-            className="card-tilt border-border cursor-pointer border-[2px] shadow-[4px_4px_0_var(--color-border)]"
-            onClick={() => onSelectQuest(quest.id)}
-          >
-            <CardHeader className="p-4 pb-2">
-              <div className="flex items-start justify-between">
-                <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
-                <Badge
-                  variant="default"
-                  className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
-                >
-                  Trending
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1 font-bold">
-                  <Users className="h-3 w-3" /> {quest.enrolleeCount}
-                </span>
-                <span className="flex items-center gap-1 font-bold">
-                  <Coins className="h-3 w-3" /> {formatTokens(quest.poolBalance)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {quests.map(quest => {
+          const stats = statsByQuest?.[quest.id] ?? {
+            enrolleeCount: "enrolleeCount" in quest ? quest.enrolleeCount : 0,
+            poolBalance: "poolBalance" in quest ? quest.poolBalance : 0,
+          }
+
+          return (
+            <button
+              key={quest.id}
+              type="button"
+              onClick={() => onSelectQuest(quest.id)}
+              aria-label={`Open quest ${quest.name}`}
+              className="card-tilt border-border focus-visible:ring-ring w-full cursor-pointer border-[2px] text-left shadow-[4px_4px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none"
+            >
+              <Card className="border-0 shadow-none">
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
+                    <Badge
+                      variant="default"
+                      className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
+                    >
+                      Trending
+                    </Badge>
+                    {"verified" in quest && quest.verified && (
+                      <Badge
+                        variant="verified"
+                        className="border-border ml-2 border-[1px] px-1 text-[10px]"
+                      >
+                        Verified
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  <div className="text-muted-foreground mt-2 flex items-center gap-3 text-xs">
+                    <span className="flex items-center gap-1 font-bold">
+                      <Users className="h-3 w-3" /> {stats.enrolleeCount}
+                    </span>
+                    <span className="flex items-center gap-1 font-bold">
+                      <Coins className="h-3 w-3" /> {formatRewardAmount(stats.poolBalance)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

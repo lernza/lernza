@@ -767,6 +767,64 @@ fn test_leave_quest_not_enrolled() {
     assert_eq!(result, Err(Ok(Error::NotEnrolled)));
 }
 
+// --- Leave-quest peer-review hold (issue #862) ---
+
+#[test]
+fn test_leave_quest_blocked_while_hold_in_place() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&0, &enrollee);
+
+    client.place_leave_hold(&0, &owner, &enrollee);
+    assert!(client.has_leave_hold(&0, &enrollee));
+
+    let result = client.try_leave_quest(&enrollee, &0);
+    assert_eq!(result, Err(Ok(Error::LeaveBlockedByPendingApproval)));
+
+    assert!(client.is_enrollee(&0, &enrollee));
+}
+
+#[test]
+fn test_leave_quest_allowed_after_hold_lifted() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&0, &enrollee);
+
+    client.place_leave_hold(&0, &owner, &enrollee);
+    client.lift_leave_hold(&0, &owner, &enrollee);
+    assert!(!client.has_leave_hold(&0, &enrollee));
+
+    client.leave_quest(&enrollee, &0);
+    assert!(!client.is_enrollee(&0, &enrollee));
+}
+
+#[test]
+fn test_place_leave_hold_rejects_non_owner() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&0, &enrollee);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_place_leave_hold(&0, &stranger, &enrollee);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_place_leave_hold_rejects_non_enrollee() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_place_leave_hold(&0, &owner, &stranger);
+    assert_eq!(result, Err(Ok(Error::NotEnrolled)));
+}
+
 // --- QuestStatus / Update / Archive Tests (PR #296) ---
 
 #[test]

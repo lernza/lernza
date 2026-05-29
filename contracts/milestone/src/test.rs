@@ -1393,7 +1393,7 @@ fn test_get_quest_completion_rate() {
     quest_client.add_enrollee(&q_id, &e4);
 
     // Initial rate should be 0
-    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 0);
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 0);
 
     // e1 completes both (100%)
     client.verify_completion(&owner, &q_id, &0, &e1);
@@ -1403,27 +1403,27 @@ fn test_get_quest_completion_rate() {
     client.verify_completion(&owner, &q_id, &0, &e2);
 
     // Current rate: 1/4 = 25%
-    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 25);
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 25);
 
     // e3 completes both
     client.verify_completion(&owner, &q_id, &0, &e3);
     client.verify_completion(&owner, &q_id, &1, &e3);
 
     // Current rate: 2/4 = 50%
-    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 50);
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 50);
 
     // e4 completes both
     client.verify_completion(&owner, &q_id, &0, &e4);
     client.verify_completion(&owner, &q_id, &1, &e4);
 
     // Current rate: 3/4 = 75%
-    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 75);
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 75);
 
     // e2 completes the second one
     client.verify_completion(&owner, &q_id, &1, &e2);
 
     // Current rate: 4/4 = 100%
-    assert_eq!(client.get_quest_completion_rate(&q_id, &4), 100);
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 100);
 }
 
 #[test]
@@ -1470,7 +1470,9 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
 
     // Set mode to Flat manually in storage without setting FlatReward
     env.as_contract(&client.address, || {
-        env.storage().persistent().set(&DataKey::Mode(q_id), &DistributionMode::Flat);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Mode(q_id), &DistributionMode::Flat);
     });
 
     let enrollee = Address::generate(&env);
@@ -1478,4 +1480,163 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
 
     let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
     assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
+}
+
+// --- Snapshot distribution mode at submission (issue #863) ---
+
+#[test]
+fn test_approval_uses_snapshot_when_mode_changed_mid_flow() {
+    // Submission happens under Flat=50. Owner switches to Custom (which
+    // would pay the milestone's reward_amount of 200) before the peer
+    // approval lands. The enrollee must still be paid the snapshotted Flat
+    // reward (50), not 200, because that's what they signed up for.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 200);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &0);
+
+    // Owner reconfigures distribution mode AFTER submission.
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
+
+    let result = client.approve_completion(&peer, &q_id, &0, &enrollee);
+    // Snapshot reward (Flat=50), NOT the new Custom reward (200).
+    assert_eq!(result, Some(50));
+}
+
+#[test]
+fn test_approval_under_competitive_uses_snapshot_reward_amount() {
+    // Snapshot also captures the milestone reward_amount at submission
+    // time. Even if the milestone is later considered under a different
+    // mode (Competitive here), the snapshot value is paid.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &0);
+
+    // First (only) winner gets the milestone reward.
+    let result = client.approve_completion(&peer, &q_id, &0, &enrollee);
+    assert_eq!(result, Some(100));
+}
+
+// --- Competitive distribution invariant (issue #859) ---
+
+#[test]
+fn test_competitive_max_winners_one_does_not_double_pay() {
+    // In Competitive(max_winners=1) the FIRST enrollee gets the reward and
+    // any subsequent enrollee gets 0 — the comp_key tombstone must be in
+    // place before the cnt bump so a same-enrollee retry returns
+    // AlreadyCompleted rather than double-paying.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+    quest_client.add_enrollee(&q_id, &e2);
+    quest_client.add_enrollee(&q_id, &e3);
+
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e1), 100);
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e2), 0);
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &e3), 0);
+
+    // A retry for the same enrollee + milestone must NOT bump the cnt or
+    // pay again.
+    let retry = client.try_verify_completion(&owner, &q_id, &0, &e1);
+    assert_eq!(retry, Err(Ok(Error::AlreadyCompleted)));
+}
+
+// --- Paginated quest completion rate (issue #865) ---
+
+#[test]
+fn test_completion_rate_rejects_unbounded_limits() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    // limit == 0 is rejected — callers must opt in to a window.
+    let err = client.try_get_quest_completion_rate(&q_id, &0, &0);
+    assert_eq!(err, Err(Ok(Error::InvalidInput)));
+
+    // limit > MAX_COMPLETION_RATE_PAGE (100) is rejected.
+    let err = client.try_get_quest_completion_rate(&q_id, &0, &101);
+    assert_eq!(err, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_completion_rate_offset_beyond_total_returns_zero() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    let e1 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+
+    // 1 enrollee total; offset=10 is past the end → 0.
+    assert_eq!(client.get_quest_completion_rate(&q_id, &10, &5), 0);
+}
+
+#[test]
+fn test_completion_rate_windowed() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    let e4 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+    quest_client.add_enrollee(&q_id, &e2);
+    quest_client.add_enrollee(&q_id, &e3);
+    quest_client.add_enrollee(&q_id, &e4);
+
+    // e1 and e3 finish the quest.
+    client.verify_completion(&owner, &q_id, &0, &e1);
+    client.verify_completion(&owner, &q_id, &0, &e3);
+
+    // Window over the first two enrollees → 1 of 2 done → 50%.
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &2), 50);
+    // Window over the last two enrollees → 1 of 2 done → 50%.
+    assert_eq!(client.get_quest_completion_rate(&q_id, &2, &2), 50);
+    // Full window of 4 → 2 of 4 done → 50%.
+    assert_eq!(client.get_quest_completion_rate(&q_id, &0, &4), 50);
+}
+
+// --- set_distribution_mode emits event (issue #868) ---
+
+#[test]
+fn test_set_distribution_mode_emits_event() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    let before = env.events().all().len();
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Flat, &50);
+    let after = env.events().all().len();
+    assert!(
+        after > before,
+        "set_distribution_mode should publish a distribution_mode_set event"
+    );
 }

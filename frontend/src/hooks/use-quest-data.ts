@@ -118,6 +118,37 @@ export function useEnrollees(questId: number) {
   }
 }
 
+export function useMilestoneCount(questId: number) {
+  const enabled = Number.isInteger(questId) && questId >= 0
+  const query = useQuery<number, Error>({
+    queryKey: ["milestoneCount", questId],
+    queryFn: async () => {
+      if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
+      return milestoneClient.getMilestoneCount(questId)
+    },
+    enabled,
+  })
+
+  const errMsg = query.error
+    ? mapError(
+        query.error,
+        contractError(
+          "milestone",
+          "On-chain milestone data is unavailable until the milestone contract is configured."
+        )
+      )
+    : null
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: errMsg,
+    isEmpty: query.data === null || query.data === undefined,
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
+  }
+}
+
 export function useRewardPool(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<bigint, Error>({

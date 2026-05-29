@@ -20,6 +20,19 @@ vi.mock("@/lib/horizon-activity", () => ({
   fetchWalletActivity: vi.fn(),
 }))
 
+vi.mock("@/lib/contracts/client", () => ({
+  NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org",
+  RPC_TIMEOUT_MS: 15000,
+  server: {
+    simulateTransaction: vi.fn(),
+    sendTransaction: vi.fn(),
+    getTransaction: vi.fn(),
+    getAccount: vi.fn(),
+  },
+  withTimeout: <T,>(promise: Promise<T>) => promise,
+}))
+
 import { useWallet } from "@/hooks/use-wallet"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useContractData } from "@/hooks/use-async-data"

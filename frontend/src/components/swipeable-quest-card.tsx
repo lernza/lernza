@@ -98,10 +98,21 @@ export function SwipeableQuestCard({
     }
   }
 
+  const handleKeyDown = async (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !quest.isEnrolled) {
+      if (window.confirm(`Enroll in "${quest.name}"?`)) {
+        await onEnroll(quest.id)
+      }
+    } else if (e.key === "Backspace" || e.key === "Delete") {
+      setIsDismissed(true)
+      setTimeout(() => onDismiss(quest.id), 300)
+    }
+  }
+
   if (isDismissed) return null
 
   return (
-    <div className="relative touch-pan-y overflow-hidden rounded-xl">
+    <div className="relative touch-pan-y overflow-hidden rounded-xl" role="group" aria-label={`Quest: ${quest.name}`}>
       {/* Action Layer (visible during swipe) */}
       <motion.div
         style={{ background, opacity }}
@@ -143,6 +154,27 @@ export function SwipeableQuestCard({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Keyboard action bar — visible only for keyboard users */}
+      <div className="sr-only focus-within:not-sr-only focus-within:flex gap-2 px-4 py-2 bg-background border-b border-border">
+        <button
+          onKeyDown={handleKeyDown}
+          onClick={() => { setIsDismissed(true); setTimeout(() => onDismiss(quest.id), 300) }}
+          className="border-border border-[2px] px-3 py-1 text-xs font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Dismiss quest: ${quest.name}`}
+        >
+          Dismiss
+        </button>
+        {!quest.isEnrolled && (
+          <button
+            onClick={async () => { if (window.confirm(`Enroll in "${quest.name}"?`)) await onEnroll(quest.id) }}
+            className="bg-primary border-border border-[2px] px-3 py-1 text-xs font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Enroll in quest: ${quest.name}`}
+          >
+            Enroll
+          </button>
+        )}
+      </div>
 
       {/* Card Layer */}
       <motion.div

@@ -107,8 +107,8 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
                 <div className="bg-success border-border h-2.5 w-2.5 border" />
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
-              <Button variant="ghost" size="icon" onClick={disconnect}>
-                <LogOut className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={disconnect} aria-label="Disconnect wallet">
+                <LogOut className="h-4 w-4" aria-hidden="true" />
               </Button>
             </>
           ) : (
@@ -121,16 +121,19 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-nav-menu"
             className="border-border bg-background neo-press flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:hidden"
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {mobileOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
+        <div id="mobile-nav-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
           <div className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
               <button

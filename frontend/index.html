@@ -33,6 +33,29 @@
     <meta name="twitter:image" content="https://lernza.com/og-image.png" />
 
     <title>Lernza — Learn. Earn. On-chain.</title>
+
+    <!-- Font preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Preload critical heading weight (700) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap&subset=latin"
+    />
+    <!-- Non-blocking stylesheet load -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap&subset=latin"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap&subset=latin"
+      />
+    </noscript>
   </head>
   <body>
     <div id="root"></div>

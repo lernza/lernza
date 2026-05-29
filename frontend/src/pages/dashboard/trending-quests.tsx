@@ -1,4 +1,4 @@
-import { Sparkles, Users, Coins } from "lucide-react"
+import { Check, Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
@@ -56,10 +56,8 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                       Trending
                     </Badge>
                     {quest.verified && (
-                      <Badge
-                        variant="verified"
-                        className="border-border ml-2 border-[1px] px-1 text-[10px]"
-                      >
+                      <Badge variant="verified" size="sm" className="ml-2 gap-1">
+                        <Check className="h-2.5 w-2.5" />
                         Verified
                       </Badge>
                     )}

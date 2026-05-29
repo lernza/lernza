@@ -506,7 +506,7 @@ export function QuestView() {
       setPendingTransaction({
         type: "create_milestone",
         details: {
-          actionName: "Create Milestone",
+          actionName: `create milestone "${values.title}"`,
           fromAddress: address,
           estimatedFee: "0.002",
           tokenAmount: BigInt(reward),
@@ -714,7 +714,7 @@ export function QuestView() {
       setPendingTransaction({
         type: "verify_payout",
         details: {
-          actionName: "Verify & Payout",
+          actionName: `verify completion for "${milestone.title}"`,
           fromAddress: address,
           toAddress: target,
           estimatedFee: "0.003",
@@ -825,7 +825,7 @@ export function QuestView() {
     setPendingTransaction({
       type: "archive_quest",
       details: {
-        actionName: "Archive Quest",
+        actionName: "archive this quest",
         fromAddress: address,
         estimatedFee: "0.001",
         description:
@@ -862,7 +862,7 @@ export function QuestView() {
       setPendingTransaction({
         type: "remove_enrollee",
         details: {
-          actionName: "Remove Enrollee",
+          actionName: `remove learner ${truncateAddress(enrollee)}`,
           fromAddress: address,
           toAddress: enrollee,
           estimatedFee: "0.001",
@@ -910,7 +910,7 @@ export function QuestView() {
     setPendingTransaction({
       type: "leave_quest",
       details: {
-        actionName: "Leave Quest",
+        actionName: "leave this quest",
         fromAddress: address,
         estimatedFee: "0.001",
         description:
@@ -1153,7 +1153,7 @@ export function QuestView() {
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-black sm:text-3xl">{quest.name}</h1>
                 {quest.verified && (
-                  <Badge variant="verified" className="gap-1 border-black">
+                  <Badge variant="verified" size="sm" className="gap-1">
                     <Check className="h-3 w-3" />
                   </Badge>
                 )}

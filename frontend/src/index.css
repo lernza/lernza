@@ -445,8 +445,13 @@ main,
 /* ── Pulse animation for skeleton ── */
 
 @keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-pulse {
@@ -483,7 +488,8 @@ body {
   translate: -2px -2px;
 }
 .neo-press:active {
-  translate: 2px 2px;
+  translate: 0 2px;
+  box-shadow: 2px 2px 0 var(--color-border);
 }
 
 .neo-lift {
@@ -504,17 +510,16 @@ body {
   transition:
     transform 0.3s ease,
     box-shadow 0.3s ease;
-  transform-style: preserve-3d;
 }
 
 .card-tilt:hover {
-  transform: perspective(800px) rotateX(2deg) rotateY(-3deg) translateY(-6px);
-  box-shadow: 10px 10px 0 var(--color-border);
+  translate: -2px -2px;
+  box-shadow: 8px 8px 0 var(--color-border);
 }
 
 .card-tilt:active {
-  transform: perspective(800px) rotateX(0) rotateY(0) translateY(0);
-  box-shadow: 3px 3px 0 var(--color-border);
+  translate: 0 2px;
+  box-shadow: 2px 2px 0 var(--color-border);
 }
 
 /* ── Stagger animation delays ── */
@@ -592,7 +597,8 @@ body {
 /* ── Pulse slow (for celebration states) ── */
 
 @keyframes pulse-slow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }

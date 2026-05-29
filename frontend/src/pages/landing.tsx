@@ -536,7 +536,7 @@ export function Landing({ onNavigate }: LandingProps) {
       {/* FOOTER */}
       <footer className="border-border bg-background border-t-[3px]">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="grid grid-cols-1 gap-10 py-12 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
             {/* Brand */}
             <div>
               <div className="mb-4 flex items-center gap-3">
@@ -581,6 +581,27 @@ export function Landing({ onNavigate }: LandingProps) {
                     {link.label}
                   </a>
                 ))}
+              </div>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 className="mb-4 text-sm font-black tracking-wider uppercase">Legal</h4>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => onNavigate("terms")}
+                  className="text-muted-foreground hover:text-foreground animated-underline cursor-pointer text-left text-sm font-bold transition-colors"
+                >
+                  Terms of Service
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onNavigate("privacy")}
+                  className="text-muted-foreground hover:text-foreground animated-underline cursor-pointer text-left text-sm font-bold transition-colors"
+                >
+                  Privacy Policy
+                </button>
               </div>
             </div>
 

@@ -34,6 +34,11 @@ pub enum DataKey {
     /// Consumed invite: set after a preimage is successfully redeemed.
     /// Key: (quest_id, commitment_hash). Value: true.
     InviteUsed(u32, BytesN<32>),
+    /// Peer-review hold placed by the quest owner while an enrollee has an
+    /// in-flight peer-review submission or recently verified completion.
+    /// While set, `leave_quest` is rejected so the submission record never
+    /// ends up pointing at a non-enrollee. Key: (quest_id, enrollee).
+    LeaveHold(u32, Address),
 }
 
 // QuestInfo moved to common.
@@ -53,6 +58,10 @@ pub enum Error {
     NameTooLong = 9,
     DescriptionTooLong = 10,
     InviteOnly = 11,
+    /// `leave_quest` was rejected because the enrollee has a peer-review
+    /// hold in place. The hold must be lifted by the quest owner once the
+    /// outstanding submission(s) settle.
+    LeaveBlockedByPendingApproval = 12,
     /// Enrollment is closed because the quest has been archived.
     EnrollmentClosed = 13,
     /// Enrollment is rejected because the quest deadline has passed.
@@ -704,11 +713,78 @@ impl QuestContract {
     }
 
     /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
+    ///
+    /// Rejects with `LeaveBlockedByPendingApproval` if the quest owner has
+    /// placed a peer-review hold on the enrollee (see `place_leave_hold`).
+    /// The hold exists so completion submissions awaiting peer approval
+    /// cannot reference a non-enrollee.
     pub fn leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
         Self::load_quest(&env, quest_id)?;
+
+        let hold_key = DataKey::LeaveHold(quest_id, enrollee.clone());
+        if env.storage().persistent().has(&hold_key) {
+            return Err(Error::LeaveBlockedByPendingApproval);
+        }
+
         Self::internal_remove_enrollee(&env, quest_id, enrollee)
+    }
+
+    /// Place a peer-review hold on an enrollee. Owner only.
+    /// While the hold is in place, `leave_quest` is rejected for that
+    /// enrollee. The owner is expected to call this whenever the enrollee
+    /// has a peer-review submission in flight or a recently verified
+    /// completion awaiting reward settlement.
+    pub fn place_leave_hold(
+        env: Env,
+        quest_id: u32,
+        owner: Address,
+        enrollee: Address,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        if !Self::load_enrollees(&env, quest_id).contains(&enrollee) {
+            return Err(Error::NotEnrolled);
+        }
+
+        let hold_key = DataKey::LeaveHold(quest_id, enrollee);
+        env.storage().persistent().set(&hold_key, &true);
+        common::extend_persistent_ttl(&env, &hold_key);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Lift a peer-review hold so the enrollee can `leave_quest` again.
+    /// Owner only. No-op if no hold was set.
+    pub fn lift_leave_hold(
+        env: Env,
+        quest_id: u32,
+        owner: Address,
+        enrollee: Address,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+
+        let hold_key = DataKey::LeaveHold(quest_id, enrollee);
+        env.storage().persistent().remove(&hold_key);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Read whether a peer-review hold is currently in place.
+    pub fn has_leave_hold(env: Env, quest_id: u32, enrollee: Address) -> bool {
+        env.storage()
+            .persistent()
+            .has(&DataKey::LeaveHold(quest_id, enrollee))
     }
 
     /// Get quest info by ID.

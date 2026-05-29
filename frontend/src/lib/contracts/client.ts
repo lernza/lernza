@@ -91,10 +91,16 @@ export function getTransactionTimebounds(tx: Transaction): TransactionTimebounds
 }
 
 /**
- * Common helper to wait for transaction completion with timeout
+ * Common helper to wait for transaction completion with timeout.
+ *
+ * Polls the Soroban RPC with exponential backoff (1s, 2s, 4s, 8s, then capped
+ * at 5s per attempt) up to 60 attempts. The combination gives a low-latency
+ * response on fast confirmations (~3 calls in the first 7 seconds) and a
+ * bounded total wait of roughly 5 minutes on slow ones, without hammering RPC.
  */
 export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransactionResponse> {
-  const MAX_POLLS = 30
+  const MAX_POLLS = 60
+  const MAX_DELAY_MS = 5_000
   let attempts = 0
   let response = await withTimeout(
     server.getTransaction(txHash),
@@ -103,8 +109,10 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
   )
 
   while (response.status === "NOT_FOUND") {
-    if (++attempts >= MAX_POLLS) throw new Error("Transaction not found after 30s")
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    if (++attempts >= MAX_POLLS) throw new Error("Transaction not found after polling timeout")
+    // 1s, 2s, 4s, then capped at MAX_DELAY_MS for every subsequent attempt.
+    const delayMs = Math.min(1_000 * 2 ** (attempts - 1), MAX_DELAY_MS)
+    await new Promise(resolve => setTimeout(resolve, delayMs))
     response = await withTimeout(
       server.getTransaction(txHash),
       RPC_TIMEOUT_MS,

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import {
   ArrowLeft,
   Plus,
@@ -43,13 +43,20 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const [statsRef, statsInView] = useInView()
   const [contentRef, contentInView] = useInView()
 
-  const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
-  const completedMilestones = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
-    .size
-  const isComplete = completedMilestones === milestones.length && milestones.length > 0
-  const earnedReward = milestones
-    .filter(m => completions.some(c => c.milestoneId === m.id && c.completed))
-    .reduce((sum, m) => sum + m.rewardAmount, 0)
+  // Memoised derivations — avoids re-running array traversals on every render (#921)
+  const { totalReward, completedMilestones, isComplete, earnedReward } = useMemo(() => {
+    const total = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
+    const completedSet = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
+    const completed = completedSet.size
+    return {
+      totalReward: total,
+      completedMilestones: completed,
+      isComplete: completed === milestones.length && milestones.length > 0,
+      earnedReward: milestones
+        .filter(m => completedSet.has(m.id))
+        .reduce((sum, m) => sum + m.rewardAmount, 0),
+    }
+  }, [milestones, completions])
 
   const enrolleesCount = useCountUp(enrollees.length, 400, statsInView)
   const milestonesCount = useCountUp(milestones.length, 400, statsInView)

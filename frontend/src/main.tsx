@@ -29,6 +29,33 @@ if (import.meta.env.DEV) {
   })
 }
 
+// ─── Vercel Analytics ─────────────────────────────────────────────────────────
+//
+// inject() loads an external script (~1 kB) that would otherwise compete with
+// first-paint resources if called at module-evaluation time.
+//
+// Strategy: defer until the browser is idle (requestIdleCallback), falling back
+// to a 0 ms setTimeout in environments that don't support rIC (e.g. Safari < 16).
+// Either path fires well after the first meaningful paint, leaving LCP unaffected.
+//
+// Note: we only call inject() in production — analytics in dev creates noise.
+
+if (import.meta.env.PROD) {
+  const scheduleAnalytics = () => {
+    import("@vercel/analytics").then(({ inject }) => inject())
+  }
+
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(scheduleAnalytics)
+  } else {
+    // Safari / older browsers: setTimeout(fn, 0) defers past the current task
+    // and any pending microtasks, including React's render flush.
+    setTimeout(scheduleAnalytics, 0)
+  }
+}
+
+// ─── React Root ───────────────────────────────────────────────────────────────
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

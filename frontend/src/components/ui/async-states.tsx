@@ -105,28 +105,95 @@ export function ErrorState({
 
 // ─── Empty States ─────────────────────────────────────────────────────────────
 
-interface EmptyStateProps {
+/**
+ * Variants that render a CTA button require an explicit handler so the button
+ * is never dead. The discriminated union makes the compiler enforce this:
+ *
+ *   variant="wallet"     → onConnect required
+ *   variant="quests"     → onCreateQuest required
+ *   variant="milestones" → onAddMilestone required
+ *   variant="enrollees"  → onAddEnrollee required
+ *   variant="earnings"   → no CTA (read-only state)
+ *   variant="compact"    → optional generic action prop (unchanged)
+ *   variant="default"    → optional generic action prop (unchanged)
+ */
+
+// Variants that own their CTA label/handler — callers may not pass a generic `action`.
+interface WalletEmptyStateProps {
+  variant: "wallet"
+  onConnect: () => void
   title?: string
   description?: string
-  action?: {
-    label: string
-    onClick: () => void
-  }
   icon?: React.ComponentType<{ className?: string }>
-  variant?: "default" | "compact" | "quests" | "milestones" | "enrollees" | "earnings" | "wallet"
+  illustration?: "dashboard" | "profile" | "leaderboard"
+  // action intentionally omitted — use onConnect
+}
+
+interface QuestsEmptyStateProps {
+  variant: "quests"
+  onCreateQuest: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
   illustration?: "dashboard" | "profile" | "leaderboard"
 }
 
-export function EmptyState({
-  title,
-  description,
-  action,
-  icon: IconComponent,
-  variant = "default",
-  illustration,
-}: EmptyStateProps) {
-  const getVariantConfig = () => {
-    switch (variant) {
+interface MilestonesEmptyStateProps {
+  variant: "milestones"
+  onAddMilestone: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+interface EnrolleesEmptyStateProps {
+  variant: "enrollees"
+  onAddEnrollee: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+// Variants with no CTA or a generic optional action.
+interface EarningsEmptyStateProps {
+  variant: "earnings"
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+interface DefaultEmptyStateProps {
+  variant?: "default" | "compact"
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+  /** Generic escape hatch for one-off CTAs on default/compact variants. */
+  action?: { label: string; onClick: () => void }
+}
+
+type EmptyStateProps =
+  | WalletEmptyStateProps
+  | QuestsEmptyStateProps
+  | MilestonesEmptyStateProps
+  | EnrolleesEmptyStateProps
+  | EarningsEmptyStateProps
+  | DefaultEmptyStateProps
+
+export function EmptyState(props: EmptyStateProps) {
+  const { title, description, icon: IconComponent, illustration } = props
+
+  // Resolve per-variant config — handler is always defined when a CTA is shown.
+  const getVariantConfig = (): {
+    title: string
+    description: string
+    icon: React.ReactNode
+    cta?: { label: string; onClick: () => void }
+  } => {
+    switch (props.variant) {
       case "quests":
         return {
           title: title || "No quests yet",
@@ -138,7 +205,7 @@ export function EmptyState({
           ) : (
             <Target className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Create Quest",
+          cta: { label: "Create Quest", onClick: props.onCreateQuest },
         }
       case "milestones":
         return {
@@ -149,7 +216,7 @@ export function EmptyState({
           ) : (
             <Target className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Add Milestone",
+          cta: { label: "Add Milestone", onClick: props.onAddMilestone },
         }
       case "enrollees":
         return {
@@ -160,7 +227,7 @@ export function EmptyState({
           ) : (
             <Users className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Add Enrollee",
+          cta: { label: "Add Enrollee", onClick: props.onAddEnrollee },
         }
       case "earnings":
         return {
@@ -172,6 +239,7 @@ export function EmptyState({
           ) : (
             <Coins className="h-6 w-6" />
           ),
+          // No CTA — earnings is a read-only state.
         }
       case "wallet":
         return {
@@ -184,9 +252,11 @@ export function EmptyState({
           ) : (
             <Wallet className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Connect Wallet",
+          cta: { label: "Connect Wallet", onClick: props.onConnect },
         }
-      default:
+      default: {
+        // "default" | "compact" | undefined
+        const action = (props as DefaultEmptyStateProps).action
         return {
           title: title || "No data",
           description: description || "No items to display.",
@@ -195,20 +265,18 @@ export function EmptyState({
           ) : (
             <Search className="h-6 w-6" />
           ),
+          cta: action ? { label: action.label, onClick: action.onClick } : undefined,
         }
+      }
     }
   }
 
   const config = getVariantConfig()
 
-  const getIllustrationSrc = () => {
-    if (!illustration) return null
-    return `/illustrations/empty-${illustration}.svg`
-  }
+  const illustrationSrc = illustration ? `/illustrations/empty-${illustration}.svg` : null
 
-  const illustrationSrc = getIllustrationSrc()
-
-  if (variant === "compact") {
+  if (props.variant === "compact") {
+    const action = (props as DefaultEmptyStateProps).action
     return (
       <Card className="animate-fade-in-up">
         <CardContent className="flex items-center gap-3 py-4">
@@ -221,7 +289,7 @@ export function EmptyState({
           </div>
           {action && (
             <Button size="sm" onClick={action.onClick}>
-              {config.actionLabel}
+              {action.label}
             </Button>
           )}
         </CardContent>
@@ -248,9 +316,9 @@ export function EmptyState({
         )}
         <h3 className="mb-2 font-black">{config.title}</h3>
         <p className="text-muted-foreground mb-6 max-w-sm text-sm">{config.description}</p>
-        {action && (
-          <Button onClick={action.onClick} className="shimmer-on-hover">
-            {config.actionLabel}
+        {config.cta && (
+          <Button onClick={config.cta.onClick} className="shimmer-on-hover">
+            {config.cta.label}
           </Button>
         )}
       </CardContent>

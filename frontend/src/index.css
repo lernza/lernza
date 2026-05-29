@@ -15,10 +15,10 @@
   --color-border: #000000;
   --color-input: #000000;
   /* Shadow scale tokens (#927) — neo-brutalist offset shadows by semantic role */
-  --shadow-sm: 2px 2px 0 var(--color-border);   /* badges, chips */
-  --shadow-md: 4px 4px 0 var(--color-border);   /* buttons, inputs */
-  --shadow-lg: 6px 6px 0 var(--color-border);   /* cards, panels */
-  --shadow-xl: 8px 8px 0 var(--color-border);   /* dialogs, modals */
+  --shadow-sm: 2px 2px 0 var(--color-border); /* badges, chips */
+  --shadow-md: 4px 4px 0 var(--color-border); /* buttons, inputs */
+  --shadow-lg: 6px 6px 0 var(--color-border); /* cards, panels */
+  --shadow-xl: 8px 8px 0 var(--color-border); /* dialogs, modals */
   --color-ring: #facc15;
   --color-accent: #facc15;
   --color-accent-foreground: #000000;
@@ -490,6 +490,36 @@ body {
 }
 .neo-lift:active {
   translate: 2px 2px;
+}
+
+/*
+  .field-focus — canonical focus style for all form inputs.
+
+  Matches the button shadow depth (4 px, --shadow-md) so focused inputs feel
+  equally interactive. Only fires on :focus-visible, meaning pointer users
+  (click/tap) never see it — only keyboard navigators do.
+
+  Usage: add class="... field-focus" to every <input>, <textarea>, <select>.
+  Remove any per-field focus:shadow-[*] / focus-visible:ring-* overrides.
+
+  Dark mode: --color-border is already cream (#f5f0e8) in .dark, so the shadow
+  colour flips automatically with no extra work.
+*/
+.field-focus {
+  outline: none;
+  transition:
+    box-shadow 100ms ease,
+    transform 100ms ease;
+}
+.field-focus:focus-visible {
+  /* 4 px hard shadow — same depth as --shadow-md / buttons */
+  box-shadow: 4px 4px 0 var(--color-border);
+  /*
+    1 px offset anchors the shadow visually, mirroring .neo-press:hover.
+    Small enough to be imperceptible on pointer devices; gives keyboard
+    users a directional cue that pairs with the shadow.
+  */
+  transform: translate(-1px, -1px);
 }
 
 /* ── Card 3D tilt on hover ── */

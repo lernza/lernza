@@ -88,7 +88,6 @@ export function AppShell({ children }: AppShellProps) {
       <Navbar />
       <ErrorBoundary>
         <main id="main-content" tabIndex={-1} className="outline-none">
-          <h1 className="sr-only">Lernza Platform</h1>
           <Outlet />
           {children}
         </main>

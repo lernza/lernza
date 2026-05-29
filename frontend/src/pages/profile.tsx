@@ -178,12 +178,13 @@ export function Profile() {
                   </p>
                   <button
                     onClick={handleCopy}
+                    aria-label={copied ? "Address copied" : "Copy wallet address"}
                     className="border-border bg-card neo-press hover:bg-secondary flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center border-2 shadow-[2px_2px_0_var(--color-border)]"
                   >
                     {copied ? (
-                      <Check className="text-success h-3 w-3" />
+                      <Check className="text-success h-3 w-3" aria-hidden="true" />
                     ) : (
-                      <Copy className="h-3 w-3" />
+                      <Copy className="h-3 w-3" aria-hidden="true" />
                     )}
                   </button>
                 </div>

@@ -4,6 +4,7 @@ import { questClient } from "@/lib/contracts/quest"
 
 const DEFAULT_HORIZON_URL = "https://horizon-testnet.stellar.org"
 const PAGE_SIZE = 10
+const SAFETY_CAP = 500
 
 export type WalletActivityType = "enrolled" | "completed" | "rewarded" | "left"
 
@@ -21,6 +22,7 @@ export interface WalletActivityItem {
 export interface WalletActivityPage {
   items: WalletActivityItem[]
   nextCursor: string | null
+  capReached: boolean
 }
 
 interface HorizonResponse<T> {
@@ -203,7 +205,8 @@ function parseActivityRecord(
 
 export async function fetchWalletActivity(
   address: string,
-  cursor?: string | null
+  cursor?: string | null,
+  currentCount: number = 0
 ): Promise<WalletActivityPage> {
   const response = await fetch(buildOperationsUrl(address, cursor))
   if (!response.ok) {
@@ -234,8 +237,12 @@ export async function fetchWalletActivity(
     .map(record => parseActivityRecord(record, address, questNames))
     .filter((item): item is WalletActivityItem => item !== null)
 
+  const capReached = currentCount + items.length >= SAFETY_CAP
+  const nextCursor = capReached ? null : (payload._links?.next?.href ?? null)
+
   return {
     items,
-    nextCursor: payload._links?.next?.href ?? null,
+    nextCursor,
+    capReached,
   }
 }

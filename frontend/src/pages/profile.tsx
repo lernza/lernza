@@ -1,11 +1,65 @@
-import { Wallet, Coins, TrendingUp, Trophy, Sparkles, Copy, Check } from "lucide-react"
-import { useState } from "react"
+import {
+  Wallet,
+  Coins,
+  TrendingUp,
+  Trophy,
+  Sparkles,
+  Copy,
+  Check,
+  Loader2,
+  AlertCircle,
+  History,
+  ExternalLink,
+} from "lucide-react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { MOCK_USER_STATS } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
+import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
+
+type ProfileTab = "overview" | "activity"
+
+/* ─── Helper functions for activity display ─── */
+
+function getActivityLabel(type: WalletActivityItem["type"]): string {
+  switch (type) {
+    case "rewarded":
+      return "Reward Claimed"
+    case "completed":
+      return "Milestone Completed"
+    case "enrolled":
+      return "Quest Enrolled"
+    default:
+      return "Activity"
+  }
+}
+
+function getActivityDescription(item: WalletActivityItem): string {
+  if (item.type === "rewarded") {
+    return `You earned ${formatTokens(item.amount || 0n, 7, "USDC")} for completing a milestone.`
+  }
+  if (item.type === "completed") {
+    return `You completed a milestone in ${item.questName}.`
+  }
+  if (item.type === "enrolled") {
+    return `You enrolled in ${item.questName}.`
+  }
+  return "Wallet activity"
+}
+
+function formatActivityDate(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
 
 /* ─── Generated Avatar from wallet address ─── */
 
@@ -29,12 +83,80 @@ export function Profile() {
   const { connected, connect, address } = useWallet()
   const stats = MOCK_USER_STATS
   const [copied, setCopied] = useState(false)
+  const [activeTab] = useState<ProfileTab>("overview")
+  const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityError, setActivityError] = useState<string | null>(null)
+  const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
+  const [capReached, setCapReached] = useState(false)
+
+  useEffect(() => {
+    setActivityItems([])
+    setActivityError(null)
+    setNextActivityCursor(null)
+    setActivityLoading(false)
+  }, [address, activeTab])
+
+  useEffect(() => {
+    if (!connected || !address || activeTab !== "activity" || activityItems.length > 0) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadInitialActivity = async () => {
+      setActivityLoading(true)
+      setActivityError(null)
+
+      try {
+        const page = await fetchWalletActivity(address, undefined, 0)
+        if (cancelled) return
+
+        setActivityItems(page.items)
+        setNextActivityCursor(page.nextCursor)
+        setCapReached(page.capReached)
+      } catch (error) {
+        if (cancelled) return
+        setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
+      } finally {
+        if (!cancelled) {
+          setActivityLoading(false)
+        }
+      }
+    }
+
+    void loadInitialActivity()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, activityItems.length, address, connected])
 
   const handleCopy = () => {
     if (address) {
       navigator.clipboard.writeText(address)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleLoadMoreActivity = async () => {
+    if (!address || !nextActivityCursor || activityLoading) {
+      return
+    }
+
+    setActivityLoading(true)
+    setActivityError(null)
+
+    try {
+      const page = await fetchWalletActivity(address, nextActivityCursor, activityItems.length)
+      setActivityItems(current => [...current, ...page.items])
+      setNextActivityCursor(page.nextCursor)
+      setCapReached(page.capReached)
+    } catch (error) {
+      setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
+    } finally {
+      setActivityLoading(false)
     }
   }
 
@@ -199,8 +321,117 @@ export function Profile() {
                   </div>
                   <p className="text-xs font-bold">USDC earned</p>
                 </div>
+                <Badge variant="outline" className="border-[2px] font-bold">
+                  {activityItems.length} loaded
+                </Badge>
               </div>
             </div>
+
+            {activityLoading && activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <Loader2 className="text-primary mb-4 h-8 w-8 animate-spin" />
+                  <h3 className="mb-2 font-black">Loading activity</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Fetching recent wallet operations from Horizon.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : activityError ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <AlertCircle className="text-destructive mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">Could not load activity</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">{activityError}</p>
+                </CardContent>
+              </Card>
+            ) : activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <History className="text-muted-foreground mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">No wallet activity yet</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">
+                    Enroll in a quest or complete a milestone to start building your on-chain
+                    timeline.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {activityItems.map(item => (
+                  <Card key={item.id} className="animate-fade-in-up">
+                    <CardContent className="py-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="bg-primary/10 border-border flex h-11 w-11 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
+                            {item.type === "rewarded" ? (
+                              <Coins className="h-5 w-5" />
+                            ) : item.type === "completed" ? (
+                              <Trophy className="h-5 w-5" />
+                            ) : (
+                              <History className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-black">{getActivityLabel(item.type)}</p>
+                              <Badge variant="secondary">{item.questName}</Badge>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {getActivityDescription(item)}
+                            </p>
+                            <p className="text-muted-foreground mt-2 text-xs font-bold">
+                              {formatActivityDate(item.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:flex-col sm:items-end">
+                          {item.amount !== undefined && (
+                            <Badge variant="success" className="tabular-nums">
+                              +{formatTokens(item.amount, 7, "USDC")}
+                            </Badge>
+                          )}
+                          <a
+                            href={item.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary inline-flex items-center gap-1 text-sm font-bold underline underline-offset-2"
+                          >
+                            View transaction
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {capReached && (
+                  <div className="text-muted-foreground mt-6 text-center text-sm font-bold">
+                    Showing first 500 items — refine filters to see more
+                  </div>
+                )}
+
+                {nextActivityCursor && !capReached && (
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={() => void handleLoadMoreActivity()}
+                      disabled={activityLoading}
+                    >
+                      {activityLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -28,6 +28,8 @@ export function useQuest(id: number) {
       return quest
     },
     enabled,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   const errMsg = query.error
@@ -59,6 +61,8 @@ export function useMilestones(questId: number) {
       return milestoneClient.listMilestones(questId)
     },
     enabled,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   const errMsg = query.error
@@ -90,6 +94,8 @@ export function useEnrollees(questId: number) {
       return questClient.getEnrollees(questId)
     },
     enabled,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 
   const errMsg = query.error
@@ -155,13 +161,7 @@ export function useQuestAuthority(questId: number) {
   })
 
   const errMsg = query.error
-    ? mapError(
-        query.error,
-        contractError(
-          "rewards",
-          "Funder information is unavailable."
-        )
-      )
+    ? mapError(query.error, contractError("rewards", "Funder information is unavailable."))
     : null
 
   return {

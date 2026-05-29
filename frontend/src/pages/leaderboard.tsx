@@ -90,32 +90,16 @@ export function Leaderboard() {
   const observerTarget = useRef<HTMLDivElement>(null)
 
   const {
-    data: earnersData,
     isLoading: earnersLoading,
     error: earnersError,
     refetch: refetchEarners,
   } = useAsyncData(() => fetchTopEarners(0), { enabled: activeTab === "earners" })
 
   const {
-    data: questsData,
     isLoading: questsLoading,
     error: questsError,
     refetch: refetchQuests,
   } = useAsyncData(() => fetchMostActiveQuests(0), { enabled: activeTab === "quests" })
-
-  useEffect(() => {
-    if (activeTab === "earners" && earnersData) {
-      setAllEarners(earnersData)
-      setEarnersOffset(0)
-    }
-  }, [earnersData, activeTab])
-
-  useEffect(() => {
-    if (activeTab === "quests" && questsData) {
-      setAllQuests(questsData)
-      setQuestsOffset(0)
-    }
-  }, [questsData, activeTab])
 
   const loadMoreEarners = useCallback(async () => {
     setIsLoadingMore(true)

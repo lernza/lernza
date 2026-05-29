@@ -104,13 +104,14 @@ describe("Profile", () => {
         },
       ],
       nextCursor: null,
+      capReached: false,
     })
 
     renderProfile()
     fireEvent.click(screen.getByRole("button", { name: "activity" }))
 
     await waitFor(() => {
-      expect(mockFetchWalletActivity).toHaveBeenCalledWith("GABC1234567890XYZ")
+      expect(mockFetchWalletActivity).toHaveBeenCalledWith("GABC1234567890XYZ", undefined, 0)
     })
 
     expect(screen.getByText("Wallet timeline")).toBeTruthy()

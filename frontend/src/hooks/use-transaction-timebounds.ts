@@ -5,11 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Transaction } from "@stellar/stellar-sdk"
-import {
-  isTransactionTimeboundsValid,
-  getTransactionTimebounds,
-  type TransactionTimebounds,
-} from "@/lib/contracts/client"
+import { isTransactionTimeboundsValid, getTransactionTimebounds } from "@/lib/contracts/client"
 
 export interface TimeboundsStatus {
   isValid: boolean
@@ -48,8 +44,7 @@ export function useTransactionTimebounds(tx: Transaction | null) {
       }
       setStatus({ isValid: false, reason })
     } else {
-      const timeRemaining =
-        timebounds.maxTime > 0 ? (timebounds.maxTime - now) * 1000 : undefined
+      const timeRemaining = timebounds.maxTime > 0 ? (timebounds.maxTime - now) * 1000 : undefined
       const expiresAt = timebounds.maxTime > 0 ? new Date(timebounds.maxTime * 1000) : undefined
 
       setStatus({

@@ -15,6 +15,8 @@ const NotFound = lazy(() => import("./pages/not-found").then(m => ({ default: m.
 const CreateQuest = lazy(() => import("./pages/create-quest").then(m => ({ default: m.CreateQuest })))
 const Leaderboard = lazy(() => import("./pages/leaderboard").then(m => ({ default: m.Leaderboard })))
 const CreatorProfile = lazy(() => import("./pages/creator").then(m => ({ default: m.CreatorProfile })))
+const TermsOfService = lazy(() => import("./pages/terms").then(m => ({ default: m.TermsOfService })))
+const PrivacyPolicy = lazy(() => import("./pages/privacy").then(m => ({ default: m.PrivacyPolicy })))
 
 function RouteShell({ children, label }: { children: ReactNode; label: string }) {
   return (
@@ -103,6 +105,22 @@ export const router = createBrowserRouter(
           element: (
             <RouteShell label="Creator">
               <CreatorProfile />
+            </RouteShell>
+          ),
+        },
+        {
+          path: "terms",
+          element: (
+            <RouteShell label="Terms">
+              <TermsOfService />
+            </RouteShell>
+          ),
+        },
+        {
+          path: "privacy",
+          element: (
+            <RouteShell label="Privacy">
+              <PrivacyPolicy />
             </RouteShell>
           ),
         },

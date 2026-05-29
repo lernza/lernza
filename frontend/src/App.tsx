@@ -9,6 +9,8 @@ import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { CreateQuest } from "@/pages/create-quest"
+import { TermsOfService } from "@/pages/terms"
+import { PrivacyPolicy } from "@/pages/privacy"
 
 // ─── Theme Context ─────────────────────────────────────────────────────────────
 
@@ -40,7 +42,7 @@ function getInitialTheme(): Theme {
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
 
-const VALID_PAGES = ["landing", "dashboard", "profile", "create-quest"] as const
+const VALID_PAGES = ["landing", "dashboard", "profile", "create-quest", "terms", "privacy"] as const
 type Page = (typeof VALID_PAGES)[number] | "quest" | "404"
 
 function pathToPage(pathname: string): { page: Page; questId: number | null } {
@@ -50,6 +52,8 @@ function pathToPage(pathname: string): { page: Page; questId: number | null } {
   if (clean === "/dashboard") return { page: "dashboard", questId: null }
   if (clean === "/profile") return { page: "profile", questId: null }
   if (clean === "/create-quest") return { page: "create-quest", questId: null }
+  if (clean === "/terms") return { page: "terms", questId: null }
+  if (clean === "/privacy") return { page: "privacy", questId: null }
 
   const questMatch = clean.match(/^\/quest\/(\d+)$/)
   if (questMatch) return { page: "quest", questId: Number(questMatch[1]) }
@@ -122,6 +126,10 @@ function App() {
         return <CreateQuest onBack={() => handleNavigate("dashboard")} />
       case "profile":
         return <Profile />
+      case "terms":
+        return <TermsOfService />
+      case "privacy":
+        return <PrivacyPolicy />
       default:
         return <NotFound onNavigate={handleNavigate} />
     }

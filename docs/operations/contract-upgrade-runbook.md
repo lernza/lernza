@@ -29,6 +29,26 @@ Run all tests against the new binary before proceeding:
 cargo test -p <contract-name>
 ```
 
+## 1.5 Dry-run the upgrade on Testnet
+
+Before touching Mainnet, rehearse the full upgrade path on Testnet with live
+synthetic traffic:
+
+1. Deploy the current release candidate as `v1`.
+2. Run a representative traffic campaign against the contract.
+3. Ship `v1.1` with the storage migration or ABI change you want to validate.
+4. Replay the same traffic and confirm reads, writes, and post-upgrade state.
+
+Record the results in a short post-mortem after the rehearsal. The post-mortem
+should capture:
+
+- The contract IDs and WASM hashes used in the rehearsal
+- Any state migration or compatibility issues found
+- The traffic profile used during the rehearsal
+- The final verification checks that passed before the upgrade was considered
+  safe
+- Any follow-up actions required before a Mainnet rollout
+
 ---
 
 ## 2. Upload the WASM to the network

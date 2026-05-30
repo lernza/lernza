@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext } from "rea
 import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Navbar } from "@/components/navbar"
+import { ToastContainer } from "@/components/toast"
 import { Landing } from "@/pages/landing"
 import { Dashboard } from "@/pages/dashboard"
 import { QuestView } from "@/pages/quest"
@@ -11,6 +12,8 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { CreateQuest } from "@/pages/create-quest"
 import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
+import { useToast } from "@/hooks/use-toast"
+import { subscribeToasts } from "@/lib/notifications"
 
 // ─── Theme Context ─────────────────────────────────────────────────────────────
 
@@ -72,6 +75,7 @@ function pageToPath(page: Page, questId: number | null): string {
 function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [state, setState] = useState(() => pathToPage(window.location.pathname))
+  const { toasts, addToast, removeToast } = useToast()
 
   // Apply .dark class to <html> and persist preference
   useEffect(() => {
@@ -107,6 +111,12 @@ function App() {
     setState({ page: "quest", questId: id })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
+
+  useEffect(() => {
+    return subscribeToasts(({ message, type, duration }) => {
+      addToast(message, type ?? "info", duration)
+    })
+  }, [addToast])
 
   const renderPage = () => {
     if (state.page === "quest" && state.questId !== null) {
@@ -145,16 +155,11 @@ function App() {
           </ErrorBoundary>
           <Analytics />
           <SpeedInsights />
-          <ToastViewport />
+          <ToastContainer toasts={toasts} onRemove={removeToast} />
         </div>
       </ErrorBoundary>
     </ThemeContext.Provider>
   )
-}
-
-function ToastViewport() {
-  // Simple placeholder for toast viewport if used by upstream additions
-  return <div id="toast-viewport" />
 }
 
 export default App

@@ -95,3 +95,9 @@ official frontend or a reviewed integration.
 ## Recognition
 
 We appreciate security researchers. Contributors who responsibly disclose vulnerabilities will be credited in the release notes (unless they prefer to remain anonymous).
+
+## Bug Bounty Program
+
+Lernza operates a private, self-hosted bug-bounty program. The current policy,
+scope, and reward bands are documented in
+[`docs/legal/bug-bounty-policy.md`](./docs/legal/bug-bounty-policy.md).

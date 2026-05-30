@@ -14,15 +14,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { PrefetchLink } from "@/components/PrefetchLink"
 import { useContractData } from "@/hooks/use-async-data"
 import { EmptyState } from "@/components/ui/async-states"
 import { SkeletonQuestList } from "@/components/ui/skeleton"
 import { SmartError } from "@/components/error-states"
 import { useWallet } from "@/hooks/use-wallet"
-import { questClient, type QuestInfo } from "@/lib/contracts/quest"
+import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import type { WorkspaceInfo } from "@/lib/contract-types"
+import { useQuestStatsMap } from "@/hooks/use-quest-stats"
 import { formatTokens } from "@/lib/utils"
 
 // Sub-components
@@ -36,24 +37,19 @@ const DASHBOARD_QUEST_PAGE_SIZE = 12
 const TRENDING_QUEST_LIMIT = 2
 const RECENT_ACTIVITY_LIMIT = 5
 
-function toWorkspaceInfo(quest: QuestInfo): WorkspaceInfo {
-  return {
-    id: quest.id,
-    owner: quest.owner,
-    name: quest.name,
-    description: quest.description,
-    token_addr: quest.tokenAddr,
-    created_at: quest.createdAt,
-    visibility: quest.visibility,
-    max_enrollees: quest.maxEnrollees,
-    verified: quest.verified,
-  }
+interface DashboardProps {
+  onSelectQuest?: (id: number) => void
+  onCreateQuest?: () => void
 }
 
-export function Dashboard() {
+export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} as DashboardProps) {
   const navigate = useNavigate()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
+  const [preset, setPreset] = useState<
+    "none" | "ending-soon" | "recently-funded" | "recently-verified"
+  >("none")
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
@@ -90,38 +86,6 @@ export function Dashboard() {
         ).values()
       )
 
-      const statsEntries = await Promise.all(
-        previewQuests.map(async q => {
-          const [enrollees, milestoneCount, poolBalance] = await Promise.all([
-            questClient.getEnrollees(q.id),
-            milestoneClient.getMilestoneCount(q.id),
-            rewardsClient.getPoolBalance(q.id),
-          ])
-
-          return [
-            q.id,
-            {
-              enrolleeCount: enrollees.length,
-              milestoneCount: milestoneCount,
-              poolBalance:
-                poolBalance > BigInt(Number.MAX_SAFE_INTEGER)
-                  ? Number.MAX_SAFE_INTEGER
-                  : Number(poolBalance),
-            },
-          ] as const
-        })
-      )
-
-      const questStats = Object.fromEntries(
-        statsEntries.map(([id, stats]) => [
-          id,
-          {
-            enrolleeCount: stats.enrolleeCount,
-            milestoneCount: stats.milestoneCount,
-            poolBalance: stats.poolBalance,
-          },
-        ])
-      )
       let questCompletions: Record<number, number> = {}
       let userEarnings = 0n
       if (address) {
@@ -143,7 +107,7 @@ export function Dashboard() {
         ownedQuests,
         enrolledQuests,
         accessibleQuests,
-        questStats,
+        previewQuestIds: previewQuests.map(q => q.id),
         questCompletions,
         userEarnings,
       }
@@ -160,14 +124,51 @@ export function Dashboard() {
     ownedQuests = [],
     enrolledQuests = [],
     accessibleQuests = [],
-    questStats = {},
+    previewQuestIds = [],
     questCompletions = {},
     userEarnings = 0n,
   } = dashboardData || {}
 
-  const filteredWorkspaces =
+  const { statsByQuestId: questStats, isLoading: questStatsLoading } =
+    useQuestStatsMap(previewQuestIds)
+
+  const goToQuest = (id: number) => {
+    if (onSelectQuest) {
+      onSelectQuest(id)
+      return
+    }
+    navigate(`/quest/${id}`)
+  }
+
+  const goToCreateQuest = () => {
+    if (onCreateQuest) {
+      onCreateQuest()
+      return
+    }
+    navigate("/quest/create")
+  }
+
+  const filteredQuests =
     filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : publicQuests
-  const visibleWorkspaces = filteredWorkspaces.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
+
+  const presetFilteredQuests = (() => {
+    if (preset === "ending-soon") {
+      const sevenDaysFromNow = nowSeconds + 7 * 24 * 60 * 60
+      return filteredQuests.filter(
+        q => q.deadline > 0 && q.deadline > nowSeconds && q.deadline <= sevenDaysFromNow
+      )
+    }
+    if (preset === "recently-funded") {
+      const thirtyDaysAgo = nowSeconds - 30 * 24 * 60 * 60
+      return filteredQuests.filter(q => q.createdAt >= thirtyDaysAgo)
+    }
+    if (preset === "recently-verified") {
+      return filteredQuests.filter(q => q.verified)
+    }
+    return filteredQuests
+  })()
+
+  const visibleQuests = presetFilteredQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -186,7 +187,6 @@ export function Dashboard() {
   const trendingQuests = [...publicQuests]
     .sort((a, b) => (questStats[b.id]?.enrolleeCount || 0) - (questStats[a.id]?.enrolleeCount || 0))
     .slice(0, TRENDING_QUEST_LIMIT)
-    .map(toWorkspaceInfo)
 
   const recentActivity = accessibleQuests
     .slice()
@@ -300,14 +300,18 @@ export function Dashboard() {
               <Sparkles className="h-5 w-5" />
               <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
             </div>
-            <h1 className="text-3xl font-black sm:text-4xl">{shortAddress}</h1>
+            <PrefetchLink to={`/creator/${address}`}>
+              <h1 className="hover:text-background/80 text-3xl font-black transition-colors sm:text-4xl">
+                {shortAddress}
+              </h1>
+            </PrefetchLink>
             <p className="mt-1 text-sm font-bold opacity-70">
               You have {personalStats.questsEnrolled} active quests
             </p>
           </div>
           <Button
             variant="secondary"
-            onClick={() => navigate("/quest/create")}
+            onClick={goToCreateQuest}
             className="shimmer-on-hover group flex-shrink-0"
           >
             <Plus className="h-4 w-4" />
@@ -354,16 +358,40 @@ export function Dashboard() {
               </div>
             </div>
 
+            {/* Preset Filter Chips */}
+            <div className="mb-5 flex flex-wrap gap-2">
+              {(
+                [
+                  { value: "none", label: "All" },
+                  { value: "ending-soon", label: "Ending Soon" },
+                  { value: "recently-funded", label: "Recently Funded" },
+                  { value: "recently-verified", label: "Recently Verified" },
+                ] as const
+              ).map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => setPreset(p.value)}
+                  className={`border-border border-[2px] px-3 py-1.5 text-xs font-bold shadow-[2px_2px_0_var(--color-border)] transition-all ${
+                    preset === p.value
+                      ? "bg-primary"
+                      : "bg-background hover:bg-secondary hover:shadow-[3px_3px_0_var(--color-border)]"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
             {loadError && (
               <div className="mb-5">
                 <SmartError message={loadError} onRetry={() => void refetch()} />
               </div>
             )}
 
-            {isLoading && <SkeletonQuestList className="mb-5" count={3} />}
+            {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
 
             <div className="relative grid gap-5">
-              {visibleWorkspaces.map((ws, i) => {
+              {visibleQuests.map((ws, i) => {
                 const stats = questStats[ws.id] || {
                   enrolleeCount: 0,
                   milestoneCount: 0,
@@ -380,9 +408,9 @@ export function Dashboard() {
                   <button
                     key={ws.id}
                     type="button"
-                    onClick={() => navigate(`/quest/${ws.id}`)}
+                    onClick={() => goToQuest(ws.id)}
                     aria-label={`Open quest ${ws.name}`}
-                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring text-left focus-visible:ring-2 focus-visible:outline-none`}
+                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
                   >
                     <Card>
                       <CardHeader className="pb-3">
@@ -468,29 +496,38 @@ export function Dashboard() {
               })}
             </div>
 
-            {filteredWorkspaces.length > visibleWorkspaces.length && !isLoading && !loadError && (
+            {filteredQuests.length > visibleQuests.length && !isLoading && !loadError && (
               <p className="text-muted-foreground mt-4 text-xs font-bold">
-                Showing the first {visibleWorkspaces.length} quests to keep dashboard loading fast.
+                Showing the first {visibleQuests.length} quests to keep dashboard loading fast.
               </p>
             )}
 
-            {filteredWorkspaces.length === 0 && !isLoading && !loadError && (
+            {presetFilteredQuests.length === 0 && !isLoading && !loadError && (
               <div className="mt-5">
                 <EmptyState
                   variant="quests"
-                  title={filter === "all" ? "No quests yet" : `No ${filter} quests`}
+                  illustration="dashboard"
+                  title={
+                    preset !== "none"
+                      ? `No ${preset.replace("-", " ")} quests`
+                      : filter === "all"
+                        ? "No quests yet"
+                        : `No ${filter} quests`
+                  }
                   description={
-                    filter === "all"
-                      ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                      : filter === "owned"
-                        ? "You haven't created any quests yet. Start one to incentivize learners."
-                        : "You haven't enrolled in any quests yet. Browse available quests to get started."
+                    preset !== "none"
+                      ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
+                      : filter === "all"
+                        ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                        : filter === "owned"
+                          ? "You haven't created any quests yet. Start one to incentivize learners."
+                          : "You haven't enrolled in any quests yet. Browse available quests to get started."
                   }
                   action={
                     filter === "all" || filter === "owned"
                       ? {
                           label: "Create Quest",
-                          onClick: () => navigate("/quest/create"),
+                          onClick: goToCreateQuest,
                         }
                       : undefined
                   }
@@ -505,7 +542,7 @@ export function Dashboard() {
           <TrendingQuests
             quests={trendingQuests}
             statsByQuest={questStats}
-            onSelectQuest={id => navigate(`/quest/${id}`)}
+            onSelectQuest={goToQuest}
           />
           <RecentActivity activities={recentActivity} />
         </div>

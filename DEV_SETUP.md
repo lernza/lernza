@@ -26,6 +26,11 @@ Lernza contracts require Rust to compile to WASM. Install the stable toolchain:
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+> **Windows users:** Download the official installer from [https://rustup.rs](https://rustup.rs) — do not commit the `.exe` file to the repository.
+
+```bash
+```
+
 Verify the installation:
 
 ```bash

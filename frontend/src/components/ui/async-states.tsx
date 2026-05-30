@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button"
 // ─── Loading States ─────────────────────────────────────────────────────────────
 
 interface LoadingStateProps {
-  message?: string
+  /** Contextual message — callers must provide one (e.g. "Fetching quests", "Confirming transaction"). */
+  message: string
   variant?: "default" | "compact" | "inline"
 }
 
-export function LoadingState({ message = "Loading...", variant = "default" }: LoadingStateProps) {
+export function LoadingState({ message, variant = "default" }: LoadingStateProps) {
   if (variant === "inline") {
     return (
       <div className="flex items-center gap-2 text-sm font-bold">
@@ -105,26 +106,95 @@ export function ErrorState({
 
 // ─── Empty States ─────────────────────────────────────────────────────────────
 
-interface EmptyStateProps {
+/**
+ * Variants that render a CTA button require an explicit handler so the button
+ * is never dead. The discriminated union makes the compiler enforce this:
+ *
+ *   variant="wallet"     → onConnect required
+ *   variant="quests"     → onCreateQuest required
+ *   variant="milestones" → onAddMilestone required
+ *   variant="enrollees"  → onAddEnrollee required
+ *   variant="earnings"   → no CTA (read-only state)
+ *   variant="compact"    → optional generic action prop (unchanged)
+ *   variant="default"    → optional generic action prop (unchanged)
+ */
+
+// Variants that own their CTA label/handler — callers may not pass a generic `action`.
+interface WalletEmptyStateProps {
+  variant: "wallet"
+  onConnect: () => void
   title?: string
   description?: string
-  action?: {
-    label: string
-    onClick: () => void
-  }
   icon?: React.ComponentType<{ className?: string }>
-  variant?: "default" | "compact" | "quests" | "milestones" | "enrollees" | "earnings" | "wallet"
+  illustration?: "dashboard" | "profile" | "leaderboard"
+  // action intentionally omitted — use onConnect
 }
 
-export function EmptyState({
-  title,
-  description,
-  action,
-  icon: IconComponent,
-  variant = "default",
-}: EmptyStateProps) {
-  const getVariantConfig = () => {
-    switch (variant) {
+interface QuestsEmptyStateProps {
+  variant: "quests"
+  onCreateQuest: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+interface MilestonesEmptyStateProps {
+  variant: "milestones"
+  onAddMilestone: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+interface EnrolleesEmptyStateProps {
+  variant: "enrollees"
+  onAddEnrollee: () => void
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+// Variants with no CTA or a generic optional action.
+interface EarningsEmptyStateProps {
+  variant: "earnings"
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+}
+
+interface DefaultEmptyStateProps {
+  variant?: "default" | "compact"
+  title?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  illustration?: "dashboard" | "profile" | "leaderboard"
+  /** Generic escape hatch for one-off CTAs on default/compact variants. */
+  action?: { label: string; onClick: () => void }
+}
+
+type EmptyStateProps =
+  | WalletEmptyStateProps
+  | QuestsEmptyStateProps
+  | MilestonesEmptyStateProps
+  | EnrolleesEmptyStateProps
+  | EarningsEmptyStateProps
+  | DefaultEmptyStateProps
+
+export function EmptyState(props: EmptyStateProps) {
+  const { title, description, icon: IconComponent, illustration } = props
+
+  // Resolve per-variant config — handler is always defined when a CTA is shown.
+  const getVariantConfig = (): {
+    title: string
+    description: string
+    icon: React.ReactNode
+    cta?: { label: string; onClick: () => void }
+  } => {
+    switch (props.variant) {
       case "quests":
         return {
           title: title || "No quests yet",
@@ -136,7 +206,7 @@ export function EmptyState({
           ) : (
             <Target className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Create Quest",
+          cta: { label: "Create Quest", onClick: props.onCreateQuest },
         }
       case "milestones":
         return {
@@ -147,7 +217,7 @@ export function EmptyState({
           ) : (
             <Target className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Add Milestone",
+          cta: { label: "Add Milestone", onClick: props.onAddMilestone },
         }
       case "enrollees":
         return {
@@ -158,7 +228,7 @@ export function EmptyState({
           ) : (
             <Users className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Add Enrollee",
+          cta: { label: "Add Enrollee", onClick: props.onAddEnrollee },
         }
       case "earnings":
         return {
@@ -170,6 +240,7 @@ export function EmptyState({
           ) : (
             <Coins className="h-6 w-6" />
           ),
+          // No CTA — earnings is a read-only state.
         }
       case "wallet":
         return {
@@ -182,9 +253,11 @@ export function EmptyState({
           ) : (
             <Wallet className="h-6 w-6" />
           ),
-          actionLabel: action?.label || "Connect Wallet",
+          cta: { label: "Connect Wallet", onClick: props.onConnect },
         }
-      default:
+      default: {
+        // "default" | "compact" | undefined
+        const action = (props as DefaultEmptyStateProps).action
         return {
           title: title || "No data",
           description: description || "No items to display.",
@@ -193,17 +266,23 @@ export function EmptyState({
           ) : (
             <Search className="h-6 w-6" />
           ),
+          cta: action ? { label: action.label, onClick: action.onClick } : undefined,
         }
+      }
     }
   }
 
   const config = getVariantConfig()
 
-  if (variant === "compact") {
+  const illustrationSrc = illustration ? `/illustrations/empty-${illustration}.svg` : null
+
+  if (props.variant === "compact") {
+    const action = (props as DefaultEmptyStateProps).action
     return (
       <Card className="animate-fade-in-up">
         <CardContent className="flex items-center gap-3 py-4">
-          <div className="bg-primary border-border flex h-8 w-8 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
+          {/* compact: h-10 w-10 container, icon h-6 w-6 — 1.6× ratio matching standalone */}
+          <div className="bg-primary border-border flex h-10 w-10 shrink-0 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
             {config.icon}
           </div>
           <div className="flex-1">
@@ -212,7 +291,7 @@ export function EmptyState({
           </div>
           {action && (
             <Button size="sm" onClick={action.onClick}>
-              {config.actionLabel}
+              {action.label}
             </Button>
           )}
         </CardContent>
@@ -223,14 +302,25 @@ export function EmptyState({
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-          {config.icon}
-        </div>
+        {illustrationSrc ? (
+          <div className="mb-6">
+            <img
+              src={illustrationSrc}
+              alt=""
+              className="h-32 w-32 sm:h-40 sm:w-40"
+              aria-hidden="true"
+            />
+          </div>
+        ) : (
+          <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+            {config.icon}
+          </div>
+        )}
         <h3 className="mb-2 font-black">{config.title}</h3>
         <p className="text-muted-foreground mb-6 max-w-sm text-sm">{config.description}</p>
-        {action && (
-          <Button onClick={action.onClick} className="shimmer-on-hover">
-            {config.actionLabel}
+        {config.cta && (
+          <Button onClick={config.cta.onClick} className="shimmer-on-hover">
+            {config.cta.label}
           </Button>
         )}
       </CardContent>
@@ -262,4 +352,20 @@ export function ContractUnavailable({
       </CardContent>
     </Card>
   )
+}
+
+// ─── Preload Illustrations ─────────────────────────────────────────────────────
+if (typeof document !== "undefined") {
+  const preloads = [
+    "/illustrations/empty-dashboard.svg",
+    "/illustrations/empty-profile.svg",
+    "/illustrations/empty-leaderboard.svg",
+  ]
+  preloads.forEach((src) => {
+    const link = document.createElement("link")
+    link.rel = "prefetch"
+    link.as = "image"
+    link.href = src
+    document.head.appendChild(link)
+  })
 }

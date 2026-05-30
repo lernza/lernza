@@ -1,0 +1,65 @@
+# cargo-deny configuration for Lernza contracts
+# Checks for security advisories, license issues, and banned dependencies
+
+[licenses]
+version = 2
+unlicensed = "deny"
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Unlicense",
+    "Zlib",
+]
+
+# Skip license checks for dev dependencies
+[licenses.dev-dependencies]
+unlicensed = "deny"
+
+# Security advisories - this is the main focus for issue #759
+[advisories]
+version = 2
+# Vulnerability database source
+db-url = "https://github.com/rustsec/advisory-db"
+# Ignore advisories for optional/development-only crates
+ignore = [
+    # Add advisory IDs to ignore here when explicitly reviewed and accepted
+    # Format: "RUSTSEC-0000-0000"
+]
+
+# Deny known vulnerabilities (fail the build on CVEs)
+[vulns]
+version = 2
+
+# Banned dependencies - fail if these are used
+[bans]
+version = 2
+deny = [
+    { name = "std::os::raw", version = "*" },
+]
+
+# Allow specific crates with known issues but acceptable for our use case
+allow = [
+    { name = "soroban-sdk" },
+    { name = "stellar-xdr" },
+]
+
+# Skip bans for dev dependencies
+[bans.dev-dependencies]
+deny = []
+
+# Sources configuration
+[sources]
+version = 2
+unknown-git-registry = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+    "https://github.com/stellar/rs-soroban-sdk",
+    "https://github.com/rust-lang/rust",
+]

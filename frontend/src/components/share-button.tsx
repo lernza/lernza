@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { createPortal } from "react-dom"
 import { Share2, Link, X as XClose, Copy, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { getQuestUrl } from "@/lib/app-url"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -38,27 +37,19 @@ interface DropdownPosition {
 interface ShareButtonProps {
   questId: number
   questName: string
-  onToast: (message: string, type?: "success" | "error" | "info" | "warning") => void
+  onToast: (message: string, type?: "success" | "error" | "info") => void
   compact?: boolean
-  className?: string
 }
 
-export function ShareButton({
-  questId,
-  questName,
-  onToast,
-  compact = false,
-  className,
-}: ShareButtonProps) {
+export function ShareButton({ questId, questName, onToast, compact = false }: ShareButtonProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<DropdownPosition>({ top: 0, right: 0 })
   const [copied, setCopied] = useState(false)
   const [discordCopied, setDiscordCopied] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  const questUrl = getQuestUrl(questId)
+  const questUrl = `${window.location.origin}/quest/${questId}`
   // Spec: em dash (—) between quest name and URL
   const xText = `Check out this quest on @lernza: ${questName} — ${questUrl}`
   const discordText = `**Check out this quest on Lernza!**\n📚 **${questName}**\n🔗 ${questUrl}`
@@ -74,9 +65,6 @@ export function ShareButton({
   }, [])
 
   const handleOpen = () => {
-    if (!open) {
-      previousFocusRef.current = document.activeElement as HTMLElement
-    }
     updatePos()
     setOpen(v => !v)
   }
@@ -117,83 +105,6 @@ export function ShareButton({
     return () => document.removeEventListener("keydown", handler)
   }, [open])
 
-  // Focus return on close
-  useEffect(() => {
-    if (!open && previousFocusRef.current) {
-      previousFocusRef.current.focus()
-    }
-  }, [open])
-
-  // Focus trap and initial focus
-  useEffect(() => {
-    if (open && panelRef.current) {
-      const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements[focusableElements.length - 1]
-
-      requestAnimationFrame(() => {
-        firstElement?.focus()
-      })
-
-      const handleTabKey = (e: KeyboardEvent) => {
-        if (e.key === "Tab") {
-          if (e.shiftKey) {
-            if (document.activeElement === firstElement) {
-              lastElement?.focus()
-              e.preventDefault()
-            }
-          } else {
-            if (document.activeElement === lastElement) {
-              firstElement?.focus()
-              e.preventDefault()
-            }
-          }
-        }
-      }
-
-      document.addEventListener("keydown", handleTabKey)
-      return () => document.removeEventListener("keydown", handleTabKey)
-    }
-  }, [open])
-
-  /**
-   * Fallback copy using a temporary textarea when the Clipboard API
-   * is unavailable or permission is denied.
-   */
-  const fallbackCopyText = (text: string): boolean => {
-    const textarea = document.createElement("textarea")
-    textarea.value = text
-    textarea.setAttribute("readonly", "")
-    textarea.style.position = "fixed"
-    textarea.style.left = "-9999px"
-    document.body.appendChild(textarea)
-    textarea.select()
-    let ok = false
-    try {
-      ok = document.execCommand("copy")
-    } catch {
-      ok = false
-    }
-    document.body.removeChild(textarea)
-    return ok
-  }
-
-  const copyToClipboard = async (text: string): Promise<boolean> => {
-    // Try Clipboard API first
-    if (navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text)
-        return true
-      } catch {
-        // Permission denied or API rejected — fall through to fallback
-      }
-    }
-    // Manual fallback via textarea + execCommand
-    return fallbackCopyText(text)
-  }
-
   // Web Share API — mobile native sheet
   const handleNativeShare = async () => {
     try {
@@ -202,32 +113,19 @@ export function ShareButton({
         text: `Check out this quest on Lernza: ${questName}`,
         url: questUrl,
       })
-    } catch (err: unknown) {
-      // If user cancelled, ignore. Otherwise fall through to copy.
-      const message = err instanceof Error ? err.message : String(err)
-      if (message.includes("AbortError") || message.includes("cancel")) return
-      // Native share denied/failed — fall back to copy
-      const ok = await copyToClipboard(questUrl)
-      onToast(
-        ok
-          ? "Link copied to clipboard instead!"
-          : "Could not share. Please copy the link manually from the address bar.",
-        ok ? "success" : "error"
-      )
+    } catch {
+      // User cancelled or share interrupted — no action needed
     }
   }
 
   const handleCopyLink = async () => {
-    const ok = await copyToClipboard(questUrl)
-    if (ok) {
+    try {
+      await navigator.clipboard.writeText(questUrl)
       setCopied(true)
       onToast("Link copied to clipboard!", "success")
       setTimeout(() => setCopied(false), 2000)
-    } else {
-      onToast(
-        "Clipboard access denied. Please copy the link manually from the address bar.",
-        "error"
-      )
+    } catch {
+      onToast("Failed to copy link", "error")
     }
   }
 
@@ -240,13 +138,13 @@ export function ShareButton({
   }
 
   const handleCopyDiscord = async () => {
-    const ok = await copyToClipboard(discordText)
-    if (ok) {
+    try {
+      await navigator.clipboard.writeText(discordText)
       setDiscordCopied(true)
       onToast("Discord message copied!", "success")
       setTimeout(() => setDiscordCopied(false), 2000)
-    } else {
-      onToast("Clipboard access denied. Please try again or copy manually.", "error")
+    } catch {
+      onToast("Failed to copy", "error")
     }
   }
 
@@ -258,18 +156,15 @@ export function ShareButton({
       style={{
         position: "absolute",
         top: pos.top,
-        // Use fixed width on desktop, but fill screen (with padding) on mobile
-        width: window.innerWidth < 640 ? "calc(100vw - 32px)" : "288px",
-        // Center on mobile, anchor to trigger on desktop
-        left: window.innerWidth < 640 ? "16px" : "auto",
-        right: window.innerWidth < 640 ? "16px" : pos.right,
+        right: pos.right,
+        // Explicit fixed stacking context — renders above everything
+        zIndex: 9999,
       }}
       className={cn(
         "bg-card text-card-foreground border-border border-[3px] shadow-[6px_6px_0_var(--color-border)]",
-        "animate-fade-in-down overflow-hidden"
+        "animate-fade-in-down w-72 overflow-hidden"
       )}
       role="dialog"
-      aria-modal="true"
       aria-label="Share options"
     >
       {/* Panel header */}
@@ -304,7 +199,7 @@ export function ShareButton({
         <ShareOption
           icon={<XIcon className="h-4 w-4" />}
           label="Share on X"
-          sublabel={`"...${questName} — ${new URL(questUrl).host}/..."`}
+          sublabel={`"...${questName} — ${window.location.host}/..."`}
           onClick={handleShareX}
         />
         <ShareOption
@@ -349,14 +244,12 @@ export function ShareButton({
           "neo-press hover:bg-primary cursor-pointer transition-colors",
           open &&
             "bg-primary translate-x-0.5 translate-y-0.5 shadow-[1px_1px_0_var(--color-border)]",
-          compact ? "h-9 w-9 justify-center" : "px-4 py-2",
-          className
+          compact ? "h-9 w-9 justify-center" : "px-4 py-2"
         )}
       >
         <Share2 className="h-4 w-4 shrink-0" />
         {!compact && <span>Share</span>}
       </button>
-
 
       {/* Portal: renders at document.body, escapes all overflow/z-index parents */}
       {typeof document !== "undefined" && createPortal(dropdown, document.body)}

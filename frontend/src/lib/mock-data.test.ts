@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest"
 import {
-  MOCK_WORKSPACES,
-  MOCK_WORKSPACE_STATS,
+  MOCK_QUESTS,
+  MOCK_QUEST_STATS,
   MOCK_MILESTONES,
   MOCK_COMPLETIONS,
   MOCK_ENROLLEES,
@@ -12,43 +12,43 @@ import {
   MOCK_EARNINGS_HISTORY,
 } from "./mock-data"
 
-// ── MOCK_WORKSPACES ───────────────────────────────────────────────────────────
+// ── MOCK_QUESTS ───────────────────────────────────────────────────────────────
 
-describe("MOCK_WORKSPACES", () => {
-  it("contains at least one workspace", () => {
-    expect(MOCK_WORKSPACES.length).toBeGreaterThan(0)
+describe("MOCK_QUESTS", () => {
+  it("contains at least one quest", () => {
+    expect(MOCK_QUESTS.length).toBeGreaterThan(0)
   })
 
-  it("every workspace has a unique id", () => {
-    const ids = MOCK_WORKSPACES.map(w => w.id)
+  it("every quest has a unique id", () => {
+    const ids = MOCK_QUESTS.map(q => q.id)
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it("every workspace has a non-empty name and description", () => {
-    for (const ws of MOCK_WORKSPACES) {
-      expect(ws.name.trim().length).toBeGreaterThan(0)
-      expect(ws.description.trim().length).toBeGreaterThan(0)
+  it("every quest has a non-empty name and description", () => {
+    for (const q of MOCK_QUESTS) {
+      expect(q.name.trim().length).toBeGreaterThan(0)
+      expect(q.description.trim().length).toBeGreaterThan(0)
     }
   })
 
-  it("every workspace has a non-empty owner address", () => {
-    for (const ws of MOCK_WORKSPACES) {
-      expect(ws.owner.trim().length).toBeGreaterThan(0)
+  it("every quest has a non-empty owner address", () => {
+    for (const q of MOCK_QUESTS) {
+      expect(q.owner.trim().length).toBeGreaterThan(0)
     }
   })
 })
 
-// ── MOCK_WORKSPACE_STATS ──────────────────────────────────────────────────────
+// ── MOCK_QUEST_STATS ──────────────────────────────────────────────────────────
 
-describe("MOCK_WORKSPACE_STATS", () => {
-  it("has a stats entry for every workspace id", () => {
-    for (const ws of MOCK_WORKSPACES) {
-      expect(MOCK_WORKSPACE_STATS[ws.id]).toBeDefined()
+describe("MOCK_QUEST_STATS", () => {
+  it("has a stats entry for every quest id", () => {
+    for (const q of MOCK_QUESTS) {
+      expect(MOCK_QUEST_STATS[q.id]).toBeDefined()
     }
   })
 
   it("all stats have non-negative counts", () => {
-    for (const stats of Object.values(MOCK_WORKSPACE_STATS)) {
+    for (const stats of Object.values(MOCK_QUEST_STATS)) {
       expect(stats.enrolleeCount).toBeGreaterThanOrEqual(0)
       expect(stats.milestoneCount).toBeGreaterThanOrEqual(0)
       expect(stats.poolBalance).toBeGreaterThanOrEqual(0)
@@ -59,10 +59,10 @@ describe("MOCK_WORKSPACE_STATS", () => {
 // ── MOCK_MILESTONES ───────────────────────────────────────────────────────────
 
 describe("MOCK_MILESTONES", () => {
-  it("all milestone quest_ids reference an existing workspace", () => {
-    const workspaceIds = new Set(MOCK_WORKSPACES.map(w => w.id))
+  it("all milestone questIds reference an existing quest", () => {
+    const questIds = new Set(MOCK_QUESTS.map(q => q.id))
     for (const [questId] of Object.entries(MOCK_MILESTONES)) {
-      expect(workspaceIds.has(Number(questId))).toBe(true)
+      expect(questIds.has(Number(questId))).toBe(true)
     }
   })
 
@@ -75,10 +75,10 @@ describe("MOCK_MILESTONES", () => {
     }
   })
 
-  it("every milestone has a positive reward_amount", () => {
+  it("every milestone has a positive rewardAmount", () => {
     for (const milestones of Object.values(MOCK_MILESTONES)) {
       for (const m of milestones) {
-        expect(m.reward_amount).toBeGreaterThan(0)
+        expect(m.rewardAmount).toBeGreaterThan(0)
       }
     }
   })
@@ -94,10 +94,10 @@ describe("MOCK_MILESTONES", () => {
 // ── MOCK_COMPLETIONS ──────────────────────────────────────────────────────────
 
 describe("MOCK_COMPLETIONS", () => {
-  it("all completion quest_ids reference an existing workspace", () => {
-    const workspaceIds = new Set(MOCK_WORKSPACES.map(w => w.id))
+  it("all completion questIds reference an existing quest", () => {
+    const questIds = new Set(MOCK_QUESTS.map(q => q.id))
     for (const [questId] of Object.entries(MOCK_COMPLETIONS)) {
-      expect(workspaceIds.has(Number(questId))).toBe(true)
+      expect(questIds.has(Number(questId))).toBe(true)
     }
   })
 
@@ -116,10 +116,10 @@ describe("MOCK_COMPLETIONS", () => {
 // ── MOCK_ENROLLEES ────────────────────────────────────────────────────────────
 
 describe("MOCK_ENROLLEES", () => {
-  it("all enrollee quest_ids reference an existing workspace", () => {
-    const workspaceIds = new Set(MOCK_WORKSPACES.map(w => w.id))
+  it("all enrollee questIds reference an existing quest", () => {
+    const questIds = new Set(MOCK_QUESTS.map(q => q.id))
     for (const [questId] of Object.entries(MOCK_ENROLLEES)) {
-      expect(workspaceIds.has(Number(questId))).toBe(true)
+      expect(questIds.has(Number(questId))).toBe(true)
     }
   })
 
@@ -157,10 +157,10 @@ describe("MOCK_PLATFORM_STATS", () => {
 // ── MOCK_TRENDING_QUESTS ──────────────────────────────────────────────────────
 
 describe("MOCK_TRENDING_QUESTS", () => {
-  it("contains only workspaces that exist in MOCK_WORKSPACES", () => {
-    const workspaceIds = new Set(MOCK_WORKSPACES.map(w => w.id))
+  it("contains only quests that exist in MOCK_QUESTS", () => {
+    const questIds = new Set(MOCK_QUESTS.map(q => q.id))
     for (const tq of MOCK_TRENDING_QUESTS) {
-      expect(workspaceIds.has(tq.id)).toBe(true)
+      expect(questIds.has(tq.id)).toBe(true)
     }
   })
 })

@@ -6,15 +6,15 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground border-[3px] border-black shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] neo-press",
+          "bg-primary text-primary-foreground border-[3px] border-black shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:shadow-[var(--shadow-sm)] neo-press",
         secondary:
-          "bg-white text-foreground border-[3px] border-black shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] neo-press",
+          "bg-white text-foreground border-[3px] border-black shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:shadow-[var(--shadow-sm)] neo-press",
         destructive:
-          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] neo-press",
+          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:shadow-[var(--shadow-sm)] neo-press",
         danger:
-          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[4px_4px_0_var(--color-border)] hover:bg-destructive/90 hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] neo-press",
+          "bg-destructive text-destructive-foreground border-[3px] border-black shadow-[var(--shadow-md)] hover:bg-destructive/90 hover:shadow-[var(--shadow-lg)] active:shadow-[var(--shadow-sm)] neo-press",
         outline:
-          "bg-transparent text-foreground border-[3px] border-black shadow-[4px_4px_0_var(--color-border)] hover:shadow-[6px_6px_0_var(--color-border)] active:shadow-[2px_2px_0_var(--color-border)] neo-press",
+          "bg-transparent text-foreground border-[3px] border-black shadow-[var(--shadow-md)] hover:shadow-[var(--shadow-lg)] active:shadow-[var(--shadow-sm)] neo-press",
         ghost: "border-0 shadow-none hover:bg-secondary transition-colors",
         link: "border-0 shadow-none underline-offset-4 hover:underline text-foreground",
       },

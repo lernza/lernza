@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react"
-import { useNavigate } from "react-router-dom"
 import { ArrowLeft, Home, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+
+interface NotFoundProps {
+  onNavigate: (page: string) => void
+}
 
 function GlitchText({ text }: { text: string }) {
   const [glitchActive, setGlitchActive] = useState(true)
@@ -30,10 +33,8 @@ function GlitchText({ text }: { text: string }) {
   )
 }
 
-export function NotFound() {
-  const navigate = useNavigate()
+export function NotFound({ onNavigate }: NotFoundProps) {
   const [hovered, setHovered] = useState(false)
-  const canGoBack = window.history.length > 1
 
   return (
     <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
@@ -100,7 +101,7 @@ export function NotFound() {
         <div className="bg-background border-border animate-fade-in-up stagger-1 shimmer-on-hover max-w-md border-[3px] px-8 py-6 shadow-[6px_6px_0_var(--color-border)]">
           <div className="mb-3 flex items-center justify-center gap-2">
             <Sparkles className="text-primary h-5 w-5" />
-            <h1 className="text-2xl font-black sm:text-3xl">Lost in the chain</h1>
+            <h2 className="text-2xl font-black sm:text-3xl">Lost in the chain</h2>
             <Sparkles className="text-primary h-5 w-5" />
           </div>
           <p className="text-muted-foreground mb-6 leading-relaxed">
@@ -108,16 +109,14 @@ export function NotFound() {
             deployed.
           </p>
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
-            <Button onClick={() => navigate("/")} className="shimmer-on-hover group">
+            <Button onClick={() => onNavigate("landing")} className="shimmer-on-hover group">
               <Home className="h-4 w-4" />
               Back to Home
             </Button>
-            {canGoBack && (
-              <Button variant="secondary" onClick={() => navigate(-1)} className="group">
-                <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                Go Back
-              </Button>
-            )}
+            <Button variant="secondary" onClick={() => window.history.back()} className="group">
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+              Go Back
+            </Button>
           </div>
         </div>
 

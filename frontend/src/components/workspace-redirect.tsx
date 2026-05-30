@@ -11,3 +11,5 @@ export function WorkspaceRedirect() {
   // Redirect to the quest detail page with the extracted ID
   return <Navigate replace to={`/quest/${id}`} />
 }
+
+export const QuestRedirect = WorkspaceRedirect

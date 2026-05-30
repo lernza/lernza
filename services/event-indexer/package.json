@@ -1,0 +1,27 @@
+{
+  "name": "@lernza/event-indexer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Indexes Lernza mainnet contract events into PostgreSQL with Sentry monitoring",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node --import tsx src/index.ts",
+    "dev": "node --import tsx --watch src/index.ts",
+    "db:migrate": "node --import tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@sentry/node": "^9.30.0",
+    "@stellar/stellar-sdk": "^15.0.1",
+    "dotenv": "^16.5.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}

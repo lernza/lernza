@@ -1,19 +1,20 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X, Sun, Moon, AlertTriangle, Loader2 } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
 import { useWallet } from "@/hooks/use-wallet"
-import { useWalletBalance } from "@/hooks/use-wallet-balance"
-import { useTheme } from "@/hooks/use-theme"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useTheme } from "@/App"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
-  { key: "landing", path: "/", label: "Home" },
-  { key: "dashboard", path: "/dashboard", label: "Dashboard" },
-  { key: "leaderboard", path: "/leaderboard", label: "Leaderboard" },
-  { key: "profile", path: "/profile", label: "Profile" },
+  { key: "landing", label: "Home" },
+  { key: "dashboard", label: "Dashboard" },
+  { key: "profile", label: "Profile" },
 ] as const
+
+interface NavbarProps {
+  activePage: string
+  onNavigate: (page: string) => void
+}
 
 function LogoMark({ className }: { className?: string }) {
   return (
@@ -46,7 +47,6 @@ function ThemeToggle() {
       className={cn(
         "border-border h-9 w-9 border-[2px] shadow-[2px_2px_0_var(--color-border)]",
         "neo-press flex cursor-pointer items-center justify-center",
-        "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
         "transition-colors duration-300",
         isDark
           ? "bg-primary text-black hover:bg-yellow-300"
@@ -58,89 +58,12 @@ function ThemeToggle() {
   )
 }
 
-/**
- * BalanceBadge renders the XLM (and optionally reward token) balance
- * alongside the connected address chip. It shows a spinner while loading
- * and silently hides itself when the wallet is disconnected.
- */
-function BalanceBadge({
-  xlmBalance,
-  rewardBalance,
-  isLoading,
-}: {
-  xlmBalance: string | null
-  rewardBalance: string | null
-  isLoading: boolean
-}) {
-  if (isLoading) {
-    return (
-      <span className="flex items-center" aria-label="Fetching balance" title="Fetching balance…">
-        <Loader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
-      </span>
-    )
-  }
-
-  if (xlmBalance === null && rewardBalance === null) return null
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {xlmBalance !== null && (
-        <span
-          className={cn(
-            "border-border inline-flex items-center border px-1.5 py-0.5",
-            "font-mono text-[11px] leading-none font-bold",
-            "bg-background text-foreground"
-          )}
-          title={`XLM balance: ${xlmBalance}`}
-        >
-          {xlmBalance} XLM
-        </span>
-      )}
-      {rewardBalance !== null && (
-        <span
-          className={cn(
-            "border-border inline-flex items-center border px-1.5 py-0.5",
-            "font-mono text-[11px] leading-none font-bold",
-            "bg-primary text-black"
-          )}
-          title={`Reward token balance: ${rewardBalance}`}
-        >
-          {rewardBalance} RWD
-        </span>
-      )}
-    </div>
-  )
-}
-
-export function Navbar() {
-  const {
-    connected,
-    shortAddress,
-    address,
-    connect,
-    disconnect,
-    loading,
-    installed,
-    installUrl,
-    networkName,
-    wrongNetwork,
-    expectedNetworkName,
-  } = useWallet()
-
-  const {
-    xlmBalance,
-    rewardBalance,
-    isLoading: balanceLoading,
-  } = useWalletBalance(address, networkName)
-
+export function Navbar({ activePage, onNavigate }: NavbarProps) {
+  const { connected, shortAddress, connect, disconnect, loading } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const navigate = useNavigate()
-  const location = useLocation()
 
-  const activePage = location.pathname === "/" ? "landing" : location.pathname.split("/")[1]
-
-  const handleNavigate = (path: string) => {
-    navigate(path)
+  const handleNavigate = (page: string) => {
+    onNavigate(page)
     setMobileOpen(false)
   }
 
@@ -149,8 +72,8 @@ export function Navbar() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button
-          onClick={() => handleNavigate("/")}
-          className="group focus-visible:ring-ring flex cursor-pointer items-center gap-2 focus-visible:ring-2 focus-visible:outline-none"
+          onClick={() => handleNavigate("landing")}
+          className="group flex cursor-pointer items-center gap-2"
         >
           <LogoMark className="h-8 w-8 transition-transform group-hover:scale-110" />
           <span className="text-xl font-black tracking-tight">Lernza</span>
@@ -161,10 +84,9 @@ export function Navbar() {
           {NAV_ITEMS.map(item => (
             <button
               key={item.key}
-              onClick={() => handleNavigate(item.path)}
-              aria-current={activePage === item.key ? "page" : undefined}
+              onClick={() => handleNavigate(item.key)}
               className={cn(
-                "animated-underline focus-visible:ring-ring cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
+                "animated-underline cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all",
                 activePage === item.key
                   ? "bg-primary border-border active shadow-[2px_2px_0_var(--color-border)]"
                   : "hover:border-border hover:bg-secondary border-transparent"
@@ -181,39 +103,14 @@ export function Navbar() {
 
           {connected ? (
             <>
-              {/*
-               * Wallet chip — shows network badge, balance badges, and short address.
-               * BalanceBadge is hidden on mobile (sm:flex) to keep the header compact;
-               * the full balance is still visible if the user opens the mobile menu.
-               */}
               <div className="border-border bg-secondary hidden items-center gap-2 border-[2px] px-3 py-1.5 shadow-[2px_2px_0_var(--color-border)] sm:flex">
                 <div className="bg-success border-border h-2.5 w-2.5 border" />
-                {networkName ? (
-                  <span className="border-border bg-background rounded-sm border px-1.5 py-0.5 text-[10px] font-black tracking-wide uppercase">
-                    {networkName}
-                  </span>
-                ) : null}
-                {/* Balance display sits between network badge and address */}
-                <BalanceBadge
-                  xlmBalance={xlmBalance}
-                  rewardBalance={rewardBalance}
-                  isLoading={balanceLoading}
-                />
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
               <Button variant="ghost" size="icon" onClick={disconnect} aria-label="Disconnect wallet">
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
               </Button>
             </>
-          ) : !installed ? (
-            <a
-              href={installUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(buttonVariants({ size: "sm" }), "shimmer-on-hover")}
-            >
-              Install Freighter
-            </a>
           ) : (
             <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
               <Wallet className="h-4 w-4" />
@@ -224,59 +121,26 @@ export function Navbar() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileOpen}
-            aria-controls="mobile-menu"
-            aria-label="Toggle Menu"
-            className="border-border bg-background neo-press focus-visible:ring-ring flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none sm:hidden"
+            aria-controls="mobile-nav-menu"
+            className="border-border bg-background neo-press flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:hidden"
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {mobileOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
       </div>
 
-      {connected && wrongNetwork ? (
-        <div className="border-border border-t-[2px] bg-yellow-400 px-4 py-3 text-black dark:bg-yellow-500 dark:text-black">
-          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-              <div>
-                <p className="text-sm font-black">
-                  Wrong network - switch Freighter to {expectedNetworkName}
-                </p>
-                <p className="mt-0.5 text-xs font-semibold opacity-80">
-                  You are on <span className="font-black">{networkName ?? "Unknown"}</span>. Lernza
-                  runs on {expectedNetworkName}.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold">
-              <span className="border border-black/30 bg-black/10 px-2 py-1">
-                1. Open Freighter
-              </span>
-              <span className="opacity-60">→</span>
-              <span className="border border-black/30 bg-black/10 px-2 py-1">
-                2. Click network dropdown
-              </span>
-              <span className="opacity-60">→</span>
-              <span className="border border-black/30 bg-black/10 px-2 py-1">
-                3. Select {expectedNetworkName}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div id="mobile-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
+        <div id="mobile-nav-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
           <div className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
               <button
                 key={item.key}
-                onClick={() => handleNavigate(item.path)}
-                aria-current={activePage === item.key ? "page" : undefined}
+                onClick={() => handleNavigate(item.key)}
                 className={cn(
-                  "focus-visible:ring-ring w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all focus-visible:ring-2 focus-visible:outline-none",
+                  "w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all",
                   activePage === item.key
                     ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
                     : "hover:border-border hover:bg-secondary border-transparent"
@@ -285,19 +149,6 @@ export function Navbar() {
                 {item.label}
               </button>
             ))}
-
-            {/* Mobile balance display — shown when wallet is connected */}
-            {connected && (
-              <div className="border-border mt-2 flex items-center gap-2 border-t-[2px] pt-3">
-                <div className="bg-success border-border h-2.5 w-2.5 border" />
-                <BalanceBadge
-                  xlmBalance={xlmBalance}
-                  rewardBalance={rewardBalance}
-                  isLoading={balanceLoading}
-                />
-                <span className="font-mono text-sm font-bold">{shortAddress}</span>
-              </div>
-            )}
           </div>
         </div>
       )}

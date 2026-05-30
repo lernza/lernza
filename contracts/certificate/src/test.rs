@@ -64,6 +64,8 @@ fn test_duplicate_certificate_prevention() {
 
 #[test]
 fn test_certificate_revocation() {
+    // Issue #720 — revoke_certificate is now owner-only and emits certificate_revoked.
+    // Use a fresh env for revocation so the owner auth frame is not already consumed.
     let (env, client, owner) = setup();
     let recipient = Address::generate(&env);
     let quest_id = 1u32;
@@ -76,13 +78,22 @@ fn test_certificate_revocation() {
         &owner,
     );
 
-    client.revoke_certificate(&token_id);
+    client.revoke_certificate(&owner, &token_id);
 
+    // Metadata is gone
     let result = client.try_get_certificate_metadata(&token_id);
     assert_eq!(result, Err(Ok(Error::NotFound)));
 
+    // User's certificate list is cleared
     let user_certs = client.get_user_certificates(&recipient);
     assert_eq!(user_certs.len(), 0);
+
+    // Tombstone marks it as revoked
+    assert!(client.is_revoked(&token_id));
+
+    // Double-revoke returns AlreadyRevoked
+    let double = client.try_revoke_certificate(&owner, &token_id);
+    assert_eq!(double, Err(Ok(Error::AlreadyRevoked)));
 }
 
 #[test]
@@ -117,4 +128,22 @@ fn test_user_certificate_details() {
     }
     assert!(cert_ids.contains(cert1_id));
     assert!(cert_ids.contains(cert2_id));
+}
+
+#[test]
+fn test_set_and_get_metadata_base() {
+    // Issue #719 — set_metadata_base allows owner to update the metadata URI.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "ipfs://bafybei.../");
+    client.set_metadata_base(&uri);
+    let stored = client.get_metadata_base();
+    assert_eq!(stored, uri);
+}
+
+#[test]
+fn test_get_metadata_base_not_set_returns_error() {
+    // Issue #719 — get_metadata_base returns MetadataBaseNotSet when unset.
+    let (_env, client, _owner) = setup();
+    let result = client.try_get_metadata_base();
+    assert_eq!(result, Err(Ok(Error::MetadataBaseNotSet)));
 }

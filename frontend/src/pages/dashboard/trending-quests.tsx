@@ -3,26 +3,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
-import type { WorkspaceInfo as QuestInfo } from "@/lib/contract-types"
-
-interface QuestStats {
-  enrolleeCount: number
-  poolBalance: number
-}
+import type { QuestInfo } from "@/lib/contracts/quest"
+import type { Quest } from "@/lib/mock-data"
+import type { QuestStatSummary } from "@/hooks/use-quest-stats"
 
 interface TrendingQuestsProps {
-  quests: QuestInfo[]
-  statsByQuest: Record<number, QuestStats>
+  quests: QuestInfo[] | Quest[]
+  statsByQuest?: Record<number, Pick<QuestStatSummary, "enrolleeCount" | "poolBalance">>
   onSelectQuest: (id: number) => void
 }
 
 export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: TrendingQuestsProps) {
-  // Get token metadata for formatting
   const tokenAddress =
     import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
   const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
 
-  // Format amounts with token metadata
   const formatRewardAmount = (amount: number) => {
     return tokenMetadata
       ? formatTokens(amount, tokenMetadata.decimals, tokenMetadata.symbol)
@@ -36,14 +31,18 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
       </h2>
       <div className="space-y-4">
         {quests.map(quest => {
-          const stats = statsByQuest[quest.id] || { enrolleeCount: 0, poolBalance: 0 }
+          const stats = statsByQuest?.[quest.id] ?? {
+            enrolleeCount: "enrolleeCount" in quest ? quest.enrolleeCount : 0,
+            poolBalance: "poolBalance" in quest ? quest.poolBalance : 0,
+          }
+
           return (
             <button
               key={quest.id}
               type="button"
               onClick={() => onSelectQuest(quest.id)}
               aria-label={`Open quest ${quest.name}`}
-              className="card-tilt border-border focus-visible:ring-ring cursor-pointer border-[2px] text-left shadow-[4px_4px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none"
+              className="card-tilt border-border focus-visible:ring-ring w-full cursor-pointer border-[2px] text-left shadow-[4px_4px_0_var(--color-border)] focus-visible:ring-2 focus-visible:outline-none"
             >
               <Card className="border-0 shadow-none">
                 <CardHeader className="p-4 pb-2">
@@ -51,12 +50,17 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
                     <CardTitle className="line-clamp-1 text-sm font-bold">{quest.name}</CardTitle>
                     <Badge
                       variant="default"
-                      className="bg-primary text-foreground border-border ml-2 border-[1px] px-1 text-[10px]"
+                      size="sm"
+                      className="ml-2"
                     >
                       Trending
                     </Badge>
-                    {quest.verified && (
-                      <Badge variant="verified" size="sm" className="ml-2 gap-1">
+                    {"verified" in quest && quest.verified && (
+                      <Badge
+                        variant="verified"
+                        size="sm"
+                        className="ml-2 gap-1"
+                      >
                         <Check className="h-2.5 w-2.5" />
                         Verified
                       </Badge>

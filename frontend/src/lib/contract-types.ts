@@ -102,25 +102,3 @@ export type UserEarnings = bigint
  * Uses bigint to match i128 from Rust contract.
  */
 export type TotalDistributed = bigint
-
-// ─── Legacy Types (to be migrated) ───────────────────────────────────────────
-
-export interface WorkspaceInfo {
-  id: number
-  owner: string
-  name: string
-  description: string
-  token_addr: string
-  created_at: number
-  visibility: Visibility
-  max_enrollees?: number
-  verified: boolean
-}
-
-export interface MilestoneInfo {
-  id: number
-  quest_id: number
-  title: string
-  description: string
-  reward_amount: number
-}

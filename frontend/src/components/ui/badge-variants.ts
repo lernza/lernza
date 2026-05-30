@@ -14,6 +14,10 @@ export const badgeVariants = cva(
         warning: "bg-warning text-warning-foreground shadow-[2px_2px_0_var(--color-border)]",
         verified:
           "bg-background text-foreground shadow-[2px_2px_0_var(--color-border)] ring-1 ring-inset ring-border",
+        // Quest status variants
+        active: "bg-success text-success-foreground shadow-[2px_2px_0_var(--color-border)]",
+        archived: "bg-muted text-muted-foreground shadow-[2px_2px_0_var(--color-border)]",
+        ended: "bg-destructive text-destructive-foreground shadow-[2px_2px_0_var(--color-border)]",
       },
       size: {
         sm: "px-2 py-0.5 text-[10px] leading-none",

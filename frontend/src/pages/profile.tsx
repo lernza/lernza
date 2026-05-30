@@ -9,11 +9,14 @@ import {
   Check,
   Loader2,
   AlertCircle,
+  History,
+  ExternalLink,
+} from "lucide-react"
+import { useState, useEffect } from "react"
   Target,
   Users,
   ExternalLink,
 } from "lucide-react"
-import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -179,34 +182,29 @@ export function Profile() {
   )
 
   useEffect(() => {
-    setActivityItems([])
-    setActivityError(null)
-    setNextActivityCursor(null)
-    setActivityLoading(false)
-  }, [address])
-
-  useEffect(() => {
-    if (!connected || !address || activeTab !== "activity" || activityItems.length > 0) {
+    if (!connected || !address || activeTab !== "activity") {
       return
     }
 
-    let cancelled = false
+    const controller = new AbortController()
 
     const loadInitialActivity = async () => {
+      setActivityItems([])
+      setNextActivityCursor(null)
       setActivityLoading(true)
       setActivityError(null)
 
       try {
-        const page = await fetchWalletActivity(address)
-        if (cancelled) return
+        const page = await fetchWalletActivity(address, null, controller.signal)
+        if (controller.signal.aborted) return
 
         setActivityItems(page.items)
         setNextActivityCursor(page.nextCursor)
       } catch (error) {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
       } finally {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setActivityLoading(false)
         }
       }
@@ -215,9 +213,9 @@ export function Profile() {
     void loadInitialActivity()
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
-  }, [activeTab, activityItems.length, address, connected])
+  }, [activeTab, address, connected])
 
   const handleCopy = () => {
     if (address) {
@@ -227,7 +225,7 @@ export function Profile() {
     }
   }
 
-  const handleLoadMoreActivity = async () => {
+  const handleLoadMoreActivity = async (signal?: AbortSignal) => {
     if (!address || !nextActivityCursor || activityLoading) {
       return
     }
@@ -236,13 +234,17 @@ export function Profile() {
     setActivityError(null)
 
     try {
-      const page = await fetchWalletActivity(address, nextActivityCursor)
+      const page = await fetchWalletActivity(address, nextActivityCursor, signal)
+      if (signal?.aborted) return
       setActivityItems(current => [...current, ...page.items])
       setNextActivityCursor(page.nextCursor)
     } catch (error) {
+      if (signal?.aborted) return
       setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
     } finally {
-      setActivityLoading(false)
+      if (!signal?.aborted) {
+        setActivityLoading(false)
+      }
     }
   }
 
@@ -392,8 +394,117 @@ export function Profile() {
                     {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}
                   </p>
                 </div>
+                <Badge variant="outline" className="border-[2px] font-bold">
+                  {activityItems.length} loaded
+                </Badge>
               </div>
             </div>
+
+            {activityLoading && activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <Loader2 className="text-primary mb-4 h-8 w-8 animate-spin" />
+                  <h3 className="mb-2 font-black">Loading activity</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Fetching recent wallet operations from Horizon.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : activityError ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <AlertCircle className="text-destructive mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">Could not load activity</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">{activityError}</p>
+                </CardContent>
+              </Card>
+            ) : activityItems.length === 0 ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <History className="text-muted-foreground mb-4 h-8 w-8" />
+                  <h3 className="mb-2 font-black">No wallet activity yet</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">
+                    Enroll in a quest or complete a milestone to start building your on-chain
+                    timeline.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {activityItems.map(item => (
+                  <Card key={item.id} className="animate-fade-in-up">
+                    <CardContent className="py-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="bg-primary/10 border-border flex h-11 w-11 items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)]">
+                            {item.type === "rewarded" ? (
+                              <Coins className="h-5 w-5" />
+                            ) : item.type === "completed" ? (
+                              <Trophy className="h-5 w-5" />
+                            ) : (
+                              <History className="h-5 w-5" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-black">{getActivityLabel(item.type)}</p>
+                              <Badge variant="secondary">{item.questName}</Badge>
+                            </div>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {getActivityDescription(item)}
+                            </p>
+                            <p className="text-muted-foreground mt-2 text-xs font-bold">
+                              {formatActivityDate(item.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 sm:flex-col sm:items-end">
+                          {item.amount !== undefined && (
+                            <Badge variant="success" className="tabular-nums">
+                              +{formatTokens(item.amount, 7, "USDC")}
+                            </Badge>
+                          )}
+                          <a
+                            href={item.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary inline-flex items-center gap-1 text-sm font-bold underline underline-offset-2"
+                          >
+                            View transaction
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {capReached && (
+                  <div className="text-muted-foreground mt-6 text-center text-sm font-bold">
+                    Showing first 500 items — refine filters to see more
+                  </div>
+                )}
+
+                {nextActivityCursor && !capReached && (
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={() => void handleLoadMoreActivity()}
+                      disabled={activityLoading}
+                    >
+                      {activityLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        "Load more"
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -449,8 +560,13 @@ export function Profile() {
             ) : totalEarned === 0n ? (
               <Card className="animate-fade-in-up">
                 <CardContent className="flex flex-col items-center py-12 text-center">
-                  <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-                    <Coins className="h-6 w-6" />
+                  <div className="mb-6">
+                    <img
+                      src="/illustrations/empty-profile.svg"
+                      alt=""
+                      className="h-32 w-32 sm:h-40 sm:w-40"
+                      aria-hidden="true"
+                    />
                   </div>
                   <h3 className="mb-2 font-black">No on-chain earnings yet</h3>
                   <p className="text-muted-foreground text-sm">
@@ -722,7 +838,7 @@ export function Profile() {
                     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h4 className="group-hover:underline decoration-primary decoration-4 underline-offset-4 truncate text-lg font-black transition-colors">
+                          <h4 className="decoration-primary truncate text-lg font-black decoration-4 underline-offset-4 transition-colors group-hover:underline">
                             {quest.name}
                           </h4>
                           <Badge variant="outline" className="text-[10px] font-bold uppercase">

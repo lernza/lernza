@@ -1,9 +1,11 @@
-import { scValToNative, xdr } from "@stellar/stellar-sdk"
+import { scValToNative, xdr } from "@stellar/stellar-sdk/minimal"
+import { env } from "@/lib/env"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
 import { questClient } from "@/lib/contracts/quest"
 
 const DEFAULT_HORIZON_URL = "https://horizon-testnet.stellar.org"
 const PAGE_SIZE = 10
+const SAFETY_CAP = 500
 
 export type WalletActivityType = "enrolled" | "completed" | "rewarded" | "left"
 
@@ -21,6 +23,7 @@ export interface WalletActivityItem {
 export interface WalletActivityPage {
   items: WalletActivityItem[]
   nextCursor: string | null
+  capReached: boolean
 }
 
 interface HorizonResponse<T> {
@@ -46,7 +49,7 @@ interface HorizonOperationRecord {
 }
 
 function getHorizonBaseUrl(): string {
-  return import.meta.env.VITE_HORIZON_URL || DEFAULT_HORIZON_URL
+  return env.VITE_HORIZON_URL ?? DEFAULT_HORIZON_URL
 }
 
 function getExplorerBaseUrl(): string {
@@ -203,9 +206,11 @@ function parseActivityRecord(
 
 export async function fetchWalletActivity(
   address: string,
-  cursor?: string | null
+  cursor?: string | null,
+  currentCount: number = 0
+  signal?: AbortSignal
 ): Promise<WalletActivityPage> {
-  const response = await fetch(buildOperationsUrl(address, cursor))
+  const response = await fetch(buildOperationsUrl(address, cursor), { signal })
   if (!response.ok) {
     throw new Error(`Failed to load wallet activity (${response.status})`)
   }
@@ -234,8 +239,12 @@ export async function fetchWalletActivity(
     .map(record => parseActivityRecord(record, address, questNames))
     .filter((item): item is WalletActivityItem => item !== null)
 
+  const capReached = currentCount + items.length >= SAFETY_CAP
+  const nextCursor = capReached ? null : (payload._links?.next?.href ?? null)
+
   return {
     items,
-    nextCursor: payload._links?.next?.href ?? null,
+    nextCursor,
+    capReached,
   }
 }

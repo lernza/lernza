@@ -1,15 +1,6 @@
 import { Clock, Plus, Target, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-
-type ActivityAction = "enrolled" | "completed" | "created"
-
-interface ActivityEvent {
-  id: string
-  user: string
-  action: ActivityAction
-  questName: string
-  timestamp: number
-}
+import type { ActivityEvent } from "@/lib/mock-data"
 
 interface RecentActivityProps {
   activities: ActivityEvent[]

@@ -113,6 +113,57 @@ main,
 
 /* ── Keyframes ── */
 
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-fade-in: none;
+    --animate-fade-in-up: none;
+    --animate-fade-in-down: none;
+    --animate-slide-in-left: none;
+    --animate-slide-in-right: none;
+    --animate-scale-in: none;
+  }
+
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-scale-in,
+  .animate-marquee,
+  .animate-float,
+  .animate-spin-slow,
+  .animate-bounce-in,
+  .animate-bounce-custom {
+    animation: none !important;
+  }
+
+  .reveal-up,
+  .reveal-left,
+  .reveal-right,
+  .reveal-scale {
+    opacity: 1;
+    transform: none;
+    transition-property: opacity;
+    transition-duration: 0.01ms;
+  }
+
+  .neo-press,
+  .neo-lift,
+  .card-tilt,
+  .shimmer-on-hover,
+  .shimmer-on-hover::after,
+  [class*="animate-"],
+  [class*="reveal-"] {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    transform: none !important;
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

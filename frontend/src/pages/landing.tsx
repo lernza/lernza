@@ -304,7 +304,7 @@ export function Landing({ onNavigate }: LandingProps) {
                     document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })
                   }}
                 >
-                  How it works
+                  See how it works
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </div>
@@ -593,14 +593,14 @@ export function Landing({ onNavigate }: LandingProps) {
                   onClick={() => onNavigate("terms")}
                   className="text-muted-foreground hover:text-foreground animated-underline cursor-pointer text-left text-sm font-bold transition-colors"
                 >
-                  Terms of Service
+                  View terms of service
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigate("privacy")}
                   className="text-muted-foreground hover:text-foreground animated-underline cursor-pointer text-left text-sm font-bold transition-colors"
                 >
-                  Privacy Policy
+                  View privacy policy
                 </button>
               </div>
             </div>

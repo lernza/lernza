@@ -1,3 +1,4 @@
+import { Archive, CircleDot, Clock3 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { type QuestInfo } from "@/lib/contract-types"
 import { getSecondsRemaining } from "@/lib/utils"
@@ -18,6 +19,7 @@ interface QuestStatusBadgeProps {
 export function QuestStatusBadge({ quest, poolBalance, className }: QuestStatusBadgeProps) {
   const label = getQuestStatusLabel(quest.status, quest.deadline, poolBalance)
   const variant = getQuestStatusVariant(quest.status, quest.deadline, poolBalance)
+  const Icon = label === "Active" ? CircleDot : label === "Ended" ? Clock3 : Archive
 
   const showTimeRemaining = label === "Active" && quest.deadline > 0
   const timeRemaining = showTimeRemaining ? getSecondsRemaining(quest.deadline) : 0
@@ -33,6 +35,7 @@ export function QuestStatusBadge({ quest, poolBalance, className }: QuestStatusB
 
   return (
     <Badge variant={variant} className={className}>
+      <Icon className="h-3 w-3" />
       {label}
       {showTimeRemaining && (
         <span className="ml-1 opacity-80">

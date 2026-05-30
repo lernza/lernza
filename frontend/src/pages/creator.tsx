@@ -182,6 +182,7 @@ export function CreatorProfile() {
                 key={ws.id}
                 type="button"
                 onClick={() => navigate(`/quest/${ws.id}`)}
+                aria-label={`Open quest ${ws.name}`}
                 className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} text-left focus-visible:outline-none`}
               >
                 <Card>

@@ -527,7 +527,7 @@ export function Profile() {
                   activeTab === tab ? "bg-primary" : "bg-background hover:bg-secondary"
                 }`}
               >
-                {tab}
+                {tab === "overview" ? "View overview" : "View activity"}
               </button>
             ))}
           </div>
@@ -865,6 +865,7 @@ export function Profile() {
                           size="sm"
                           className="font-bold shadow-[2px_2px_0_#000]"
                           onClick={() => navigate(`/quest/${quest.id}`)}
+                          aria-label={`Open quest ${quest.name}`}
                         >
                           Manage
                         </Button>

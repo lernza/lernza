@@ -68,16 +68,34 @@ async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEnt
 
 function RankBadge({ rank }: { rank: number }) {
   const base =
-    "inline-flex h-8 w-8 items-center justify-center border-[2px] border-border text-sm font-black shadow-[2px_2px_0_var(--color-border)]"
-  if (rank === 1) return <span className={cn(base, "bg-warning text-warning-foreground")}>#1</span>
+    "inline-flex min-h-10 min-w-12 flex-col items-center justify-center border-[2px] border-border px-2 py-1 text-center text-[11px] font-black leading-none shadow-[2px_2px_0_var(--color-border)]"
+  if (rank === 1)
+    return (
+      <span className={cn(base, "bg-warning text-warning-foreground")}>
+        <span>#1</span>
+        <span className="text-[8px] uppercase tracking-widest">Gold</span>
+      </span>
+    )
   if (rank === 2)
     return (
       <span className={cn(base, "bg-muted text-foreground")}>
-        #2
+        <span>#2</span>
+        <span className="text-[8px] uppercase tracking-widest">Silver</span>
       </span>
     )
-  if (rank === 3) return <span className={cn(base, "bg-amber-600 text-white")}>#3</span>
-  return <span className={cn(base, "bg-background text-foreground")}>#{rank}</span>
+  if (rank === 3)
+    return (
+      <span className={cn(base, "bg-amber-600 text-white")}>
+        <span>#3</span>
+        <span className="text-[8px] uppercase tracking-widest">Bronze</span>
+      </span>
+    )
+  return (
+    <span className={cn(base, "bg-background text-foreground")}>
+      <span>#{rank}</span>
+      <span className="text-[8px] uppercase tracking-widest">Rank</span>
+    </span>
+  )
 }
 
 export function Leaderboard() {
@@ -201,7 +219,7 @@ export function Leaderboard() {
           )}
         >
           <Coins className="h-4 w-4" />
-          Top Earners
+          View top earners
         </button>
         <button
           onClick={() => setActiveTab("quests")}
@@ -211,7 +229,7 @@ export function Leaderboard() {
           )}
         >
           <Users className="h-4 w-4" />
-          Most Active Quests
+          View active quests
         </button>
       </div>
 

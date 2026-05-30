@@ -8,6 +8,127 @@ import prettier from "eslint-config-prettier"
 import unusedImports from "eslint-plugin-unused-imports"
 import { defineConfig, globalIgnores } from "eslint/config"
 
+const imperativeButtonVerbs = new Set([
+  "add",
+  "back",
+  "build",
+  "cancel",
+  "close",
+  "connect",
+  "copy",
+  "create",
+  "delete",
+  "disconnect",
+  "edit",
+  "enroll",
+  "enrol",
+  "export",
+  "find",
+  "follow",
+  "fund",
+  "go",
+  "import",
+  "launch",
+  "learn",
+  "load",
+  "manage",
+  "open",
+  "preview",
+  "continue",
+  "refresh",
+  "reload",
+  "remove",
+  "return",
+  "retry",
+  "reset",
+  "save",
+  "search",
+  "see",
+  "set",
+  "share",
+  "show",
+  "sort",
+  "start",
+  "submit",
+  "next",
+  "switch",
+  "toggle",
+  "try",
+  "update",
+  "verify",
+  "view",
+  "join",
+  "approve",
+  "reject",
+])
+
+function getJsxName(name) {
+  return name.type === "JSXIdentifier" ? name.name : null
+}
+
+function getLiteralText(node) {
+  if (node.type === "JSXText") return node.value
+
+  if (
+    node.type === "JSXExpressionContainer" &&
+    node.expression.type === "Literal" &&
+    typeof node.expression.value === "string"
+  ) {
+    return node.expression.value
+  }
+
+  if (node.type === "JSXElement") {
+    return node.children.map(getLiteralText).join(" ")
+  }
+
+  return ""
+}
+
+const buttonCopyPlugin = {
+  rules: {
+    "imperative-button-labels": {
+      meta: {
+        type: "suggestion",
+        docs: {
+          description:
+            "Require visible button copy to start with an imperative verb so labels stay action-oriented.",
+        },
+        schema: [],
+      },
+      create(context) {
+        return {
+          JSXElement(node) {
+            const tagName = getJsxName(node.openingElement.name)
+            if (tagName !== "button" && tagName !== "Button") return
+
+            const ariaLabeled = node.openingElement.attributes.some(attribute => {
+              if (attribute.type !== "JSXAttribute" || attribute.name.name !== "aria-label") {
+                return false
+              }
+
+              return true
+            })
+
+            if (ariaLabeled) return
+
+            const label = node.children.map(getLiteralText).join(" ").replace(/\s+/g, " ").trim()
+            if (!label) return
+
+            const firstWord = label.match(/[A-Za-z]+/)?.[0]?.toLowerCase()
+            if (!firstWord || imperativeButtonVerbs.has(firstWord)) return
+
+            context.report({
+              node: node.openingElement,
+              message:
+                'Button labels must start with an imperative verb (for example: "View", "Open", "Create").',
+            })
+          },
+        }
+      },
+    },
+  },
+}
+
 export default defineConfig([
   globalIgnores(["dist"]),
   {
@@ -31,6 +152,7 @@ export default defineConfig([
     plugins: {
       react,
       "unused-imports": unusedImports,
+      "button-copy": buttonCopyPlugin,
     },
     settings: {
       react: {
@@ -49,6 +171,7 @@ export default defineConfig([
         'warn',
         { vars: 'all', varsIgnorePattern: '^_', args: 'after-used', argsIgnorePattern: '^_' },
       ],
+      'button-copy/imperative-button-labels': 'error',
       // The React Compiler rules from eslint-plugin-react-hooks@6 surface design
       // notes ("we couldn't auto-memoize this", "setState in effect is a smell").
       // Keep them visible as warnings rather than errors — they're guidance about

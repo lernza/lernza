@@ -6,9 +6,9 @@ import { useTheme } from "@/App"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
-  { key: "landing", label: "Home" },
-  { key: "dashboard", label: "Dashboard" },
-  { key: "profile", label: "Profile" },
+  { key: "landing", label: "Go home" },
+  { key: "dashboard", label: "Open dashboard" },
+  { key: "profile", label: "View profile" },
 ] as const
 
 interface NavbarProps {
@@ -73,6 +73,7 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
         {/* Logo */}
         <button
           onClick={() => handleNavigate("landing")}
+          aria-label="Go home"
           className="group flex cursor-pointer items-center gap-2"
         >
           <LogoMark className="h-8 w-8 transition-transform group-hover:scale-110" />
@@ -80,21 +81,24 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
         </button>
 
         {/* Desktop nav links */}
-        <nav className="hidden items-center gap-1 sm:flex">
-          {NAV_ITEMS.map(item => (
-            <button
-              key={item.key}
-              onClick={() => handleNavigate(item.key)}
-              className={cn(
-                "animated-underline cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all",
-                activePage === item.key
-                  ? "bg-primary border-border active shadow-[2px_2px_0_var(--color-border)]"
-                  : "hover:border-border hover:bg-secondary border-transparent"
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
+        <nav aria-label="Main navigation" className="hidden sm:block">
+          <ul className="flex items-center gap-1">
+            {NAV_ITEMS.map(item => (
+              <li key={item.key}>
+                <button
+                  onClick={() => handleNavigate(item.key)}
+                  className={cn(
+                    "animated-underline cursor-pointer border-[2px] px-4 py-2 text-sm font-bold transition-all",
+                    activePage === item.key
+                      ? "bg-primary border-border active shadow-[2px_2px_0_var(--color-border)]"
+                      : "hover:border-border hover:bg-secondary border-transparent"
+                  )}
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
         </nav>
 
         {/* Right side: theme toggle + wallet + mobile menu */}
@@ -133,24 +137,25 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <div id="mobile-nav-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
-          <div className="space-y-1 px-4 py-3">
+        <nav aria-label="Main navigation" id="mobile-nav-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
+          <ul className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
-              <button
-                key={item.key}
-                onClick={() => handleNavigate(item.key)}
-                className={cn(
-                  "w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all",
-                  activePage === item.key
-                    ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
-                    : "hover:border-border hover:bg-secondary border-transparent"
-                )}
-              >
-                {item.label}
-              </button>
+              <li key={item.key}>
+                <button
+                  onClick={() => handleNavigate(item.key)}
+                  className={cn(
+                    "w-full cursor-pointer border-[2px] px-4 py-3 text-left text-sm font-bold transition-all",
+                    activePage === item.key
+                      ? "bg-primary border-border shadow-[2px_2px_0_var(--color-border)]"
+                      : "hover:border-border hover:bg-secondary border-transparent"
+                  )}
+                >
+                  {item.label}
+                </button>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </nav>
       )}
     </header>
   )

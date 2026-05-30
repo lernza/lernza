@@ -172,13 +172,13 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo, rout
               className="flex-1 basis-[140px] font-black tracking-wider uppercase"
             >
               <RotateCcw size={14} />
-              {routeLabel ? `Reload ${routeLabel}` : "Reset View"}
+              {routeLabel ? `Reload ${routeLabel}` : "Reset view"}
             </Button>
             <Button
               onClick={onReload}
               className="flex-1 basis-[140px] font-black tracking-wider uppercase"
             >
-              <RefreshCw size={14} /> Reload Page
+              <RefreshCw size={14} /> Reload page
             </Button>
           </div>
 

@@ -315,7 +315,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
             className="shimmer-on-hover group flex-shrink-0"
           >
             <Plus className="h-4 w-4" />
-            New Quest
+            Create quest
           </Button>
         </div>
       </div>
@@ -352,7 +352,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                       filter === f ? "bg-primary" : "bg-background hover:bg-secondary"
                     }`}
                   >
-                    {f}
+                    {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
                   </button>
                 ))}
               </div>
@@ -362,10 +362,10 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
             <div className="mb-5 flex flex-wrap gap-2">
               {(
                 [
-                  { value: "none", label: "All" },
-                  { value: "ending-soon", label: "Ending Soon" },
-                  { value: "recently-funded", label: "Recently Funded" },
-                  { value: "recently-verified", label: "Recently Verified" },
+                  { value: "none", label: "Show all" },
+                  { value: "ending-soon", label: "Show ending soon" },
+                  { value: "recently-funded", label: "Show recently funded" },
+                  { value: "recently-verified", label: "Show recently verified" },
                 ] as const
               ).map(p => (
                 <button
@@ -526,7 +526,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                   action={
                     filter === "all" || filter === "owned"
                       ? {
-                          label: "Create Quest",
+                          label: "Create quest",
                           onClick: goToCreateQuest,
                         }
                       : undefined

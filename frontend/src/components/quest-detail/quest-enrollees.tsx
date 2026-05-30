@@ -62,7 +62,7 @@ export function QuestEnrollees({
             <div className="flex gap-2">
                <Button variant="secondary" size="sm" className="shimmer-on-hover px-6 border-black font-black uppercase tracking-widest text-[10px]">
                   <TrendingUp className="h-4 w-4 mr-2" />
-                  Most Progress
+                  Sort by progress
                </Button>
                <Button variant="outline" size="sm" className="shimmer-on-hover px-6 border-black font-black uppercase tracking-widest text-[10px]">
                   Export List

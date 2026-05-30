@@ -120,7 +120,7 @@ export function QuestHeader({
                   </Button>
                   <Button size="sm" onClick={onAddMilestone} className="shimmer-on-hover">
                     <Plus className="h-4 w-4" />
-                    New Milestone
+                    Create milestone
                   </Button>
                   <Button
                     size="sm"

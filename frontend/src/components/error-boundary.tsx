@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Lightbulb, RotateCcw, RefreshCw, FileCode2, Wifi, Package, Zap } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 // Types
 interface ErrorBoundaryProps {
@@ -115,195 +116,78 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo, rout
   return (
     <div
       role="alert"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#fafaf8",
-        padding: "24px",
-        fontFamily: "'Space Mono', 'Courier New', monospace",
-      }}
+      className="bg-background min-h-screen flex items-center justify-center px-6 font-mono transition-colors duration-300"
     >
+      {/* Decorative grid texture — uses border token so it adapts to dark mode */}
       <div
         aria-hidden
+        className="pointer-events-none fixed inset-0 z-0 opacity-[0.08]"
         style={{
-          position: "fixed",
-          inset: 0,
           backgroundImage:
-            "linear-gradient(#00000008 1px, transparent 1px), linear-gradient(90deg, #00000008 1px, transparent 1px)",
+            "linear-gradient(var(--color-border) 1px,transparent 1px),linear-gradient(90deg,var(--color-border) 1px,transparent 1px)",
           backgroundSize: "40px 40px",
-          pointerEvents: "none",
-          zIndex: 0,
         }}
       />
 
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: 600,
-          width: "100%",
-        }}
-      >
-        <div
-          style={{
-            border: "3px solid #000",
-            boxShadow: "8px 8px 0 #000",
-            backgroundColor: "#fff",
-            padding: "36px 32px 28px",
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "#ff3c5f",
-              border: "3px solid #000",
-              margin: "-36px -32px 28px",
-              padding: "12px 20px",
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 20, letterSpacing: 4, fontWeight: 700, color: "#fff" }}>
+      <div className="relative z-10 w-full max-w-[600px]">
+        {/* Main card */}
+        <div className="bg-card border-border border-[3px] shadow-xl px-8 pt-9 pb-7">
+          {/* Error header stripe */}
+          <div className="bg-destructive border-border -mx-8 -mt-9 mb-7 flex items-center gap-2.5 border-b-[3px] px-5 py-3">
+            <span className="text-destructive-foreground text-xl font-black tracking-[4px]">
               ERROR
             </span>
-            <span
-              style={{
-                marginLeft: "auto",
-                backgroundColor: "#000",
-                color: "#ff3c5f",
-                fontWeight: 700,
-                fontSize: 11,
-                padding: "2px 8px",
-                letterSpacing: 2,
-              }}
-            >
+            <span className="bg-card text-destructive ml-auto px-2 py-0.5 text-[11px] font-black tracking-[2px]">
               {kind.toUpperCase()}
             </span>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <span style={{ display: "block", marginBottom: 8 }}>{copy.icon}</span>
-            <h1
-              style={{
-                fontSize: 26,
-                fontWeight: 900,
-                lineHeight: 1.1,
-                letterSpacing: -0.5,
-                margin: 0,
-              }}
-            >
-              {copy.title}
-            </h1>
+          {/* Icon + title */}
+          <div className="mb-4">
+            <span className="mb-2 block">{copy.icon}</span>
+            <h1 className="text-[26px] font-black leading-tight tracking-tight">{copy.title}</h1>
           </div>
 
-          <p style={{ margin: "0 0 8px", fontSize: 15, lineHeight: 1.6, color: "#333" }}>
-            {copy.description}
-          </p>
-          <p
-            style={{
-              margin: "0 0 24px",
-              fontSize: 13,
-              lineHeight: 1.5,
-              color: "#666",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: 6,
-            }}
-          >
-            <Lightbulb size={14} style={{ marginTop: 2, flexShrink: 0 }} />
+          {/* Description */}
+          <p className="text-foreground mb-2 text-[15px] leading-relaxed">{copy.description}</p>
+
+          {/* Hint */}
+          <p className="text-muted-foreground mb-6 flex items-start gap-1.5 text-sm leading-normal">
+            <Lightbulb size={14} className="mt-0.5 shrink-0" />
             {copy.hint}
           </p>
 
-          <div
-            style={{
-              border: "2px solid #000",
-              backgroundColor: "#111",
-              padding: "12px 14px",
-              marginBottom: 24,
-              overflowX: "auto",
-            }}
-          >
-            <code style={{ fontSize: 12, color: "#ff3c5f", wordBreak: "break-all" }}>
+          {/* Error code block */}
+          <div className="border-border mb-6 overflow-x-auto border-[2px] bg-black px-3.5 py-3">
+            <code className="text-destructive break-all text-xs">
               {error.message || String(error)}
             </code>
           </div>
 
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-            <button
+          {/* Actions */}
+          <div className="mb-5 flex flex-wrap gap-3">
+            <Button
+              variant="secondary"
               onClick={onReset}
-              style={{
-                flex: "1 1 140px",
-                border: "3px solid #000",
-                boxShadow: "4px 4px 0 #000",
-                backgroundColor: "#000",
-                color: "#fff",
-                fontFamily: "inherit",
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: 1,
-                padding: "12px 20px",
-                cursor: "pointer",
-                transition: "transform 80ms, box-shadow 80ms",
-              }}
-              onMouseDown={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.transform = "translate(3px,3px)"
-                ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "1px 1px 0 #000"
-              }}
-              onMouseUp={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.transform = ""
-                ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "4px 4px 0 #000"
-              }}
+              className="flex-1 basis-[140px] font-black tracking-wider uppercase"
             >
-              <RotateCcw size={14} style={{ marginRight: 6 }} />
-              {routeLabel ? `RELOAD ${routeLabel.toUpperCase()}` : "RESET VIEW"}
-            </button>
-
-            <button
+              <RotateCcw size={14} />
+              {routeLabel ? `Reload ${routeLabel}` : "Reset View"}
+            </Button>
+            <Button
               onClick={onReload}
-              style={{
-                flex: "1 1 140px",
-                border: "3px solid #000",
-                boxShadow: "4px 4px 0 #000",
-                backgroundColor: "#ffe600",
-                color: "#000",
-                fontFamily: "inherit",
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: 1,
-                padding: "12px 20px",
-                cursor: "pointer",
-                transition: "transform 80ms, box-shadow 80ms",
-              }}
-              onMouseDown={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.transform = "translate(3px,3px)"
-                ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "1px 1px 0 #000"
-              }}
-              onMouseUp={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.transform = ""
-                ;(e.currentTarget as HTMLButtonElement).style.boxShadow = "4px 4px 0 #000"
-              }}
+              className="flex-1 basis-[140px] font-black tracking-wider uppercase"
             >
-              <RefreshCw size={14} style={{ marginRight: 6 }} /> RELOAD PAGE
-            </button>
+              <RefreshCw size={14} /> Reload Page
+            </Button>
           </div>
+
+          {/* Report link */}
           <a
             href={issueUrl}
             target="_blank"
             rel="noopener noreferrer"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              fontWeight: 700,
-              color: "#000",
-              textDecoration: "none",
-              borderBottom: "2px solid #000",
-              paddingBottom: 1,
-              letterSpacing: 0.5,
-            }}
+            className="text-foreground border-foreground inline-flex items-center gap-1.5 border-b-2 pb-px text-xs font-black tracking-[0.5px]"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
               <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
@@ -312,44 +196,14 @@ function ErrorFallbackUI({ error, errorInfo, onReset, onReload, githubRepo, rout
           </a>
         </div>
 
+        {/* Dev-only stack trace panel */}
         {import.meta.env.DEV && (
-          <details
-            style={{
-              marginTop: 16,
-              border: "3px solid #000",
-              boxShadow: "6px 6px 0 #000",
-              backgroundColor: "#111",
-            }}
-          >
-            <summary
-              style={{
-                padding: "10px 16px",
-                fontFamily: "inherit",
-                fontSize: 12,
-                fontWeight: 700,
-                color: "#ffe600",
-                cursor: "pointer",
-                letterSpacing: 2,
-                userSelect: "none",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
+          <details className="border-border mt-4 border-[3px] bg-black shadow-lg">
+            <summary className="text-primary flex cursor-pointer select-none items-center gap-2 px-4 py-2.5 text-xs font-black tracking-[2px] uppercase">
               <Zap size={12} /> DEV — STACK TRACE
             </summary>
-            <div style={{ padding: "12px 16px 16px" }}>
-              <pre
-                style={{
-                  margin: 0,
-                  fontSize: 11,
-                  color: "#aaa",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  lineHeight: 1.6,
-                  overflowX: "auto",
-                }}
-              >
+            <div className="px-4 pb-4 pt-3">
+              <pre className="text-muted-foreground m-0 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-relaxed">
                 {error.stack}
                 {errorInfo?.componentStack ? `\n\nComponent Stack:${errorInfo.componentStack}` : ""}
               </pre>

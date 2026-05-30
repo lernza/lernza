@@ -9,7 +9,14 @@ import {
   Account,
 } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
-import { server, signAndSubmit, NETWORK_PASSPHRASE, RPC_TIMEOUT_MS, withTimeout } from "./client"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
+  withRpcReadThrottle,
+} from "./client"
 
 const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
 
@@ -205,10 +212,8 @@ export class MilestoneClient {
         .setTimeout(30)
         .build()
 
-      const response = await withTimeout(
-        server.simulateTransaction(tx),
-        RPC_TIMEOUT_MS,
-        `RPC timeout: ${method}`
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
       )
 
       if (response && "result" in response && response.result) {

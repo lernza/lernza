@@ -1,5 +1,5 @@
 import { Contract, scValToNative, Keypair, Account, TransactionBuilder } from "@stellar/stellar-sdk"
-import { server, NETWORK_PASSPHRASE } from "./client"
+import { server, NETWORK_PASSPHRASE, RPC_TIMEOUT_MS, withTimeout, withRpcReadThrottle } from "./client"
 
 export interface TokenMetadata {
   symbol: string
@@ -80,9 +80,15 @@ export class TokenClient {
 
       // Simulate transactions to get results
       const [symbolResult, decimalsResult, nameResult] = await Promise.all([
-        server.simulateTransaction(txSymbol),
-        server.simulateTransaction(txDecimal),
-        server.simulateTransaction(txName),
+        withRpcReadThrottle("loading token symbol", () =>
+          withTimeout(server.simulateTransaction(txSymbol), RPC_TIMEOUT_MS, "RPC timeout: symbol")
+        ),
+        withRpcReadThrottle("loading token decimals", () =>
+          withTimeout(server.simulateTransaction(txDecimal), RPC_TIMEOUT_MS, "RPC timeout: decimal")
+        ),
+        withRpcReadThrottle("loading token name", () =>
+          withTimeout(server.simulateTransaction(txName), RPC_TIMEOUT_MS, "RPC timeout: name")
+        ),
       ])
 
       // Extract values from simulation results

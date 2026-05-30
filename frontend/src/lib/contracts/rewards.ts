@@ -14,6 +14,7 @@ import {
   NETWORK_PASSPHRASE,
   RPC_TIMEOUT_MS,
   withTimeout,
+  withRpcReadThrottle,
   type TransactionLifecycleHandlers,
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
@@ -149,10 +150,8 @@ export class RewardsClient {
         .setTimeout(30)
         .build()
 
-      const response = await withTimeout(
-        server.simulateTransaction(tx),
-        RPC_TIMEOUT_MS,
-        `RPC timeout: ${method}`
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
       )
 
       if (response && "result" in response && response.result) {

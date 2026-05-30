@@ -9,7 +9,14 @@ import {
 } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
-import { server, signAndSubmit, NETWORK_PASSPHRASE, RPC_TIMEOUT_MS, withTimeout } from "./client"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
+  withRpcReadThrottle,
+} from "./client"
 import { safeContractCall } from "../error-utils"
 
 const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
@@ -389,10 +396,8 @@ export class QuestClient {
         .setTimeout(30)
         .build()
 
-      const response = await withTimeout(
-        server.simulateTransaction(tx),
-        RPC_TIMEOUT_MS,
-        `RPC timeout: ${method}`
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
       )
 
       if (response && "result" in response && response.result) {

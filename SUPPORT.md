@@ -41,3 +41,9 @@ duplicates.
 
 **Do not open a public issue for security vulnerabilities.**
 Follow the process in [`SECURITY.md`](./SECURITY.md).
+
+##  Bug bounty
+
+Security researchers can review the live program details in
+[`docs/legal/bug-bounty-policy.md`](./docs/legal/bug-bounty-policy.md). Use the
+private security intake path for all reports.

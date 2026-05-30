@@ -1,6 +1,8 @@
 import { rpc } from "@stellar/stellar-sdk/rpc"
 import { Transaction } from "@stellar/stellar-sdk/minimal"
 import { signTransaction, getNetworkDetails, getPublicKey } from "@stellar/freighter-api"
+import { env } from "../env"
+import { pushToast } from "../notifications"
 
 export const SOROBAN_RPC_URL =
   import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
@@ -12,6 +14,85 @@ const isMainnet = SOROBAN_RPC_URL.includes("mainnet")
 export const RPC_TIMEOUT_MS = isMainnet ? 8000 : 15000
 
 export const server = new rpc.Server(SOROBAN_RPC_URL)
+
+const DEFAULT_RPC_READ_RATE_LIMIT_CAPACITY = 24
+const DEFAULT_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND = 12
+const RPC_THROTTLE_TOAST_COOLDOWN_MS = 30_000
+
+interface RpcReadBucket {
+  tokens: number
+  lastRefillMs: number
+  lastToastMs: number
+}
+
+function getRpcReadRateLimitConfig() {
+  return {
+    capacity: env.VITE_RPC_READ_RATE_LIMIT_CAPACITY ?? DEFAULT_RPC_READ_RATE_LIMIT_CAPACITY,
+    refillPerSecond:
+      env.VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND ??
+      DEFAULT_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND,
+  }
+}
+
+const rpcReadBucket: RpcReadBucket = {
+  tokens: getRpcReadRateLimitConfig().capacity,
+  lastRefillMs: Date.now(),
+  lastToastMs: 0,
+}
+
+function refillRpcReadTokens(nowMs: number) {
+  const { capacity, refillPerSecond } = getRpcReadRateLimitConfig()
+  const elapsedSeconds = Math.max(0, (nowMs - rpcReadBucket.lastRefillMs) / 1000)
+
+  if (elapsedSeconds > 0) {
+    rpcReadBucket.tokens = Math.min(
+      capacity,
+      rpcReadBucket.tokens + elapsedSeconds * refillPerSecond
+    )
+    rpcReadBucket.lastRefillMs = nowMs
+  }
+}
+
+function getRpcReadWaitMs(): number {
+  const nowMs = Date.now()
+  refillRpcReadTokens(nowMs)
+
+  if (rpcReadBucket.tokens >= 1) {
+    rpcReadBucket.tokens -= 1
+    return 0
+  }
+
+  const { refillPerSecond } = getRpcReadRateLimitConfig()
+  if (refillPerSecond <= 0) return 0
+
+  const missingTokens = 1 - rpcReadBucket.tokens
+  return Math.ceil((missingTokens / refillPerSecond) * 1000)
+}
+
+function notifyRpcReadThrottle(operation: string, waitMs: number) {
+  const nowMs = Date.now()
+  if (nowMs - rpcReadBucket.lastToastMs < RPC_THROTTLE_TOAST_COOLDOWN_MS) return
+
+  rpcReadBucket.lastToastMs = nowMs
+  pushToast({
+    message: `RPC reads are busy. Waiting about ${Math.ceil(waitMs / 1000)}s before ${operation}.`,
+    type: "info",
+    duration: 4500,
+  })
+}
+
+export async function withRpcReadThrottle<T>(
+  operation: string,
+  action: () => Promise<T>
+): Promise<T> {
+  const waitMs = getRpcReadWaitMs()
+  if (waitMs > 0) {
+    notifyRpcReadThrottle(operation, waitMs)
+    await new Promise(resolve => setTimeout(resolve, waitMs))
+  }
+
+  return action()
+}
 
 /**
  * Wraps a promise with a timeout. Rejects if the promise doesn't resolve within the timeout.
@@ -139,10 +220,8 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
   const MAX_POLLS = 60
   const MAX_DELAY_MS = 5_000
   let attempts = 0
-  let response = await withTimeout(
-    server.getTransaction(txHash),
-    RPC_TIMEOUT_MS,
-    "RPC timeout: getTransaction"
+  let response = await withRpcReadThrottle("checking transaction status", () =>
+    withTimeout(server.getTransaction(txHash), RPC_TIMEOUT_MS, "RPC timeout: getTransaction")
   )
 
   while (response.status === "NOT_FOUND") {
@@ -150,10 +229,8 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
     // 1s, 2s, 4s, then capped at MAX_DELAY_MS for every subsequent attempt.
     const delayMs = Math.min(1_000 * 2 ** (attempts - 1), MAX_DELAY_MS)
     await new Promise(resolve => setTimeout(resolve, delayMs))
-    response = await withTimeout(
-      server.getTransaction(txHash),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: getTransaction"
+    response = await withRpcReadThrottle("checking transaction status", () =>
+      withTimeout(server.getTransaction(txHash), RPC_TIMEOUT_MS, "RPC timeout: getTransaction")
     )
   }
 

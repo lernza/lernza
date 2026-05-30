@@ -32,6 +32,7 @@ export function TransactionConfirmDialog({
   isPending = false,
 }: TransactionConfirmDialogProps) {
   const [isClosing, setIsClosing] = useState(false)
+  const actionLabel = details?.actionName ?? "confirm this transaction"
 
   const handleClose = useCallback(() => {
     if (isPending) return
@@ -240,12 +241,12 @@ export function TransactionConfirmDialog({
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Opening Freighter...
+                    {`Opening Freighter to ${actionLabel}...`}
                   </>
                 ) : (
                   <>
                     <Shield className="h-4 w-4" />
-                    Confirm & Sign
+                    {`Confirm to ${actionLabel}`}
                   </>
                 )}
               </Button>

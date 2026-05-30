@@ -69,10 +69,10 @@ async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEnt
 function RankBadge({ rank }: { rank: number }) {
   const base =
     "inline-flex h-8 w-8 items-center justify-center border-[2px] border-border text-sm font-black shadow-[2px_2px_0_var(--color-border)]"
-  if (rank === 1) return <span className={cn(base, "bg-yellow-400 text-black")}>#1</span>
+  if (rank === 1) return <span className={cn(base, "bg-warning text-warning-foreground")}>#1</span>
   if (rank === 2)
     return (
-      <span className={cn(base, "bg-zinc-300 text-black dark:bg-zinc-600 dark:text-white")}>
+      <span className={cn(base, "bg-muted text-foreground")}>
         #2
       </span>
     )

@@ -205,13 +205,13 @@ export function TransactionConfirmDialog({
 
             {/* Estimated Fee */}
             {details.estimatedFee && (
-              <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+              <div className="flex items-start gap-2 rounded-md bg-warning/10 p-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 text-warning" />
                 <div>
-                  <p className="text-xs font-bold tracking-wider text-amber-800 uppercase">
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                     Estimated Fee
                   </p>
-                  <p className="mt-0.5 text-sm font-medium text-amber-700">
+                  <p className="mt-0.5 text-sm font-medium text-warning">
                     ~{details.estimatedFee} XLM
                   </p>
                 </div>

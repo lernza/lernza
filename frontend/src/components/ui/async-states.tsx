@@ -34,8 +34,8 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-          <Loader2 className="h-6 w-6 animate-spin" />
+        <div className="bg-muted border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+          <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
         </div>
         <h3 className="mb-2 font-black">{message}</h3>
         <p className="text-muted-foreground text-sm">Fetching on-chain data, please wait...</p>

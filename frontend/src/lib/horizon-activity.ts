@@ -207,7 +207,7 @@ function parseActivityRecord(
 export async function fetchWalletActivity(
   address: string,
   cursor?: string | null,
-  currentCount: number = 0
+  currentCount: number = 0,
   signal?: AbortSignal
 ): Promise<WalletActivityPage> {
   const response = await fetch(buildOperationsUrl(address, cursor), { signal })

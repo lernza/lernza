@@ -45,7 +45,7 @@ function ThemeToggle() {
       aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
       title={`Switch to ${isDark ? "light" : "dark"} mode`}
       className={cn(
-        "border-border h-9 w-9 border-[2px] shadow-[2px_2px_0_var(--color-border)]",
+        "border-border h-11 w-11 border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:h-9 sm:w-9",
         "neo-press flex cursor-pointer items-center justify-center",
         "transition-colors duration-300",
         isDark
@@ -111,7 +111,13 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
                 <div className="bg-success border-border h-2.5 w-2.5 border" />
                 <span className="font-mono text-sm font-bold">{shortAddress}</span>
               </div>
-              <Button variant="ghost" size="icon" onClick={disconnect} aria-label="Disconnect wallet">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={disconnect}
+                aria-label="Disconnect wallet"
+                className="h-11 w-11 sm:h-9 sm:w-9"
+              >
                 <LogOut className="h-4 w-4" aria-hidden="true" />
               </Button>
             </>
@@ -128,16 +134,24 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
             aria-label={mobileOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav-menu"
-            className="border-border bg-background neo-press flex h-9 w-9 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:hidden"
+            className="border-border bg-background neo-press flex h-11 w-11 cursor-pointer items-center justify-center border-[2px] shadow-[2px_2px_0_var(--color-border)] sm:hidden"
           >
-            {mobileOpen ? <X className="h-4 w-4" aria-hidden="true" /> : <Menu className="h-4 w-4" aria-hidden="true" />}
+            {mobileOpen ? (
+              <X className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Menu className="h-4 w-4" aria-hidden="true" />
+            )}
           </button>
         </div>
       </div>
 
       {/* Mobile menu dropdown */}
       {mobileOpen && (
-        <nav aria-label="Main navigation" id="mobile-nav-menu" className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden">
+        <nav
+          aria-label="Main navigation"
+          id="mobile-nav-menu"
+          className="border-border bg-background animate-fade-in-down border-t-[3px] transition-colors duration-300 sm:hidden"
+        >
           <ul className="space-y-1 px-4 py-3">
             {NAV_ITEMS.map(item => (
               <li key={item.key}>

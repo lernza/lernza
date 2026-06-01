@@ -87,7 +87,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="bg-background text-foreground flex min-h-screen flex-col">
       <a
         href="#main-content"
-        className="bg-background text-foreground focus-visible:ring-ring sr-only absolute top-4 left-4 z-[100] px-4 py-2 font-bold opacity-0 transition-opacity focus-visible:not-sr-only focus-visible:opacity-100 focus-visible:ring-2 focus-visible:outline-none"
+        className="bg-background text-foreground border-border sr-only absolute top-2 left-2 z-[200] border-[3px] px-4 py-2 font-bold shadow-[4px_4px_0_var(--color-border)] focus:not-sr-only focus:outline-2 focus:outline-offset-2 focus:outline-current"
       >
         Skip to main content
       </a>

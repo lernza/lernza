@@ -87,7 +87,8 @@ export function Step2Form({
                       type="button"
                       onClick={() => swap(index, index - 1)}
                       disabled={index === 0}
-                      className="border-border bg-background hover:bg-secondary neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label={`Move milestone ${index + 1} up`}
+                      className="border-border bg-background hover:bg-secondary neo-press flex h-11 w-11 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                     >
                       <ChevronUp className="h-3.5 w-3.5" />
                     </button>
@@ -95,7 +96,8 @@ export function Step2Form({
                       type="button"
                       onClick={() => swap(index, index + 1)}
                       disabled={index === fields.length - 1}
-                      className="border-border bg-background hover:bg-secondary neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label={`Move milestone ${index + 1} down`}
+                      className="border-border bg-background hover:bg-secondary neo-press flex h-11 w-11 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                     >
                       <ChevronDown className="h-3.5 w-3.5" />
                     </button>
@@ -103,7 +105,8 @@ export function Step2Form({
                       type="button"
                       onClick={() => remove(index)}
                       disabled={fields.length === 1}
-                      className="border-border bg-background hover:bg-destructive/10 hover:border-destructive neo-press flex h-7 w-7 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                      aria-label={`Remove milestone ${index + 1}`}
+                      className="border-border bg-background hover:bg-destructive/10 hover:border-destructive neo-press flex h-11 w-11 cursor-pointer items-center justify-center border-[2px] transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

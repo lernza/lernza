@@ -13,8 +13,13 @@ interface LoadingStateProps {
 export function LoadingState({ message, variant = "default" }: LoadingStateProps) {
   if (variant === "inline") {
     return (
-      <div className="flex items-center gap-2 text-sm font-bold">
-        <Loader2 className="h-4 w-4 animate-spin" />
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        className="flex items-center gap-2 text-sm font-bold"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
         {message}
       </div>
     )
@@ -24,8 +29,15 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
     return (
       <Card>
         <CardContent className="flex items-center gap-3 py-4">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm font-bold">{message}</span>
+          <div
+            role="status"
+            aria-live="polite"
+            aria-busy="true"
+            className="flex items-center gap-3"
+          >
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span className="text-sm font-bold">{message}</span>
+          </div>
         </CardContent>
       </Card>
     )
@@ -34,11 +46,18 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div className="bg-muted border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-          <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="flex flex-col items-center"
+        >
+          <div className="bg-muted border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+            <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" aria-hidden="true" />
+          </div>
+          <h3 className="mb-2 font-black">{message}</h3>
+          <p className="text-muted-foreground text-sm">Fetching on-chain data, please wait...</p>
         </div>
-        <h3 className="mb-2 font-black">{message}</h3>
-        <p className="text-muted-foreground text-sm">Fetching on-chain data, please wait...</p>
       </CardContent>
     </Card>
   )
@@ -63,8 +82,8 @@ export function ErrorState({
 
   if (variant === "inline") {
     return (
-      <div className="text-destructive flex items-center gap-2 text-sm font-bold">
-        <ErrorIcon className="h-4 w-4" />
+      <div role="alert" className="text-destructive flex items-center gap-2 text-sm font-bold">
+        <ErrorIcon className="h-4 w-4" aria-hidden="true" />
         {message}
       </div>
     )
@@ -74,8 +93,10 @@ export function ErrorState({
     return (
       <Card className="border-destructive">
         <CardContent className="flex items-center gap-3 py-4">
-          <ErrorIcon className="text-destructive h-4 w-4" />
-          <span className="text-destructive text-sm font-bold">{message}</span>
+          <div role="alert" className="flex flex-1 items-center gap-3">
+            <ErrorIcon className="text-destructive h-4 w-4" aria-hidden="true" />
+            <span className="text-destructive text-sm font-bold">{message}</span>
+          </div>
           {onRetry && (
             <Button size="sm" variant="outline" onClick={onRetry}>
               Retry
@@ -89,11 +110,13 @@ export function ErrorState({
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
-          <ErrorIcon className="text-destructive h-6 w-6" />
+        <div role="alert" className="flex flex-col items-center">
+          <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
+            <ErrorIcon className="text-destructive h-6 w-6" aria-hidden="true" />
+          </div>
+          <h3 className="mb-2 font-black">Error</h3>
+          <p className="text-muted-foreground mb-4 max-w-md text-sm">{message}</p>
         </div>
-        <h3 className="mb-2 font-black">Error</h3>
-        <p className="text-muted-foreground mb-4 max-w-md text-sm">{message}</p>
         {onRetry && (
           <Button onClick={onRetry} className="shimmer-on-hover">
             Try Again
@@ -301,15 +324,14 @@ export function EmptyState(props: EmptyStateProps) {
 
   return (
     <Card className="animate-fade-in-up">
-      <CardContent className="flex flex-col items-center py-12 text-center">
+      <CardContent
+        role="status"
+        aria-live="polite"
+        className="flex flex-col items-center py-12 text-center"
+      >
         {illustrationSrc ? (
           <div className="mb-6">
-            <img
-              src={illustrationSrc}
-              alt=""
-              className="h-32 w-32 sm:h-40 sm:w-40"
-              aria-hidden="true"
-            />
+            <img src={illustrationSrc} alt={config.title} className="h-32 w-32 sm:h-40 sm:w-40" />
           </div>
         ) : (
           <div className="bg-primary border-border mb-4 flex h-14 w-14 items-center justify-center border-[3px] shadow-[4px_4px_0_var(--color-border)]">
@@ -361,7 +383,7 @@ if (typeof document !== "undefined") {
     "/illustrations/empty-profile.svg",
     "/illustrations/empty-leaderboard.svg",
   ]
-  preloads.forEach((src) => {
+  preloads.forEach(src => {
     const link = document.createElement("link")
     link.rel = "prefetch"
     link.as = "image"

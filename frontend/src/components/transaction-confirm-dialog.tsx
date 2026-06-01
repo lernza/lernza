@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatTokens } from "@/lib/utils"
+import { useScrollLock } from "@/hooks/use-scroll-lock"
 
 export interface TransactionDetails {
   actionName: string
@@ -34,6 +35,13 @@ export function TransactionConfirmDialog({
   const [isClosing, setIsClosing] = useState(false)
   const actionLabel = details?.actionName ?? "confirm this transaction"
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Lock body scroll when dialog is open
+  useScrollLock(isOpen)
+
   const handleClose = useCallback(() => {
     if (isPending) return
     setIsClosing(true)
@@ -47,9 +55,6 @@ export function TransactionConfirmDialog({
     if (!address) return ""
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
-
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // Handle Escape key
   useEffect(() => {
@@ -66,18 +71,18 @@ export function TransactionConfirmDialog({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isOpen, isPending, handleClose])
 
-  // Handle Focus Trap
+  // Handle Focus Management
   useEffect(() => {
     if (isOpen) {
+      // Store the previously focused element
       previousFocusRef.current = document.activeElement as HTMLElement
 
-      // Focus the first interactive element or the card itself
-      const focusableElements = dialogRef.current?.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      if (focusableElements && focusableElements.length > 0) {
-        ;(focusableElements[0] as HTMLElement).focus()
-      }
+      // Focus the primary action button after a brief delay to ensure it's rendered
+      const focusTimer = setTimeout(() => {
+        if (confirmButtonRef.current) {
+          confirmButtonRef.current.focus()
+        }
+      }, 100)
 
       const handleTabKey = (e: KeyboardEvent) => {
         if (e.key !== "Tab" || !dialogRef.current) return
@@ -102,9 +107,14 @@ export function TransactionConfirmDialog({
       }
 
       window.addEventListener("keydown", handleTabKey)
+
       return () => {
+        clearTimeout(focusTimer)
         window.removeEventListener("keydown", handleTabKey)
-        previousFocusRef.current?.focus()
+        // Restore focus to the previously focused element
+        if (previousFocusRef.current) {
+          previousFocusRef.current.focus()
+        }
       }
     }
   }, [isOpen])
@@ -206,13 +216,13 @@ export function TransactionConfirmDialog({
 
             {/* Estimated Fee */}
             {details.estimatedFee && (
-              <div className="flex items-start gap-2 rounded-md bg-warning/10 p-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 text-warning" />
+              <div className="bg-warning/10 flex items-start gap-2 rounded-md p-3">
+                <AlertCircle className="text-warning mt-0.5 h-4 w-4" />
                 <div>
                   <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                     Estimated Fee
                   </p>
-                  <p className="mt-0.5 text-sm font-medium text-warning">
+                  <p className="text-warning mt-0.5 text-sm font-medium">
                     ~{details.estimatedFee} XLM
                   </p>
                 </div>
@@ -237,7 +247,12 @@ export function TransactionConfirmDialog({
               >
                 Cancel
               </Button>
-              <Button onClick={onConfirm} disabled={isPending} className="shimmer-on-hover flex-1">
+              <Button
+                onClick={onConfirm}
+                disabled={isPending}
+                className="shimmer-on-hover flex-1"
+                ref={confirmButtonRef}
+              >
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />

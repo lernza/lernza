@@ -9,14 +9,11 @@ import {
   Check,
   Loader2,
   AlertCircle,
-  History,
-  ExternalLink,
-} from "lucide-react"
-import { useState, useEffect } from "react"
   Target,
   Users,
   ExternalLink,
 } from "lucide-react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -92,6 +89,7 @@ export function Profile() {
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState<string | null>(null)
   const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
+  const [capReached, setCapReached] = useState(false)
   const { role, isLoading: roleLoading } = useUserRole()
 
   // Use the new async hook for earnings data
@@ -191,15 +189,17 @@ export function Profile() {
     const loadInitialActivity = async () => {
       setActivityItems([])
       setNextActivityCursor(null)
+      setCapReached(false)
       setActivityLoading(true)
       setActivityError(null)
 
       try {
-        const page = await fetchWalletActivity(address, null, controller.signal)
+        const page = await fetchWalletActivity(address, null, 0, controller.signal)
         if (controller.signal.aborted) return
 
         setActivityItems(page.items)
         setNextActivityCursor(page.nextCursor)
+        setCapReached(page.capReached)
       } catch (error) {
         if (controller.signal.aborted) return
         setActivityError(error instanceof Error ? error.message : "Failed to load activity.")
@@ -234,10 +234,16 @@ export function Profile() {
     setActivityError(null)
 
     try {
-      const page = await fetchWalletActivity(address, nextActivityCursor, signal)
+      const page = await fetchWalletActivity(
+        address,
+        nextActivityCursor,
+        activityItems.length,
+        signal
+      )
       if (signal?.aborted) return
       setActivityItems(current => [...current, ...page.items])
       setNextActivityCursor(page.nextCursor)
+      setCapReached(page.capReached)
     } catch (error) {
       if (signal?.aborted) return
       setActivityError(error instanceof Error ? error.message : "Failed to load activity.")

@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Check, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import React from "react"
 
 // ─── Zod schemas ─────────────────────────────────────────────────────────────
 
@@ -38,7 +39,13 @@ export function FieldError({ message }: { message?: string }) {
   )
 }
 
-export function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+export function FormLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode
+  required?: boolean
+}) {
   return (
     <label className="mb-1.5 block text-sm font-black">
       {children}

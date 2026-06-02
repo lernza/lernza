@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Lightbulb, RotateCcw, RefreshCw, FileCode2, Wifi, Package, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import * as Sentry from "@sentry/react"
 
 // Types
 interface ErrorBoundaryProps {
@@ -232,6 +233,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ errorInfo: info })
     devLog(error, info)
+    Sentry.captureException(error, {
+      contexts: { react: { componentStack: info.componentStack } },
+    })
   }
 
   reset = () => {

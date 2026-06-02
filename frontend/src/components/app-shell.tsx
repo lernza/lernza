@@ -7,6 +7,8 @@ import { ErrorBoundary } from "@/components/error-boundary"
 import { useWallet } from "@/hooks/use-wallet"
 import { AlertTriangle, X } from "lucide-react"
 import { useState } from "react"
+import * as Sentry from "@sentry/react"
+import { env } from "@/lib/env"
 
 /**
  * Focus main content on route change for keyboard users.
@@ -83,6 +85,16 @@ interface AppShellProps {
  * navigation, analytics, and routing.
  */
 export function AppShell({ children }: AppShellProps) {
+  const { pathname } = useLocation()
+  const { network, expectedNetwork } = useWallet()
+
+  useEffect(() => {
+    if (env.VITE_SENTRY_DSN) {
+      Sentry.setTag("route", pathname)
+      Sentry.setTag("wallet_network", network ?? expectedNetwork)
+    }
+  }, [pathname, network, expectedNetwork])
+
   return (
     <div className="bg-background text-foreground flex min-h-screen flex-col">
       <a

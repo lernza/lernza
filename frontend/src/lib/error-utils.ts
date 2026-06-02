@@ -1,3 +1,6 @@
+import * as Sentry from "@sentry/react"
+import { env } from "./env"
+
 export function setupGlobalErrorHandlers() {
   if (typeof window === "undefined") return
 
@@ -13,6 +16,12 @@ export function setupGlobalErrorHandlers() {
       console.error(error)
       console.groupEnd()
     }
+
+    // Sentry's browserTracingIntegration captures these automatically, but we
+    // also capture explicitly so the hint carries the original reason value.
+    if (env.VITE_SENTRY_DSN) {
+      Sentry.captureException(error, { mechanism: { type: "onunhandledrejection", handled: false } })
+    }
   })
 
   window.addEventListener("error", event => {
@@ -21,6 +30,7 @@ export function setupGlobalErrorHandlers() {
       console.error(event.error ?? event.message)
       console.groupEnd()
     }
+    // Uncaught errors are already captured by Sentry's global error handler.
   })
 }
 

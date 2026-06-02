@@ -10,6 +10,8 @@
   },
   "scripts": {
     "predev": "node scripts/check-env.mjs",
+    "check-env": "node scripts/check-env.mjs",
+    "check-env:mainnet": "node scripts/check-env.mjs --mode mainnet",
     "dev": "vite",
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/validate-public-assets.mjs",

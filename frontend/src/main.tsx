@@ -6,6 +6,7 @@ import { HelmetProvider } from "react-helmet-async"
 import { queryClient } from "@/lib/query-client"
 import * as Sentry from "@sentry/react"
 import { env } from "@/lib/env"
+import { setupGlobalErrorHandlers } from "@/lib/error-utils"
 import "./index.css"
 import App from "./App.tsx"
 
@@ -25,6 +26,10 @@ if (env.VITE_SENTRY_DSN) {
     replaysOnErrorSampleRate: 1.0, // Sample 100% of sessions where an error occurs
   })
 }
+
+// Register global error/rejection handlers after Sentry is initialised so
+// unhandled promise rejections are forwarded with correct Sentry context.
+setupGlobalErrorHandlers()
 
 if (import.meta.env.DEV) {
   Promise.all([import("@axe-core/react"), import("react"), import("react-dom")]).then(

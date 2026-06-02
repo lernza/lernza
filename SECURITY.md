@@ -92,6 +92,16 @@ sequencing beyond the checks already coded. A buggy or malicious frontend could
 call contract functions out of order. Users should only interact through the
 official frontend or a reviewed integration.
 
+## External Audit
+
+The Lernza smart contracts handle user funds on Stellar. An independent security audit by a Soroban-experienced firm is required before mainnet launch.
+
+**Recommended auditors:** OtterSec, Trail of Bits, Halborn.
+
+**Audit status:** Pending — tracked in [#1008](https://github.com/lernza/lernza/issues/1008).
+
+All findings will be addressed and the final report published in `docs/audits/` before mainnet deployment.
+
 ## Recognition
 
 We appreciate security researchers. Contributors who responsibly disclose vulnerabilities will be credited in the release notes (unless they prefer to remain anonymous).

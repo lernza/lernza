@@ -17,7 +17,7 @@ vi.mock("@stellar/freighter-api", () => ({
 
 import freighter from "@stellar/freighter-api"
 
-const mockFreighter = freighter as {
+const mockFreighter = freighter as unknown as {
   requestAccess: ReturnType<typeof vi.fn>
   getAddress: ReturnType<typeof vi.fn>
   isConnected: ReturnType<typeof vi.fn>

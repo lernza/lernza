@@ -5,6 +5,10 @@ export const MAX_QUEST_DESCRIPTION_LEN = 2000
 export const MAX_MILESTONE_TITLE_LEN = 128
 export const MAX_MILESTONE_DESCRIPTION_LEN = 1000
 export const MAX_MILESTONES = 50
+// Contract enforces 10^15 raw token units; the form collects whole tokens,
+// which are multiplied by 10^6 (USDC decimals) before submission.
+// 10^15 / 10^6 = 10^9 whole tokens max.
+export const MAX_REWARD_AMOUNT = 1_000_000_000
 
 // ─── Quest Contract Types ────────────────────────────────────────────────────
 
@@ -51,6 +55,7 @@ export interface QuestInfo {
   status: QuestStatus // QuestStatus enum
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
+  verified: boolean // bool
 }
 
 // ─── Rewards Contract Types ──────────────────────────────────────────────────
@@ -72,6 +77,8 @@ export const RewardsError = {
   ArithmeticOverflow: 10,
   AlreadyPaid: 11,
   InvalidToken: 12,
+  RewardAmountMismatch: 13,
+  QuestNotArchived: 14,
 } as const
 export type RewardsError = (typeof RewardsError)[keyof typeof RewardsError]
 
@@ -95,25 +102,3 @@ export type UserEarnings = bigint
  * Uses bigint to match i128 from Rust contract.
  */
 export type TotalDistributed = bigint
-
-// ─── Legacy Types (to be migrated) ───────────────────────────────────────────
-
-export interface WorkspaceInfo {
-  id: number
-  owner: string
-  name: string
-  description: string
-  token_addr: string
-  created_at: number
-  visibility: Visibility
-  max_enrollees?: number
-  verified: boolean
-}
-
-export interface MilestoneInfo {
-  id: number
-  quest_id: number
-  title: string
-  description: string
-  reward_amount: number
-}

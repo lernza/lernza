@@ -7,7 +7,12 @@ const FREIGHTER_INSTALL_URL = "https://www.freighter.app/"
 
 export type WalletNetwork = "mainnet" | "testnet" | "standalone" | "futurenet" | "unknown"
 
-export type WalletErrorCode = "freighter_not_installed" | "network_error" | "unknown"
+export type WalletErrorCode =
+  | "freighter_not_installed"
+  | "network_error"
+  | "timeout"
+  | "missing_api"
+  | "unknown"
 
 export interface WalletErrorState {
   code: WalletErrorCode
@@ -62,11 +67,20 @@ function isNetworkError(err: unknown): boolean {
   return (
     msg.includes("network") ||
     msg.includes("fetch") ||
-    msg.includes("timeout") ||
     msg.includes("internet") ||
     msg.includes("offline")
   )
 }
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutError: Error): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(timeoutError), timeoutMs)),
+  ])
+}
+
+const TIMEOUT_MS = 10000
+const TIMEOUT_ERROR = new Error("Freighter request timed out")
 
 type FreighterApi = {
   requestAccess: () => Promise<{ address: string }>
@@ -172,8 +186,22 @@ export function useWallet() {
         return
       }
 
+      // Check for missing API before attempting connection
+      if (!freighterApi.getNetworkDetails) {
+        setState(s => ({
+          ...s,
+          loading: false,
+          error: {
+            code: "missing_api",
+            message:
+              "Your Freighter version is outdated and missing required features. Please update Freighter to the latest version and try again.",
+          },
+        }))
+        return
+      }
+
       sessionStorage.removeItem(DISCONNECTED_KEY)
-      const { address } = await freighterApi.requestAccess()
+      const { address } = await withTimeout(freighterApi.requestAccess(), TIMEOUT_MS, TIMEOUT_ERROR)
       await syncNetwork()
 
       setState(s => ({
@@ -202,6 +230,20 @@ export function useWallet() {
         return
       }
 
+      // Check for timeout first
+      if (msg === TIMEOUT_ERROR.message || normalized.includes("timed out")) {
+        setState(s => ({
+          ...s,
+          loading: false,
+          error: {
+            code: "timeout",
+            message:
+              "Freighter did not respond in time. Make sure Freighter is unlocked and try again.",
+          },
+        }))
+        return
+      }
+
       setState(s => ({
         ...s,
         loading: false,
@@ -209,7 +251,7 @@ export function useWallet() {
           ? {
               code: "network_error",
               message:
-                "Network error while connecting wallet. Check Freighter and your internet connection, then retry.",
+                "Network error while connecting wallet. Check your internet connection and Freighter status, then retry.",
             }
           : {
               code: "unknown",

@@ -1,0 +1,184 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Run every Sunday at 00:00 UTC
+    - cron: '0 0 * * 0'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason for manual run'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  # ── Detect what changed ──────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contracts: ${{ steps.filter.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            contracts:
+              - 'contracts/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+
+  # ── Run cargo-mutants ─────────────────────────────────────────────
+  mutants:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-mutants-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-mutants-
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@cargo-mutants
+
+      - name: Run mutation testing
+        run: |
+          cargo mutants --workspace --no-fail-fast --json > mutants_output.json 2>&1 || true
+
+      - name: Parse results and create issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('mutants_output.json', 'utf8');
+            const lines = output.split('\n');
+            
+            // Parse the JSON output from cargo-mutants
+            let totalMutants = 0;
+            let killed = 0;
+            let survived = 0;
+            let timeout = 0;
+            let noCoverage = 0;
+            
+            const survivingMutants = [];
+            
+            for (const line of lines) {
+              try {
+                const data = JSON.parse(line);
+                if (data.type === 'summary') {
+                  totalMutants = data.total || 0;
+                  killed = data.killed || 0;
+                  survived = data.survived || 0;
+                  timeout = data.timeout || 0;
+                  noCoverage = data.no_coverage || 0;
+                } else if (data.type === 'survived' || data.status === 'survived') {
+                  survivingMutants.push({
+                    function: data.function || data.mutant?.function || 'unknown',
+                    mutant: data.mutant?.description || data.description || 'unknown',
+                    file: data.mutant?.file || data.file || 'unknown',
+                    diff: data.mutant?.diff || '',
+                  });
+                }
+              } catch (e) {
+                // Not JSON, skip
+              }
+            }
+            
+            const survivedCount = survivingMutants.length;
+            const killedRate = totalMutants > 0 ? ((killed / totalMutants) * 100).toFixed(1) : 0;
+            
+            // Format date
+            const now = new Date();
+            const dateStr = now.toISOString().split('T')[0];
+            
+            // Build markdown report
+            let body = `## 🧪 Mutation Testing Report (${dateStr})\n\n`;
+            body += `| Metric | Value |\n`;
+            body += `|--------|-------|\n`;
+            body += `| Total Mutants | ${totalMutants} |\n`;
+            body += `| Killed | ${killed} |\n`;
+            body += `| Survived | ${survived} |\n`;
+            body += `| Timeout | ${timeout} |\n`;
+            body += `| No Coverage | ${noCoverage} |\n`;
+            body += `| Kill Rate | ${killedRate}% |\n\n`;
+            
+            if (survivingMutants.length > 0) {
+              body += `## ⚠️ Surviving Mutants\n\n`;
+              body += `The following mutants survived — these tests may be passing incorrectly:\n\n`;
+              
+              for (const m of survivingMutants.slice(0, 20)) {
+                body += `### \`${m.function}\`\n\n`;
+                body += `- **File**: \`${m.file}\`\n`;
+                body += `- **Mutant**: ${m.mutant}\n`;
+                if (m.diff) {
+                  body += '```diff\n' + m.diff + '\n```\n';
+                }
+                body += '\n';
+              }
+              
+              if (survivingMutants.length > 20) {
+                body += `_... and ${survivingMutants.length - 20} more survivors._\n`;
+              }
+            } else {
+              body += `## ✅ All Mutants Killed\n\n`;
+              body += `No surviving mutants detected. Your test suite is strong!\n`;
+            }
+            
+            body += `\n---\n`;
+            body += `_Generated by cargo-mutants workflow_`;
+            
+            // Find existing report issue
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'mutation-testing',
+              state: 'open',
+            });
+            
+            const existingIssue = issues.find(i => i.title.includes('Mutation Testing Report'));
+            
+            try {
+              if (existingIssue) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  body: body,
+                });
+                console.log('Updated existing issue:', existingIssue.number);
+              } else {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: `Mutation Testing Report (${dateStr})`,
+                  body: body,
+                  labels: ['mutation-testing'],
+                });
+                console.log('Created new issue');
+              }
+            } catch (error) {
+              console.log('Failed to manage issue:', error.message);
+              // Still succeed - the mutation testing ran, just couldn't post issue
+            }

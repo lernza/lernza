@@ -26,9 +26,13 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 )
 CardHeader.displayName = "CardHeader"
 
-const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
-    <h3
+interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  as?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+}
+
+const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
+  ({ className, as: Component = "h3", ...props }, ref) => (
+    <Component
       ref={ref}
       className={cn(
         "text-card-foreground text-lg leading-none font-black tracking-tight",

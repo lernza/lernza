@@ -1,6 +1,5 @@
 # Rust
 target
-contracts/**/test_snapshots/
 
 # Stellar
 .soroban
@@ -16,16 +15,10 @@ frontend/dist
 # IDE
 .idea
 .vscode
-.claude/
 
 # Environment
 .env
 .env.local
 pr.md
 issue.md
-
-# Generated contract bindings (regenerated from WASM via pnpm generate:bindings)
-frontend/src/lib/contracts/generated/
-
-
-contracts/quest/test_snapshots/test/*frontend/.vercel
+prerror.md

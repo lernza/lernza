@@ -19,18 +19,25 @@ export function useAsyncData<T>(
 ): AsyncDataState<T> & { refetch: () => Promise<void> } {
   const { initialData = null, dependencies = [], enabled = true } = options
 
-  const [state, setState] = useState<AsyncDataState<T>>({
-    data: initialData,
-    isLoading: false,
-    error: null,
-    isEmpty: !initialData,
-  })
+   const [state, setState] = useState<AsyncDataState<T>>({
+     data: initialData,
+     isLoading: false,
+     error: null,
+     isEmpty: !initialData,
+   })
 
-  // Use a ref for the fetcher to avoid re-triggering the effect when the
-  // fetcher function identity changes (which happens every render since
-  // callers pass inline arrow functions).
-  const fetcherRef = useRef(fetcher)
-  fetcherRef.current = fetcher
+    // Use a ref for the fetcher to avoid re-triggering the effect when the
+    // fetcher function identity changes (which happens every render since
+    // callers pass inline arrow functions).
+    const fetcherRef = useRef(fetcher)
+    
+    // Wrap fetcher in useCallback to stabilize its identity across renders
+    const stableFetcher = useCallback(fetcher, [...dependencies])
+    
+    // Update the ref with the stable fetcher after render to avoid ref mutation during render
+    useEffect(() => {
+      fetcherRef.current = stableFetcher
+    }, [stableFetcher])
 
   // Track whether a fetch is already in-flight to prevent overlapping calls.
   const inflightRef = useRef(false)

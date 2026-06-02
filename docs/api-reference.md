@@ -1,517 +1,733 @@
 # Contract API Reference
 
-This reference documents every public function exposed by Lernza's three Soroban contracts:
+Public functions exposed by Lernza's four Soroban contracts.
 
-- Quest contract: `contracts/workspace/`
+- Quest contract: `contracts/quest/`
 - Milestone contract: `contracts/milestone/`
 - Rewards contract: `contracts/rewards/`
-
-The product language uses "quest", while the current contract module and function names still use `workspace`. This document uses "quest contract" for the concept and preserves the exact on-chain function names for CLI usage.
+- Certificate contract: `contracts/certificate/`
 
 ## CLI Conventions
 
-These examples use the current Stellar CLI invoke format and assume:
-
-- You already selected a network, for example: `stellar network use testnet`
-- You already deployed the contracts and saved aliases such as `quest`, `milestone`, and `rewards`
-- You already created local identities such as `owner`, `learner`, and `funder`
-- Strings with spaces are passed as JSON-quoted values
-
-Example setup:
+Examples assume:
+- Network selected: `stellar network use testnet`
+- Contracts deployed with aliases: `quest`, `milestone`, `rewards`, `certificate`
+- Local identities created: `owner`, `learner`, `funder`
 
 ```bash
 stellar network use testnet
 stellar keys use owner
 ```
 
-## Shared Return Types
+---
 
-### `WorkspaceInfo`
+## Shared Types
 
-Returned by `get_workspace`.
+### `QuestInfo`
+
+Returned by `get_quest`, `list_public_quests`, `list_quests_by_owner`, `list_quests_by_enrollee`.
 
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `id` | `u32` | Auto-incremented quest ID. |
 | `owner` | `Address` | Quest owner address. |
-| `name` | `String` | Quest title. |
-| `description` | `String` | Quest description. |
-| `token_addr` | `Address` | Reward token contract address. |
-| `created_at` | `u64` | Ledger timestamp recorded at creation. |
+| `name` | `String` | Quest title (max 64 chars). |
+| `description` | `String` | Quest description (max 2000 chars). |
+| `category` | `String` | Category string for discovery. |
+| `tags` | `Vec<String>` | Up to 5 tags (max 32 chars each). |
+| `token_addr` | `Address` | Reward token contract address (SAC). |
+| `created_at` | `u64` | Ledger timestamp at creation. |
+| `visibility` | `Visibility` | `Public` or `Private`. |
+| `status` | `QuestStatus` | `Active` or `Archived`. |
+| `deadline` | `u64` | Unix timestamp deadline; `0` means no deadline. |
+| `archived_at` | `u64` | Timestamp when archived; `0` if not archived. |
+| `max_enrollees` | `Option<u32>` | Enrollment cap; `None` means unlimited. |
+| `verified` | `bool` | Whether the creator was verified at creation time. |
 
 ### `MilestoneInfo`
 
-Returned by `get_milestone` and `get_milestones`.
+Returned by `get_milestone`, `get_milestones`, `list_milestones`.
 
 | Field | Type | Description |
 |:------|:-----|:------------|
 | `id` | `u32` | Auto-incremented milestone ID within a quest. |
-| `workspace_id` | `u32` | Quest ID the milestone belongs to. |
-| `title` | `String` | Milestone title. |
-| `description` | `String` | Milestone description. |
-| `reward_amount` | `i128` | Reward amount in token base units. |
+| `quest_id` | `u32` | Quest this milestone belongs to. |
+| `title` | `String` | Milestone title (max 128 chars). |
+| `description` | `String` | Milestone description (max 1000 chars). |
+| `reward_amount` | `i128` | Reward in token base units. |
+| `requires_previous` | `bool` | If `true`, previous milestone must be completed first. |
+
+### `Visibility`
+
+| Variant | Description |
+|:--------|:------------|
+| `Public` | Quest appears in `list_public_quests` and category queries. |
+| `Private` | Quest is hidden from discovery helpers. Direct reads by ID still work. |
+
+### `VerificationMode`
+
+| Variant | Description |
+|:--------|:------------|
+| `OwnerOnly` | Only the quest owner can verify completions (default). |
+| `PeerReview(u32)` | Requires `u32` peer approvals to auto-complete. |
+
+### `DistributionMode`
+
+| Variant | Description |
+|:--------|:------------|
+| `Custom` | Each milestone pays its own `reward_amount` (default). |
+| `Flat` | All milestones pay the same flat reward set via `set_distribution_mode`. |
+| `Competitive(u32)` | First `u32` completers earn the reward; the rest earn 0. |
+
+---
 
 ## Quest Contract
 
-Source: `contracts/workspace/src/lib.rs`
+Source: `contracts/quest/src/lib.rs`
 
-### `create_workspace`
+### `initialize`
 
-Signature:
+One-time setup. Sets the contract admin.
 
 ```rust
-create_workspace(owner: Address, name: String, description: String, token_addr: Address) -> Result<u32, Error>
+initialize(env: Env, admin: Address) -> Result<(), Error>
 ```
-
-Parameters:
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `owner` | `Address` | Address that owns and administers the quest. Must authorize the call. |
-| `name` | `String` | Quest name shown to users. |
-| `description` | `String` | Quest description. |
-| `token_addr` | `Address` | Stellar asset contract address used for rewards. |
+| `admin` | `Address` | Admin address. |
 
-Returns:
+Errors: `Unauthorized` if already initialized.
 
-- `Ok(u32)`: newly created quest ID.
+```bash
+stellar contract invoke --id quest -- initialize --admin owner
+```
 
-Possible errors:
+---
 
-- No contract-defined `Error` variant is currently returned by this implementation.
-- Runtime note: the transaction still requires `owner` authorization.
+### `create_quest`
 
-Example:
+Create a new quest. Returns the quest ID.
+
+```rust
+create_quest(
+    owner: Address,
+    name: String,
+    description: String,
+    category: String,
+    tags: Vec<String>,
+    token_addr: Address,
+    visibility: Visibility,
+    max_enrollees: Option<u32>,
+) -> Result<u32, Error>
+```
+
+| Parameter | Type | Description |
+|:----------|:-----|:------------|
+| `owner` | `Address` | Quest owner. Must authorize. |
+| `name` | `String` | Quest title (max 64 chars, non-blank). |
+| `description` | `String` | Quest description (max 2000 chars, non-blank). |
+| `category` | `String` | Category for discovery. |
+| `tags` | `Vec<String>` | Up to 5 tags. |
+| `token_addr` | `Address` | SAC address for the reward token. Must be a contract address (starts with `C`). |
+| `visibility` | `Visibility` | `Public` or `Private`. |
+| `max_enrollees` | `Option<u32>` | Enrollment cap. Pass `null` for unlimited. |
+
+Returns `Ok(u32)` — the new quest ID.
+
+Errors: `InvalidInput`, `NameTooLong`, `DescriptionTooLong`, `Paused`.
 
 ```bash
 stellar keys use owner
-stellar contract invoke --id quest -- create_workspace \
+stellar contract invoke --id quest -- create_quest \
   --owner owner \
   --name '"Rust Basics"' \
   --description '"Complete Soroban onboarding milestones"' \
-  --token-addr token
+  --category '"Engineering"' \
+  --tags '["soroban","rust"]' \
+  --token-addr token \
+  --visibility '{"Public": null}' \
+  --max-enrollees 'null'
 ```
+
+---
+
+### `update_quest`
+
+Update quest metadata. Owner only. Quest must be active.
+
+```rust
+update_quest(
+    quest_id: u32,
+    owner: Address,
+    name: Option<String>,
+    description: Option<String>,
+    category: Option<String>,
+    tags: Option<Vec<String>>,
+    visibility: Option<Visibility>,
+    max_enrollees: Option<u32>,
+) -> Result<(), Error>
+```
+
+Pass `null` for any field you do not want to change.
+
+Errors: `NotFound`, `Unauthorized`, `QuestArchived`, `InvalidInput`, `NameTooLong`, `DescriptionTooLong`.
+
+---
+
+### `archive_quest`
+
+Archive a quest. Owner only. Archived quests reject new enrollments.
+
+```rust
+archive_quest(env: Env, quest_id: u32) -> Result<(), Error>
+```
+
+Errors: `NotFound`, `Unauthorized`, `Paused`.
+
+```bash
+stellar keys use owner
+stellar contract invoke --id quest -- archive_quest --quest-id 0
+```
+
+---
 
 ### `add_enrollee`
 
-Signature:
+Enroll a learner. Owner only.
 
 ```rust
-add_enrollee(workspace_id: u32, enrollee: Address) -> Result<(), Error>
+add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error>
 ```
 
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Target quest ID. |
-| `enrollee` | `Address` | Learner address to add. |
-
-Returns:
-
-- `Ok(())`: learner was added to the quest.
-
-Possible errors:
-
-- `Error::NotFound`: quest does not exist.
-- `Error::AlreadyEnrolled`: learner is already enrolled.
-- Runtime note: only the stored quest owner can authorize this call.
-
-Example:
+Errors: `NotFound`, `Unauthorized`, `QuestArchived`, `AlreadyEnrolled`, `QuestFull`.
 
 ```bash
 stellar keys use owner
 stellar contract invoke --id quest -- add_enrollee \
-  --workspace-id 0 \
-  --enrollee learner
+  --quest-id 0 --enrollee learner
 ```
+
+---
+
+### `join_quest`
+
+Self-enroll in a public quest. Enrollee must authorize.
+
+```rust
+join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error>
+```
+
+Errors: `NotFound`, `QuestArchived`, `InviteOnly` (if `Private`), `AlreadyEnrolled`, `QuestFull`.
+
+```bash
+stellar keys use learner
+stellar contract invoke --id quest -- join_quest \
+  --enrollee learner --quest-id 0
+```
+
+---
 
 ### `remove_enrollee`
 
-Signature:
+Remove a learner. Owner only.
 
 ```rust
-remove_enrollee(workspace_id: u32, enrollee: Address) -> Result<(), Error>
+remove_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error>
 ```
 
-Parameters:
+Errors: `NotFound`, `Unauthorized`, `NotEnrolled`.
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Target quest ID. |
-| `enrollee` | `Address` | Learner address to remove. |
+---
 
-Returns:
+### `leave_quest`
 
-- `Ok(())`: learner was removed from the quest.
-
-Possible errors:
-
-- `Error::NotFound`: quest does not exist.
-- `Error::NotEnrolled`: learner is not enrolled in the quest.
-- Runtime note: only the stored quest owner can authorize this call.
-
-Example:
-
-```bash
-stellar keys use owner
-stellar contract invoke --id quest -- remove_enrollee \
-  --workspace-id 0 \
-  --enrollee learner
-```
-
-### `get_workspace`
-
-Signature:
+Unenroll yourself. Enrollee must authorize.
 
 ```rust
-get_workspace(workspace_id: u32) -> Result<WorkspaceInfo, Error>
+leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error>
 ```
 
-Parameters:
+Errors: `NotFound`, `NotEnrolled`.
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to fetch. |
+---
 
-Returns:
+### `set_visibility`
 
-- `Ok(WorkspaceInfo)`: full quest metadata.
+Change public/private visibility. Owner only. Does not provide on-chain confidentiality.
 
-Possible errors:
+```rust
+set_visibility(env: Env, quest_id: u32, visibility: Visibility) -> Result<(), Error>
+```
 
-- `Error::NotFound`: quest does not exist.
+---
 
-Example:
+### `set_deadline`
+
+Set or clear a quest deadline. Owner only. Pass `0` to remove.
+
+```rust
+set_deadline(env: Env, quest_id: u32, deadline: u64) -> Result<(), Error>
+```
+
+---
+
+### `get_quest`
+
+Fetch quest metadata by ID. Readable for any ID regardless of visibility.
+
+```rust
+get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, Error>
+```
+
+Errors: `NotFound`.
 
 ```bash
-stellar contract invoke --id quest -- get_workspace \
-  --workspace-id 0
+stellar contract invoke --id quest -- get_quest --quest-id 0
 ```
+
+---
 
 ### `get_enrollees`
 
-Signature:
+List all enrolled addresses for a quest.
 
 ```rust
-get_enrollees(workspace_id: u32) -> Result<Vec<Address>, Error>
+get_enrollees(env: Env, quest_id: u32) -> Result<Vec<Address>, Error>
 ```
 
-Parameters:
+Errors: `NotFound`.
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to inspect. |
-
-Returns:
-
-- `Ok(Vec<Address>)`: all enrolled learner addresses for the quest.
-
-Possible errors:
-
-- `Error::NotFound`: quest does not exist.
-
-Example:
-
-```bash
-stellar contract invoke --id quest -- get_enrollees \
-  --workspace-id 0
-```
+---
 
 ### `is_enrollee`
 
-Signature:
+Check whether an address is enrolled.
 
 ```rust
-is_enrollee(workspace_id: u32, user: Address) -> Result<bool, Error>
+is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, Error>
 ```
 
-Parameters:
+Errors: `NotFound`.
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to inspect. |
-| `user` | `Address` | Address to check. |
+---
 
-Returns:
+### `is_expired`
 
-- `Ok(true)`: the address is enrolled.
-- `Ok(false)`: the address is not enrolled.
-
-Possible errors:
-
-- `Error::NotFound`: quest does not exist.
-
-Example:
-
-```bash
-stellar contract invoke --id quest -- is_enrollee \
-  --workspace-id 0 \
-  --user learner
-```
-
-### `get_workspace_count`
-
-Signature:
+Returns `true` if the quest has a non-zero deadline that has passed.
 
 ```rust
-get_workspace_count() -> u32
+is_expired(env: Env, quest_id: u32) -> Result<bool, Error>
 ```
 
-Parameters:
+---
 
-- None.
+### `list_public_quests`
 
-Returns:
+Paginated list of public quests.
 
-- `u32`: total number of quests created so far.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
-
-```bash
-stellar contract invoke --id quest -- get_workspace_count
+```rust
+list_public_quests(env: Env, start: u32, limit: u32) -> Vec<QuestInfo>
 ```
+
+---
+
+### `get_quests_by_category`
+
+All public quests in a category.
+
+```rust
+get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo>
+```
+
+---
+
+### `list_quests_by_owner`
+
+All quests owned by an address.
+
+```rust
+list_quests_by_owner(env: Env, owner: Address) -> Vec<QuestInfo>
+```
+
+---
+
+### `list_quests_by_enrollee`
+
+All quests an address is enrolled in.
+
+```rust
+list_quests_by_enrollee(env: Env, enrollee: Address) -> Vec<QuestInfo>
+```
+
+---
+
+### `get_quest_count`
+
+Total number of quests created.
+
+```rust
+get_quest_count(env: Env) -> u32
+```
+
+---
+
+### `get_enrollment_cap`
+
+Returns the enrollment cap for a quest, or `None` if unlimited.
+
+```rust
+get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32>
+```
+
+---
+
+### `verify_creator` / `is_creator_verified`
+
+Admin-only: mark a creator as verified. Verified status is stored on the quest at creation time.
+
+```rust
+verify_creator(env: Env, admin: Address, creator: Address) -> Result<(), Error>
+is_creator_verified(env: Env, creator: Address) -> bool
+```
+
+---
+
+### `transfer_admin`
+
+Transfer admin control to a new address. Admin only.
+
+```rust
+transfer_admin(env: Env, current_admin: Address, new_admin: Address) -> Result<(), Error>
+```
+
+---
+
+### `pause` / `unpause` / `is_paused`
+
+Admin-only circuit breaker. Pausing blocks all state-mutating calls.
+
+```rust
+pause(env: Env, admin: Address) -> Result<(), Error>
+unpause(env: Env, admin: Address) -> Result<(), Error>
+is_paused(env: Env) -> bool
+```
+
+---
 
 ## Milestone Contract
 
 Source: `contracts/milestone/src/lib.rs`
 
-### `create_milestone`
+### `initialize`
 
-Signature:
+One-time setup. Must be called before any milestones can be created.
 
 ```rust
-create_milestone(owner: Address, workspace_id: u32, title: String, description: String, reward_amount: i128) -> Result<u32, Error>
+initialize(
+    env: Env,
+    admin: Address,
+    quest_contract: Address,
+    certificate_contract: Address,
+) -> Result<(), Error>
 ```
-
-Parameters:
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `owner` | `Address` | Quest owner. Must authorize the call. |
-| `workspace_id` | `u32` | Quest ID the milestone belongs to. |
-| `title` | `String` | Milestone title. |
-| `description` | `String` | Milestone description. |
-| `reward_amount` | `i128` | Reward amount in token base units. Zero is allowed; negative values are rejected. |
+| `admin` | `Address` | Admin address. Must authorize. |
+| `quest_contract` | `Address` | Deployed quest contract address. |
+| `certificate_contract` | `Address` | Deployed certificate contract address. |
 
-Returns:
+Errors: `Unauthorized` if already initialized.
 
-- `Ok(u32)`: newly created milestone ID for that quest.
+```bash
+stellar contract invoke --id milestone -- initialize \
+  --admin owner \
+  --quest-contract <QUEST_ID> \
+  --certificate-contract <CERT_ID>
+```
 
-Possible errors:
+---
 
-- `Error::InvalidAmount`: `reward_amount` is negative.
-- `Error::OwnerMismatch`: a different owner is already recorded for this quest in the milestone contract.
-- Runtime note: `owner` must authorize the call.
+### `create_milestone`
 
-Example:
+Add a milestone to a quest. Owner auth required. Validates ownership via cross-contract call.
+
+```rust
+create_milestone(
+    env: Env,
+    owner: Address,
+    quest_id: u32,
+    title: String,
+    description: String,
+    reward_amount: i128,
+    requires_previous: bool,
+) -> Result<u32, Error>
+```
+
+| Parameter | Type | Description |
+|:----------|:-----|:------------|
+| `owner` | `Address` | Quest owner. Must authorize. |
+| `quest_id` | `u32` | Quest to add the milestone to. |
+| `title` | `String` | Milestone title (max 128 chars, non-blank). |
+| `description` | `String` | Milestone description (max 1000 chars, non-blank). |
+| `reward_amount` | `i128` | Reward in token base units. Must be > 0 and ≤ 10^15. |
+| `requires_previous` | `bool` | If `true`, previous milestone must be completed first. |
+
+Returns `Ok(u32)` — the new milestone ID.
+
+Errors: `NotInitialized`, `OwnerMismatch`, `InvalidInput`, `TitleTooLong`, `DescriptionTooLong`, `InvalidAmount`.
 
 ```bash
 stellar keys use owner
 stellar contract invoke --id milestone -- create_milestone \
   --owner owner \
-  --workspace-id 0 \
+  --quest-id 0 \
   --title '"Build first API"' \
   --description '"Ship a working Soroban-backed endpoint"' \
-  --reward-amount 5000000
+  --reward-amount 5000000 \
+  --requires-previous false
 ```
+
+---
+
+### `create_milestones_batch`
+
+Atomically create multiple milestones. All succeed or none are written.
+
+```rust
+create_milestones_batch(
+    env: Env,
+    owner: Address,
+    quest_id: u32,
+    milestones: Vec<MilestoneInput>,
+) -> Result<Vec<u32>, Error>
+```
+
+`MilestoneInput` fields: `title`, `description`, `reward_amount`, `requires_previous`. Max batch size: 20.
+
+Errors: `BatchTooLarge`, `OwnerMismatch`, `InvalidInput`, `TitleTooLong`, `DescriptionTooLong`, `InvalidAmount`.
+
+---
+
+### `set_verification_mode`
+
+Set how milestone completions are verified for a quest. Owner only.
+
+```rust
+set_verification_mode(
+    env: Env,
+    owner: Address,
+    quest_id: u32,
+    mode: VerificationMode,
+) -> Result<(), Error>
+```
+
+| Mode | Description |
+|:-----|:------------|
+| `OwnerOnly` | Default. Owner calls `verify_completion`. |
+| `PeerReview(n)` | Learners submit via `submit_for_review`; `n` peers must call `approve_completion`. |
+
+---
+
+### `set_distribution_mode`
+
+Set the reward distribution mode for a quest. Owner only.
+
+```rust
+set_distribution_mode(
+    env: Env,
+    owner: Address,
+    quest_id: u32,
+    mode: DistributionMode,
+    flat_reward: i128,
+) -> Result<(), Error>
+```
+
+Pass `flat_reward > 0` when using `Flat` mode; pass `0` otherwise.
+
+---
 
 ### `verify_completion`
 
-Signature:
+Mark a learner's milestone as complete. Owner only. Returns the reward amount so the frontend can trigger `distribute_reward`.
 
 ```rust
-verify_completion(owner: Address, workspace_id: u32, milestone_id: u32, enrollee: Address) -> Result<i128, Error>
+verify_completion(
+    env: Env,
+    owner: Address,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: Address,
+) -> Result<i128, Error>
 ```
 
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `owner` | `Address` | Quest owner recorded in the milestone contract. Must authorize the call. |
-| `workspace_id` | `u32` | Quest ID containing the milestone. |
-| `milestone_id` | `u32` | Milestone ID to verify. |
-| `enrollee` | `Address` | Learner whose completion is being verified. |
-
-Returns:
-
-- `Ok(i128)`: the milestone reward amount. The frontend uses this value to trigger reward distribution.
-
-Possible errors:
-
-- `Error::NotFound`: the quest owner was never recorded in this contract for `workspace_id`, or the milestone does not exist.
-- `Error::Unauthorized`: the caller is not the stored owner for the quest.
-- `Error::AlreadyCompleted`: this learner was already verified for the milestone.
-- Runtime note: `owner` must authorize the call.
-
-Example:
+Errors: `NotInitialized`, `Unauthorized`, `NotEnrolled`, `NotFound`, `AlreadyCompleted`, `MilestoneNotUnlocked`.
 
 ```bash
 stellar keys use owner
 stellar contract invoke --id milestone -- verify_completion \
   --owner owner \
-  --workspace-id 0 \
+  --quest-id 0 \
   --milestone-id 0 \
   --enrollee learner
 ```
+
+---
+
+### `submit_for_review`
+
+Submit a milestone completion for peer review. Enrollee must authorize. Only valid when `VerificationMode` is `PeerReview`.
+
+```rust
+submit_for_review(
+    env: Env,
+    enrollee: Address,
+    quest_id: u32,
+    milestone_id: u32,
+) -> Result<(), Error>
+```
+
+Errors: `NotFound`, `AlreadyCompleted`, `AlreadySubmitted`, `Unauthorized`, `NotEnrolled`.
+
+---
+
+### `approve_completion`
+
+Approve a peer's submitted milestone. Peer must be enrolled and must not be the submitter. Returns `Some(reward)` when the threshold is reached and the milestone auto-completes; `None` if more approvals are still needed.
+
+```rust
+approve_completion(
+    env: Env,
+    peer: Address,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: Address,
+) -> Result<Option<i128>, Error>
+```
+
+Errors: `NotFound`, `AlreadyCompleted`, `NotSubmitted`, `InvalidApprover`, `AlreadyApproved`, `NotEnrolled`, `Unauthorized`.
+
+---
 
 ### `get_milestone`
 
-Signature:
+Fetch a single milestone.
 
 ```rust
-get_milestone(workspace_id: u32, milestone_id: u32) -> Result<MilestoneInfo, Error>
+get_milestone(env: Env, quest_id: u32, milestone_id: u32) -> Result<MilestoneInfo, Error>
 ```
 
-Parameters:
+---
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID containing the milestone. |
-| `milestone_id` | `u32` | Milestone ID to fetch. |
+### `get_milestones` / `list_milestones`
 
-Returns:
-
-- `Ok(MilestoneInfo)`: milestone metadata and reward amount.
-
-Possible errors:
-
-- `Error::NotFound`: milestone does not exist.
-
-Example:
-
-```bash
-stellar contract invoke --id milestone -- get_milestone \
-  --workspace-id 0 \
-  --milestone-id 0
-```
-
-### `get_milestones`
-
-Signature:
+All milestones for a quest (both functions are equivalent).
 
 ```rust
-get_milestones(workspace_id: u32) -> Vec<MilestoneInfo>
+get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo>
+list_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo>
 ```
 
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to inspect. |
-
-Returns:
-
-- `Vec<MilestoneInfo>`: all stored milestones for the quest. Returns an empty list if none exist yet.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
-
-```bash
-stellar contract invoke --id milestone -- get_milestones \
-  --workspace-id 0
-```
+---
 
 ### `get_milestone_count`
 
-Signature:
+Number of milestones in a quest.
 
 ```rust
-get_milestone_count(workspace_id: u32) -> u32
+get_milestone_count(env: Env, quest_id: u32) -> u32
 ```
 
-Parameters:
+---
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to inspect. |
+### `get_milestone_reward`
 
-Returns:
+Configured reward amount for a specific milestone.
 
-- `u32`: number of milestones created for the quest.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
-
-```bash
-stellar contract invoke --id milestone -- get_milestone_count \
-  --workspace-id 0
+```rust
+get_milestone_reward(env: Env, quest_id: u32, milestone_id: u32) -> Result<i128, Error>
 ```
+
+---
 
 ### `is_completed`
 
-Signature:
+Check whether a learner has completed a milestone.
 
 ```rust
-is_completed(workspace_id: u32, milestone_id: u32, enrollee: Address) -> bool
+is_completed(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool
 ```
-
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID containing the milestone. |
-| `milestone_id` | `u32` | Milestone ID to inspect. |
-| `enrollee` | `Address` | Learner address to check. |
-
-Returns:
-
-- `true`: learner has already been marked complete for the milestone.
-- `false`: learner has not been marked complete.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
 
 ```bash
 stellar contract invoke --id milestone -- is_completed \
-  --workspace-id 0 \
-  --milestone-id 0 \
-  --enrollee learner
+  --quest-id 0 --milestone-id 0 --enrollee learner
 ```
+
+---
 
 ### `get_enrollee_completions`
 
-Signature:
+Total verified milestone completions for a learner in a quest.
 
 ```rust
-get_enrollee_completions(workspace_id: u32, enrollee: Address) -> u32
+get_enrollee_completions(env: Env, quest_id: u32, enrollee: Address) -> u32
 ```
 
-Parameters:
+---
 
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID to inspect. |
-| `enrollee` | `Address` | Learner address to inspect. |
+### `get_enrollee_progress`
 
-Returns:
+Full progress details for a learner: completion count, total milestones, total earned, and per-milestone timestamps.
 
-- `u32`: total verified milestone completions for that learner in the quest.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
-
-```bash
-stellar contract invoke --id milestone -- get_enrollee_completions \
-  --workspace-id 0 \
-  --enrollee learner
+```rust
+get_enrollee_progress(env: Env, quest_id: u32, enrollee: Address) -> EnrolleeProgress
 ```
+
+---
+
+### `get_enrollee_earnings`
+
+Total tokens earned by a learner in a quest (milestone contract's view).
+
+```rust
+get_enrollee_earnings(env: Env, quest_id: u32, enrollee: Address) -> i128
+```
+
+---
+
+### `get_total_reserved_reward`
+
+Total reward reserved (verified completions + pending peer reviews) for a quest. Used by the rewards contract to calculate refundable balance.
+
+```rust
+get_total_reserved_reward(env: Env, quest_id: u32) -> i128
+```
+
+---
+
+### `get_distribution_mode` / `get_flat_reward`
+
+Read the configured distribution mode and flat reward for a quest.
+
+```rust
+get_distribution_mode(env: Env, quest_id: u32) -> DistributionMode
+get_flat_reward(env: Env, quest_id: u32) -> Option<i128>
+```
+
+---
+
+### `pause` / `unpause` / `is_paused`
+
+Admin-only circuit breaker.
+
+```rust
+pause(env: Env, admin: Address) -> Result<(), Error>
+unpause(env: Env, admin: Address) -> Result<(), Error>
+is_paused(env: Env) -> bool
+```
+
+---
 
 ## Rewards Contract
 
@@ -519,217 +735,359 @@ Source: `contracts/rewards/src/lib.rs`
 
 ### `initialize`
 
-Signature:
+One-time setup. Sets the reward token and contract addresses.
 
 ```rust
-initialize(token_addr: Address) -> Result<(), Error>
+initialize(
+    env: Env,
+    token_addr: Address,
+    quest_contract_addr: Address,
+    milestone_contract_addr: Address,
+) -> Result<(), Error>
 ```
-
-Parameters:
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `token_addr` | `Address` | Stellar asset contract address used by the rewards pool. |
+| `token_addr` | `Address` | SAC address for the reward token. |
+| `quest_contract_addr` | `Address` | Deployed quest contract address. |
+| `milestone_contract_addr` | `Address` | Deployed milestone contract address. |
 
-Returns:
-
-- `Ok(())`: rewards contract initialized successfully.
-
-Possible errors:
-
-- `Error::AlreadyInitialized`: token address was already set earlier.
-
-Example:
+Errors: `AlreadyInitialized`.
 
 ```bash
 stellar contract invoke --id rewards -- initialize \
-  --token-addr token
+  --token-addr token \
+  --quest-contract-addr <QUEST_ID> \
+  --milestone-contract-addr <MILESTONE_ID>
 ```
 
-### `fund_workspace`
+---
 
-Signature:
+### `fund_quest`
+
+Deposit tokens into a quest's reward pool. The funder must be the quest owner. Funder becomes the quest authority.
 
 ```rust
-fund_workspace(funder: Address, workspace_id: u32, amount: i128) -> Result<(), Error>
+fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error>
 ```
-
-Parameters:
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `funder` | `Address` | Address depositing tokens into the quest pool. Must authorize the call. |
-| `workspace_id` | `u32` | Quest ID whose pool is being funded. |
-| `amount` | `i128` | Deposit amount in token base units. Must be greater than zero. |
+| `funder` | `Address` | Quest owner depositing tokens. Must authorize. |
+| `quest_id` | `u32` | Quest whose pool is being funded. |
+| `amount` | `i128` | Deposit amount in token base units. Must be > 0. |
 
-Returns:
-
-- `Ok(())`: pool balance was credited.
-
-Possible errors:
-
-- `Error::InvalidAmount`: `amount` is zero or negative.
-- `Error::NotInitialized`: rewards contract was not initialized with a token address.
-- `Error::Unauthorized`: the quest pool already has a different authority recorded.
-- Runtime note: token transfer from `funder` to the rewards contract must also succeed.
-
-Example:
+Errors: `InvalidAmount`, `NotInitialized`, `Unauthorized`, `InvalidToken`, `QuestLookupFailed`.
 
 ```bash
 stellar keys use owner
-stellar contract invoke --id rewards -- fund_workspace \
+stellar contract invoke --id rewards -- fund_quest \
   --funder owner \
-  --workspace-id 0 \
+  --quest-id 0 \
   --amount 50000000
 ```
 
+---
+
 ### `distribute_reward`
 
-Signature:
+Pay a reward to a learner. Requires milestone completion to be verified first. Idempotent — a second call for the same `(quest_id, milestone_id, enrollee)` returns `AlreadyPaid`.
 
 ```rust
-distribute_reward(authority: Address, workspace_id: u32, enrollee: Address, amount: i128) -> Result<(), Error>
+distribute_reward(
+    env: Env,
+    authority: Address,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: Address,
+    amount: i128,
+) -> Result<(), Error>
 ```
-
-Parameters:
 
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
-| `authority` | `Address` | Address authorized to pay from the quest pool. Must authorize the call. |
-| `workspace_id` | `u32` | Quest ID whose pool is being debited. |
+| `authority` | `Address` | Quest authority (the funder). Must authorize. |
+| `quest_id` | `u32` | Quest whose pool is debited. |
+| `milestone_id` | `u32` | Milestone the reward is for. |
 | `enrollee` | `Address` | Learner receiving the reward. |
-| `amount` | `i128` | Reward amount in token base units. Must be greater than zero. |
+| `amount` | `i128` | Amount in token base units. Must match the milestone's configured `reward_amount`. |
 
-Returns:
-
-- `Ok(())`: tokens were transferred to the learner and accounting was updated.
-
-Possible errors:
-
-- `Error::InvalidAmount`: `amount` is zero or negative.
-- `Error::WorkspaceNotFunded`: no authority was ever recorded for the quest.
-- `Error::Unauthorized`: caller is not the recorded authority for the quest.
-- `Error::InsufficientPool`: quest pool balance is lower than `amount`.
-- `Error::NotInitialized`: rewards contract was not initialized with a token address.
-- Runtime note: token transfer from the rewards contract to `enrollee` must also succeed.
-
-Example:
+Errors: `InvalidAmount`, `AlreadyPaid`, `QuestNotFunded`, `Unauthorized`, `MilestoneNotCompleted`, `RewardAmountMismatch`, `InsufficientPool`.
 
 ```bash
 stellar keys use owner
 stellar contract invoke --id rewards -- distribute_reward \
   --authority owner \
-  --workspace-id 0 \
+  --quest-id 0 \
+  --milestone-id 0 \
   --enrollee learner \
   --amount 5000000
 ```
 
-### `get_pool_balance`
+---
 
-Signature:
+### `refund_pool`
+
+Withdraw unallocated tokens back to the authority. The quest must be archived and the 7-day grace period (604,800 seconds) must have elapsed since archiving.
 
 ```rust
-get_pool_balance(workspace_id: u32) -> i128
+refund_pool(env: Env, authority: Address, quest_id: u32, amount: i128) -> Result<(), Error>
 ```
 
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `workspace_id` | `u32` | Quest ID whose pool balance should be returned. |
-
-Returns:
-
-- `i128`: current funded balance for the quest. Returns `0` when no pool exists yet.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
+Errors: `InvalidAmount`, `QuestNotFunded`, `Unauthorized`, `QuestNotArchived`, `RefundWindowNotOpen`, `InsufficientPool`.
 
 ```bash
-stellar contract invoke --id rewards -- get_pool_balance \
-  --workspace-id 0
+stellar keys use owner
+stellar contract invoke --id rewards -- refund_pool \
+  --authority owner \
+  --quest-id 0 \
+  --amount 10000000
 ```
+
+---
+
+### `get_pool_balance`
+
+Current token balance in a quest's reward pool.
+
+```rust
+get_pool_balance(env: Env, quest_id: u32) -> i128
+```
+
+Returns `0` if the quest has no pool yet.
+
+```bash
+stellar contract invoke --id rewards -- get_pool_balance --quest-id 0
+```
+
+---
 
 ### `get_user_earnings`
 
-Signature:
+Cumulative rewards distributed to a user across all quests.
 
 ```rust
-get_user_earnings(user: Address) -> i128
+get_user_earnings(env: Env, user: Address) -> i128
 ```
-
-Parameters:
-
-| Parameter | Type | Description |
-|:----------|:-----|:------------|
-| `user` | `Address` | Learner address to inspect. |
-
-Returns:
-
-- `i128`: cumulative rewards distributed to that user across all quests.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
 
 ```bash
-stellar contract invoke --id rewards -- get_user_earnings \
-  --user learner
+stellar contract invoke --id rewards -- get_user_earnings --user learner
 ```
+
+---
 
 ### `get_total_distributed`
 
-Signature:
+Global total of all rewards distributed by this contract.
 
 ```rust
-get_total_distributed() -> i128
+get_total_distributed(env: Env) -> i128
 ```
 
-Parameters:
-
-- None.
-
-Returns:
-
-- `i128`: total amount distributed by the rewards contract across all quests.
-
-Possible errors:
-
-- No contract-defined errors.
-
-Example:
-
-```bash
-stellar contract invoke --id rewards -- get_total_distributed
-```
+---
 
 ### `get_token`
 
-Signature:
+The configured reward token address.
 
 ```rust
-get_token() -> Result<Address, Error>
+get_token(env: &Env) -> Result<Address, Error>
 ```
 
-Parameters:
+Errors: `NotInitialized`.
 
-- None.
+---
 
-Returns:
+## Certificate Contract
 
-- `Ok(Address)`: configured Stellar asset contract address used for rewards.
+Source: `contracts/certificate/src/lib.rs`
 
-Possible errors:
+The certificate contract is an NFT (non-fungible token) built on the Stellar `stellar-tokens` library. Certificates are minted automatically by the milestone contract when a learner completes all milestones in a quest.
 
-- `Error::NotInitialized`: rewards contract has not been initialized yet.
+### `__constructor`
 
-Example:
+Initializes the contract with an owner and sets NFT collection metadata. Called once at deploy time.
 
-```bash
-stellar contract invoke --id rewards -- get_token
+```rust
+__constructor(env: Env, owner: Address)
 ```
+
+---
+
+### `mint_quest_certificate`
+
+Mint a certificate for quest completion. Called internally by the milestone contract; not intended for direct use.
+
+```rust
+mint_quest_certificate(
+    env: Env,
+    quest_id: u32,
+    quest_name: String,
+    quest_category: String,
+    recipient: Address,
+) -> Result<u32, Error>
+```
+
+Returns the NFT `token_id`.
+
+Errors: `AlreadyIssued`, `NotOwner`.
+
+---
+
+### `mint_certificate`
+
+Owner-only manual mint. Used for administrative issuance.
+
+```rust
+mint_certificate(
+    env: Env,
+    quest_id: u32,
+    quest_name: String,
+    quest_category: String,
+    recipient: Address,
+    issuer: Address,
+) -> Result<u32, Error>
+```
+
+Errors: `AlreadyIssued`.
+
+---
+
+### `revoke_certificate`
+
+Burn a certificate NFT. Owner only. For exceptional cases only.
+
+```rust
+revoke_certificate(env: Env, token_id: u32) -> Result<(), Error>
+```
+
+Errors: `NotFound`.
+
+---
+
+### `get_certificate_metadata`
+
+Fetch metadata for a certificate by token ID.
+
+```rust
+get_certificate_metadata(env: Env, token_id: u32) -> Result<CertificateMetadata, Error>
+```
+
+`CertificateMetadata` fields: `quest_id`, `quest_name`, `quest_category`, `completion_date`, `issuer`, `recipient`.
+
+Errors: `NotFound`.
+
+---
+
+### `get_quest_certificate`
+
+Get the token ID for a specific quest + recipient combination.
+
+```rust
+get_quest_certificate(env: Env, quest_id: u32, recipient: Address) -> Result<u32, Error>
+```
+
+Errors: `NotFound`.
+
+---
+
+### `has_quest_certificate`
+
+Check whether a user holds a certificate for a quest.
+
+```rust
+has_quest_certificate(env: Env, quest_id: u32, recipient: Address) -> bool
+```
+
+---
+
+### `get_user_certificates`
+
+All certificate token IDs held by a user.
+
+```rust
+get_user_certificates(env: Env, user: Address) -> Vec<u32>
+```
+
+---
+
+### `get_certificate_details`
+
+Certificate metadata plus the current NFT owner address.
+
+```rust
+get_certificate_details(env: Env, token_id: u32) -> Result<(CertificateMetadata, Address), Error>
+```
+
+---
+
+### `get_user_certificate_details`
+
+All certificates for a user with full metadata.
+
+```rust
+get_user_certificate_details(env: Env, user: Address) -> Vec<(u32, CertificateMetadata)>
+```
+
+---
+
+## Error Codes
+
+### Quest Contract
+
+| Code | Name | Description |
+|:-----|:-----|:------------|
+| 1 | `NotFound` | Quest does not exist. |
+| 2 | `Unauthorized` | Caller is not the owner or admin. |
+| 3 | `InvalidInput` | Blank name/description, bad token address, or invalid tags. |
+| 4 | `AlreadyEnrolled` | Learner is already enrolled. |
+| 6 | `NotEnrolled` | Learner is not enrolled. |
+| 7 | `QuestFull` | Enrollment cap reached. |
+| 8 | `QuestArchived` | Quest is archived. |
+| 9 | `NameTooLong` | Name exceeds 64 characters. |
+| 10 | `DescriptionTooLong` | Description exceeds 2000 characters. |
+| 11 | `InviteOnly` | Quest is private; self-enrollment not allowed. |
+| 12 | `Paused` | Contract is paused. |
+
+### Milestone Contract
+
+| Code | Name | Description |
+|:-----|:-----|:------------|
+| 1 | `NotFound` | Milestone does not exist. |
+| 2 | `Unauthorized` | Caller is not authorized. |
+| 3 | `InvalidInput` | Blank title/description or invalid input. |
+| 4 | `AlreadyCompleted` | Milestone already completed for this learner. |
+| 6 | `InvalidAmount` | Reward amount is zero, negative, or exceeds max. |
+| 7 | `OwnerMismatch` | Caller is not the quest owner. |
+| 8 | `NotInitialized` | Contract not initialized. |
+| 9 | `AlreadySubmitted` | Submission already pending review. |
+| 10 | `NotSubmitted` | No pending submission to approve. |
+| 11 | `AlreadyApproved` | Peer already approved this submission. |
+| 12 | `NotEnrolled` | User is not enrolled in the quest. |
+| 13 | `InvalidApprover` | Approver is the same as the submitter. |
+| 14 | `MilestoneNotUnlocked` | Previous milestone not yet completed. |
+| 15 | `TitleTooLong` | Title exceeds 128 characters. |
+| 16 | `DescriptionTooLong` | Description exceeds 1000 characters. |
+| 17 | `BatchTooLarge` | Batch exceeds 20 milestones. |
+| 18 | `Paused` | Contract is paused. |
+| 19 | `Overflow` | Arithmetic overflow in earnings calculation. |
+
+### Rewards Contract
+
+| Code | Name | Description |
+|:-----|:-----|:------------|
+| 1 | `AlreadyInitialized` | Contract already initialized. |
+| 2 | `NotInitialized` | Contract not initialized. |
+| 3 | `Unauthorized` | Caller is not the quest authority. |
+| 4 | `InsufficientPool` | Pool balance too low. |
+| 5 | `InvalidAmount` | Amount is zero, negative, or exceeds max. |
+| 6 | `QuestNotFunded` | No authority recorded for this quest. |
+| 7 | `QuestLookupFailed` | Cross-contract quest lookup failed. |
+| 8 | `MilestoneNotCompleted` | Milestone not verified before distribution. |
+| 9 | `MilestoneContractNotInitialized` | Milestone contract address not set. |
+| 10 | `ArithmeticOverflow` | Overflow in pool/earnings arithmetic. |
+| 11 | `AlreadyPaid` | Reward already distributed for this (quest, milestone, enrollee). |
+| 12 | `InvalidToken` | Token address mismatch or not a valid SAC. |
+| 13 | `RewardAmountMismatch` | Amount does not match milestone's configured reward. |
+| 14 | `QuestNotArchived` | Quest must be archived before refund. |
+| 15 | `RefundWindowNotOpen` | 7-day grace period has not elapsed since archiving. |

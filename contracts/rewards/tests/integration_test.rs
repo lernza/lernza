@@ -75,6 +75,7 @@ impl QuestSystemTest {
             &certificate_id,
         );
         RewardsContractClient::new(&env, &rewards_id).initialize(
+            &admin,
             &token_addr,
             &quest_id,
             &milestone_id,
@@ -212,7 +213,7 @@ fn test_completing_all_milestones_mints_certificate() {
         .distribute_reward(&owner, &q_id, &ms2_id, &enrollee, &300);
     assert!(ctx.certificate().has_quest_certificate(&q_id, &enrollee));
 
-    let progress = ctx.milestone().get_enrollee_progress(&q_id, &enrollee);
+    let progress = ctx.milestone().get_enrollee_progress(&q_id, &enrollee, &0, &100);
     assert_eq!(progress.completions, 2);
     assert_eq!(progress.total_milestones, 2);
 
@@ -393,7 +394,7 @@ fn test_fund_quest_require_auth_truly_enforced() {
     let rewards = RewardsContractClient::new(&env, &rewards_id);
 
     // rewards.initialize has no require_auth — works without mocking
-    rewards.initialize(&token_addr, &quest_contract_id, &milestone_contract_id);
+    rewards.initialize(&Address::generate(&env), &token_addr, &quest_contract_id, &milestone_contract_id);
 
     // attacker.require_auth() is the very first statement in fund_quest.
     // With no auth entry set up, the Soroban host panics here — before the
@@ -490,7 +491,7 @@ fn test_broken_quest_linkage_propagates_error() {
     let ghost_milestone = Address::generate(&env);
     let rewards_id = env.register(RewardsContract, ());
     let rewards = RewardsContractClient::new(&env, &rewards_id);
-    rewards.initialize(&token_addr, &ghost_quest, &ghost_milestone);
+    rewards.initialize(&Address::generate(&env), &token_addr, &ghost_quest, &ghost_milestone);
 
     let funder = Address::generate(&env);
     StellarAssetClient::new(&env, &token_addr).mint(&funder, &1_000);

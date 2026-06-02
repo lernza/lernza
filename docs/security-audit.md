@@ -28,6 +28,15 @@ The three contracts implement a learn-to-earn flow where the frontend orchestrat
 | INFO-01 | quest | Informational | Read-only functions are ungated (by design) |
 | INFO-02 | cross | Informational | Frontend-orchestrated flow creates ordering assumptions |
 
+## OWASP-Style Threat Triage Matrix
+
+| Asset | Primary Threat | Attack Path | Impact | Existing Controls | Additional Mitigation |
+|---|---|---|---|---|---|
+| Quest funds (reward pools in `rewards`) | Unauthorized distribution / pool drainage | Attacker gains quest authority (front-running or compromised key) and calls `distribute_reward` / `refund_pool` | Loss of learner incentives and treasury funds | Authority checks, archived-quest + refund window checks, milestone completion checks before distribution | Add multi-sig admin for production, anomaly alerting on large payouts, and per-quest withdrawal/rate limits |
+| Enrollment data (`quest` enrollees + membership checks) | Unauthorized completion/reward flow for non-enrollees | Missing or bypassed enrollee validation in completion/reward orchestration | Rewards paid to unqualified addresses, integrity loss in learner records | Enrollment APIs + contract-level enrollment storage | Keep strict cross-contract `is_enrollee` checks in milestone verification path and add negative tests for unenrolled addresses |
+| Certificate metadata (`certificate` NFT records) | Forged issuance or unauthorized revocation | Compromised owner path or weak owner-rotation process leads to unauthorized owner-only actions | Trust/reputation damage, invalid completion proofs | Owner-only mint/revoke gates (`Ownable`) | Define enforced owner rotation drills, monitor owner-only txs, and require dual-approval process for certificate admin actions |
+| Admin keys (quest/milestone/rewards/certificate operators) | Key compromise / admin takeover | Secret leakage, endpoint compromise, or CI token exposure | Full control over pause/admin operations and contract upgrade/rotation workflows | Admin auth checks, pause controls, documented operations runbook | HSM-backed keys, mandatory periodic rotation, incident-response SLA, and on-chain monitoring for admin function calls |
+
 ---
 
 ## Findings
@@ -288,6 +297,21 @@ The three contracts are independent: no cross-contract calls are made at runtime
 3. Calling `fund_quest` with the quest owner's identity.
 
 A malicious or buggy frontend can violate these assumptions. The findings above (MED-01, CRIT-01, CRIT-02) are the concrete exploits that this enables. The architectural recommendation is to add cross-contract validation for at minimum the ownership checks (CRIT-01, CRIT-02).
+
+---
+
+### INFO-03 — Pause Flag Is Write-Only (By Design)
+
+**Contract:** `contracts/quest/src/lib.rs`
+**Severity:** Informational
+
+The `pause` flag, when set by the quest admin, blocks all state-mutating operations (`create_enrollment`, `archive_quest`, etc.) but does **not** block read-only views (`get_quest`, `list_public_quests`, `is_enrollee`, etc.). This is intentional: read paths are safe by design and provide value even during pause windows.
+
+**Design intent:** In the event of a critical vulnerability or exploit, admins can halt enrollment and completion workflows to prevent further damage while still allowing read queries and frontend indexing.
+
+**Threat model:** If future threat analysis requires suppressing read paths (e.g., to prevent indexer DoS or data exfiltration during an incident), a `pause_reads` flag can be added as a separate admin control.
+
+**Status:** Documented. No action required for current threat model. Re-evaluate if threat model changes to include read-side protection.
 
 ---
 

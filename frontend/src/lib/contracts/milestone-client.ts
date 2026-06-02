@@ -8,8 +8,15 @@ import {
   Keypair,
   Account,
 } from "@stellar/stellar-sdk"
-import type { TransactionResult } from "./client"
-import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
+import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
+  withRpcReadThrottle,
+} from "./client"
 
 const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
 
@@ -63,7 +70,9 @@ export class MilestoneClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
       }
     } else {
       this.contract = null
@@ -122,7 +131,8 @@ export class MilestoneClient {
     title: string,
     description: string,
     rewardAmount: bigint,
-    requiresPrevious = false
+    requiresPrevious = false,
+    handlers?: TransactionLifecycleHandlers
   ): Promise<TransactionResult> {
     const tx = await this.buildTx(owner, "create_milestone", [
       new Address(owner).toScVal(),
@@ -132,14 +142,15 @@ export class MilestoneClient {
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious, { type: "bool" }),
     ])
-    return this.normalizeTransactionResult(await signAndSubmit(tx))
+    return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
   }
 
   async verifyCompletion(
     owner: string,
     questId: number,
     milestoneId: number,
-    enrollee: string
+    enrollee: string,
+    handlers?: TransactionLifecycleHandlers
   ): Promise<VerifyCompletionResult> {
     const tx = await this.buildTx(owner, "verify_completion", [
       new Address(owner).toScVal(),
@@ -147,7 +158,7 @@ export class MilestoneClient {
       nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])
-    const result = this.normalizeTransactionResult(await signAndSubmit(tx))
+    const result = this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
     return {
       ...result,
       rewardAmount: this.parseNumericResult(result.resultXdr),
@@ -194,36 +205,48 @@ export class MilestoneClient {
       const account = new Account(randomKP.publicKey(), "0")
 
       const tx = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
-      const response = await server.simulateTransaction(tx)
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
+      )
 
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
       }
     } catch (e) {
-      console.error(`Read error ${method}:`, e)
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
     }
     return null
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await server.getAccount(source)
+    const account = await withTimeout(
+      server.getAccount(source),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: getAccount"
+    )
 
     const tx = new TransactionBuilder(account, {
-      fee: "100",
+      fee: "10000",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 
-    return await server.prepareTransaction(tx)
+    return await withTimeout(
+      server.prepareTransaction(tx),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: prepareTransaction"
+    )
   }
 }
 

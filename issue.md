@@ -1,45 +1,62 @@
-#263 documentation: update sequence diagrams to use create_quest/fund_quest and current auth requirements
+# [FIXED]880 perf(milestone): paginate get_enrollee_progress
 Repo Avatar
 lernza/lernza
 Problem
-Several flow docs still teach the old workspace-era function names and interaction order.
+get_enrollee_progress iterates every milestone for a quest. A quest with 100 milestones consumes significant gas per read.
 
-Evidence
-Examples include docs/quest-creation-flow.md, docs/enrollment-flow.md, and docs/milestone-reward-flow.md.
-Why this matters
-Flow diagrams are supposed to reduce cognitive load, but right now they encode stale APIs.
+Where
+contracts/milestone/src/lib.rs.
 
-Acceptance Criteria
-Refresh the diagrams to current contract names and auth flows.
-Validate each diagram against the real contract interfaces before publishing.
+Approach
+Add offset/limit parameters or split into get_enrollee_completion_details(offset, limit).
+
+Acceptance
+ Function rejects unbounded ranges
 
 
-#188 documentation(contracts): update security audit and architecture docs to reflect the post-workspace contract names
+ #877 feat(quest): include timestamp + actor on enrollment events
 Repo Avatar
 lernza/lernza
 Problem
-Multiple docs still speak in workspace terms even though the repo and contracts now use quest.
+enrollee_added events emit (quest_id, enrollee) only. Indexers cannot reconstruct chronology or distinguish self-join from owner-add.
 
-Evidence
-Examples: README.md, docs/security-audit.md, and the flow diagrams still reference workspace, create_workspace, and fund_workspace.
-Why this matters
-The documentation currently teaches contributors the wrong API surface and makes audits harder to trust.
+Where
+contracts/quest/src/lib.rs — add_enrollee, join_quest, join_quest_with_invite.
 
-Acceptance Criteria
-Update docs to the current naming and contract signatures.
-Remove references that imply the old workspace crate still exists.
+Approach
+Standardize payload to (quest_id, enrollee, actor, timestamp, join_mode) across all three call sites.
 
-#265 documentation: add an explicit section describing the current frontend-to-contract integration status
+Acceptance
+ EVENT_REFERENCE.md updated
+ Existing tests adapted
+
+# [FIXED]894 fix(frontend): show specific UI for DUPLICATE / ERROR submit statuses
 Repo Avatar
 lernza/lernza
 Problem
-The root docs describe architecture and flows as if the frontend is already orchestrating the three contracts, but the UI remains mostly mock-driven.
+signAndSubmit reports a generic 'Submission failed' for all non-PENDING statuses. Users have no hint whether to retry, wait, or re-sign.
 
-Evidence
-This gap shows up across README.md and the flow docs.
-Why this matters
-Contributors need a crisp distinction between implemented, stubbed, and planned product areas.
+Where
+frontend/src/lib/contracts/client.ts lines 63-89.
 
-Acceptance Criteria
-Add a current-status matrix for quest reads, writes, milestones, rewards, and profile data.
-Keep it updated as integration work lands.
+Approach
+Map each status code to a specific message + action (retry, wait, contact support).
+
+Acceptance
+ User-facing copy for each status
+
+# [FIXED]890 fix(frontend): detect account change after signing
+Repo Avatar
+lernza/lernza
+Problem
+signAndSubmit does not re-check the wallet address after Freighter returns. A user who switches accounts between request and sign can submit a tx with envelope from account A but submitted as account B.
+
+Where
+frontend/src/lib/contracts/client.ts.
+
+Approach
+Parse the signed envelope's source account and compare to the currently selected wallet address.
+
+Acceptance
+ Mismatch aborts submission with a toast asking the user to re-confirm
+

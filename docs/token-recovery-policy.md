@@ -33,7 +33,7 @@ During contract deployment, the deployer must:
 initialize(admin_address, token_address, quest_contract_address)
 ```
 
-### 2. Handling Accidental Transfers
+### 2. Handling Accidental Direct Transfers
 
 When tokens are accidentally sent directly to the contract:
 
@@ -42,14 +42,41 @@ When tokens are accidentally sent directly to the contract:
 3. **Verify Transfer**: Check recipient's token balance
 4. **Audit Trail**: Monitor `(reward, recovered)` events
 
-### 3. Emergency Procedures
+### 3. Quest Pool Refund Window
 
-For large accidental transfers or security incidents:
+After a quest is archived, the quest authority may request a refund of the unused pool balance.
+The refund window opens **7 days (604,800 seconds) after the quest's `archived_at` timestamp** and remains open indefinitely.
 
-1. **Immediate Assessment**: Calculate total unallocated balance
-2. **Staged Recovery**: Recover tokens in smaller amounts if needed
-3. **Documentation**: Record all recovery operations with timestamps and reasons
-4. **Stakeholder Communication**: Notify affected parties
+#### API
+
+```rust
+get_refund_window(env: Env, quest_id: u32) -> (u64, u64)
+```
+
+Returns `(open_timestamp, close_timestamp)`:
+- `(0, 0)` — Quest not found or not archived; window closed.
+- `(archived_at + 604_800, u64::MAX)` — Window open; any time on or after `open_timestamp` is valid for `refund_pool` or `refund_unused_pool`.
+
+Both values are **deterministic**, **monotonic**, and derived solely from the stored quest metadata.
+
+#### UI Interpretation
+
+Frontends should:
+1. Call `get_refund_window(quest_id)` and compare `open_timestamp` against the current ledger time.
+2. If `open_timestamp == 0` → Hide refund controls (quest active or invalid).
+3. If `ledger_timestamp < open_timestamp` → Show countdown: `open_timestamp - ledger_timestamp`.
+4. If `ledger_timestamp >= open_timestamp` → Enable `refund_pool`/`refund_unused_pool` actions.
+
+#### Example
+
+```text
+archived_at = 1_700_000_000
+open_timestamp = 1_700_000_000 + 604_800 = 1_700_604_800
+close_timestamp = 18_446_744_073_709_551_615 (u64::MAX)
+```
+
+After 1_700_604_800, the authority may call `refund_pool` for any amount ≤ (pool_balance − reserved_obligations).
+
 
 ## Security Considerations
 

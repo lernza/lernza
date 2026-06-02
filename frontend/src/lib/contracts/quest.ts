@@ -8,38 +8,24 @@ import {
   Account,
 } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
-import type { TransactionResult } from "./client"
-import { server, signAndSubmit, NETWORK_PASSPHRASE } from "./client"
+import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
+  withRpcReadThrottle,
+} from "./client"
+import { safeContractCall } from "../error-utils"
 
 const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
 
-export const Visibility = {
-  Public: 0,
-  Private: 1,
-} as const
-export type Visibility = (typeof Visibility)[keyof typeof Visibility]
-
-export const QuestStatus = {
-  Active: 0,
-  Archived: 1,
-} as const
-export type QuestStatus = (typeof QuestStatus)[keyof typeof QuestStatus]
-
-export interface QuestInfo {
-  id: number
-  owner: string
-  name: string
-  description: string
-  category: string
-  tags: string[]
-  tokenAddr: string
-  createdAt: number
-  visibility: Visibility
-  status: QuestStatus
-  deadline: number
-  maxEnrollees?: number
-  verified: boolean
-}
+// Re-export so consumers can import the canonical contract types from either
+// `@/lib/contracts/quest` or `@/lib/contract-types`. Keeping both import paths
+// active matches the existing call sites; the types behind them are identical.
+export { Visibility, QuestStatus, type QuestInfo } from "../contract-types"
+import { Visibility, QuestStatus, type QuestInfo } from "../contract-types"
 
 export class QuestClient {
   private contract: Contract | null
@@ -50,7 +36,9 @@ export class QuestClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        console.error(`[QuestClient] Invalid VITE_QUEST_CONTRACT_ID: "${CONTRACT_ID}"`)
+        if (import.meta.env.DEV) {
+          console.error(`[QuestClient] Invalid VITE_QUEST_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
       }
     } else {
       this.contract = null
@@ -112,6 +100,26 @@ export class QuestClient {
   }
 
   /**
+   * Returns all quests owned by the provided address.
+   */
+  async listQuestsByOwner(owner: string): Promise<QuestInfo[]> {
+    const result = await this.invokeRead("list_quests_by_owner", [new Address(owner).toScVal()])
+    if (!Array.isArray(result)) return []
+    return result.map((r: unknown) => this.parseQuestInfo(r))
+  }
+
+  /**
+   * Returns all quests the provided address is enrolled in.
+   */
+  async listQuestsByEnrollee(enrollee: string): Promise<QuestInfo[]> {
+    const result = await this.invokeRead("list_quests_by_enrollee", [
+      new Address(enrollee).toScVal(),
+    ])
+    if (!Array.isArray(result)) return []
+    return result.map((r: unknown) => this.parseQuestInfo(r))
+  }
+
+  /**
    * Returns all public quests within a category.
    */
   async getQuestsByCategory(category: string): Promise<QuestInfo[]> {
@@ -141,18 +149,18 @@ export class QuestClient {
   }
 
   async isCreatorVerified(creator: string): Promise<boolean> {
-    const result = await this.invokeRead("is_creator_verified", [
-      new Address(creator).toScVal(),
-    ])
+    const result = await this.invokeRead("is_creator_verified", [new Address(creator).toScVal()])
     return !!result
   }
 
   async verifyCreator(admin: string, creator: string) {
-    const tx = await this.buildTx(admin, "verify_creator", [
-      new Address(admin).toScVal(),
-      new Address(creator).toScVal(),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(admin, "verify_creator", [
+        new Address(admin).toScVal(),
+        new Address(creator).toScVal(),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   // --- Write Operations ---
@@ -170,19 +178,21 @@ export class QuestClient {
     visibility: Visibility,
     maxEnrollees?: number
   ) {
-    const tx = await this.buildTx(owner, "create_quest", [
-      new Address(owner).toScVal(),
-      nativeToScVal(name, { type: "string" }),
-      nativeToScVal(description, { type: "string" }),
-      nativeToScVal(category, { type: "string" }),
-      nativeToScVal(tags, { type: "string_vec" }),
-      new Address(tokenAddr).toScVal(),
-      nativeToScVal(visibility, { type: "u32" }),
-      maxEnrollees !== undefined
-        ? nativeToScVal(maxEnrollees, { type: "u32" })
-        : nativeToScVal(null),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "create_quest", [
+        new Address(owner).toScVal(),
+        nativeToScVal(name, { type: "string" }),
+        nativeToScVal(description, { type: "string" }),
+        nativeToScVal(category, { type: "string" }),
+        nativeToScVal(tags, { type: "string_vec" }),
+        new Address(tokenAddr).toScVal(),
+        nativeToScVal(visibility, { type: "u32" }),
+        maxEnrollees !== undefined
+          ? nativeToScVal(maxEnrollees, { type: "u32" })
+          : nativeToScVal(null),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   /**
@@ -198,21 +208,23 @@ export class QuestClient {
     visibility?: Visibility,
     maxEnrollees?: number
   ) {
-    const tx = await this.buildTx(owner, "update_quest", [
-      nativeToScVal(questId, { type: "u32" }),
-      new Address(owner).toScVal(),
-      name !== undefined ? nativeToScVal(name, { type: "string" }) : nativeToScVal(null),
-      description !== undefined
-        ? nativeToScVal(description, { type: "string" })
-        : nativeToScVal(null),
-      category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
-      tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
-      visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
-      maxEnrollees !== undefined
-        ? nativeToScVal(maxEnrollees, { type: "u32" })
-        : nativeToScVal(null),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "update_quest", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(owner).toScVal(),
+        name !== undefined ? nativeToScVal(name, { type: "string" }) : nativeToScVal(null),
+        description !== undefined
+          ? nativeToScVal(description, { type: "string" })
+          : nativeToScVal(null),
+        category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
+        tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
+        visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
+        maxEnrollees !== undefined
+          ? nativeToScVal(maxEnrollees, { type: "u32" })
+          : nativeToScVal(null),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   // updateQuest was replaced by the more flexible version above
@@ -221,83 +233,119 @@ export class QuestClient {
    * Archives a quest. Owner only.
    * Archived quests remain readable but do not accept new enrollments.
    */
-  async archiveQuest(owner: string, questId: number) {
-    const tx = await this.buildTx(owner, "archive_quest", [nativeToScVal(questId, { type: "u32" })])
-    return signAndSubmit(tx)
+  async archiveQuest(owner: string, questId: number, handlers?: TransactionLifecycleHandlers) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "archive_quest", [
+        nativeToScVal(questId, { type: "u32" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   /**
    * Adds an enrollee to a quest as the owner, or self-enrolls a learner into a public quest.
    */
-  async addEnrollee(owner: string, questId: number, enrollee: string): Promise<TransactionResult>
-  async addEnrollee(questId: number, enrollee: string): Promise<TransactionResult>
+  async addEnrollee(
+    owner: string,
+    questId: number,
+    enrollee: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult>
+  async addEnrollee(
+    questId: number,
+    enrollee: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult>
   async addEnrollee(
     ownerOrQuestId: string | number,
     questIdOrEnrollee: number | string,
-    maybeEnrollee?: string
+    maybeEnrolleeOrHandlers?: string | TransactionLifecycleHandlers,
+    maybeHandlers?: TransactionLifecycleHandlers
   ) {
     if (typeof ownerOrQuestId === "number" && typeof questIdOrEnrollee === "string") {
-      return this.joinQuest(questIdOrEnrollee, ownerOrQuestId)
+      return this.joinQuest(
+        questIdOrEnrollee,
+        ownerOrQuestId,
+        maybeEnrolleeOrHandlers as TransactionLifecycleHandlers | undefined
+      )
     }
 
     const owner = ownerOrQuestId as string
     const questId = questIdOrEnrollee as number
-    const enrollee = maybeEnrollee
+    const enrollee =
+      typeof maybeEnrolleeOrHandlers === "string" ? maybeEnrolleeOrHandlers : undefined
+    const handlers =
+      typeof maybeEnrolleeOrHandlers === "string" ? maybeHandlers : maybeEnrolleeOrHandlers
 
     if (!enrollee) {
       throw new Error("Missing enrollee address.")
     }
 
-    const tx = await this.buildTx(owner, "add_enrollee", [
-      nativeToScVal(questId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "add_enrollee", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   /**
    * Removes an enrollee from a quest. Owner only.
    */
-  async removeEnrollee(owner: string, questId: number, enrollee: string) {
-    const tx = await this.buildTx(owner, "remove_enrollee", [
-      nativeToScVal(questId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-    ])
-    return signAndSubmit(tx)
+  async removeEnrollee(
+    owner: string,
+    questId: number,
+    enrollee: string,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "remove_enrollee", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   /**
    * Allows an enrollee to unenroll themselves.
    * Must be signed by the enrollee.
    */
-  async leaveQuest(enrollee: string, questId: number) {
-    const tx = await this.buildTx(enrollee, "leave_quest", [
-      new Address(enrollee).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-    ])
-    return signAndSubmit(tx)
+  async leaveQuest(enrollee: string, questId: number, handlers?: TransactionLifecycleHandlers) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(enrollee, "leave_quest", [
+        new Address(enrollee).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   /**
    * Allows a learner to enroll themselves in a public quest.
    */
-  async joinQuest(enrollee: string, questId: number) {
-    const tx = await this.buildTx(enrollee, "join_quest", [
-      new Address(enrollee).toScVal(),
-      nativeToScVal(questId, { type: "u32" }),
-    ])
-    return signAndSubmit(tx)
+  async joinQuest(enrollee: string, questId: number, handlers?: TransactionLifecycleHandlers) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(enrollee, "join_quest", [
+        new Address(enrollee).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
   }
 
   /**
    * Sets visibility for a quest. Owner only.
    */
   async setVisibility(owner: string, questId: number, visibility: Visibility) {
-    const tx = await this.buildTx(owner, "set_visibility", [
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(visibility, { type: "u32" }),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "set_visibility", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(visibility, { type: "u32" }),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   /**
@@ -305,11 +353,13 @@ export class QuestClient {
    * Pass 0 to remove the deadline.
    */
   async setDeadline(owner: string, questId: number, deadline: number) {
-    const tx = await this.buildTx(owner, "set_deadline", [
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(deadline, { type: "u64" }),
-    ])
-    return signAndSubmit(tx)
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "set_deadline", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(deadline, { type: "u64" }),
+      ])
+      return signAndSubmit(tx)
+    })
   }
 
   // --- Private Helpers ---
@@ -339,36 +389,48 @@ export class QuestClient {
       const account = new Account(randomKP.publicKey(), "0")
 
       const tx = new TransactionBuilder(account, {
-        fee: "100",
+        fee: "10000",
         networkPassphrase: NETWORK_PASSPHRASE,
       })
         .addOperation(this.getContract().call(method, ...args))
         .setTimeout(30)
         .build()
 
-      const response = await server.simulateTransaction(tx)
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
+      )
 
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
       }
     } catch (e: unknown) {
-      console.error(`Read error ${method}:`, e)
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
     }
     return null
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await server.getAccount(source)
+    const account = await withTimeout(
+      server.getAccount(source),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: getAccount"
+    )
 
     const tx = new TransactionBuilder(account, {
-      fee: "100",
+      fee: "10000",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
       .addOperation(this.getContract().call(method, ...args))
       .setTimeout(30)
       .build()
 
-    return await server.prepareTransaction(tx)
+    return await withTimeout(
+      server.prepareTransaction(tx),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: prepareTransaction"
+    )
   }
 }
 

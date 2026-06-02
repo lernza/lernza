@@ -4,10 +4,10 @@ This guide is a step-by-step runbook for deploying Lernza Soroban contracts to S
 
 Contracts in this repo:
 - `contracts/rewards` (reward pools and payout)
-- `contracts/workspace` (quest/workspace creation and enrollment)
+- `contracts/quest` (quest creation and enrollment)
 - `contracts/milestone` (milestone definition and completion verification)
 
-`workspace` is the current contract name for quests.
+`quest` is the contract name for quests.
 
 ## 1. Prerequisites
 
@@ -35,7 +35,7 @@ stellar contract build
 
 Expected wasm outputs:
 - `target/wasm32v1-none/release/rewards.wasm`
-- `target/wasm32v1-none/release/workspace.wasm`
+- `target/wasm32v1-none/release/quest.wasm`
 - `target/wasm32v1-none/release/milestone.wasm`
 
 ## 3. Configure Network + Deployer Identity
@@ -93,17 +93,17 @@ stellar contract deploy \
 
 Save output as `REWARDS_ID`.
 
-### 5.2 Deploy workspace (quest)
+### 5.2 Deploy quest contract
 
 ```bash
 stellar contract deploy \
-  --wasm target/wasm32v1-none/release/workspace.wasm \
+  --wasm target/wasm32v1-none/release/quest.wasm \
   --source-account lernza-deployer \
   --network testnet \
-  --alias lernza-workspace-testnet
+  --alias lernza-quest-testnet
 ```
 
-Save output as `WORKSPACE_ID`.
+Save output as `QUEST_ID`.
 
 ### 5.3 Deploy milestone
 
@@ -121,7 +121,7 @@ Save output as `MILESTONE_ID`.
 
 Required order for first setup:
 1. Initialize `rewards`
-2. Create quest in `workspace`
+2. Create quest in `quest`
 3. Create milestone in `milestone`
 
 ### 6.1 Initialize rewards first
@@ -135,21 +135,21 @@ stellar contract invoke \
   --token_addr <TOKEN_ID>
 ```
 
-### 6.2 Create quest/workspace
+### 6.2 Create quest
 
 ```bash
 stellar contract invoke \
-  --id <WORKSPACE_ID> \
+  --id <QUEST_ID> \
   --source-account lernza-deployer \
   --network testnet \
-  -- create_workspace \
+  -- create_quest \
   --owner lernza-deployer \
   --name "Lernza Test Quest" \
   --description "Deployment check quest" \
   --token_addr <TOKEN_ID>
 ```
 
-Save output as `WORKSPACE_NUMERIC_ID` (usually `0` for first quest/workspace).
+Save output as `QUEST_NUMERIC_ID` (usually `0` for first quest).
 
 ### 6.3 Create milestone
 
@@ -160,13 +160,13 @@ stellar contract invoke \
   --network testnet \
   -- create_milestone \
   --owner lernza-deployer \
-  --workspace_id <WORKSPACE_NUMERIC_ID> \
+  --quest_id <QUEST_NUMERIC_ID> \
   --title "First Milestone" \
   --description "Run deployment smoke test" \
   --reward_amount 1000
 ```
 
-Save output as `MILESTONE_NUMERIC_ID` (usually `0` for first milestone in that workspace).
+Save output as `MILESTONE_NUMERIC_ID` (usually `0` for first milestone in that quest).
 
 ## 7. Verification Commands
 
@@ -180,21 +180,21 @@ stellar contract invoke \
   -- get_token
 ```
 
-Confirm quest/workspace exists:
+Confirm quest exists:
 
 ```bash
 stellar contract invoke \
-  --id <WORKSPACE_ID> \
+  --id <QUEST_ID> \
   --source-account lernza-deployer \
   --network testnet \
-  -- get_workspace_count
+  -- get_quest_count
 
 stellar contract invoke \
-  --id <WORKSPACE_ID> \
+  --id <QUEST_ID> \
   --source-account lernza-deployer \
   --network testnet \
-  -- get_workspace \
-  --workspace_id <WORKSPACE_NUMERIC_ID>
+  -- get_quest \
+  --quest_id <QUEST_NUMERIC_ID>
 ```
 
 Confirm milestone exists:
@@ -205,14 +205,14 @@ stellar contract invoke \
   --source-account lernza-deployer \
   --network testnet \
   -- get_milestone_count \
-  --workspace_id <WORKSPACE_NUMERIC_ID>
+  --quest_id <QUEST_NUMERIC_ID>
 
 stellar contract invoke \
   --id <MILESTONE_ID> \
   --source-account lernza-deployer \
   --network testnet \
   -- get_milestone \
-  --workspace_id <WORKSPACE_NUMERIC_ID> \
+  --quest_id <QUEST_NUMERIC_ID> \
   --milestone_id <MILESTONE_NUMERIC_ID>
 ```
 
@@ -222,16 +222,16 @@ stellar contract invoke \
   `initialize` is one-time only. Reuse existing rewards contract, or redeploy a new rewards instance.
 
 - `NotFound` on milestone verification  
-  Usually means owner was never registered for that workspace in milestone contract (create at least one milestone first), or wrong workspace/milestone IDs.
+  Usually means owner was never registered for that quest in milestone contract (create at least one milestone first), or wrong quest/milestone IDs.
 
 - `OwnerMismatch` in milestone contract  
-  First owner that creates a milestone for a workspace is locked as owner for that workspace in milestone contract.
+  First owner that creates a milestone for a quest is locked as owner for that quest in milestone contract.
 
-- `WorkspaceNotFunded` / `InsufficientPool` in rewards contract  
-  Call `fund_workspace` first and ensure funded amount covers distributions.
+- `QuestNotFunded` / `InsufficientPool` in rewards contract  
+  Call `fund_quest` first and ensure funded amount covers distributions.
 
 - CLI says read-only simulation and does not submit  
-  This is normal for getters (e.g., `get_workspace_count`, `get_milestone`).
+  This is normal for getters (e.g., `get_quest_count`, `get_milestone`).
 
 - `source-account`/auth errors  
   Ensure `--source-account` is the expected signer and that the address passed to `--owner`/`--funder` matches authorization expectations.

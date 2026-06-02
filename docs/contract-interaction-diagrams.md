@@ -2,7 +2,7 @@
 
 These diagrams document how the frontend coordinates Lernza's contracts for the main MVP flows.
 
-The current codebase still uses `workspace` as the quest contract name. The diagrams use "Quest Contract (workspace)" so the user-facing concept and the on-chain module stay aligned.
+The current codebase uses `quest` as the quest contract name. The diagrams use "Quest Contract" so the user-facing concept and the on-chain module stay aligned.
 
 ## Flows
 

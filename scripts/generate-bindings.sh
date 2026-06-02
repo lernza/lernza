@@ -13,13 +13,13 @@
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 # Prerequisites:
 #   - Stellar CLI installed (https://developers.stellar.org/docs/tools/developer-tools/cli/install-cli)
-#   - Contract IDs set in frontend/.env (copy from frontend/.env.example)
+#   - Contract IDs set in frontend/.env.local (copy from frontend/.env.example)
 #   - Rust + wasm32v1-none target installed for contract builds
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Load contract IDs from frontend/.env
+# Load contract IDs from frontend/.env.local or frontend/.env
 # Parsed manually to avoid sourcing issues with values that contain spaces
 # or shell metacharacters (e.g. VITE_NETWORK_PASSPHRASE=Test SDF Network ; ...)
 # ---------------------------------------------------------------------------
@@ -29,10 +29,16 @@ get_env_var() {
   grep -E "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2-
 }
 
-if [ -f "frontend/.env" ]; then
-  QUEST_CONTRACT_ID="$(get_env_var VITE_QUEST_CONTRACT_ID frontend/.env)"
-  MILESTONE_CONTRACT_ID="$(get_env_var VITE_MILESTONE_CONTRACT_ID frontend/.env)"
-  REWARDS_CONTRACT_ID="$(get_env_var VITE_REWARDS_CONTRACT_ID frontend/.env)"
+# Determine which env file to use (.env.local takes precedence)
+ENV_FILE="frontend/.env.local"
+if [ ! -f "$ENV_FILE" ]; then
+  ENV_FILE="frontend/.env"
+fi
+
+if [ -f "$ENV_FILE" ]; then
+  QUEST_CONTRACT_ID="$(get_env_var VITE_QUEST_CONTRACT_ID "$ENV_FILE")"
+  MILESTONE_CONTRACT_ID="$(get_env_var VITE_MILESTONE_CONTRACT_ID "$ENV_FILE")"
+  REWARDS_CONTRACT_ID="$(get_env_var VITE_REWARDS_CONTRACT_ID "$ENV_FILE")"
 else
   QUEST_CONTRACT_ID=""
   MILESTONE_CONTRACT_ID=""
@@ -42,7 +48,7 @@ fi
 if [ -z "$QUEST_CONTRACT_ID" ] || [ -z "$MILESTONE_CONTRACT_ID" ] || [ -z "$REWARDS_CONTRACT_ID" ]; then
   echo "Error: contract IDs are not set."
   echo ""
-  echo "Copy frontend/.env.example to frontend/.env and fill in the deployed contract IDs:"
+  echo "Copy frontend/.env.example to frontend/.env.local and fill in the deployed contract IDs:"
   echo "  VITE_QUEST_CONTRACT_ID=<your quest contract ID>"
   echo "  VITE_MILESTONE_CONTRACT_ID=<your milestone contract ID>"
   echo "  VITE_REWARDS_CONTRACT_ID=<your rewards contract ID>"

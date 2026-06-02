@@ -1,9 +1,9 @@
-import { useState, useCallback, useRef, type ReactNode } from "react"
+import { useState, useCallback, useRef } from "react"
 
 export interface Toast {
   id: string
-  message: ReactNode
-  type?: "success" | "error" | "info" | "warning"
+  message: string
+  type?: "success" | "error" | "info"
   duration?: number
 }
 
@@ -12,7 +12,7 @@ export function useToast() {
   const counterRef = useRef(0)
 
   const addToast = useCallback(
-    (message: ReactNode, type: Toast["type"] = "success", duration = 3000) => {
+    (message: string, type: Toast["type"] = "success", duration = 3000) => {
       const id = `toast-${++counterRef.current}`
       setToasts(prev => [...prev, { id, message, type, duration }])
       setTimeout(() => {

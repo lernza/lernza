@@ -3,12 +3,16 @@ import type { ReactNode } from "react"
 import { ThemeContext, type Theme } from "./theme"
 
 function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "light"
+
   try {
-    const stored = localStorage.getItem("lernza-theme")
+    const stored = localStorage.getItem("theme")
     if (stored === "dark" || stored === "light") return stored
   } catch {
-    return "light"
+    // Ignore localStorage errors
   }
+
+  // Default to light; respect the user's explicit choice once they toggle.
   return "light"
 }
 
@@ -22,7 +26,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark")
     try {
-      localStorage.setItem("lernza-theme", theme)
+      localStorage.setItem("theme", theme)
     } catch {
       // localStorage unavailable (sandboxed iframe, private mode quota) - ignore
     }
@@ -34,4 +38,3 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
   return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>
 }
-

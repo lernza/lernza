@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { X, Shield, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatTokens } from "@/lib/utils"
+import { useScrollLock } from "@/hooks/use-scroll-lock"
 
 export interface TransactionDetails {
   actionName: string
@@ -31,6 +33,14 @@ export function TransactionConfirmDialog({
   isPending = false,
 }: TransactionConfirmDialogProps) {
   const [isClosing, setIsClosing] = useState(false)
+  const actionLabel = details?.actionName ?? "confirm this transaction"
+
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const confirmButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Lock body scroll when dialog is open
+  useScrollLock(isOpen)
 
   const handleClose = useCallback(() => {
     if (isPending) return
@@ -46,9 +56,72 @@ export function TransactionConfirmDialog({
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
+  // Handle Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen && !isPending) {
+        handleClose()
+      }
+    }
+
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown)
+    }
+
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isOpen, isPending, handleClose])
+
+  // Handle Focus Management
+  useEffect(() => {
+    if (isOpen) {
+      // Store the previously focused element
+      previousFocusRef.current = document.activeElement as HTMLElement
+
+      // Focus the primary action button after a brief delay to ensure it's rendered
+      const focusTimer = setTimeout(() => {
+        if (confirmButtonRef.current) {
+          confirmButtonRef.current.focus()
+        }
+      }, 100)
+
+      const handleTabKey = (e: KeyboardEvent) => {
+        if (e.key !== "Tab" || !dialogRef.current) return
+
+        const focusable = dialogRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const first = focusable[0] as HTMLElement
+        const last = focusable[focusable.length - 1] as HTMLElement
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            last.focus()
+            e.preventDefault()
+          }
+        } else {
+          if (document.activeElement === last) {
+            first.focus()
+            e.preventDefault()
+          }
+        }
+      }
+
+      window.addEventListener("keydown", handleTabKey)
+
+      return () => {
+        clearTimeout(focusTimer)
+        window.removeEventListener("keydown", handleTabKey)
+        // Restore focus to the previously focused element
+        if (previousFocusRef.current) {
+          previousFocusRef.current.focus()
+        }
+      }
+    }
+  }, [isOpen])
+
   if (!isOpen || !details) return null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
@@ -57,10 +130,16 @@ export function TransactionConfirmDialog({
           isClosing ? "opacity-0" : "opacity-100"
         )}
         onClick={handleClose}
+        aria-hidden="true"
       />
 
       {/* Dialog */}
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tx-dialog-title"
+        aria-describedby="tx-dialog-description"
         className={cn(
           "animate-fade-in-up relative z-10 w-full max-w-md px-4",
           isClosing && "scale-95 opacity-0"
@@ -70,8 +149,8 @@ export function TransactionConfirmDialog({
           {/* Header */}
           <div className="bg-primary border-border flex items-center justify-between border-b-[3px] px-6 py-4">
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              <span className="text-sm font-black tracking-wider uppercase">
+              <Shield className="h-5 w-5" aria-hidden="true" />
+              <span id="tx-dialog-title" className="text-sm font-black tracking-wider uppercase">
                 Confirm Transaction
               </span>
             </div>
@@ -87,7 +166,7 @@ export function TransactionConfirmDialog({
 
           <CardContent className="space-y-4 p-6">
             {/* Action Name */}
-            <div>
+            <div id="tx-dialog-description">
               <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                 Action
               </p>
@@ -137,13 +216,13 @@ export function TransactionConfirmDialog({
 
             {/* Estimated Fee */}
             {details.estimatedFee && (
-              <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3">
-                <AlertCircle className="mt-0.5 h-4 w-4 text-amber-600" />
+              <div className="bg-warning/10 flex items-start gap-2 rounded-md p-3">
+                <AlertCircle className="text-warning mt-0.5 h-4 w-4" />
                 <div>
-                  <p className="text-xs font-bold tracking-wider text-amber-800 uppercase">
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                     Estimated Fee
                   </p>
-                  <p className="mt-0.5 text-sm font-medium text-amber-700">
+                  <p className="text-warning mt-0.5 text-sm font-medium">
                     ~{details.estimatedFee} XLM
                   </p>
                 </div>
@@ -168,16 +247,21 @@ export function TransactionConfirmDialog({
               >
                 Cancel
               </Button>
-              <Button onClick={onConfirm} disabled={isPending} className="shimmer-on-hover flex-1">
+              <Button
+                onClick={onConfirm}
+                disabled={isPending}
+                className="shimmer-on-hover flex-1"
+                ref={confirmButtonRef}
+              >
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Opening Freighter...
+                    {`Opening Freighter to ${actionLabel}...`}
                   </>
                 ) : (
                   <>
                     <Shield className="h-4 w-4" />
-                    Confirm & Sign
+                    {`Confirm to ${actionLabel}`}
                   </>
                 )}
               </Button>
@@ -185,6 +269,7 @@ export function TransactionConfirmDialog({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

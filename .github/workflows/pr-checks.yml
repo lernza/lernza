@@ -1,5 +1,8 @@
 name: PR Checks
 
+# Enforce semantic PR titles and linked issues
+# Closes #958
+#
 # pull_request_target runs in the BASE repo context, so GITHUB_TOKEN
 # has write access even when the PR comes from a fork.
 # SAFETY: This workflow only reads PR metadata (title, labels, body)
@@ -24,22 +27,23 @@ jobs:
     if: >-
       github.event.pull_request.user.login != 'github-actions[bot]' &&
       github.event.pull_request.user.login != 'release-please[bot]' &&
-      github.event.pull_request.user.login != 'dependabot[bot]'
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'renovate[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }} # Checkout the PR branch
 
       - name: Auto-label PR
-        uses: actions/labeler@v6
+        uses: actions/labeler@v5
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           sync-labels: true
 
       - name: Validate PR title
-        uses: amannn/action-semantic-pull-request@v6
+        uses: amannn/action-semantic-pull-request@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -56,8 +60,12 @@ jobs:
             chore
             revert
             security
-          headerPattern: '^(?:[\w-]+:#\d+\s+)?(\w*)(?:\(([\w$.\-*/ ]*)\))?!?: (.*)$'
-          headerPatternCorrespondence: type, scope, subject
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            didn't match the configured pattern. Please ensure that the subject
+            doesn't start with an uppercase character.
 
       - name: Check linked issue
         env:
@@ -71,7 +79,9 @@ jobs:
           HAS_NO_ISSUE=$(echo "$PR_DATA" | jq -r '.labels | map(.name) | any(. == "no-issue")')
 
           # Skip for bots and no-issue PRs
-          if [ "$AUTHOR" = "dependabot[bot]" ] || [ "$HAS_NO_ISSUE" = "true" ]; then
+          if [ "$AUTHOR" = "dependabot[bot]" ] || \
+             [ "$AUTHOR" = "renovate[bot]" ] || \
+             [ "$HAS_NO_ISSUE" = "true" ]; then
             echo "Skipped (bot or no-issue label)"
             exit 0
           fi

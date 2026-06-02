@@ -1,6 +1,7 @@
 name: Release
 
 # Automated release pipeline using Release Please.
+# Closes #959
 #
 # How it works:
 #   1. You merge PRs to main with conventional commits
@@ -10,6 +11,8 @@ name: Release
 #      ALL commit types + contributors + full changelog link
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -36,7 +39,7 @@ jobs:
     env:
       TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 

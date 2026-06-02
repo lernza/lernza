@@ -27,8 +27,8 @@ jobs:
       contracts: ${{ steps.filter.outputs.contracts }}
       docs: ${{ steps.filter.outputs.docs }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
         id: filter
         with:
           filters: |
@@ -47,7 +47,7 @@ jobs:
     if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.contracts == 'true' || needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check for stale workspace references in docs/
         if: needs.changes.outputs.docs == 'true'
@@ -114,13 +114,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -132,8 +132,16 @@ jobs:
       - name: Lint
         run: pnpm run lint
 
-      - name: Test
-        run: pnpm run test
+      - name: Test (with coverage)
+        run: pnpm run test -- --coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-report
+          path: frontend/coverage/
+          retention-days: 14
 
       - name: Type-check & build
         run: pnpm run build
@@ -149,7 +157,7 @@ jobs:
 
       - name: Comment bundle size
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const { total_size, assets_size } = process.env;
@@ -199,7 +207,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install stellar-cli (Linux)
         if: runner.os == 'Linux'
@@ -213,14 +221,14 @@ jobs:
           curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-apple-darwin.tar.gz \
             | tar xz -C /usr/local/bin
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
         with:
           toolchain: stable
           target: wasm32-unknown-unknown,wasm32v1-none
           components: rustfmt, clippy
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -247,7 +255,14 @@ jobs:
       - name: Check contract WASM sizes (Linux)
         if: runner.os == 'Linux'
         run: |
-          MAX_SIZE=$((256 * 1024))
+          # Per-contract size budgets (bytes). Adjust as contracts grow.
+          declare -A BUDGETS=(
+            ["certificate.wasm"]=$((100 * 1024))
+            ["milestone.wasm"]=$((150 * 1024))
+            ["quest.wasm"]=$((150 * 1024))
+            ["rewards.wasm"]=$((100 * 1024))
+          )
+          DEFAULT_BUDGET=$((256 * 1024))
           FAILED=0
 
           echo "=== Contract WASM Size Report ==="
@@ -256,25 +271,34 @@ jobs:
             SIZE=$(stat -c%s "$wasm")
             SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
             NAME=$(basename "$wasm")
+            BUDGET=${BUDGETS[$NAME]:-$DEFAULT_BUDGET}
+            BUDGET_KB=$(echo "scale=2; $BUDGET / 1024" | bc)
 
-            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS 256KB limit)"
+            if [ "$SIZE" -gt "$BUDGET" ]; then
+              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS ${BUDGET_KB}KB budget)"
               FAILED=1
             else
-              echo "OK   $NAME: ${SIZE_KB}KB"
+              echo "OK   $NAME: ${SIZE_KB}KB / ${BUDGET_KB}KB budget"
             fi
           done
 
           echo "================================="
           if [ "$FAILED" -eq 1 ]; then
-            echo "One or more contracts exceed the 256KB Soroban size limit."
+            echo "One or more contracts exceed their per-contract size budget."
             exit 1
           fi
 
       - name: Check contract WASM sizes (macOS)
         if: runner.os == 'macOS'
         run: |
-          MAX_SIZE=$((256 * 1024))
+          # Per-contract size budgets (bytes). Adjust as contracts grow.
+          declare -A BUDGETS=(
+            ["certificate.wasm"]=$((100 * 1024))
+            ["milestone.wasm"]=$((150 * 1024))
+            ["quest.wasm"]=$((150 * 1024))
+            ["rewards.wasm"]=$((100 * 1024))
+          )
+          DEFAULT_BUDGET=$((256 * 1024))
           FAILED=0
 
           echo "=== Contract WASM Size Report ==="
@@ -283,24 +307,26 @@ jobs:
             SIZE=$(stat -f%z "$wasm")
             SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
             NAME=$(basename "$wasm")
+            BUDGET=${BUDGETS[$NAME]:-$DEFAULT_BUDGET}
+            BUDGET_KB=$(echo "scale=2; $BUDGET / 1024" | bc)
 
-            if [ "$SIZE" -gt "$MAX_SIZE" ]; then
-              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS 256KB limit)"
+            if [ "$SIZE" -gt "$BUDGET" ]; then
+              echo "FAIL $NAME: ${SIZE_KB}KB (EXCEEDS ${BUDGET_KB}KB budget)"
               FAILED=1
             else
-              echo "OK   $NAME: ${SIZE_KB}KB"
+              echo "OK   $NAME: ${SIZE_KB}KB / ${BUDGET_KB}KB budget"
             fi
           done
 
           echo "================================="
           if [ "$FAILED" -eq 1 ]; then
-            echo "One or more contracts exceed the 256KB Soroban size limit."
+            echo "One or more contracts exceed their per-contract size budget."
             exit 1
           fi
 
       - name: Upload WASM artifacts
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: contracts-wasm
           path: target/wasm32v1-none/release/*.wasm
@@ -314,16 +340,16 @@ jobs:
     if: needs.changes.outputs.contracts == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: EmbarkStudios/cargo-deny-action@v1
+      - uses: EmbarkStudios/cargo-deny-action@3f4a782664881cf5725d0ffd23969fcce89fd868 # v1
         with:
           command: check advisories
           arguments: --config deny.toml
 
   # ── WASM size delta comment ───────────────────────────────────────
   # Builds the WASM on the base branch and the PR branch, computes the
-  # per-contract delta, and posts a summary comment on the PR.
+  # per-contract delta vs. budget, and posts a summary comment on the PR.
   wasm-size:
     needs: changes
     if: needs.changes.outputs.contracts == 'true' && github.event_name == 'pull_request'
@@ -337,13 +363,13 @@ jobs:
           curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-unknown-linux-gnu.tar.gz \
             | tar xz -C /usr/local/bin
 
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
         with:
           toolchain: stable
           target: wasm32v1-none
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -352,7 +378,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-wasm-size-
 
       # Build base branch WASM
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
@@ -373,7 +399,7 @@ jobs:
           done
 
       # Build PR branch WASM
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: head
@@ -383,7 +409,7 @@ jobs:
         run: stellar contract build
 
       - name: Compute delta and post comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const fs = require('fs');
@@ -391,6 +417,15 @@ jobs:
 
             const wasmDir = 'head/target/wasm32v1-none/release';
             const sizeDir = '/tmp/wasm-sizes';
+
+            // Per-contract budgets in bytes (keep in sync with contracts job).
+            const BUDGETS = {
+              'certificate.wasm': 100 * 1024,
+              'milestone.wasm':   150 * 1024,
+              'quest.wasm':       150 * 1024,
+              'rewards.wasm':     100 * 1024,
+            };
+            const DEFAULT_BUDGET = 256 * 1024;
 
             let rows = '';
             let hasFiles = false;
@@ -400,6 +435,11 @@ jobs:
               hasFiles = true;
               const headSize = fs.statSync(path.join(wasmDir, name)).size;
               const baseFile = path.join(sizeDir, `base_${name}.size`);
+              const budget = BUDGETS[name] ?? DEFAULT_BUDGET;
+              const budgetKB = (budget / 1024).toFixed(2);
+              const overBudget = headSize > budget;
+              const statusIcon = overBudget ? '🔴 over' : '🟢 ok';
+
               let baseSize = null;
               if (fs.existsSync(baseFile)) {
                 baseSize = parseInt(fs.readFileSync(baseFile, 'utf8').trim(), 10);
@@ -407,13 +447,13 @@ jobs:
 
               const headKB = (headSize / 1024).toFixed(2);
               if (baseSize === null) {
-                rows += `| \`${name}\` | — | ${headKB} KB | new |\n`;
+                rows += `| \`${name}\` | ${budgetKB} KB | — | ${headKB} KB | new | ${statusIcon} |\n`;
               } else {
                 const delta = headSize - baseSize;
                 const deltaKB = (Math.abs(delta) / 1024).toFixed(2);
                 const sign = delta > 0 ? '+' : delta < 0 ? '-' : '+/-';
-                const icon = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
-                rows += `| \`${name}\` | ${(baseSize / 1024).toFixed(2)} KB | ${headKB} KB | ${icon} ${sign}${deltaKB} KB |\n`;
+                const icon = delta > 0 ? '⬆️' : delta < 0 ? '⬇️' : '➡️';
+                rows += `| \`${name}\` | ${budgetKB} KB | ${(baseSize / 1024).toFixed(2)} KB | ${headKB} KB | ${icon} ${sign}${deltaKB} KB | ${statusIcon} |\n`;
               }
             }
 
@@ -422,8 +462,8 @@ jobs:
             const body = [
               '## WASM Size Delta',
               '',
-              '| Contract | Base | PR | Delta |',
-              '|----------|------|----|-------|',
+              '| Contract | Budget | Base | PR | Delta | Status |',
+              '|----------|--------|------|----|-------|--------|',
               rows.trim(),
               '',
               '_Release builds (wasm32v1-none) via `stellar contract build`._',
@@ -468,13 +508,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -496,7 +536,7 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: frontend/playwright-report/
@@ -511,13 +551,13 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -530,7 +570,7 @@ jobs:
         run: pnpm run build
 
       - name: Run Lighthouse CI
-        uses: treosh/lighthouse-ci-action@v11
+        uses: treosh/lighthouse-ci-action@72f881228236981b625ed765b928efb1786a1f55 # v11
         with:
           urls: |
             http://localhost:5173

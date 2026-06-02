@@ -13,6 +13,7 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     exclude: ["e2e/**", "node_modules/**"],
     coverage: {
+      provider: "v8",
       thresholds: {
         perFile: true,
         statements: 70,

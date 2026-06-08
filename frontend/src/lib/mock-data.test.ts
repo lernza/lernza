@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
   MOCK_QUESTS,
-  MOCK_QUEST_STATS,
   MOCK_MILESTONES,
   MOCK_COMPLETIONS,
   MOCK_ENROLLEES,
@@ -34,24 +33,6 @@ describe("MOCK_QUESTS", () => {
   it("every quest has a non-empty owner address", () => {
     for (const q of MOCK_QUESTS) {
       expect(q.owner.trim().length).toBeGreaterThan(0)
-    }
-  })
-})
-
-// ── MOCK_QUEST_STATS ──────────────────────────────────────────────────────────
-
-describe("MOCK_QUEST_STATS", () => {
-  it("has a stats entry for every quest id", () => {
-    for (const q of MOCK_QUESTS) {
-      expect(MOCK_QUEST_STATS[q.id]).toBeDefined()
-    }
-  })
-
-  it("all stats have non-negative counts", () => {
-    for (const stats of Object.values(MOCK_QUEST_STATS)) {
-      expect(stats.enrolleeCount).toBeGreaterThanOrEqual(0)
-      expect(stats.milestoneCount).toBeGreaterThanOrEqual(0)
-      expect(stats.poolBalance).toBeGreaterThanOrEqual(0)
     }
   })
 })

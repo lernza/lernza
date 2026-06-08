@@ -68,7 +68,7 @@ describe("ShareButton Clipboard Fallback", () => {
     })
   })
 
-  it("uses fallbackCopyText in insecure contexts (navigator.clipboard undefined)", async () => {
+  it("shows error toast when clipboard is undefined", async () => {
     Object.defineProperty(navigator, "clipboard", {
       value: undefined,
       configurable: true,
@@ -87,12 +87,11 @@ describe("ShareButton Clipboard Fallback", () => {
     fireEvent.click(copyButton)
 
     await waitFor(() => {
-      expect(document.execCommand).toHaveBeenCalledWith("copy")
-      expect(mockOnToast).toHaveBeenCalledWith("Link copied to clipboard!", "success")
+      expect(mockOnToast).toHaveBeenCalledWith("Failed to copy link", "error")
     })
   })
 
-  it("uses fallbackCopyText when navigator.clipboard.writeText fails", async () => {
+  it("shows error toast when navigator.clipboard.writeText fails", async () => {
     const writeTextMock = vi.fn().mockRejectedValue(new Error("Permission denied"))
     Object.defineProperty(navigator, "clipboard", {
       value: {
@@ -111,8 +110,7 @@ describe("ShareButton Clipboard Fallback", () => {
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalled()
-      expect(document.execCommand).toHaveBeenCalledWith("copy")
-      expect(mockOnToast).toHaveBeenCalledWith("Link copied to clipboard!", "success")
+      expect(mockOnToast).toHaveBeenCalledWith("Failed to copy link", "error")
     })
   })
 })

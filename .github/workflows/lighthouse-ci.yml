@@ -30,7 +30,7 @@ jobs:
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.12.0
           cache: pnpm
@@ -43,7 +43,7 @@ jobs:
         run: pnpm run build
 
       - name: Wait for Vercel preview deployment
-        uses: patrickedqvist/wait-for-vercel-preview@v1.3.2
+        uses: patrickedqvist/wait-for-vercel-preview@v1.3.3
         id: vercel
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

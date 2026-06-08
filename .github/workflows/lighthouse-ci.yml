@@ -50,7 +50,7 @@ jobs:
           max_timeout: 300
 
       - name: Run Lighthouse CI against Vercel preview
-        uses: treosh/lighthouse-ci-action@v11
+        uses: treosh/lighthouse-ci-action@v12
         with:
           urls: |
             ${{ steps.vercel.outputs.url }}

@@ -19,6 +19,7 @@ import {
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
 import { safeContractCall } from "../error-utils"
+import { withContractLogging } from "./logger"
 
 const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
 
@@ -138,7 +139,7 @@ export class RewardsClient {
   // --- Private Helpers ---
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
-    try {
+    return withContractLogging("rewards", method, {}, async () => {
       const randomKP = Keypair.random()
       const account = new Account(randomKP.publicKey(), "0")
 
@@ -157,12 +158,13 @@ export class RewardsClient {
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
       }
-    } catch (e) {
+      return null
+    }).catch((e: unknown) => {
       if (import.meta.env.DEV) {
         console.error(`Read error ${method}:`, e)
       }
-    }
-    return null
+      return null
+    })
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {

@@ -4,8 +4,32 @@ import { createRoot } from "react-dom/client"
 import { QueryClientProvider } from "@tanstack/react-query"
 import { HelmetProvider } from "react-helmet-async"
 import { queryClient } from "@/lib/query-client"
+import * as Sentry from "@sentry/react"
+import { env } from "@/lib/env"
+import { setupGlobalErrorHandlers } from "@/lib/error-utils"
 import "./index.css"
 import App from "./App.tsx"
+
+// ─── Sentry Error Tracking ────────────────────────────────────────────────────
+
+if (env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: env.VITE_SENTRY_DSN,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    // Tracing
+    tracesSampleRate: 1.0, // Capture 100% of transactions in dev/production
+    // Session Replay
+    replaysSessionSampleRate: 0.1, // Sample 10% of sessions
+    replaysOnErrorSampleRate: 1.0, // Sample 100% of sessions where an error occurs
+  })
+}
+
+// Register global error/rejection handlers after Sentry is initialised so
+// unhandled promise rejections are forwarded with correct Sentry context.
+setupGlobalErrorHandlers()
 
 if (import.meta.env.DEV) {
   Promise.all([import("@axe-core/react"), import("react"), import("react-dom")]).then(

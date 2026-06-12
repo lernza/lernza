@@ -10,6 +10,8 @@
   },
   "scripts": {
     "predev": "node scripts/check-env.mjs",
+    "check-env": "node scripts/check-env.mjs",
+    "check-env:mainnet": "node scripts/check-env.mjs --mode mainnet",
     "dev": "vite",
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/validate-public-assets.mjs",
@@ -25,6 +27,7 @@
     "prepare": "cd .. && husky"
   },
   "dependencies": {
+    "@sentry/react": "^10.55.0",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.0.1",
     "@tanstack/react-query": "^5.100.9",

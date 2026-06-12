@@ -17,5 +17,8 @@
     "blockchain"
   ],
   "author": "Lernza Contributors",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@sentry/react": "^10.55.0"
+  }
 }

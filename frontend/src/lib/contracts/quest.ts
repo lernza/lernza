@@ -18,6 +18,7 @@ import {
   withRpcReadThrottle,
 } from "./client"
 import { safeContractCall } from "../error-utils"
+import { withContractLogging } from "./logger"
 
 const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
 
@@ -384,7 +385,7 @@ export class QuestClient {
   }
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
-    try {
+    return withContractLogging("quest", method, {}, async () => {
       const randomKP = Keypair.random()
       const account = new Account(randomKP.publicKey(), "0")
 
@@ -403,12 +404,13 @@ export class QuestClient {
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
       }
-    } catch (e: unknown) {
+      return null
+    }).catch((e: unknown) => {
       if (import.meta.env.DEV) {
         console.error(`Read error ${method}:`, e)
       }
-    }
-    return null
+      return null
+    })
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {

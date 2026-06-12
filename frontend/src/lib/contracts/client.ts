@@ -3,6 +3,8 @@ import { Transaction } from "@stellar/stellar-sdk/minimal"
 import { signTransaction, getNetworkDetails, getPublicKey } from "@stellar/freighter-api"
 import { env } from "../env"
 import { pushToast } from "../notifications"
+import { logContractCall } from "./logger"
+import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
 
 export const SOROBAN_RPC_URL =
   import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
@@ -246,6 +248,23 @@ export async function signAndSubmit(
   tx: Transaction,
   handlers: TransactionLifecycleHandlers = {}
 ): Promise<TransactionResult> {
+  const startMs = Date.now()
+
+  // Helper: emit a structured breadcrumb for this transaction lifecycle event.
+  function logTx(
+    stage: string,
+    result: "success" | "failed" | "error",
+    extra: Record<string, unknown> = {}
+  ) {
+    logContractCall({
+      contract: "soroban",
+      fn: stage,
+      durationMs: Date.now() - startMs,
+      result,
+      ...extra,
+    })
+  }
+
   try {
     // Check transaction timebounds before proceeding
     const timebounds = getTransactionTimebounds(tx)
@@ -259,22 +278,16 @@ export async function signAndSubmit(
         errorMsg = `Transaction has expired. Valid until ${new Date(timebounds.maxTime * 1000).toISOString()}`
       }
 
-      return {
-        status: "FAILED",
-        txHash: "",
-        error: errorMsg,
-      }
+      logTx("timebounds_check", "failed", { error: errorMsg })
+      return { status: "FAILED", txHash: "", error: errorMsg }
     }
 
     const netBeforeSign = await getNetworkDetails()
     if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
       const message = `Freighter is on the wrong network. Expected: ${getExpectedNetworkLabel()}.`
+      logTx("network_check", "failed", { error: message })
       handlers.onError?.(message)
-      return {
-        status: "FAILED",
-        txHash: "",
-        error: message,
-      }
+      return { status: "FAILED", txHash: "", error: message }
     }
 
     const result = await signTransaction(tx.toXDR(), {
@@ -288,23 +301,17 @@ export async function signAndSubmit(
 
       const netAfterSign = await getNetworkDetails()
       if (!freighterNetworkMatches(netAfterSign.networkPassphrase)) {
+        logTx("network_check_post_sign", "failed", { error: NETWORK_MISMATCH_MESSAGE })
         handlers.onError?.(NETWORK_MISMATCH_MESSAGE)
-        return {
-          status: "FAILED",
-          txHash: "",
-          error: NETWORK_MISMATCH_MESSAGE,
-        }
+        return { status: "FAILED", txHash: "", error: NETWORK_MISMATCH_MESSAGE }
       }
 
       const currentAddress = await getPublicKey()
       if (signedTx.source !== currentAddress) {
         const message = "Account changed after signing. Please re-confirm."
+        logTx("account_check", "failed", { error: message })
         handlers.onError?.(message)
-        return {
-          status: "FAILED",
-          txHash: "",
-          error: message,
-        }
+        return { status: "FAILED", txHash: "", error: message }
       }
 
       const submitResponse = await submitTransactionWithRetry(signedTx)
@@ -313,18 +320,26 @@ export async function signAndSubmit(
       // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
       if (submitResponse.status === "PENDING") {
         handlers.onSubmitted?.(submitResponse.hash)
+        logTx("submit", "success", { txHash: submitResponse.hash })
+
         const pollResponse = await pollTransaction(submitResponse.hash)
 
         if (pollResponse.status === "SUCCESS") {
           const successResp = pollResponse as rpc.Api.GetSuccessfulTransactionResponse
           const horizonMeta = await trackTransaction(submitResponse.hash)
-          return {
+          const txResult: TransactionResult = {
             status: "SUCCESS",
             txHash: submitResponse.hash,
             resultXdr: successResp.returnValue?.toXDR("base64"),
             horizonMeta: horizonMeta ?? undefined,
           }
+          logTx("confirmed", "success", { txHash: submitResponse.hash })
+          return txResult
         } else {
+          logTx("poll", "failed", {
+            txHash: submitResponse.hash,
+            error: "Transaction failed after submission",
+          })
           return {
             status: "FAILED",
             txHash: submitResponse.hash,
@@ -332,48 +347,37 @@ export async function signAndSubmit(
           }
         }
       } else if (submitResponse.status === "DUPLICATE") {
-        return {
-          status: "FAILED",
-          txHash: submitResponse.hash,
-          error: "This transaction is a duplicate. Please wait a moment or try again.",
-        }
+        const error = "This transaction is a duplicate. Please wait a moment or try again."
+        logTx("submit", "failed", { txHash: submitResponse.hash, submitStatus: "DUPLICATE", error })
+        return { status: "FAILED", txHash: submitResponse.hash, error }
       } else if (submitResponse.status === "TRY_AGAIN_LATER") {
         const message = "Network is busy. Please try again later."
-        handlers.onError?.(message)
-        return {
-          status: "FAILED",
+        logTx("submit", "failed", {
           txHash: submitResponse.hash,
+          submitStatus: "TRY_AGAIN_LATER",
           error: message,
-        }
+        })
+        handlers.onError?.(message)
+        return { status: "FAILED", txHash: submitResponse.hash, error: message }
       } else if (submitResponse.status === "ERROR") {
-        return {
-          status: "FAILED",
-          txHash: submitResponse.hash,
-          error: "Transaction error. Please contact support or check your inputs.",
-        }
+        const error = "Transaction error. Please contact support or check your inputs."
+        logTx("submit", "failed", { txHash: submitResponse.hash, submitStatus: "ERROR", error })
+        return { status: "FAILED", txHash: submitResponse.hash, error }
       } else {
-        return {
-          status: "FAILED",
-          txHash: submitResponse.hash,
-          error: `Submission failed: ${submitResponse.status}`,
-        }
+        const error = `Submission failed: ${submitResponse.status}`
+        logTx("submit", "failed", { txHash: submitResponse.hash, submitStatus: submitResponse.status, error })
+        return { status: "FAILED", txHash: submitResponse.hash, error }
       }
     } else {
-      return {
-        status: "FAILED",
-        txHash: "",
-        error: "Signing failed",
-      }
+      logTx("sign", "failed", { error: "Signing failed" })
+      return { status: "FAILED", txHash: "", error: "Signing failed" }
     }
   } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error during signing/submission"
+    logTx("sign_and_submit", "error", { error: message })
     if (import.meta.env.DEV) {
       console.error("Transaction submission error:", err)
     }
-    const message = err instanceof Error ? err.message : "Unknown error during signing/submission"
-    return {
-      status: "FAILED",
-      txHash: "",
-      error: message,
-    }
+    return { status: "FAILED", txHash: "", error: message }
   }
 }

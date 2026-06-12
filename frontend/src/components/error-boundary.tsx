@@ -1,14 +1,49 @@
-import { Component, type ErrorInfo, type ReactNode } from "react"
+import { Component, createContext, useContext, useEffect, useRef, type ErrorInfo, type ReactNode } from "react"
+import { useLocation } from "react-router-dom"
 import { Lightbulb, RotateCcw, RefreshCw, FileCode2, Wifi, Package, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import * as Sentry from "@sentry/react"
+import { useWallet } from "@/hooks/use-wallet"
+
+// ─── Context ─────────────────────────────────────────────────────────────────
+
+interface ErrorBoundaryContext {
+  route: string
+  walletNetwork: string | null
+}
+
+/**
+ * Holds a mutable ref so the class component can read the latest route +
+ * wallet state synchronously inside componentDidCatch without stale closures.
+ */
+const ErrorBoundaryCtx = createContext<React.RefObject<ErrorBoundaryContext> | null>(null)
+
+/**
+ * Place this above any <ErrorBoundary> that lives inside a React Router tree.
+ * AppShell wraps its boundary with it; route-level boundaries inherit it too.
+ */
+export function ErrorBoundaryProvider({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  const { network } = useWallet()
+
+  const ctxRef = useRef<ErrorBoundaryContext>({ route: pathname, walletNetwork: network })
+
+  useEffect(() => {
+    ctxRef.current = { route: pathname, walletNetwork: network }
+  }, [pathname, network])
+
+  return <ErrorBoundaryCtx.Provider value={ctxRef}>{children}</ErrorBoundaryCtx.Provider>
+}
 
 // Types
 interface ErrorBoundaryProps {
-  children: ReactNode
+  children?: ReactNode
   fallback?: (error: Error, reset: () => void) => ReactNode
   githubRepo?: string
   /** Short label surfaced in the primary CTA, e.g. "Quest", "Dashboard". */
   routeLabel?: string
+  /** Injected by React via contextType — do not pass manually. */
+  _ctx?: React.RefObject<ErrorBoundaryContext> | null
 }
 
 interface ErrorBoundaryState {
@@ -232,6 +267,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ errorInfo: info })
     devLog(error, info)
+
+    const ctx = this.props._ctx?.current
+    Sentry.captureException(error, {
+      contexts: {
+        react: { componentStack: info.componentStack },
+        app: {
+          route: ctx?.route ?? "unknown",
+          wallet_network: ctx?.walletNetwork ?? "unknown",
+        },
+      },
+    })
   }
 
   reset = () => {
@@ -264,3 +310,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return children
   }
 }
+
+/**
+ * Reads the ErrorBoundaryCtx and forwards it as a prop to the class component.
+ * This is the standard pattern for giving class components access to context
+ * when you can't use contextType (multiple contexts, or context defined locally).
+ */
+function ContextBridge(props: Omit<ErrorBoundaryProps, "_ctx">) {
+  const ctxRef = useContext(ErrorBoundaryCtx)
+  return <ErrorBoundary {...props} _ctx={ctxRef} />
+}
+
+// Re-export ContextBridge as the public API so all call sites stay unchanged.
+export { ContextBridge as ErrorBoundary }

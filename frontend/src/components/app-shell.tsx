@@ -3,10 +3,12 @@ import { Outlet, ScrollRestoration, useLocation } from "react-router-dom"
 import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Navbar } from "@/components/navbar"
-import { ErrorBoundary } from "@/components/error-boundary"
+import { ErrorBoundary, ErrorBoundaryProvider } from "@/components/error-boundary"
 import { useWallet } from "@/hooks/use-wallet"
 import { AlertTriangle, X } from "lucide-react"
 import { useState } from "react"
+import * as Sentry from "@sentry/react"
+import { env } from "@/lib/env"
 
 /**
  * Focus main content on route change for keyboard users.
@@ -83,6 +85,16 @@ interface AppShellProps {
  * navigation, analytics, and routing.
  */
 export function AppShell({ children }: AppShellProps) {
+  const { pathname } = useLocation()
+  const { network, expectedNetwork } = useWallet()
+
+  useEffect(() => {
+    if (env.VITE_SENTRY_DSN) {
+      Sentry.setTag("route", pathname)
+      Sentry.setTag("wallet_network", network ?? expectedNetwork)
+    }
+  }, [pathname, network, expectedNetwork])
+
   return (
     <div className="bg-background text-foreground flex min-h-screen flex-col">
       <a
@@ -95,12 +107,14 @@ export function AppShell({ children }: AppShellProps) {
       <ScrollRestoration getKey={location => `${location.pathname}${location.search}`} />
       <NetworkMismatchBanner />
       <Navbar />
-      <ErrorBoundary>
-        <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
-          <Outlet />
-          {children}
-        </main>
-      </ErrorBoundary>
+      <ErrorBoundaryProvider>
+        <ErrorBoundary>
+          <main id="main-content" tabIndex={-1} className="flex-1 outline-none">
+            <Outlet />
+            {children}
+          </main>
+        </ErrorBoundary>
+      </ErrorBoundaryProvider>
       <footer className="border-border bg-secondary/40 border-t-[3px]">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div>

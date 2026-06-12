@@ -6,6 +6,7 @@ const schema = z.object({
   VITE_HORIZON_URL: z.url().optional(),
   VITE_RPC_READ_RATE_LIMIT_CAPACITY: z.coerce.number().int().positive().optional(),
   VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND: z.coerce.number().positive().optional(),
+  VITE_SENTRY_DSN: z.string().optional(),
 })
 
 export const env = schema.parse({
@@ -15,4 +16,5 @@ export const env = schema.parse({
   VITE_RPC_READ_RATE_LIMIT_CAPACITY: import.meta.env.VITE_RPC_READ_RATE_LIMIT_CAPACITY,
   VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND:
     import.meta.env.VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND,
+  VITE_SENTRY_DSN: import.meta.env.VITE_SENTRY_DSN,
 })

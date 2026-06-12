@@ -17,6 +17,7 @@ import {
   withTimeout,
   withRpcReadThrottle,
 } from "./client"
+import { withContractLogging } from "./logger"
 
 const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
 
@@ -200,7 +201,7 @@ export class MilestoneClient {
   }
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
-    try {
+    return withContractLogging("milestone", method, {}, async () => {
       const randomKP = Keypair.random()
       const account = new Account(randomKP.publicKey(), "0")
 
@@ -219,12 +220,13 @@ export class MilestoneClient {
       if (response && "result" in response && response.result) {
         return scValToNative(response.result.retval)
       }
-    } catch (e) {
+      return null
+    }).catch((e: unknown) => {
       if (import.meta.env.DEV) {
         console.error(`Read error ${method}:`, e)
       }
-    }
-    return null
+      return null
+    })
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {

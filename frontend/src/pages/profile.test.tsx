@@ -121,17 +121,23 @@ describe("Profile", () => {
     })
 
     renderProfile()
-    fireEvent.click(screen.getByRole("button", { name: "activity" }))
+    fireEvent.click(screen.getByRole("button", { name: "View activity" }))
 
     await waitFor(() => {
-      expect(mockFetchWalletActivity).toHaveBeenCalledWith("GABC1234567890XYZ", undefined, 0)
+      expect(mockFetchWalletActivity).toHaveBeenCalledWith(
+        "GABC1234567890XYZ",
+        null,
+        0,
+        expect.any(AbortSignal)
+      )
     })
 
     expect(screen.getByText("Wallet timeline")).toBeTruthy()
-    expect(screen.getByText("Rewarded")).toBeTruthy()
-    expect(screen.getByText("Rust Basics")).toBeTruthy()
-    expect(screen.getByText("+250 USDC")).toBeTruthy()
-    expect(screen.getByRole("link", { name: /view transaction/i }).getAttribute("href")).toBe(
+    expect(screen.getAllByText("Rewarded").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Rust Basics").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("+250 USDC").length).toBeGreaterThan(0)
+    const allLinks = screen.getAllByRole("link", { name: /view transaction/i })
+    expect(allLinks[0].getAttribute("href")).toBe(
       "https://stellar.expert/explorer/testnet/tx/abc123"
     )
   })

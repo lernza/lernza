@@ -73,27 +73,27 @@ function RankBadge({ rank }: { rank: number }) {
     return (
       <span className={cn(base, "bg-warning text-warning-foreground")}>
         <span>#1</span>
-        <span className="text-[8px] uppercase tracking-widest">Gold</span>
+        <span className="text-[8px] tracking-widest uppercase">Gold</span>
       </span>
     )
   if (rank === 2)
     return (
       <span className={cn(base, "bg-muted text-foreground")}>
         <span>#2</span>
-        <span className="text-[8px] uppercase tracking-widest">Silver</span>
+        <span className="text-[8px] tracking-widest uppercase">Silver</span>
       </span>
     )
   if (rank === 3)
     return (
       <span className={cn(base, "bg-amber-600 text-white")}>
         <span>#3</span>
-        <span className="text-[8px] uppercase tracking-widest">Bronze</span>
+        <span className="text-[8px] tracking-widest uppercase">Bronze</span>
       </span>
     )
   return (
     <span className={cn(base, "bg-background text-foreground")}>
       <span>#{rank}</span>
-      <span className="text-[8px] uppercase tracking-widest">Rank</span>
+      <span className="text-[8px] tracking-widest uppercase">Rank</span>
     </span>
   )
 }
@@ -108,16 +108,32 @@ export function Leaderboard() {
   const observerTarget = useRef<HTMLDivElement>(null)
 
   const {
+    data: earnersData,
     isLoading: earnersLoading,
     error: earnersError,
     refetch: refetchEarners,
   } = useAsyncData(() => fetchTopEarners(0), { enabled: activeTab === "earners" })
 
   const {
+    data: questsData,
     isLoading: questsLoading,
     error: questsError,
     refetch: refetchQuests,
   } = useAsyncData(() => fetchMostActiveQuests(0), { enabled: activeTab === "quests" })
+
+  // Update allEarners when earnersData changes
+  useEffect(() => {
+    if (earnersData) {
+      setAllEarners(earnersData)
+    }
+  }, [earnersData])
+
+  // Update allQuests when questsData changes
+  useEffect(() => {
+    if (questsData) {
+      setAllQuests(questsData)
+    }
+  }, [questsData])
 
   const loadMoreEarners = useCallback(async () => {
     setIsLoadingMore(true)
@@ -171,26 +187,26 @@ export function Leaderboard() {
     return () => observer.disconnect()
   }, [activeTab, isLoadingMore, loadMoreEarners, loadMoreQuests])
 
-   const refetchActive = useCallback(() => {
-     if (activeTab === "earners") return refetchEarners()
-     return refetchQuests()
-   }, [activeTab, refetchEarners, refetchQuests])
+  const refetchActive = useCallback(() => {
+    if (activeTab === "earners") return refetchEarners()
+    return refetchQuests()
+  }, [activeTab, refetchEarners, refetchQuests])
 
-   // Use a ref to store the latest refetchActive to prevent interval leaks
-   const refetchActiveRef = useRef(refetchActive)
-   useEffect(() => {
-     refetchActiveRef.current = refetchActive
-   }, [refetchActive])
+  // Use a ref to store the latest refetchActive to prevent interval leaks
+  const refetchActiveRef = useRef(refetchActive)
+  useEffect(() => {
+    refetchActiveRef.current = refetchActive
+  }, [refetchActive])
 
-   useEffect(() => {
-     const id = setInterval(
-       () => {
-         void refetchActiveRef.current()
-       },
-       5 * 60 * 1000
-     )
-     return () => clearInterval(id)
-   }, [])
+  useEffect(() => {
+    const id = setInterval(
+      () => {
+        void refetchActiveRef.current()
+      },
+      5 * 60 * 1000
+    )
+    return () => clearInterval(id)
+  }, [])
 
   const isLoading = activeTab === "earners" ? earnersLoading : questsLoading
   const error = activeTab === "earners" ? earnersError : questsError

@@ -1,0 +1,26 @@
+[package]
+name = "rewards"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+common = { path = "../common" }
+
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+quest = { path = "../quest" }
+milestone = { path = "../milestone" }
+certificate = { path = "../certificate" }
+testutils = { path = "../testutils" }
+proptest = "1"
+common = { path = "../common" }
+
+[features]
+testutils = []

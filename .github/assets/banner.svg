@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="1200" height="320">
+  <defs>
+    <style>
+      text { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="320" fill="#FFFFFF"/>
+
+  <!-- Top accent bar -->
+  <rect width="1200" height="8" fill="#FACC15"/>
+  <rect y="8" width="1200" height="3" fill="#000"/>
+
+  <!-- Bottom accent bar -->
+  <rect y="309" width="1200" height="3" fill="#000"/>
+  <rect y="312" width="1200" height="8" fill="#FACC15"/>
+
+  <!-- ── Left geometric cluster ── -->
+  <!-- Large block (tilted) -->
+  <g transform="rotate(-6, 95, 105)">
+    <rect x="50" y="60" width="90" height="90" fill="#000" transform="translate(6,6)"/>
+    <rect x="50" y="60" width="90" height="90" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  </g>
+  <!-- Medium block -->
+  <g transform="rotate(10, 185, 72)">
+    <rect x="158" y="45" width="54" height="54" fill="#000" transform="translate(4,4)"/>
+    <rect x="158" y="45" width="54" height="54" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  </g>
+  <!-- Small block -->
+  <rect x="62" y="185" width="34" height="34" fill="#000" transform="translate(3,3)"/>
+  <rect x="62" y="185" width="34" height="34" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  <!-- Tiny block (tilted) -->
+  <g transform="rotate(-8, 167, 167)">
+    <rect x="156" y="156" width="22" height="22" fill="#000" transform="translate(3,3)"/>
+    <rect x="156" y="156" width="22" height="22" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  </g>
+  <!-- Extra small -->
+  <rect x="120" y="235" width="18" height="18" fill="#000" transform="translate(2,2)"/>
+  <rect x="120" y="235" width="18" height="18" fill="#FACC15" stroke="#000" stroke-width="2"/>
+
+  <!-- ── Right geometric cluster ── -->
+  <!-- Large block (tilted) -->
+  <g transform="rotate(8, 1095, 80)">
+    <rect x="1060" y="48" width="70" height="70" fill="#000" transform="translate(5,5)"/>
+    <rect x="1060" y="48" width="70" height="70" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  </g>
+  <!-- Medium block -->
+  <rect x="1098" y="165" width="45" height="45" fill="#000" transform="translate(4,4)"/>
+  <rect x="1098" y="165" width="45" height="45" fill="#FACC15" stroke="#000" stroke-width="2.5"/>
+  <!-- Small block (tilted) -->
+  <g transform="rotate(-6, 1042, 208)">
+    <rect x="1028" y="194" width="28" height="28" fill="#000" transform="translate(3,3)"/>
+    <rect x="1028" y="194" width="28" height="28" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  </g>
+  <!-- Tiny block -->
+  <rect x="1070" y="248" width="18" height="18" fill="#000" transform="translate(2,2)"/>
+  <rect x="1070" y="248" width="18" height="18" fill="#FACC15" stroke="#000" stroke-width="2"/>
+
+  <!-- ── Center content ── -->
+
+  <!-- Title -->
+  <text
+    x="600" y="128"
+    text-anchor="middle"
+    fill="#000"
+    font-size="84"
+    font-weight="900"
+    letter-spacing="-3"
+  >Lernza</text>
+
+  <!-- Tagline highlight bar -->
+  <rect x="374" y="152" width="452" height="46" fill="#000"/>
+  <rect x="370" y="148" width="452" height="46" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  <text
+    x="596" y="178"
+    text-anchor="middle"
+    fill="#000"
+    font-size="22"
+    font-weight="700"
+    letter-spacing="3"
+  >Learn. Earn. On-chain.</text>
+
+  <!-- Subtitle -->
+  <text
+    x="600" y="238"
+    text-anchor="middle"
+    fill="#666"
+    font-size="17"
+    font-weight="500"
+  >Create quests, set milestones, reward learners with tokens — all on Stellar</text>
+
+  <!-- Three decorative squares -->
+  <rect x="569" y="260" width="14" height="14" fill="#000" transform="translate(2,2)"/>
+  <rect x="569" y="260" width="14" height="14" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  <rect x="593" y="260" width="14" height="14" fill="#000" transform="translate(2,2)"/>
+  <rect x="593" y="260" width="14" height="14" fill="#FACC15" stroke="#000" stroke-width="2"/>
+  <rect x="617" y="260" width="14" height="14" fill="#000" transform="translate(2,2)"/>
+  <rect x="617" y="260" width="14" height="14" fill="#FACC15" stroke="#000" stroke-width="2"/>
+</svg>

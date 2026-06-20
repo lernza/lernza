@@ -1,0 +1,42 @@
+import { browserPerformanceTimeOrigin } from '@sentry/core';
+import { extractNetworkProtocol, getBrowserPerformanceAPI } from './utils.js';
+
+function getAbsoluteTime(time) {
+  return time ? ((browserPerformanceTimeOrigin() || performance.timeOrigin) + time) / 1e3 : time;
+}
+function resourceTimingToSpanAttributes(resourceTiming) {
+  const timingSpanData = {};
+  if (resourceTiming.nextHopProtocol != void 0) {
+    const { name, version } = extractNetworkProtocol(resourceTiming.nextHopProtocol);
+    timingSpanData["network.protocol.version"] = version;
+    timingSpanData["network.protocol.name"] = name;
+  }
+  if (!(browserPerformanceTimeOrigin() || getBrowserPerformanceAPI()?.timeOrigin)) {
+    return timingSpanData;
+  }
+  return dropUndefinedKeysFromObject({
+    ...timingSpanData,
+    "http.request.redirect_start": getAbsoluteTime(resourceTiming.redirectStart),
+    "http.request.redirect_end": getAbsoluteTime(resourceTiming.redirectEnd),
+    "http.request.worker_start": getAbsoluteTime(resourceTiming.workerStart),
+    "http.request.fetch_start": getAbsoluteTime(resourceTiming.fetchStart),
+    "http.request.domain_lookup_start": getAbsoluteTime(resourceTiming.domainLookupStart),
+    "http.request.domain_lookup_end": getAbsoluteTime(resourceTiming.domainLookupEnd),
+    "http.request.connect_start": getAbsoluteTime(resourceTiming.connectStart),
+    "http.request.secure_connection_start": getAbsoluteTime(resourceTiming.secureConnectionStart),
+    "http.request.connection_end": getAbsoluteTime(resourceTiming.connectEnd),
+    "http.request.request_start": getAbsoluteTime(resourceTiming.requestStart),
+    "http.request.response_start": getAbsoluteTime(resourceTiming.responseStart),
+    "http.request.response_end": getAbsoluteTime(resourceTiming.responseEnd),
+    // For TTFB we actually want the relative time from timeOrigin to responseStart
+    // This way, TTFB always measures the "first page load" experience.
+    // see: https://web.dev/articles/ttfb#measure-resource-requests
+    "http.request.time_to_first_byte": resourceTiming.responseStart != null ? resourceTiming.responseStart / 1e3 : void 0
+  });
+}
+function dropUndefinedKeysFromObject(attrs) {
+  return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value != null));
+}
+
+export { resourceTimingToSpanAttributes };
+//# sourceMappingURL=resourceTiming.js.map

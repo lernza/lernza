@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 220" width="900" height="220">
+  <defs>
+    <style>
+      text { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    </style>
+    <radialGradient id="glow" cx="650" cy="110" r="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FACC15" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FACC15" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Dark card -->
+  <rect width="900" height="220" rx="16" fill="#0d1117"/>
+  <rect width="900" height="220" rx="16" fill="url(#glow)"/>
+  <rect x="1" y="1" width="898" height="218" rx="15" fill="none" stroke="#30363d"/>
+
+  <!-- ═══ LEFT: Neo-brutalist text ═══ -->
+
+  <!-- Label box -->
+  <rect x="48" y="52" width="210" height="28" fill="#000" transform="translate(4,4)"/>
+  <rect x="44" y="48" width="210" height="28" fill="#21262d" stroke="#30363d" stroke-width="2"/>
+  <text x="149" y="67" text-anchor="middle" fill="#8b949e" font-size="11" font-weight="700" letter-spacing="2">LIKE WHAT YOU SEE?</text>
+
+  <!-- Yellow highlight bar -->
+  <rect x="48" y="96" width="360" height="50" fill="#000" transform="translate(5,5)"/>
+  <rect x="44" y="92" width="360" height="50" fill="#FACC15" stroke="#000" stroke-width="3"/>
+  <text x="224" y="124" text-anchor="middle" fill="#000" font-size="27" font-weight="900" letter-spacing="-1">Give it a Star ★</text>
+
+  <!-- Subtitle -->
+  <text x="48" y="170" fill="#484f58" font-size="13" font-weight="400">Hit Star ★ at the top of this page.</text>
+
+  <!-- ═══ RIGHT: Star constellation ═══ -->
+
+  <!-- ★ Hero star — large, pulsing -->
+  <g transform="translate(655, 88)">
+    <g transform="rotate(-6)">
+      <g>
+        <animateTransform attributeName="transform" type="scale" values="1;1.12;1" dur="2s" repeatCount="indefinite"/>
+        <path d="M0,-38 L8.5,-11.8 L36.1,-11.8 L13.9,4.5 L22.3,30.8 L0,14.5 L-22.3,30.8 L-13.9,4.5 L-36.1,-11.8 L-8.5,-11.8Z"
+              fill="#FACC15" fill-opacity="0.1" transform="scale(1.2)"/>
+        <path d="M0,-38 L8.5,-11.8 L36.1,-11.8 L13.9,4.5 L22.3,30.8 L0,14.5 L-22.3,30.8 L-13.9,4.5 L-36.1,-11.8 L-8.5,-11.8Z"
+              fill="#FACC15" stroke="#000" stroke-width="2.5" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ★ Medium star — upper left, floating -->
+  <g transform="translate(555, 48)">
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0 0; 0 -5; 0 0" dur="3.5s" repeatCount="indefinite"/>
+      <g transform="rotate(10)">
+        <path d="M0,-22 L4.9,-6.8 L20.9,-6.8 L8,2.6 L12.9,17.8 L0,8.4 L-12.9,17.8 L-8,2.6 L-20.9,-6.8 L-4.9,-6.8Z"
+              fill="#FACC15" fill-opacity="0.1" transform="scale(1.2)"/>
+        <path d="M0,-22 L4.9,-6.8 L20.9,-6.8 L8,2.6 L12.9,17.8 L0,8.4 L-12.9,17.8 L-8,2.6 L-20.9,-6.8 L-4.9,-6.8Z"
+              fill="#FACC15" stroke="#000" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- ★ Medium star — right, wobbling -->
+  <g transform="translate(765, 95)">
+    <g>
+      <animateTransform attributeName="transform" type="rotate" values="0;10;0;-10;0" dur="4s" repeatCount="indefinite"/>
+      <path d="M0,-22 L4.9,-6.8 L20.9,-6.8 L8,2.6 L12.9,17.8 L0,8.4 L-12.9,17.8 L-8,2.6 L-20.9,-6.8 L-4.9,-6.8Z"
+            fill="#FACC15" fill-opacity="0.1" transform="scale(1.2)"/>
+      <path d="M0,-22 L4.9,-6.8 L20.9,-6.8 L8,2.6 L12.9,17.8 L0,8.4 L-12.9,17.8 L-8,2.6 L-20.9,-6.8 L-4.9,-6.8Z"
+            fill="#FACC15" stroke="#000" stroke-width="2" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <!-- ★ Small star — lower center, pulsing -->
+  <g transform="translate(590, 158) rotate(12)">
+    <g>
+      <animateTransform attributeName="transform" type="scale" values="1;1.15;1" dur="2.2s" repeatCount="indefinite" begin="0.5s"/>
+      <path d="M0,-14 L3.1,-4.3 L13.3,-4.3 L5.1,1.6 L8.2,11.3 L0,5.4 L-8.2,11.3 L-5.1,1.6 L-13.3,-4.3 L-3.1,-4.3Z"
+            fill="#FACC15" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <!-- ★ Small star — upper right, twinkling -->
+  <g transform="translate(738, 35) rotate(-10)">
+    <animate attributeName="opacity" values="0.15;1;0.15" dur="2s" repeatCount="indefinite"/>
+    <path d="M0,-14 L3.1,-4.3 L13.3,-4.3 L5.1,1.6 L8.2,11.3 L0,5.4 L-8.2,11.3 L-5.1,1.6 L-13.3,-4.3 L-3.1,-4.3Z"
+          fill="#FACC15" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ★ Tiny star — lower right -->
+  <g transform="translate(722, 170) rotate(8)">
+    <path d="M0,-9 L2,-2.8 L8.6,-2.8 L3.3,1.1 L5.3,7.3 L0,3.4 L-5.3,7.3 L-3.3,1.1 L-8.6,-2.8 L-2,-2.8Z"
+          fill="#FACC15" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ★ Tiny star — far left, twinkling -->
+  <g transform="translate(490, 110) rotate(-8)">
+    <animate attributeName="opacity" values="0.1;1;0.1" dur="1.8s" repeatCount="indefinite" begin="0.4s"/>
+    <path d="M0,-9 L2,-2.8 L8.6,-2.8 L3.3,1.1 L5.3,7.3 L0,3.4 L-5.3,7.3 L-3.3,1.1 L-8.6,-2.8 L-2,-2.8Z"
+          fill="#FACC15" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ★ Tiny star — far right, floating -->
+  <g transform="translate(830, 140)">
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0 0; 0 4; 0 0" dur="2.8s" repeatCount="indefinite" begin="1s"/>
+      <g transform="rotate(15)">
+        <path d="M0,-9 L2,-2.8 L8.6,-2.8 L3.3,1.1 L5.3,7.3 L0,3.4 L-5.3,7.3 L-3.3,1.1 L-8.6,-2.8 L-2,-2.8Z"
+              fill="#FACC15" stroke="#000" stroke-width="1" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Sparkle particles -->
+  <circle cx="485" cy="68" r="1.5" fill="#FACC15">
+    <animate attributeName="opacity" values="0;0.9;0" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="845" cy="75" r="1" fill="#FACC15">
+    <animate attributeName="opacity" values="0;0.7;0" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+  </circle>
+  <circle cx="680" cy="185" r="1" fill="#FACC15">
+    <animate attributeName="opacity" values="0;0.8;0" dur="2.4s" repeatCount="indefinite" begin="1.2s"/>
+  </circle>
+</svg>

@@ -1,0 +1,14 @@
+[development]
+network = "standalone"
+rpc_url = "http://localhost:8000/soroban/rpc"
+network_passphrase = "Standalone Network ; February 2017"
+
+[testnet]
+network = "testnet"
+rpc_url = "https://soroban-testnet.stellar.org"
+network_passphrase = "Test SDF Network ; September 2015"
+
+[mainnet]
+network = "mainnet"
+rpc_url = "https://soroban.stellar.org"
+network_passphrase = "Public Global Stellar Network ; September 2015"

@@ -1,0 +1,28 @@
+# Auto-label PRs based on changed file paths.
+# Used by the labeler job in ci.yml (actions/labeler).
+
+contracts:
+  - changed-files:
+      - any-glob-to-any-file: "contracts/**"
+      - any-glob-to-any-file: "Cargo.toml"
+      - any-glob-to-any-file: "Cargo.lock"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: "frontend/**"
+
+infrastructure:
+  - changed-files:
+      - any-glob-to-any-file: ".github/**"
+      - any-glob-to-any-file: "environments.toml"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: "**/*.md"
+      - any-glob-to-any-file: "docs/**"
+
+design:
+  - changed-files:
+      - any-glob-to-any-file: "frontend/src/components/ui/**"
+      - any-glob-to-any-file: "frontend/src/pages/**"
+      - any-glob-to-any-file: "frontend/public/**"

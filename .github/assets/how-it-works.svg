@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 210" width="1200" height="210">
+  <defs>
+    <style>
+      text { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="210" fill="#FFFFFF"/>
+
+  <!-- ═══ Box 1: Create ═══ -->
+  <g>
+    <rect x="90" y="35" width="220" height="150" fill="#000" transform="translate(5,5)"/>
+    <rect x="90" y="35" width="220" height="150" fill="#FFF" stroke="#000" stroke-width="3"/>
+    <!-- Number badge -->
+    <rect x="104" y="49" width="34" height="34" fill="#FACC15" stroke="#000" stroke-width="2"/>
+    <text x="121" y="72" text-anchor="middle" fill="#000" font-size="16" font-weight="900">01</text>
+    <!-- Title -->
+    <text x="150" y="72" fill="#000" font-size="20" font-weight="900">Create</text>
+    <!-- Description -->
+    <text x="104" y="106" fill="#666" font-size="14" font-weight="500">Define a quest with</text>
+    <text x="104" y="124" fill="#666" font-size="14" font-weight="500">milestones &amp; rewards</text>
+    <!-- Role badge -->
+    <rect x="104" y="140" width="80" height="22" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+    <text x="144" y="155" text-anchor="middle" fill="#000" font-size="10" font-weight="800" letter-spacing="1">CREATOR</text>
+  </g>
+
+  <!-- Arrow 1 → -->
+  <line x1="320" y1="110" x2="350" y2="110" stroke="#000" stroke-width="3"/>
+  <polygon points="350,103 365,110 350,117" fill="#000"/>
+
+  <!-- ═══ Box 2: Fund ═══ -->
+  <g>
+    <rect x="370" y="35" width="220" height="150" fill="#000" transform="translate(5,5)"/>
+    <rect x="370" y="35" width="220" height="150" fill="#FFF" stroke="#000" stroke-width="3"/>
+    <rect x="384" y="49" width="34" height="34" fill="#FACC15" stroke="#000" stroke-width="2"/>
+    <text x="401" y="72" text-anchor="middle" fill="#000" font-size="16" font-weight="900">02</text>
+    <text x="430" y="72" fill="#000" font-size="20" font-weight="900">Fund</text>
+    <text x="384" y="106" fill="#666" font-size="14" font-weight="500">Deposit tokens into</text>
+    <text x="384" y="124" fill="#666" font-size="14" font-weight="500">the quest reward pool</text>
+    <rect x="384" y="140" width="80" height="22" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+    <text x="424" y="155" text-anchor="middle" fill="#000" font-size="10" font-weight="800" letter-spacing="1">CREATOR</text>
+  </g>
+
+  <!-- Arrow 2 → -->
+  <line x1="600" y1="110" x2="630" y2="110" stroke="#000" stroke-width="3"/>
+  <polygon points="630,103 645,110 630,117" fill="#000"/>
+
+  <!-- ═══ Box 3: Learn ═══ -->
+  <g>
+    <rect x="650" y="35" width="220" height="150" fill="#000" transform="translate(5,5)"/>
+    <rect x="650" y="35" width="220" height="150" fill="#FFF" stroke="#000" stroke-width="3"/>
+    <rect x="664" y="49" width="34" height="34" fill="#FACC15" stroke="#000" stroke-width="2"/>
+    <text x="681" y="72" text-anchor="middle" fill="#000" font-size="16" font-weight="900">03</text>
+    <text x="710" y="72" fill="#000" font-size="20" font-weight="900">Learn</text>
+    <text x="664" y="106" fill="#666" font-size="14" font-weight="500">Complete milestones</text>
+    <text x="664" y="124" fill="#666" font-size="14" font-weight="500">and submit for review</text>
+    <rect x="664" y="140" width="80" height="22" fill="#FACC15" stroke="#000" stroke-width="1.5"/>
+    <text x="704" y="155" text-anchor="middle" fill="#000" font-size="10" font-weight="800" letter-spacing="1">LEARNER</text>
+  </g>
+
+  <!-- Arrow 3 → -->
+  <line x1="880" y1="110" x2="910" y2="110" stroke="#000" stroke-width="3"/>
+  <polygon points="910,103 925,110 910,117" fill="#000"/>
+
+  <!-- ═══ Box 4: Earn ═══ -->
+  <g>
+    <rect x="930" y="35" width="220" height="150" fill="#000" transform="translate(5,5)"/>
+    <rect x="930" y="35" width="220" height="150" fill="#FACC15" stroke="#000" stroke-width="3"/>
+    <rect x="944" y="49" width="34" height="34" fill="#000"/>
+    <text x="961" y="72" text-anchor="middle" fill="#FACC15" font-size="16" font-weight="900">04</text>
+    <text x="990" y="72" fill="#000" font-size="20" font-weight="900">Earn</text>
+    <text x="944" y="106" fill="#000" font-size="14" font-weight="500" opacity="0.7">Tokens transfer</text>
+    <text x="944" y="124" fill="#000" font-size="14" font-weight="500" opacity="0.7">automatically on-chain</text>
+    <rect x="944" y="140" width="112" height="22" fill="#000"/>
+    <text x="1000" y="155" text-anchor="middle" fill="#FACC15" font-size="10" font-weight="800" letter-spacing="1">SMART CONTRACT</text>
+  </g>
+</svg>

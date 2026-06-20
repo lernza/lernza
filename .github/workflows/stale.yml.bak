@@ -1,0 +1,113 @@
+name: Stale Issue Cleanup
+
+# Frees up issues assigned to inactive contributors.
+# This is a bounty project — speed matters. If someone claims an
+# issue and goes quiet, it needs to be available for others fast.
+#
+# Timeline:
+#   Hour 0:  Issue assigned → In Progress
+#   Day 3:   No activity → warning comment
+#   Day 5:   Still no activity → unassigned → back to Backlog
+#
+# Runs every 6 hours. "Activity" = issue updated_at (comments,
+# label changes, commits pushed to linked PR, etc.)
+#
+# Exceptions:
+#   - Issues with "stale-exempt" label are never touched
+#   - Issues with an open PR linked are never touched (they're working)
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+env:
+  GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+
+jobs:
+  check-stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find and handle stale assigned issues
+        run: |
+          REPO="lernza/lernza"
+          WARN_HOURS=72    # 3 days
+          UNASSIGN_HOURS=120  # 5 days
+          NOW=$(date +%s)
+
+          echo "=== Stale check (warn: 3d, unassign: 5d) ==="
+
+          # Get all open assigned issues
+          ISSUES=$(gh issue list --repo "$REPO" --state open --assignee "*" \
+            --json number,assignees,updatedAt,labels --limit 200)
+
+          echo "$ISSUES" | jq -c '.[]' | while read -r ISSUE; do
+
+            NUM=$(echo "$ISSUE" | jq -r '.number')
+            ASSIGNEES=$(echo "$ISSUE" | jq -r '[.assignees[].login] | join(", ")')
+            UPDATED=$(echo "$ISSUE" | jq -r '.updatedAt')
+
+            # Skip stale-exempt
+            EXEMPT=$(echo "$ISSUE" | jq -r '.labels | map(.name) | any(. == "stale-exempt")')
+            if [ "$EXEMPT" = "true" ]; then
+              echo "  skip #$NUM (stale-exempt)"
+              continue
+            fi
+
+            # Parse updated timestamp
+            UPDATED_TS=$(date -d "$UPDATED" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%SZ" "$UPDATED" +%s 2>/dev/null || echo "")
+            if [ -z "$UPDATED_TS" ]; then
+              continue
+            fi
+
+            HOURS_STALE=$(( (NOW - UPDATED_TS) / 3600 ))
+            DAYS_STALE=$(( HOURS_STALE / 24 ))
+
+            # Skip if contributor has an open PR for this issue
+            if [ "$HOURS_STALE" -ge "$WARN_HOURS" ]; then
+              HAS_PR=$(gh pr list --repo "$REPO" --state open --json number,body \
+                -q "[.[] | select(.body | test(\"(?i)(close[sd]?|fix(e[sd])?|resolve[sd]?)\\\\s+#$NUM\"))] | length" 2>/dev/null || echo "0")
+
+              if [ "$HAS_PR" -gt 0 ] 2>/dev/null; then
+                echo "  ok   #$NUM (${DAYS_STALE}d stale but has open PR)"
+                continue
+              fi
+            fi
+
+            # Check existing warnings
+            WARNED=$(gh issue view "$NUM" --repo "$REPO" \
+              --json comments -q '[.comments[] | select(.body | contains("stale-check"))] | length' 2>/dev/null || echo "0")
+
+            if [ "$HOURS_STALE" -ge "$UNASSIGN_HOURS" ] && [ "$WARNED" -gt 0 ]; then
+              # === UNASSIGN ===
+              for LOGIN in $(echo "$ISSUE" | jq -r '.assignees[].login'); do
+                gh issue edit "$NUM" --repo "$REPO" --remove-assignee "$LOGIN"
+              done
+
+              gh issue comment "$NUM" --repo "$REPO" --body "<!-- stale-check-unassign -->
+          This issue has been unassigned due to **${DAYS_STALE} days of inactivity**. It is now back in the Backlog for anyone to pick up.
+
+          @${ASSIGNEES} — no worries! If you want to continue, just comment here and we will reassign it."
+
+              echo "  UNASSIGN #$NUM (${DAYS_STALE}d, was: $ASSIGNEES)"
+
+            elif [ "$HOURS_STALE" -ge "$WARN_HOURS" ] && [ "$WARNED" -eq 0 ]; then
+              # === WARN ===
+              gh issue comment "$NUM" --repo "$REPO" --body "<!-- stale-check -->
+          Hey @${ASSIGNEES} — this issue has had no activity for **${DAYS_STALE} days**.
+
+          Are you still working on it? A quick update (even just \"still on it\") will reset the timer. Otherwise it will be unassigned in **2 days** so others can pick it up.
+
+          Blocked or need help? Let us know!"
+
+              echo "  WARN   #$NUM (${DAYS_STALE}d, assigned to $ASSIGNEES)"
+
+            else
+              echo "  ok   #$NUM (${DAYS_STALE}d, assigned to $ASSIGNEES)"
+            fi
+          done
+
+          echo "=== Done ==="

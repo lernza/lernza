@@ -1,0 +1,59 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature. Please describe it clearly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the feature you want.
+      placeholder: What should this feature do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this feature needed? What problem does it solve?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this affect?
+      options:
+        - Frontend - UI/UX
+        - Frontend - Wallet Integration
+        - Smart Contracts
+        - Token/Rewards System
+        - CI/Infrastructure
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: How would you implement this? Include technical details if you have them.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you considered.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Mockups, references, related issues.

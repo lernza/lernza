@@ -1,0 +1,55 @@
+warning: unused imports: `ERR_INVALID_INPUT`, `ERR_NOT_FOUND`, `ERR_UNAUTHORIZED`, `QuestStatus`, and `Visibility`
+ --> contracts/milestone/src/lib.rs:4:37
+  |
+4 |     extend_instance_ttl, QuestInfo, QuestStatus, Visibility, BUMP, ERR_INVALID_INPUT,
+  |                                     ^^^^^^^^^^^  ^^^^^^^^^^        ^^^^^^^^^^^^^^^^^
+5 |     ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRESHOLD,
+  |     ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `ERR_INVALID_INPUT`, `ERR_NOT_FOUND`, and `ERR_UNAUTHORIZED`
+ --> contracts/quest/src/lib.rs:5:5
+  |
+5 |     ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_UNAUTHORIZED, THRE...
+  |     ^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: this function has too many arguments (8/7)
+  --> contracts/quest/src/lib.rs:97:1
+   |
+97 | #[contractimpl]
+   | ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#too_many_arguments
+   = note: `#[warn(clippy::too_many_arguments)]` on by default
+   = note: this warning originates in the attribute macro `soroban_sdk::contractargs` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: this function has too many arguments (8/7)
+  --> contracts/quest/src/lib.rs:97:1
+   |
+97 | #[contractimpl]
+   | ^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#too_many_arguments
+   = note: this warning originates in the attribute macro `soroban_sdk::contractargs` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused imports: `ERR_NOT_FOUND`, `ERR_UNAUTHORIZED`, `QuestStatus`, and `Visibility`
+ --> contracts/rewards/src/lib.rs:4:37
+  |
+4 | ...o, QuestStatus, Visibility, BUMP, ERR_NOT_FOUND, ERR_UNAUTHORIZED,
+  |       ^^^^^^^^^^^  ^^^^^^^^^^        ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `String`
+ --> contracts/rewards/src/lib.rs:9:19
+  |
+9 |     Address, Env, String,
+  |                   ^^^^^^
+
+warning: `milestone` (lib) generated 1 warning (run `cargo clippy --fix --lib -p milestone` to apply 1 suggestion)
+warning: `quest` (lib) generated 3 warnings (run `cargo clippy --fix --lib -p quest` to apply 1 suggestion)
+warning: `rewards` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p rewards` to apply 2 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s

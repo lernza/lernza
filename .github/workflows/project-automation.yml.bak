@@ -1,0 +1,307 @@
+name: Project Automation
+
+# ONE job handles ALL project board automation.
+# Routes events internally — no wasted VMs, no skipped jobs.
+#
+# Statuses: Backlog → In Progress → In Review → Done / Invalid
+#
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │  Built-in project workflows (in project settings UI):              │
+# │  ✅ Auto-add to project    filter: is:issue is:open                │
+# │  ✅ Item added to project  issue only → Backlog                    │
+# │  ✅ Auto-close issue       when status = Done → closes issue       │
+# │  ❌ All others              OFF                                    │
+# │                                                                    │
+# │  This workflow handles everything else:                            │
+# │                                                                    │
+# │  Issue assigned            → In Progress (from Backlog)            │
+# │  Issue unassigned (none)   → Backlog (from In Progress)            │
+# │  Issue closed (completed)  → Done                                  │
+# │  Issue closed (not planned)→ Invalid                               │
+# │  Issue reopened            → Backlog                               │
+# │  PR opened (draft)         → In Progress (from Backlog)            │
+# │  PR opened (ready)         → In Review (from Backlog/In Progress)  │
+# │  PR reopened (draft)       → In Progress                           │
+# │  PR reopened (ready)       → In Review                             │
+# │  PR ready for review       → In Review                             │
+# │  Review requested          → In Review                             │
+# │  Converted to draft        → In Progress (from In Review)          │
+# │  Changes requested         → In Progress (checks other PRs)       │
+# │  PR closed (not merged)    → In Progress/Backlog (checks other PRs)│
+# └─────────────────────────────────────────────────────────────────────┘
+
+on:
+  issues:
+    types: [assigned, unassigned, closed, reopened]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, closed, review_requested, converted_to_draft]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  issues: write
+  pull-requests: read
+  repository-projects: write
+
+env:
+  GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+  PROJECT_ID: "PVT_kwDOC20SDc4BRpIZ"
+  PROJECT_OWNER: lernza
+  PROJECT_NUMBER: "1"
+  FIELD_ID: "PVTSSF_lADOC20SDc4BRpIZzg_aUc4"
+  S_BACKLOG: "9ee49bec"
+  S_IN_PROGRESS: "2f115854"
+  S_IN_REVIEW: "cb65cf8c"
+  S_DONE: "9e0f6df4"
+  S_INVALID: "c099a7e2"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync project board
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # ── Helpers ─────────────────────────────────────────
+
+          get_linked_issues() {
+            local pr_num=$1
+            local owner="${REPO%/*}"
+            local name="${REPO#*/}"
+
+            local nums
+            nums=$(gh api graphql -f query="
+              query {
+                repository(owner: \"$owner\", name: \"$name\") {
+                  pullRequest(number: $pr_num) {
+                    closingIssuesReferences(first: 10) {
+                      nodes { number }
+                    }
+                  }
+                }
+              }" -q '.data.repository.pullRequest.closingIssuesReferences.nodes[].number' 2>/dev/null || true)
+
+            if [ -z "$nums" ]; then
+              local body
+              body=$(gh pr view "$pr_num" --repo "$REPO" --json body -q '.body' 2>/dev/null || echo "")
+              nums=$(echo "$body" | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | grep -oE '[0-9]+' || true)
+            fi
+
+            echo "$nums"
+          }
+
+          get_item() {
+            local issue_num=$1
+            gh api graphql --paginate -f query='
+              query($endCursor: String) {
+                node(id: "'"$PROJECT_ID"'") {
+                  ... on ProjectV2 {
+                    items(first: 100, after: $endCursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        id
+                        content { ... on Issue { number } }
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue { name }
+                        }
+                      }
+                    }
+                  }
+                }
+              }' -q ".data.node.items.nodes[] | select(.content.number == $issue_num) | \"\(.id) \(.fieldValueByName.name // \"\")\"" 2>/dev/null || echo ""
+          }
+
+          set_status() {
+            local item_id=$1
+            local status_id=$2
+            gh api graphql -f query="
+              mutation {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: \"$PROJECT_ID\"
+                  itemId: \"$item_id\"
+                  fieldId: \"$FIELD_ID\"
+                  value: { singleSelectOptionId: \"$status_id\" }
+                }) { projectV2Item { id } }
+              }" > /dev/null 2>&1
+          }
+
+          ensure_in_project() {
+            local issue_url=$1
+            gh project item-add "$PROJECT_NUMBER" \
+              --owner "$PROJECT_OWNER" \
+              --url "$issue_url" \
+              --format json 2>/dev/null | jq -r '.id'
+          }
+
+          move_if() {
+            local issue_num=$1
+            local target_id=$2
+            local target_name=$3
+            shift 3
+            local allowed=("$@")
+
+            local data
+            data=$(get_item "$issue_num")
+            local item_id=$(echo "$data" | awk '{print $1}')
+            local current=$(echo "$data" | cut -d' ' -f2-)
+
+            [ -z "$item_id" ] && return 1
+
+            if [ ${#allowed[@]} -gt 0 ]; then
+              local ok=false
+              for a in "${allowed[@]}"; do
+                [ "$current" = "$a" ] && ok=true
+              done
+              [ "$current" = "" ] && ok=true
+              if [ "$ok" = "false" ]; then
+                echo "· #$issue_num is $current, skipped"
+                return 0
+              fi
+            fi
+
+            set_status "$item_id" "$target_id"
+            echo "✓ #$issue_num → $target_name (was: ${current:-empty})"
+          }
+
+          has_other_ready_prs() {
+            local issue_num=$1
+            local exclude_pr=$2
+            local count
+            count=$(gh pr list --repo "$REPO" --state open \
+              --json number,body,isDraft -q \
+              "[.[] | select(.number != $exclude_pr) | select(.isDraft == false) | select(.body | test(\"(?i)(close[sd]?|fix(e[sd])?|resolve[sd]?)\\\\s+#$issue_num\"))] | length" 2>/dev/null || echo "0")
+            [ "$count" -gt 0 ]
+          }
+
+          # ── Issue Events ────────────────────────────────────
+
+          handle_issue() {
+            case "$ACTION" in
+              assigned)
+                ensure_in_project "$ISSUE_URL" > /dev/null
+                move_if "$ISSUE_NUM" "$S_IN_PROGRESS" "In Progress" "Backlog"
+                ;;
+
+              unassigned)
+                local assignees
+                assignees=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json assignees -q '.assignees | length')
+                if [ "$assignees" -eq 0 ]; then
+                  move_if "$ISSUE_NUM" "$S_BACKLOG" "Backlog" "In Progress"
+                else
+                  echo "· #$ISSUE_NUM still has $assignees assignee(s)"
+                fi
+                ;;
+
+              closed)
+                if [ "$ISSUE_STATE_REASON" = "not_planned" ]; then
+                  sleep 3  # Let built-in set Done first, then override
+                  move_if "$ISSUE_NUM" "$S_INVALID" "Invalid"
+                else
+                  move_if "$ISSUE_NUM" "$S_DONE" "Done"
+                fi
+                ;;
+
+              reopened)
+                move_if "$ISSUE_NUM" "$S_BACKLOG" "Backlog"
+                ;;
+            esac
+          }
+
+          # ── PR Events ───────────────────────────────────────
+
+          handle_pr() {
+            local issues
+            issues=$(get_linked_issues "$PR_NUM")
+            [ -z "$issues" ] && echo "· PR #$PR_NUM has no linked issues" && return
+
+            case "$ACTION" in
+              opened|reopened)
+                for num in $issues; do
+                  if [ "$PR_DRAFT" = "true" ]; then
+                    move_if "$num" "$S_IN_PROGRESS" "In Progress" "Backlog"
+                  else
+                    move_if "$num" "$S_IN_REVIEW" "In Review" "Backlog" "In Progress"
+                  fi
+                done
+                ;;
+
+              ready_for_review|review_requested)
+                for num in $issues; do
+                  move_if "$num" "$S_IN_REVIEW" "In Review" "Backlog" "In Progress"
+                done
+                ;;
+
+              converted_to_draft)
+                for num in $issues; do
+                  move_if "$num" "$S_IN_PROGRESS" "In Progress" "In Review"
+                done
+                ;;
+
+              closed)
+                [ "$PR_MERGED" = "true" ] && return  # Merged → auto-close handles it
+
+                for num in $issues; do
+                  local data
+                  data=$(get_item "$num")
+                  local current=$(echo "$data" | cut -d' ' -f2-)
+
+                  [ "$current" = "Done" ] || [ "$current" = "Invalid" ] && continue
+
+                  if has_other_ready_prs "$num" "$PR_NUM"; then
+                    echo "· #$num has other open PRs, staying In Review"
+                    continue
+                  fi
+
+                  local assignees
+                  assignees=$(gh issue view "$num" --repo "$REPO" --json assignees -q '.assignees | length' 2>/dev/null || echo "0")
+
+                  if [ "$assignees" -gt 0 ]; then
+                    move_if "$num" "$S_IN_PROGRESS" "In Progress" "In Review" "Backlog"
+                  else
+                    move_if "$num" "$S_BACKLOG" "Backlog" "In Review" "In Progress"
+                  fi
+                done
+                ;;
+            esac
+          }
+
+          # ── Review Events ───────────────────────────────────
+
+          handle_review() {
+            [ "$REVIEW_STATE" != "changes_requested" ] && return
+
+            local issues
+            issues=$(get_linked_issues "$PR_NUM")
+            [ -z "$issues" ] && return
+
+            for num in $issues; do
+              if has_other_ready_prs "$num" "$PR_NUM"; then
+                echo "· #$num has other open PRs, staying In Review"
+                continue
+              fi
+              move_if "$num" "$S_IN_PROGRESS" "In Progress" "In Review"
+            done
+          }
+
+          # ── Route ────────────────────────────────────────────
+
+          echo "Event: $EVENT.$ACTION"
+
+          case "$EVENT" in
+            issues)              handle_issue ;;
+            pull_request_target) handle_pr ;;
+            pull_request_review) handle_review ;;
+            *)                   echo "Unknown event: $EVENT" ;;
+          esac

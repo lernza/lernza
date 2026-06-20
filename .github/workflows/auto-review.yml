@@ -1,0 +1,253 @@
+name: Auto Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Philosophy:
+#   This bot helps contributors get merged. It is not a gatekeeper.
+#   It only ever does ONE of two things:
+#     1. Approve and squash-merge a PR with real, on-topic changes.
+#     2. Leave a single warm, constructive comment.
+#   It NEVER closes a PR, NEVER requests changes, NEVER blocks. Those
+#   destructive actions are gone on purpose.
+
+jobs:
+  review:
+    if: github.event.pull_request.state == 'open' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Gather PR context
+        id: ctx
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          PR_DATA=$(gh pr view "$PR_NUM" --json title,body,author,changedFiles,additions,deletions)
+          AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
+          TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+          FILES=$(echo "$PR_DATA" | jq -r '.changedFiles')
+          ADDS=$(echo "$PR_DATA" | jq -r '.additions')
+          DELS=$(echo "$PR_DATA" | jq -r '.deletions')
+
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          echo "adds=$ADDS" >> $GITHUB_OUTPUT
+          echo "dels=$DELS" >> $GITHUB_OUTPUT
+          { echo "title<<GHA_DELIM"; echo "$TITLE"; echo "GHA_DELIM"; } >> $GITHUB_OUTPUT
+          { echo "pr_body<<GHA_DELIM"; echo "$BODY"; echo "GHA_DELIM"; } >> $GITHUB_OUTPUT
+
+          gh pr diff "$PR_NUM" > /tmp/pr-diff.txt 2>/dev/null || true
+          DIFF_BYTES=$(wc -c < /tmp/pr-diff.txt | tr -d ' ')
+          REAL_CHANGE_LINES=$(grep -E '^[+-]' /tmp/pr-diff.txt | grep -vE '^(\+\+\+|---)' | wc -l | tr -d ' ')
+          echo "diff_bytes=$DIFF_BYTES" >> $GITHUB_OUTPUT
+          echo "real_change_lines=$REAL_CHANGE_LINES" >> $GITHUB_OUTPUT
+          head -3000 /tmp/pr-diff.txt > /tmp/pr-diff-truncated.txt
+
+          # Detect a truly empty diff (no real code). We do NOT treat this as fraud
+          # and we do NOT close it - we just nudge gently later.
+          if [ "$DIFF_BYTES" -lt 50 ] || [ "${ADDS:-0}" -eq 0 ] || [ "${REAL_CHANGE_LINES:-0}" -lt 1 ]; then
+            echo "is_empty=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_empty=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Linked-issue context just helps the model write a relevant comment.
+          ISSUE_NUMS=$(echo "$BODY" | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true)
+          : > /tmp/issues-context.txt
+          if [ -n "${ISSUE_NUMS:-}" ]; then
+            for NUM in $ISSUE_NUMS; do
+              ISSUE_DATA=$(gh issue view "$NUM" --repo "${{ github.repository }}" --json number,title,body 2>/dev/null || echo "")
+              if [ -n "$ISSUE_DATA" ]; then
+                ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title // ""')
+                ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""' | head -c 2000)
+                { echo "--- Issue #$NUM: $ISSUE_TITLE ---"; echo "$ISSUE_BODY"; echo ""; } >> /tmp/issues-context.txt
+              fi
+            done
+          fi
+          [ -s /tmp/issues-context.txt ] || echo "(No linked issue)" > /tmp/issues-context.txt
+
+      # Empty diff: leave a kind nudge, then stop. No closing, ever.
+      - name: Gentle nudge on empty diff
+        if: steps.ctx.outputs.is_empty == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.OWNER_PAT }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUM" --body "Hey! I don't see any code changes in this PR yet. If you still need to push your commits, go ahead and they'll show up here automatically. I'll take another look once they land."
+
+      - name: AI review (Groq gpt-oss-120b)
+        if: steps.ctx.outputs.is_empty != 'true'
+        id: review
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          PR_TITLE: ${{ steps.ctx.outputs.title }}
+          PR_AUTHOR: ${{ steps.ctx.outputs.author }}
+          PR_BODY: ${{ steps.ctx.outputs.pr_body }}
+          PR_FILES: ${{ steps.ctx.outputs.files }}
+          PR_ADDS: ${{ steps.ctx.outputs.adds }}
+          PR_DELS: ${{ steps.ctx.outputs.dels }}
+        run: |
+          SYSTEM_PROMPT=$(cat <<'SYSTEM_EOF'
+          You are a warm, encouraging code reviewer for a fast-moving hackathon project.
+          Your job is to help contributors get their work merged, not to gatekeep.
+
+          ## Default: APPROVE
+          Approve almost everything that contains real code changes plausibly related
+          to the PR title or linked issue. When in doubt, APPROVE.
+
+          Completely ignore (these are NEVER reasons to withhold approval):
+          code style, formatting, naming, missing tests, untyped code, unhandled edge
+          cases, performance, accessibility, missing comments or docs, "not idiomatic"
+          patterns, partial or work-in-progress implementations that compile, hardcoded
+          values, magic numbers, no error handling, typos, suggestions for improvement.
+
+          ## The only time you do NOT approve: COMMENT (still never blocks or closes)
+          Return decision "COMMENT" only when something genuinely deserves a human's
+          eyes, and even then your tone stays friendly and helpful. Cases:
+          - the diff has no plausible connection at all to what the PR claims
+          - it is clearly auto-generated dead code that solves nothing (functions never
+            called, files never imported) with no real problem addressed
+          - it duplicates existing repo code verbatim and presents it as new work
+          - it exposes secrets, API keys, or credentials, or contains obviously
+            destructive commands
+
+          Even in these cases: do NOT accuse, do NOT use the word "fraud", do NOT
+          mention closing or rejecting. Ask a gentle clarifying question or kindly note
+          what looks off and invite them to take a look. If you are not highly certain
+          there is a real problem, APPROVE instead.
+
+          ## Output
+          Respond with a SINGLE JSON object only. No markdown fences, no text outside it.
+          The "summary" is posted to the PR as-is: warm, friendly, under 120 words,
+          addressed to the contributor, with no meta-commentary about being a bot,
+          confidence, or decision type.
+
+          Schema:
+          {
+            "decision": "APPROVE" | "COMMENT",
+            "confidence": <number 0 to 1>,
+            "summary": <string under 120 words, friendly, addressed to the contributor>
+          }
+          SYSTEM_EOF
+          )
+
+          PAYLOAD=$(jq -n \
+            --arg system "$SYSTEM_PROMPT" \
+            --arg title "$PR_TITLE" \
+            --arg author "$PR_AUTHOR" \
+            --arg pr_body "$PR_BODY" \
+            --arg files "$PR_FILES" \
+            --arg adds "$PR_ADDS" \
+            --arg dels "$PR_DELS" \
+            --rawfile diff /tmp/pr-diff-truncated.txt \
+            --rawfile issues /tmp/issues-context.txt \
+            '{
+              model: "openai/gpt-oss-120b",
+              messages: [
+                { role: "system", content: $system },
+                { role: "user", content: (
+                    "## PR metadata\n\n" +
+                    "Title: " + $title + "\n" +
+                    "Author: " + $author + "\n" +
+                    "Files changed: " + $files + "\n" +
+                    "Additions: " + $adds + "\n" +
+                    "Deletions: " + $dels + "\n\n" +
+                    "## PR description\n\n" + $pr_body + "\n\n" +
+                    "## Linked issue(s)\n\n" + $issues + "\n\n" +
+                    "## Diff (first 3000 lines)\n\n```diff\n" + $diff + "\n```\n\n" +
+                    "Now produce the JSON review object."
+                ) }
+              ],
+              max_completion_tokens: 4096,
+              temperature: 0.1,
+              response_format: { type: "json_object" },
+              reasoning_effort: "medium"
+            }')
+
+          RESPONSE=$(curl -s --max-time 180 https://api.groq.com/openai/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -d "$PAYLOAD")
+
+          API_ERROR=$(echo "$RESPONSE" | jq -r '.error.message // ""' 2>/dev/null || echo "")
+          REVIEW_JSON=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // ""' 2>/dev/null || echo "")
+
+          DECISION="COMMENT"
+          CONFIDENCE="0"
+          SUMMARY=""
+
+          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "null" ]; then
+            echo "Groq API error: $API_ERROR"
+            SUMMARY="Thanks for the PR! A maintainer will take a look shortly."
+          elif [ -z "$REVIEW_JSON" ] || [ "$REVIEW_JSON" = "null" ] || ! echo "$REVIEW_JSON" | jq empty 2>/dev/null; then
+            echo "Empty or malformed model response"
+            SUMMARY="Thanks for the PR! A maintainer will take a look shortly."
+          else
+            DECISION=$(echo "$REVIEW_JSON" | jq -r '.decision // "COMMENT"')
+            CONFIDENCE=$(echo "$REVIEW_JSON" | jq -r '.confidence // 0')
+            SUMMARY=$(echo "$REVIEW_JSON" | jq -r '.summary // ""')
+            # Anything that is not a clean APPROVE just becomes a friendly comment.
+            if [ "$DECISION" != "APPROVE" ]; then
+              DECISION="COMMENT"
+            fi
+          fi
+
+          [ -n "$SUMMARY" ] || SUMMARY="Looks good, thanks for contributing!"
+
+          echo "::group::Auto-review details (run log only)"
+          echo "Decision:   $DECISION"
+          echo "Confidence: $CONFIDENCE"
+          echo "::endgroup::"
+
+          echo "decision=$DECISION" >> $GITHUB_OUTPUT
+          echo "confidence=$CONFIDENCE" >> $GITHUB_OUTPUT
+          { echo "body<<REVIEW_EOF"; echo "$SUMMARY"; echo "REVIEW_EOF"; } >> $GITHUB_OUTPUT
+
+      # The only actions: approve + merge, or a friendly comment. Never close, never block.
+      - name: Approve and merge, or comment
+        if: steps.ctx.outputs.is_empty != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.OWNER_PAT }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ steps.ctx.outputs.author }}
+          PR_TITLE: ${{ steps.ctx.outputs.title }}
+          DECISION: ${{ steps.review.outputs.decision }}
+          BODY: ${{ steps.review.outputs.body }}
+        run: |
+          PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
+          IS_SELF="false"
+          [ "$PR_AUTHOR" = "$PAT_USER" ] && IS_SELF="true"
+          [ -n "$BODY" ] || BODY="Looks good, thanks for contributing!"
+
+          if [ "$DECISION" = "APPROVE" ]; then
+            # Post the approval (you cannot formally approve your own PR, so self-PRs get a comment).
+            if [ "$IS_SELF" = "true" ]; then
+              gh pr comment "$PR_NUM" --body "$BODY" || true
+            else
+              gh pr review "$PR_NUM" --approve --body "$BODY" || gh pr comment "$PR_NUM" --body "$BODY" || true
+            fi
+
+            # Squash-merge. Strip bot co-authors, keep human ones, add your attribution.
+            COMMIT_BODY=$(gh pr view "$PR_NUM" --json commits \
+              --jq '[.commits[].messageBody] | join("\n")' \
+              | grep -viE 'co-authored-by:.*(claude|qwen|copilot|github-actions|bot|\[bot\]|gpt|openai|anthropic)' \
+              || true)
+            MERGE_BODY=$(printf '%s\n\nCo-authored-by: Dopey <hello@sshdopey.com>' "$COMMIT_BODY" \
+              | sed '/^$/N;/^\n$/d')
+
+            # If the merge cannot happen right now (conflicts, checks pending), do NOT
+            # close or fail loudly - just leave a friendly note so the human can finish.
+            gh pr merge "$PR_NUM" --squash --admin --subject "$PR_TITLE" --body "$MERGE_BODY" \
+              || gh pr comment "$PR_NUM" --body "Approved! I couldn't auto-merge this just yet (it may need a rebase or have a check still running). A maintainer can merge it whenever it's ready."
+          else
+            # COMMENT path: a single warm, non-blocking comment. That's all.
+            gh pr comment "$PR_NUM" --body "$BODY" || true
+          fi

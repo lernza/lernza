@@ -1,0 +1,216 @@
+name: Deploy Contracts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "contracts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/deploy-contracts.yml"
+
+permissions:
+  contents: read
+
+env:
+  STELLAR_CLI_VERSION: "25.2.0"
+  STELLAR_NETWORK: "testnet"
+  STELLAR_RPC_URL: "https://soroban-testnet.stellar.org"
+  STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      quest_contract_id: ${{ steps.deploy.outputs.quest_contract_id }}
+      milestone_contract_id: ${{ steps.deploy.outputs.milestone_contract_id }}
+      rewards_contract_id: ${{ steps.deploy.outputs.rewards_contract_id }}
+      certificate_contract_id: ${{ steps.deploy.outputs.certificate_contract_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install stellar-cli
+        run: |
+          curl -fsSL "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar xz -C /usr/local/bin
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown,wasm32v1-none
+
+      - name: Configure Stellar testnet
+        run: |
+          stellar network add "${STELLAR_NETWORK}" \
+            --rpc-url "${STELLAR_RPC_URL}" \
+            --network-passphrase "${STELLAR_NETWORK_PASSPHRASE}" \
+            || true
+
+      - name: Build contract workspace
+        run: cargo build --workspace --release --target wasm32-unknown-unknown
+
+      - name: Build optimized Soroban WASM
+        run: stellar contract build
+
+      - name: Upload, deploy, and initialize contracts
+        id: deploy
+        env:
+          DEPLOYER_SECRET: ${{ secrets.STELLAR_TESTNET_DEPLOYER_SECRET }}
+          DEPLOYER_PUBLIC_KEY: ${{ secrets.STELLAR_TESTNET_DEPLOYER_PUBLIC_KEY }}
+          REWARD_TOKEN_ID: ${{ secrets.STELLAR_TESTNET_REWARD_TOKEN_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOYER_SECRET:-}" ] || [ -z "${DEPLOYER_PUBLIC_KEY:-}" ] || [ -z "${REWARD_TOKEN_ID:-}" ]; then
+            echo "Required deployment secrets are missing." >&2
+            echo "Expected: STELLAR_TESTNET_DEPLOYER_SECRET, STELLAR_TESTNET_DEPLOYER_PUBLIC_KEY, STELLAR_TESTNET_REWARD_TOKEN_ID" >&2
+            exit 1
+          fi
+
+          upload_contract() {
+            local contract_name="$1"
+            stellar contract upload \
+              --wasm "target/wasm32v1-none/release/${contract_name}.wasm" \
+              --source-account "${DEPLOYER_SECRET}" \
+              --network "${STELLAR_NETWORK}" \
+              | tail -n1 | tr -d '\r'
+          }
+
+          deploy_contract() {
+            local wasm_hash="$1"
+            shift
+            stellar contract deploy \
+              --wasm-hash "${wasm_hash}" \
+              --source-account "${DEPLOYER_SECRET}" \
+              --network "${STELLAR_NETWORK}" \
+              "$@" \
+              | tail -n1 | tr -d '\r'
+          }
+
+          quest_wasm_hash="$(upload_contract quest)"
+          quest_contract_id="$(deploy_contract "${quest_wasm_hash}")"
+
+          milestone_wasm_hash="$(upload_contract milestone)"
+          milestone_contract_id="$(deploy_contract "${milestone_wasm_hash}")"
+
+          rewards_wasm_hash="$(upload_contract rewards)"
+          rewards_contract_id="$(deploy_contract "${rewards_wasm_hash}")"
+
+          certificate_wasm_hash="$(upload_contract certificate)"
+          certificate_contract_id="$(
+            deploy_contract "${certificate_wasm_hash}" -- --owner "${milestone_contract_id}"
+          )"
+
+          stellar contract invoke \
+            --id "${milestone_contract_id}" \
+            --source-account "${DEPLOYER_SECRET}" \
+            --network "${STELLAR_NETWORK}" \
+            -- initialize \
+            --admin "${DEPLOYER_PUBLIC_KEY}" \
+            --quest_contract "${quest_contract_id}" \
+            --certificate_contract "${certificate_contract_id}" \
+            >/dev/null
+
+          stellar contract invoke \
+            --id "${rewards_contract_id}" \
+            --source-account "${DEPLOYER_SECRET}" \
+            --network "${STELLAR_NETWORK}" \
+            -- initialize \
+            --token_addr "${REWARD_TOKEN_ID}" \
+            --quest_contract_addr "${quest_contract_id}" \
+            --milestone_contract_addr "${milestone_contract_id}" \
+            >/dev/null
+
+          {
+            echo "quest_contract_id=${quest_contract_id}"
+            echo "milestone_contract_id=${milestone_contract_id}"
+            echo "rewards_contract_id=${rewards_contract_id}"
+            echo "certificate_contract_id=${certificate_contract_id}"
+          } >> "${GITHUB_OUTPUT}"
+
+          cat > contract-deployment-testnet.json <<JSON
+          {
+            "network": "${STELLAR_NETWORK}",
+            "quest_contract_id": "${quest_contract_id}",
+            "milestone_contract_id": "${milestone_contract_id}",
+            "rewards_contract_id": "${rewards_contract_id}",
+            "certificate_contract_id": "${certificate_contract_id}",
+            "reward_token_id": "${REWARD_TOKEN_ID}"
+          }
+          JSON
+
+          {
+            echo "## Testnet Contract Deployment"
+            echo ""
+            echo "| Contract | ID |"
+            echo "|---|---|"
+            echo "| Quest | ${quest_contract_id} |"
+            echo "| Milestone | ${milestone_contract_id} |"
+            echo "| Rewards | ${rewards_contract_id} |"
+            echo "| Certificate | ${certificate_contract_id} |"
+            echo "| Reward token | ${REWARD_TOKEN_ID} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload deployment metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: contract-deployment-testnet
+          path: contract-deployment-testnet.json
+          retention-days: 30
+
+      - name: Update Netlify environment variables
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_ACCOUNT_ID: ${{ secrets.NETLIFY_ACCOUNT_ID }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          QUEST_CONTRACT_ID: ${{ steps.deploy.outputs.quest_contract_id }}
+          MILESTONE_CONTRACT_ID: ${{ steps.deploy.outputs.milestone_contract_id }}
+          REWARDS_CONTRACT_ID: ${{ steps.deploy.outputs.rewards_contract_id }}
+          REWARD_TOKEN_ID: ${{ secrets.STELLAR_TESTNET_REWARD_TOKEN_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${NETLIFY_AUTH_TOKEN:-}" ] || [ -z "${NETLIFY_ACCOUNT_ID:-}" ] || [ -z "${NETLIFY_SITE_ID:-}" ]; then
+            echo "Netlify credentials are not configured; skipping environment variable sync." >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
+          upsert_env() {
+            local key="$1"
+            local value="$2"
+            local status
+
+            status="$(
+              curl -sS -o /tmp/netlify-env.json -w "%{http_code}" \
+                -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+                "https://api.netlify.com/api/v1/accounts/${NETLIFY_ACCOUNT_ID}/env/${key}?site_id=${NETLIFY_SITE_ID}"
+            )"
+
+            if [ "${status}" = "200" ]; then
+              curl -fsSL \
+                -X PATCH \
+                -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.netlify.com/api/v1/accounts/${NETLIFY_ACCOUNT_ID}/env/${key}?site_id=${NETLIFY_SITE_ID}" \
+                --data "{\"context\":\"all\",\"value\":\"${value}\"}" \
+                >/dev/null
+            else
+              curl -fsSL \
+                -X POST \
+                -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "https://api.netlify.com/api/v1/accounts/${NETLIFY_ACCOUNT_ID}/env?site_id=${NETLIFY_SITE_ID}" \
+                --data "[{\"key\":\"${key}\",\"values\":[{\"context\":\"all\",\"value\":\"${value}\"}]}]" \
+                >/dev/null
+            fi
+          }
+
+          upsert_env VITE_QUEST_CONTRACT_ID "${QUEST_CONTRACT_ID}"
+          upsert_env VITE_MILESTONE_CONTRACT_ID "${MILESTONE_CONTRACT_ID}"
+          upsert_env VITE_REWARDS_CONTRACT_ID "${REWARDS_CONTRACT_ID}"
+          upsert_env VITE_REWARDS_TOKEN_CONTRACT_ID "${REWARD_TOKEN_ID}"
+          upsert_env VITE_USDC_TOKEN_ADDRESS "${REWARD_TOKEN_ID}"
+
+          echo "Netlify environment variables updated." >> "${GITHUB_STEP_SUMMARY}"

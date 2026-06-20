@@ -1,0 +1,11 @@
+# Default owner for everything
+* @sshdopey
+
+# Contract code
+contracts/ @sshdopey
+
+# Frontend code
+frontend/ @sshdopey
+
+# CI/CD and infrastructure
+.github/ @sshdopey

@@ -1,0 +1,329 @@
+import { useEffect, useCallback, useRef } from "react"
+import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
+import { useAsyncData } from "@/hooks/use-async-data"
+import { LoadingState, EmptyState } from "@/components/ui/async-states"
+import { SmartError } from "@/components/error-states"
+import { questClient } from "@/lib/contracts/quest"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { formatTokens, shortenAddress } from "@/lib/utils"
+import { useState } from "react"
+import { cn } from "@/lib/utils"
+import { PrefetchLink } from "@/components/PrefetchLink"
+import { PageContainer } from "@/components/page-container"
+import { PageHeader } from "@/components/page-header"
+
+type ActiveTab = "earners" | "quests"
+
+interface EarnerEntry {
+  address: string
+  totalEarned: bigint
+  rank: number
+}
+
+interface ActiveQuestEntry {
+  id: number
+  name: string
+  enrolleeCount: number
+  rank: number
+}
+
+const PAGE_SIZE = 50
+
+async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
+  const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
+  const enrolleeSets = await Promise.all(quests.map(q => questClient.getEnrollees(q.id)))
+
+  const allAddresses = new Set<string>()
+  for (const list of enrolleeSets) {
+    for (const addr of list) {
+      allAddresses.add(addr)
+    }
+  }
+
+  const entries = await Promise.all(
+    Array.from(allAddresses).map(async address => {
+      const totalEarned = await rewardsClient.getUserEarnings(address)
+      return { address, totalEarned }
+    })
+  )
+
+  return entries
+    .sort((a, b) => (b.totalEarned > a.totalEarned ? 1 : b.totalEarned < a.totalEarned ? -1 : 0))
+    .map((e, i) => ({ ...e, rank: offset + i + 1 }))
+}
+
+async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEntry[]> {
+  const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
+  const withCounts = await Promise.all(
+    quests.map(async q => {
+      const enrollees = await questClient.getEnrollees(q.id)
+      return { id: q.id, name: q.name, enrolleeCount: enrollees.length }
+    })
+  )
+
+  return withCounts
+    .sort((a, b) => b.enrolleeCount - a.enrolleeCount)
+    .map((q, i) => ({ ...q, rank: offset + i + 1 }))
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  const base =
+    "inline-flex min-h-10 min-w-12 flex-col items-center justify-center border border-border px-2 py-1 text-center text-[11px] font-semibold leading-none shadow-sm"
+  if (rank === 1)
+    return (
+      <span className={cn(base, "bg-warning text-warning-foreground")}>
+        <span>#1</span>
+        <span className="text-[8px] tracking-widest uppercase">Gold</span>
+      </span>
+    )
+  if (rank === 2)
+    return (
+      <span className={cn(base, "bg-muted text-foreground")}>
+        <span>#2</span>
+        <span className="text-[8px] tracking-widest uppercase">Silver</span>
+      </span>
+    )
+  if (rank === 3)
+    return (
+      <span className={cn(base, "bg-amber-600 text-white")}>
+        <span>#3</span>
+        <span className="text-[8px] tracking-widest uppercase">Bronze</span>
+      </span>
+    )
+  return (
+    <span className={cn(base, "bg-background text-foreground")}>
+      <span>#{rank}</span>
+      <span className="text-[8px] tracking-widest uppercase">Rank</span>
+    </span>
+  )
+}
+
+export function Leaderboard() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("earners")
+  const [earnersOffset, setEarnersOffset] = useState(0)
+  const [questsOffset, setQuestsOffset] = useState(0)
+  const [allEarners, setAllEarners] = useState<EarnerEntry[]>([])
+  const [allQuests, setAllQuests] = useState<ActiveQuestEntry[]>([])
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const observerTarget = useRef<HTMLDivElement>(null)
+
+  const {
+    data: earnersData,
+    isLoading: earnersLoading,
+    error: earnersError,
+    refetch: refetchEarners,
+  } = useAsyncData(() => fetchTopEarners(0), { enabled: activeTab === "earners" })
+
+  const {
+    data: questsData,
+    isLoading: questsLoading,
+    error: questsError,
+    refetch: refetchQuests,
+  } = useAsyncData(() => fetchMostActiveQuests(0), { enabled: activeTab === "quests" })
+
+  // Update allEarners when earnersData changes
+  useEffect(() => {
+    if (earnersData) {
+      setAllEarners(earnersData)
+    }
+  }, [earnersData])
+
+  // Update allQuests when questsData changes
+  useEffect(() => {
+    if (questsData) {
+      setAllQuests(questsData)
+    }
+  }, [questsData])
+
+  const loadMoreEarners = useCallback(async () => {
+    setIsLoadingMore(true)
+    try {
+      const newOffset = earnersOffset + PAGE_SIZE
+      const more = await fetchTopEarners(newOffset)
+      if (more.length > 0) {
+        const nextRank = allEarners.length + 1
+        setAllEarners(prev => [...prev, ...more.map((e, i) => ({ ...e, rank: nextRank + i }))])
+        setEarnersOffset(newOffset)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [earnersOffset, allEarners.length])
+
+  const loadMoreQuests = useCallback(async () => {
+    setIsLoadingMore(true)
+    try {
+      const newOffset = questsOffset + PAGE_SIZE
+      const more = await fetchMostActiveQuests(newOffset)
+      if (more.length > 0) {
+        const nextRank = allQuests.length + 1
+        setAllQuests(prev => [...prev, ...more.map((q, i) => ({ ...q, rank: nextRank + i }))])
+        setQuestsOffset(newOffset)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [questsOffset, allQuests.length])
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting && !isLoadingMore) {
+        if (activeTab === "earners") {
+          void loadMoreEarners()
+        } else {
+          void loadMoreQuests()
+        }
+      }
+    })
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current)
+    }
+
+    return () => observer.disconnect()
+  }, [activeTab, isLoadingMore, loadMoreEarners, loadMoreQuests])
+
+  const refetchActive = useCallback(() => {
+    if (activeTab === "earners") return refetchEarners()
+    return refetchQuests()
+  }, [activeTab, refetchEarners, refetchQuests])
+
+  // Use a ref to store the latest refetchActive to prevent interval leaks
+  const refetchActiveRef = useRef(refetchActive)
+  useEffect(() => {
+    refetchActiveRef.current = refetchActive
+  }, [refetchActive])
+
+  useEffect(() => {
+    const id = setInterval(
+      () => {
+        void refetchActiveRef.current()
+      },
+      5 * 60 * 1000
+    )
+    return () => clearInterval(id)
+  }, [])
+
+  const isLoading = activeTab === "earners" ? earnersLoading : questsLoading
+  const error = activeTab === "earners" ? earnersError : questsError
+  const isEmpty = activeTab === "earners" ? allEarners.length === 0 : allQuests.length === 0
+
+  return (
+    <PageContainer width="narrow">
+      <PageHeader
+        eyebrow={
+          <>
+            <Trophy className="h-4 w-4" />
+            Leaderboard
+          </>
+        }
+        title="Top performers"
+        subtitle="Refreshes automatically every 5 minutes."
+      />
+
+      {/* Tabs */}
+      <div className="border-border mb-6 flex gap-0 border shadow-md">
+        <button
+          onClick={() => setActiveTab("earners")}
+          className={cn(
+            "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
+            activeTab === "earners" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+          )}
+        >
+          <Coins className="h-4 w-4" />
+          View top earners
+        </button>
+        <button
+          onClick={() => setActiveTab("quests")}
+          className={cn(
+            "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",
+            activeTab === "quests" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+          )}
+        >
+          <Users className="h-4 w-4" />
+          View active quests
+        </button>
+      </div>
+
+      {/* Refresh button */}
+      <div className="mb-4 flex justify-end">
+        <button
+          onClick={() => void refetchActive()}
+          disabled={isLoading}
+          className="border-border neo-press focus-visible:ring-ring hover:bg-secondary flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-bold shadow-sm transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+        >
+          <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
+          Refresh
+        </button>
+      </div>
+
+      {/* Content */}
+      {isLoading && <LoadingState message="Fetching on-chain data…" />}
+      {!isLoading && error && <SmartError message={error} onRetry={refetchActive} />}
+      {!isLoading && !error && isEmpty && (
+        <EmptyState
+          illustration="leaderboard"
+          title="No data yet"
+          description="On-chain activity will appear here once quests have enrollees."
+        />
+      )}
+
+      {/* Top Earners list */}
+      {!isLoading && !error && !isEmpty && activeTab === "earners" && (
+        <>
+          <ol className="space-y-2">
+            {allEarners.map(entry => (
+              <li
+                key={entry.address}
+                className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md"
+              >
+                <RankBadge rank={entry.rank} />
+                <PrefetchLink
+                  to={`/creator/${entry.address}`}
+                  className="hover:text-accent flex-1 font-mono text-sm font-bold transition-colors"
+                >
+                  {shortenAddress(entry.address, 6)}
+                </PrefetchLink>
+                <span className="border-border bg-background border px-2 py-1 text-xs font-semibold shadow-sm">
+                  {formatTokens(entry.totalEarned)}
+                </span>
+              </li>
+            ))}
+          </ol>
+          <div ref={observerTarget} className="mt-8 py-4 text-center">
+            {isLoadingMore && <LoadingState message="Loading more earners…" />}
+          </div>
+        </>
+      )}
+
+      {/* Most Active Quests list */}
+      {!isLoading && !error && !isEmpty && activeTab === "quests" && (
+        <>
+          <ol className="space-y-2">
+            {allQuests.map(entry => (
+              <PrefetchLink
+                key={entry.id}
+                to={`/quest/${entry.id}`}
+                className="border-border bg-card flex cursor-pointer items-center gap-4 border px-4 py-3 shadow-md transition-transform hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <RankBadge rank={entry.rank} />
+                <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
+                <span className="border-border bg-background flex items-center gap-1 border px-2 py-1 text-xs font-semibold shadow-sm">
+                  <Users className="h-3 w-3" />
+                  {entry.enrolleeCount}
+                </span>
+              </PrefetchLink>
+            ))}
+          </ol>
+          <div ref={observerTarget} className="mt-8 py-4 text-center">
+            {isLoadingMore && <LoadingState message="Loading more quests…" />}
+          </div>
+        </>
+      )}
+    </PageContainer>
+  )
+}

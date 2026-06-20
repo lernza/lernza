@@ -1,0 +1,17 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Content-Encoding", "value": "br" },
+        { "key": "Vary", "value": "Accept-Encoding" }
+      ]
+    }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "^/(|dashboard|profile|leaderboard|quest/create)$", "dest": "/index.html" },
+    { "src": "^/(quest|creator|workspace)/.+$", "dest": "/index.html" },
+    { "src": "/(.*)", "dest": "/index.html", "status": 404 }
+  ]
+}

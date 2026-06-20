@@ -1,0 +1,193 @@
+import {
+  Address,
+  Contract,
+  nativeToScVal,
+  scValToNative,
+  xdr,
+  TransactionBuilder,
+  Keypair,
+  Account,
+} from "@stellar/stellar-sdk"
+import {
+  server,
+  signAndSubmit,
+  NETWORK_PASSPHRASE,
+  RPC_TIMEOUT_MS,
+  withTimeout,
+  withRpcReadThrottle,
+  type TransactionLifecycleHandlers,
+} from "./client"
+import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
+import { safeContractCall } from "../error-utils"
+import { withContractLogging } from "./logger"
+
+const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
+
+export class RewardsClient {
+  private contract: Contract | null
+
+  constructor() {
+    if (CONTRACT_ID) {
+      try {
+        this.contract = new Contract(CONTRACT_ID)
+      } catch {
+        this.contract = null
+        if (import.meta.env.DEV) {
+          console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
+        }
+      }
+    } else {
+      this.contract = null
+    }
+  }
+
+  private getContract(): Contract {
+    if (!this.contract)
+      throw new Error("Rewards contract not configured. Set VITE_REWARDS_CONTRACT_ID.")
+    return this.contract
+  }
+
+  // --- Read Operations ---
+
+  async getPoolBalance(questId: number): Promise<PoolBalance> {
+    const result = await this.invokeRead("get_pool_balance", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    return result ? BigInt(result) : 0n
+  }
+
+  async getUserEarnings(user: string): Promise<UserEarnings> {
+    const result = await this.invokeRead("get_user_earnings", [new Address(user).toScVal()])
+    return result ? BigInt(result) : 0n
+  }
+
+  async getTotalDistributed(): Promise<TotalDistributed> {
+    const result = await this.invokeRead("get_total_distributed", [])
+    return result ? BigInt(result) : 0n
+  }
+
+  async getQuestAuthority(questId: number): Promise<string | null> {
+    const result = await this.invokeRead("get_quest_authority", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    if (!result) return null
+    const native = scValToNative(result)
+    return typeof native === "string" ? native : null
+  }
+
+  // --- Write Operations ---
+
+  async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
+      return signAndSubmit(tx, handlers)
+    })
+  }
+
+  async fundQuest(
+    funder: string,
+    questId: number,
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(funder, "fund_quest", [
+        new Address(funder).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
+  }
+
+  async distributeReward(
+    authority: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(authority, "distribute_reward", [
+        new Address(authority).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(milestoneId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
+  }
+
+  async refundPool(
+    authority: string,
+    questId: number,
+    amount: bigint,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(authority, "refund_pool", [
+        new Address(authority).toScVal(),
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(amount, { type: "i128" }),
+      ])
+      return signAndSubmit(tx, handlers)
+    })
+  }
+
+  // --- Private Helpers ---
+
+  private async invokeRead(method: string, args: xdr.ScVal[]) {
+    return withContractLogging("rewards", method, {}, async () => {
+      const randomKP = Keypair.random()
+      const account = new Account(randomKP.publicKey(), "0")
+
+      const tx = new TransactionBuilder(account, {
+        fee: "10000",
+        networkPassphrase: NETWORK_PASSPHRASE,
+      })
+        .addOperation(this.getContract().call(method, ...args))
+        .setTimeout(30)
+        .build()
+
+      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
+        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
+      )
+
+      if (response && "result" in response && response.result) {
+        return scValToNative(response.result.retval)
+      }
+      return null
+    }).catch((e: unknown) => {
+      if (import.meta.env.DEV) {
+        console.error(`Read error ${method}:`, e)
+      }
+      return null
+    })
+  }
+
+  private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
+    const account = await withTimeout(
+      server.getAccount(source),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: getAccount"
+    )
+
+    const tx = new TransactionBuilder(account, {
+      fee: "10000",
+      networkPassphrase: NETWORK_PASSPHRASE,
+    })
+      .addOperation(this.getContract().call(method, ...args))
+      .setTimeout(30)
+      .build()
+
+    return await withTimeout(
+      server.prepareTransaction(tx),
+      RPC_TIMEOUT_MS,
+      "RPC timeout: prepareTransaction"
+    )
+  }
+}
+
+export const rewardsClient = new RewardsClient()

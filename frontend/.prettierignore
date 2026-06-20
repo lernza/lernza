@@ -1,0 +1,11 @@
+dist
+node_modules
+coverage
+*.log
+.env
+.env.local
+.env.*.local
+pnpm-lock.yaml
+package-lock.json
+eslint.config.js
+

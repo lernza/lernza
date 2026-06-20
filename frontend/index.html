@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
+    <meta name="theme-color" content="#FBFAF7" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Lernza — Learn. Earn. On-chain." />
+    <meta
+      property="og:description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
+    <meta property="og:image" content="%BASE_URL%og-image.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:url" content="https://lernza.com" />
+    <meta property="og:site_name" content="Lernza" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Lernza — Learn. Earn. On-chain." />
+    <meta
+      name="twitter:description"
+      content="The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
+    />
+    <meta name="twitter:image" content="%BASE_URL%og-image.png" />
+
+    <title>Lernza — Learn. Earn. On-chain.</title>
+
+    <!-- Critical hero CSS inlined to unblock first paint (issue #925) -->
+    <style>
+      *,::before,::after{box-sizing:border-box}
+      body{margin:0;background:#fbfaf7;color:#1a1813;font-family:Inter,system-ui,sans-serif}
+      #root{min-height:100dvh}
+      .hero-section{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6rem 1.5rem;text-align:center;background:#fbfaf7}
+      .hero-heading{font-family:Fraunces,Georgia,serif;font-size:clamp(2.25rem,6vw,4.25rem);font-weight:500;line-height:1.05;letter-spacing:-0.02em;margin:0 0 1.25rem}
+      .hero-sub{font-size:1.125rem;color:#6b6256;max-width:46ch;margin:0 auto 2rem;line-height:1.6}
+      .hero-cta{display:inline-flex;align-items:center;gap:.5rem;padding:.8rem 1.75rem;font-weight:600;border-radius:.625rem;border:1px solid #1a1813;background:#1a1813;color:#fbfaf7;cursor:pointer;text-decoration:none}
+    </style>
+
+    <!-- Font preconnect -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Editorial pairing: Fraunces (serif display) + Inter (sans body) -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..600&family=Inter:wght@400;500;600;700&display=swap"
+      />
+    </noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

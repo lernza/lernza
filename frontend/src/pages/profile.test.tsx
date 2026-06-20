@@ -1,0 +1,139 @@
+import React from "react"
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { Profile } from "./profile"
+
+vi.mock("@/hooks/use-wallet", () => ({
+  useWallet: vi.fn(),
+}))
+
+vi.mock("@/hooks/use-user-role", () => ({
+  useUserRole: vi.fn(),
+}))
+
+vi.mock("@/hooks/use-async-data", () => ({
+  useContractData: vi.fn(),
+}))
+
+vi.mock("@/lib/horizon-activity", () => ({
+  fetchWalletActivity: vi.fn(),
+}))
+
+vi.mock("@/lib/contracts/client", () => ({
+  NETWORK_PASSPHRASE: "Test SDF Network ; September 2015",
+  SOROBAN_RPC_URL: "https://soroban-testnet.stellar.org",
+  RPC_TIMEOUT_MS: 15000,
+  server: {
+    simulateTransaction: vi.fn(),
+    sendTransaction: vi.fn(),
+    getTransaction: vi.fn(),
+    getAccount: vi.fn(),
+  },
+  withTimeout: <T,>(promise: Promise<T>) => promise,
+}))
+
+import { useWallet } from "@/hooks/use-wallet"
+import { useUserRole } from "@/hooks/use-user-role"
+import { useContractData } from "@/hooks/use-async-data"
+import { fetchWalletActivity } from "@/lib/horizon-activity"
+
+const mockUseWallet = vi.mocked(useWallet)
+const mockUseUserRole = vi.mocked(useUserRole)
+const mockUseContractData = vi.mocked(useContractData)
+const mockFetchWalletActivity = vi.mocked(fetchWalletActivity)
+
+function renderProfile() {
+  return render(<Profile />)
+}
+
+describe("Profile", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    mockUseWallet.mockReturnValue({
+      connected: true,
+      connect: vi.fn(),
+      address: "GABC1234567890XYZ",
+    } as ReturnType<typeof useWallet>)
+
+    mockUseUserRole.mockReturnValue({
+      role: "learner",
+      isOwner: false,
+      isEnrolled: true,
+      ownedQuests: [],
+      enrolledQuests: [],
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useUserRole>)
+
+    mockUseContractData.mockImplementation(key => {
+      if (key === "rewards") {
+        return {
+          data: 7_500_000_000n,
+          isLoading: false,
+          error: null,
+        }
+      }
+
+      return {
+        data: {
+          totalQuests: 0,
+          totalEnrollees: 0,
+          totalPoolBalance: 0n,
+          quests: [],
+        },
+        isLoading: false,
+        error: null,
+      }
+    })
+  })
+
+  it("shows the aggregate on-chain earnings in the overview tab", () => {
+    renderProfile()
+
+    expect(screen.getByText("Profile Activity")).toBeTruthy()
+    expect(screen.getByText("750 USDC")).toBeTruthy()
+    expect(screen.getByText("USDC earned on-chain")).toBeTruthy()
+    expect(screen.getByText(/use the activity tab to inspect recent enrollments/i)).toBeTruthy()
+  })
+
+  it("loads and renders wallet activity from Horizon", async () => {
+    mockFetchWalletActivity.mockResolvedValue({
+      items: [
+        {
+          id: "op-1",
+          type: "rewarded",
+          questId: 12,
+          questName: "Rust Basics",
+          timestamp: Date.parse("2026-03-20T12:00:00Z"),
+          txHash: "abc123",
+          href: "https://stellar.expert/explorer/testnet/tx/abc123",
+          amount: 2_500_000_000n,
+        },
+      ],
+      nextCursor: null,
+      capReached: false,
+    })
+
+    renderProfile()
+    fireEvent.click(screen.getByRole("button", { name: "View activity" }))
+
+    await waitFor(() => {
+      expect(mockFetchWalletActivity).toHaveBeenCalledWith(
+        "GABC1234567890XYZ",
+        null,
+        0,
+        expect.any(AbortSignal)
+      )
+    })
+
+    expect(screen.getByText("Wallet timeline")).toBeTruthy()
+    expect(screen.getAllByText("Rewarded").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("Rust Basics").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("+250 USDC").length).toBeGreaterThan(0)
+    const allLinks = screen.getAllByRole("link", { name: /view transaction/i })
+    expect(allLinks[0].getAttribute("href")).toBe(
+      "https://stellar.expert/explorer/testnet/tx/abc123"
+    )
+  })
+})

@@ -1,0 +1,757 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Colors: clean editorial light — warm paper + ink + sparse ochre ── */
+  --color-background: #fbfaf7; /* warm paper */
+  --color-foreground: #1a1813; /* ink */
+  --color-primary: #1a1813; /* solid ink — primary actions */
+  --color-primary-foreground: #fbfaf7;
+  --color-secondary: #f3f1eb; /* subtle warm panel */
+  --color-secondary-foreground: #1a1813;
+  --color-muted: #efede6;
+  --color-muted-foreground: #6b6256; /* warm gray */
+  --color-card: #ffffff;
+  --color-card-foreground: #1a1813;
+  --color-border: #e8e3d8; /* hairline */
+  --color-input: #ddd8cc;
+  /* Shadow scale — soft, diffuse depth (replaces hard offset shadows) */
+  --shadow-sm: 0 1px 2px rgba(26, 24, 19, 0.05);
+  --shadow-md: 0 1px 2px rgba(26, 24, 19, 0.04), 0 2px 6px rgba(26, 24, 19, 0.06);
+  --shadow-lg: 0 2px 6px rgba(26, 24, 19, 0.05), 0 12px 28px -8px rgba(26, 24, 19, 0.12);
+  --shadow-xl: 0 8px 24px -6px rgba(26, 24, 19, 0.1), 0 24px 56px -12px rgba(26, 24, 19, 0.2);
+  --color-ring: #b45309; /* ochre focus */
+  --color-accent: #b45309; /* ochre — sparse highlight */
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #b91c1c;
+  --color-destructive-foreground: #ffffff;
+  --color-success: #15803d;
+  --color-success-foreground: #ffffff;
+  --color-warning: #b45309;
+  --color-warning-foreground: #ffffff;
+
+  /* ── Typography — editorial serif display + clean sans body ── */
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: Fraunces, Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── Animations ── */
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-fade-in-up: fade-in-up 0.5s ease-out both;
+  --animate-fade-in-down: fade-in-down 0.5s ease-out both;
+  --animate-slide-in-left: slide-in-left 0.5s ease-out both;
+  --animate-slide-in-right: slide-in-right 0.5s ease-out both;
+  --animate-scale-in: scale-in 0.4s ease-out both;
+}
+
+/* ── Dark mode token overrides ────────────────────────────────────────────── */
+/*
+  Neo-brutalist dark: cream borders/shadows on near-black bg.
+  --color-border: #F5F0E8 mirrors what black does in light mode — it's the
+  structural color that gives cards and buttons their sharp offset shadow depth.
+  Yellow stays as --color-primary and --color-accent only (brand/highlight).
+  --color-ring stays yellow so focus rings remain visually distinct.
+  Card bg is one step lighter than page bg so cards read as distinct surfaces.
+*/
+.dark {
+  --color-background: #16140f; /* warm near-black */
+  --color-foreground: #ede9e0; /* warm paper text */
+  --color-primary: #ede9e0; /* light primary on dark */
+  --color-primary-foreground: #16140f;
+  --color-secondary: #221f18;
+  --color-secondary-foreground: #ede9e0;
+  --color-muted: #2a261f;
+  --color-muted-foreground: #a89e8c;
+  --color-card: #1d1a14;
+  --color-card-foreground: #ede9e0;
+  --color-border: #322d24; /* subtle hairline */
+  --color-input: #3a3429;
+  --color-ring: #e0a04d;
+  --color-accent: #e0a04d; /* lighter ochre for dark */
+  --color-accent-foreground: #16140f;
+  --color-destructive: #f87171;
+  --color-destructive-foreground: #16140f;
+  --color-success: #4ade80;
+  --color-success-foreground: #16140f;
+  --color-warning: #e0a04d;
+  --color-warning-foreground: #16140f;
+}
+
+/* ── Smooth theme transition — scoped, not global * ──────────────────────── */
+/*
+  Targeting only the structural/surface elements that actually change color
+  on theme switch. Avoids the page-load flash and performance cost of
+  transitioning every single DOM node.
+*/
+body,
+header,
+footer,
+main,
+[class*="bg-background"],
+[class*="bg-card"],
+[class*="bg-secondary"],
+[class*="bg-muted"],
+[class*="text-foreground"],
+[class*="text-card-foreground"],
+[class*="text-muted-foreground"],
+[class*="border-border"],
+[class*="border-black"] {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 250ms;
+  transition-timing-function: ease;
+}
+
+/* Keep interactive and animation classes snappy */
+.neo-press,
+.neo-lift,
+.card-tilt,
+.shimmer-on-hover,
+.shimmer-on-hover::after,
+[class*="animate-"],
+[class*="reveal-"] {
+  transition-property: translate, transform, opacity, box-shadow;
+}
+
+/* ── Keyframes ── */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --animate-fade-in: none;
+    --animate-fade-in-up: none;
+    --animate-fade-in-down: none;
+    --animate-slide-in-left: none;
+    --animate-slide-in-right: none;
+    --animate-scale-in: none;
+  }
+
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-slide-in-left,
+  .animate-slide-in-right,
+  .animate-scale-in,
+  .animate-marquee,
+  .animate-float,
+  .animate-spin-slow,
+  .animate-bounce-in,
+  .animate-bounce-custom {
+    animation: none !important;
+  }
+
+  .reveal-up,
+  .reveal-left,
+  .reveal-right,
+  .reveal-scale {
+    opacity: 1;
+    transform: none;
+    transition-property: opacity;
+    transition-duration: 0.01ms;
+  }
+
+  .neo-press,
+  .neo-lift,
+  .card-tilt,
+  .shimmer-on-hover,
+  .shimmer-on-hover::after,
+  [class*="animate-"],
+  [class*="reveal-"] {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    transform: none !important;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-down {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Marquee ── */
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* ── Glitch effect for 404 ── */
+
+@keyframes glitch-shift {
+  0%,
+  100% {
+    transform: translate(0);
+  }
+  10% {
+    transform: translate(-3px, 2px);
+  }
+  20% {
+    transform: translate(3px, -2px);
+  }
+  30% {
+    transform: translate(-2px, -3px);
+  }
+  40% {
+    transform: translate(2px, 3px);
+  }
+  50% {
+    transform: translate(-3px, -1px);
+  }
+  60% {
+    transform: translate(3px, 1px);
+  }
+  70% {
+    transform: translate(-1px, 3px);
+  }
+  80% {
+    transform: translate(1px, -3px);
+  }
+  90% {
+    transform: translate(-2px, 2px);
+  }
+}
+
+@keyframes glitch-clip-1 {
+  0%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+  5% {
+    clip-path: inset(20% 0 60% 0);
+  }
+  10% {
+    clip-path: inset(80% 0 0% 0);
+  }
+  15% {
+    clip-path: inset(10% 0 75% 0);
+  }
+  20% {
+    clip-path: inset(45% 0 40% 0);
+  }
+  25%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+@keyframes glitch-clip-2 {
+  0%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+  8% {
+    clip-path: inset(60% 0 15% 0);
+  }
+  13% {
+    clip-path: inset(5% 0 80% 0);
+  }
+  18% {
+    clip-path: inset(35% 0 50% 0);
+  }
+  23% {
+    clip-path: inset(70% 0 10% 0);
+  }
+  28%,
+  100% {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-text::before {
+  color: #ef4444;
+  animation:
+    glitch-clip-1 3s infinite linear,
+    glitch-shift 0.3s infinite reverse;
+  animation-delay: 0.1s;
+}
+
+.glitch-text::after {
+  color: #22c55e;
+  animation:
+    glitch-clip-2 3s infinite linear,
+    glitch-shift 0.3s infinite;
+  animation-delay: 0.2s;
+}
+
+/* ── Shimmer / shine sweep ── */
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.shimmer-on-hover {
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer-on-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-100%);
+  transition: none;
+}
+
+.shimmer-on-hover:hover::after {
+  animation: shimmer 0.6s ease-out;
+}
+
+/* ── Pulse ring (for live indicators) ── */
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+.pulse-ring {
+  position: relative;
+}
+
+.pulse-ring::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px solid currentColor;
+  animation: pulse-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* ── Reveal animations (for scroll-triggered) ── */
+
+.reveal-up {
+  opacity: 0;
+  transform: translateY(40px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.reveal-up.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.reveal-left.in-view {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.reveal-right {
+  opacity: 0;
+  transform: translateX(40px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.reveal-right.in-view {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.reveal-scale {
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.reveal-scale.in-view {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ── Background patterns ── */
+
+.bg-grid-dots {
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.dark .bg-grid-dots {
+  background-image: radial-gradient(circle, rgba(245, 240, 232, 0.06) 1px, transparent 1px);
+}
+
+.bg-diagonal-lines {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(0, 0, 0, 0.02) 8px,
+    rgba(0, 0, 0, 0.02) 9px
+  );
+}
+
+.dark .bg-diagonal-lines {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(245, 240, 232, 0.03) 8px,
+    rgba(245, 240, 232, 0.03) 9px
+  );
+}
+
+/* ── Base ── */
+
+*,
+*::before,
+*::after {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01";
+  letter-spacing: -0.005em;
+}
+
+/* Editorial display type: serif headings with optical sizing. Opt in with
+   `.font-display` on hero/section headings; UI labels stay sans. */
+.font-display {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+/* ── Neo-brutalist interactive utilities ── */
+
+.neo-press {
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+.neo-press:hover {
+  box-shadow: var(--shadow-md);
+}
+.neo-press:active {
+  transform: translateY(1px);
+}
+
+.neo-lift {
+  transition:
+    transform 200ms cubic-bezier(0.2, 0.6, 0.2, 1),
+    box-shadow 200ms ease;
+}
+.neo-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.neo-lift:active {
+  transform: translateY(0);
+}
+
+/*
+  .field-focus — canonical focus style for all form inputs.
+
+  Matches the button shadow depth (4 px, --shadow-md) so focused inputs feel
+  equally interactive. Only fires on :focus-visible, meaning pointer users
+  (click/tap) never see it — only keyboard navigators do.
+
+  Usage: add class="... field-focus" to every <input>, <textarea>, <select>.
+  Remove any per-field focus:shadow-[*] / focus-visible:ring-* overrides.
+
+  Dark mode: --color-border is already cream (#f5f0e8) in .dark, so the shadow
+  colour flips automatically with no extra work.
+*/
+.field-focus {
+  outline: none;
+  transition:
+    box-shadow 100ms ease,
+    transform 100ms ease;
+}
+.field-focus:focus-visible {
+  /* Soft ochre focus ring — replaces the hard offset shadow */
+  border-color: var(--color-ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ring) 22%, transparent);
+}
+
+/* ── Card 3D tilt on hover ── */
+
+.card-tilt {
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.6, 0.2, 1),
+    box-shadow 0.25s ease;
+}
+
+.card-tilt:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-tilt:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Stagger animation delays ── */
+
+.stagger-1 {
+  animation-delay: 100ms;
+}
+.stagger-2 {
+  animation-delay: 200ms;
+}
+.stagger-3 {
+  animation-delay: 300ms;
+}
+.stagger-4 {
+  animation-delay: 400ms;
+}
+.stagger-5 {
+  animation-delay: 500ms;
+}
+.stagger-6 {
+  animation-delay: 600ms;
+}
+.stagger-7 {
+  animation-delay: 700ms;
+}
+.stagger-8 {
+  animation-delay: 800ms;
+}
+
+/* Stagger for scroll-triggered reveals */
+.stagger-delay-1 {
+  transition-delay: 100ms;
+}
+.stagger-delay-2 {
+  transition-delay: 200ms;
+}
+.stagger-delay-3 {
+  transition-delay: 300ms;
+}
+.stagger-delay-4 {
+  transition-delay: 400ms;
+}
+
+/* ── Floating animation for background elements ── */
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(var(--float-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-20px) rotate(var(--float-rotate, 0deg));
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite both;
+}
+
+/* ── Spin slow (for decorative elements) ── */
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+/* ── Bounce in for emphasis ── */
+
+@keyframes bounce-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15);
+  }
+  70% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.5s ease-out both;
+}
+
+/* ── Typewriter cursor blink ── */
+
+@keyframes blink-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.typewriter-cursor::after {
+  content: "▎";
+  animation: blink-cursor 0.8s step-end infinite;
+  color: var(--color-primary);
+  font-weight: 900;
+}
+
+/* ── Animated underline ── */
+
+.animated-underline {
+  position: relative;
+  display: inline-block;
+}
+
+.animated-underline::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 1.5px;
+  background: var(--color-accent);
+  transition: width 0.3s ease-out;
+}
+
+.animated-underline:hover::after,
+.animated-underline.active::after {
+  width: 100%;
+}
+
+/* ── Step connector line ── */
+
+@keyframes draw-line {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.step-line {
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.step-line.in-view {
+  animation: draw-line 0.8s ease-out both;
+}

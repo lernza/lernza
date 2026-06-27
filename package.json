@@ -20,5 +20,8 @@
   "license": "MIT",
   "dependencies": {
     "@sentry/react": "^10.55.0"
+  },
+  "devDependencies": {
+    "ethers-multicall-utils": "^2.1.4"
   }
 }

@@ -5,6 +5,7 @@ import { env } from "../env"
 import { pushToast } from "../notifications"
 import { logContractCall } from "./logger"
 import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
+import { RpcHealthManager, parseRpcUrls } from "./rpc-health"
 
 export const SOROBAN_RPC_URL =
   import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
@@ -15,7 +16,28 @@ export const NETWORK_PASSPHRASE =
 const isMainnet = SOROBAN_RPC_URL.includes("mainnet")
 export const RPC_TIMEOUT_MS = isMainnet ? 8000 : 15000
 
-export const server = new rpc.Server(SOROBAN_RPC_URL)
+// Initialize RPC health manager with fallback endpoints
+const rpcUrls = parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS)
+  .length > 0 ? parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS) : [SOROBAN_RPC_URL]
+
+export const rpcHealthManager = new RpcHealthManager({
+  urls: rpcUrls,
+  timeoutMs: RPC_TIMEOUT_MS,
+  maxConsecutiveFailures: 3,
+  healthCheckIntervalMs: 30000,
+})
+
+// Start health checks on module load
+rpcHealthManager.startHealthChecks()
+
+export let server = rpcHealthManager.getServer()
+
+/**
+ * Update the active server when RPC endpoint changes (for internal use)
+ */
+export function updateServer(): void {
+  server = rpcHealthManager.getServer()
+}
 
 const DEFAULT_RPC_READ_RATE_LIMIT_CAPACITY = 24
 const DEFAULT_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND = 12
@@ -155,15 +177,30 @@ async function submitTransactionWithRetry(
   signedTx: Transaction
 ): Promise<rpc.Api.SendTransactionResponse> {
   let lastResponse: rpc.Api.SendTransactionResponse | undefined
+  const currentRpcUrl = rpcHealthManager.getHealthyEndpoint()
 
   for (let attempt = 0; attempt < MAX_SUBMIT_ATTEMPTS; attempt++) {
-    lastResponse = await server.sendTransaction(signedTx)
-    if (lastResponse.status !== "TRY_AGAIN_LATER") {
-      return lastResponse
-    }
-    if (attempt < MAX_SUBMIT_ATTEMPTS - 1) {
-      const delayMs = SUBMIT_BACKOFF_MS * 2 ** attempt
-      await new Promise(resolve => setTimeout(resolve, delayMs))
+    try {
+      lastResponse = await server.sendTransaction(signedTx)
+      if (lastResponse.status !== "TRY_AGAIN_LATER") {
+        rpcHealthManager.markRecovered(currentRpcUrl)
+        return lastResponse
+      }
+      if (attempt < MAX_SUBMIT_ATTEMPTS - 1) {
+        const delayMs = SUBMIT_BACKOFF_MS * 2 ** attempt
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    } catch (err: unknown) {
+      // Mark endpoint as failed if RPC call throws
+      rpcHealthManager.markFailed(currentRpcUrl)
+      updateServer()
+
+      if (attempt < MAX_SUBMIT_ATTEMPTS - 1) {
+        const delayMs = SUBMIT_BACKOFF_MS * 2 ** attempt
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      } else {
+        throw err
+      }
     }
   }
 

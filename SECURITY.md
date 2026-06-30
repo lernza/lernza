@@ -6,11 +6,35 @@ Lernza handles token distribution on the Stellar network. Security is critical. 
 
 **Do not open a public issue for security vulnerabilities.**
 
-Instead, report vulnerabilities privately:
+Private vulnerability reporting is enabled for this repository via GitHub's native
+[Security Advisories](https://github.com/lernza/lernza/security/advisories) feature.
+
+**Preferred reporting path:**
 
 1. Go to the [Security Advisories](https://github.com/lernza/lernza/security/advisories) page
-2. Click "Report a vulnerability"
-3. Provide as much detail as possible
+2. Click **"Report a vulnerability"** (only visible to GitHub users)
+3. Fill in the advisory form — GitHub keeps it private until we agree to disclose
+
+**Alternative — encrypted email:**
+
+If you prefer email or cannot access GitHub, send a report to:
+
+```
+security@lernza.xyz
+```
+
+Use the subject line `[SECURITY] Lernza vulnerability report` and, if possible,
+encrypt the message with our PGP key (fingerprint below).
+
+### PGP Public Key
+
+```
+Fingerprint: TBD — maintainers: add your GPG public key block here before mainnet launch.
+             Run: gpg --armor --export <key-id> and paste the output below.
+```
+
+> Until a PGP key is published, use GitHub's encrypted advisory form (preferred)
+> or send an unencrypted email if urgency requires it.
 
 If GitHub Security Advisories are unavailable, email the maintainers directly with the subject line `[SECURITY] Lernza vulnerability report`.
 

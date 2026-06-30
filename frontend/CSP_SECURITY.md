@@ -81,17 +81,27 @@ Security headers are only applied during Netlify deployment, not in local develo
 3. Monitor console for CSP violations
 4. Test with SecurityHeaders.com
 
-### CSP Violation Monitoring
-The app includes CSP violation monitoring:
-```javascript
-document.addEventListener('securitypolicyviolation', (e) => {
-    console.error('CSP Violation:', {
-        blockedURI: e.blockedURI,
-        violatedDirective: e.violatedDirective,
-        originalPolicy: e.originalPolicy
-    });
-});
+### CSP Violation Reporting
+CSP violations are forwarded to Sentry via two mechanisms:
+
+**`report-uri`** (legacy, all browsers):
 ```
+report-uri /api/csp-report
+```
+The `/api/csp-report` Vercel edge function (`frontend/api/csp-report.ts`) receives
+`application/csp-report` POST payloads and forwards them to Sentry's security
+endpoint (`https://<host>/api/<project>/security/?sentry_key=<key>`) using the
+`VITE_SENTRY_DSN` environment variable.
+
+**`report-to`** (modern Reporting API, Chrome/Edge):
+```
+report-to csp-endpoint
+```
+Paired with the `Report-To` response header pointing at the same `/api/csp-report` endpoint.
+
+To verify the receiver is working: open DevTools → Application → Content Security Policy,
+or deliberately violate the policy (e.g. `eval(1)` in the browser console) and check the
+Sentry Issues dashboard for a new security event within a few seconds.
 
 ## Deployment Notes
 

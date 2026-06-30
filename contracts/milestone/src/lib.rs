@@ -640,6 +640,9 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .extend_ttl(&comp_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&reserved_key, THRESHOLD, BUMP);
 
         // Determine reward based on distribution mode. The Competitive
         // counter bump happens AFTER the comp_key tombstone is in place.
@@ -786,6 +789,9 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .set(&reserved_key, &(current_reserved + milestone.reward_amount));
+        env.storage()
+            .persistent()
+            .extend_ttl(&reserved_key, THRESHOLD, BUMP);
         env.storage()
             .persistent()
             .extend_ttl(&submit_key, THRESHOLD, BUMP);

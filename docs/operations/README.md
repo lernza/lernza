@@ -12,4 +12,5 @@ Operational guides for mainnet deployment and ongoing maintenance.
 | [Event Indexer Runbook](./event-indexer-runbook.md) | Mainnet contract event monitoring |
 | [Incident Response Playbook](./incident-response.md) | General incident response procedures, escalation, communication |
 | [On-Call DNS Access](./on-call-dns-access.md) | DNS incident response |
+| [SLA & Error Budget](./sla.md) | Error budgets per surface and Sentry/Vercel alert rules |
 | [Status Page Setup](./status-page-setup.md) | Public status page configuration and usage |

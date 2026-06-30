@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Loader2, Coins, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens, cn } from "@/lib/utils"
+import { track } from "@/lib/analytics"
 import { milestoneSchema, type Step1Values, type Step2Values, type TxPhase } from "./types"
 
 export function Step3Review({
@@ -36,6 +37,10 @@ export function Step3Review({
     // Simulate quest creation transaction via Freighter
     await new Promise(r => setTimeout(r, 2000))
     setTxPhase("done")
+    track("quest_created", {
+      milestone_count: step2Data.milestones.length,
+      total_reward: totalReward,
+    })
     onComplete()
   }
 

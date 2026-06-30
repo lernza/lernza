@@ -19,6 +19,7 @@ import { Progress } from "@/components/ui/progress"
 import { useInView, useCountUp } from "@/hooks/use-animations"
 import { MOCK_QUESTS, MOCK_MILESTONES, MOCK_ENROLLEES, MOCK_COMPLETIONS } from "@/lib/mock-data"
 import { formatTokens } from "@/lib/utils"
+import { track } from "@/lib/analytics"
 import { useToast } from "@/hooks/use-toast"
 import { ToastContainer } from "@/components/toast"
 import { ShareButton } from "@/components/share-button"
@@ -323,7 +324,13 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
                                   variant="outline"
                                   size="sm"
                                   className="shimmer-on-hover"
-                                  onClick={e => e.stopPropagation()}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    track("milestone_verified", {
+                                      quest_id: questId,
+                                      milestone_id: ms.id,
+                                    })
+                                  }}
                                 >
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                   Verify Completion

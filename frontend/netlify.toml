@@ -22,13 +22,19 @@
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
       font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com https://cdn.jsdelivr.net;
       img-src 'self' data: blob: https:;
-      connect-src 'self' https://soroban-testnet.stellar.org https://soroban-futurenet.stellar.org https://horizon-testnet.stellar.org https://vercel.app;
+      connect-src 'self' https://soroban-testnet.stellar.org https://soroban-futurenet.stellar.org https://horizon-testnet.stellar.org https://vercel.app https://o.ingest.sentry.io;
       frame-ancestors 'none';
       base-uri 'self';
       form-action 'self';
       upgrade-insecure-requests;
+      report-uri /api/csp-report;
+      report-to csp-endpoint
     """
-    
+
+    # Reporting API v1 — browsers send structured violation reports to this group.
+    # Update the endpoint URL to the absolute production URL before mainnet launch.
+    Report-To = "{\"group\":\"csp-endpoint\",\"max_age\":10886400,\"endpoints\":[{\"url\":\"/api/csp-report\"}],\"include_subdomains\":false}"
+
     # Additional security headers
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"

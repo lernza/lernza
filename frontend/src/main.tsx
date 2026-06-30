@@ -7,6 +7,7 @@ import { queryClient } from "@/lib/query-client"
 import * as Sentry from "@sentry/react"
 import { env } from "@/lib/env"
 import { setupGlobalErrorHandlers } from "@/lib/error-utils"
+import { reportWebVitals } from "@/lib/analytics"
 import { ThemeProvider } from "@/contexts/theme-context"
 import { WalletProvider } from "@/hooks/use-wallet"
 import "./index.css"
@@ -75,6 +76,10 @@ if (import.meta.env.PROD) {
     // and any pending microtasks, including React's render flush.
     setTimeout(scheduleAnalytics, 0)
   }
+
+  // Report Core Web Vitals to Sentry + Vercel Analytics.
+  // Deferred so observers register after the initial render without blocking LCP.
+  reportWebVitals()
 }
 
 // ─── React Root ───────────────────────────────────────────────────────────────

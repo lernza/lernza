@@ -32,7 +32,7 @@ function getArg(flag) {
   return idx !== -1 ? args[idx + 1] : null
 }
 
-const mode = getArg("--mode") ?? "testnet"
+const mode = getArg("--mode") ?? (process.env.VERCEL_ENV === "production" ? "mainnet" : "testnet")
 
 if (mode !== "testnet" && mode !== "mainnet") {
   console.error(`check-env: unknown --mode "${mode}". Expected "testnet" or "mainnet".`)

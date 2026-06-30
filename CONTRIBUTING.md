@@ -12,7 +12,15 @@ Thanks for your interest in contributing. Lernza is an open source learn-to-earn
 
 ## Development Setup
 
-For detailed setup instructions, see [DEV_SETUP.md](DEV_SETUP.md).
+The fastest way to get started on macOS or Linux is the one-command bootstrap:
+
+```bash
+./scripts/bootstrap.sh
+```
+
+This detects your OS and installs Rust, the `wasm32-unknown-unknown` target, Stellar CLI, Node.js, pnpm, frontend dependencies, and runs the contract test suite once to confirm everything works. After it finishes, edit `frontend/.env.local` with your contract IDs and run `pnpm dev`.
+
+For a step-by-step walkthrough see [DEV_SETUP.md](DEV_SETUP.md).
 
 ### Smart Contracts (Rust/Soroban)
 
@@ -96,10 +104,11 @@ import { Client as QuestClient } from '@/lib/contracts/generated/quest';
 
 This project uses [husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged) to run automated checks before commits. The pre-commit hook runs:
 
-- **ESLint** on staged `.ts`/`.tsx` files in the frontend
-- **cargo fmt --check** on staged `.rs` files in the contracts
+- **lint-staged** — ESLint + Prettier on staged `.ts`/`.tsx` files, and `cargo fmt --check` on staged `.rs` files
+- **ESLint** (full project) — `pnpm run lint` catches issues outside the staged set
+- **TypeScript** (full project) — `tsc -b --noEmit` blocks commits with type errors
 
-These checks help prevent formatting issues from reaching CI. The hooks are automatically installed after running `pnpm install` in the frontend directory.
+All three must pass. Broken TypeScript cannot be committed. The hooks are automatically installed after running `pnpm install` in the frontend directory.
 
 To troubleshoot hook issues, check `.husky/pre-commit` and `.lintstagedrc`.
 The `.env.example` file contains optional configuration for connecting to Stellar testnet. These variables will be required once contract integration is complete.

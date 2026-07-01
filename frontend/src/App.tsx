@@ -144,9 +144,16 @@ function App() {
   return (
     <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
       <div className="bg-background text-foreground min-h-screen">
+        {/* Skip-to-content link: sr-only until focused, z-index above sticky navbar */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
+        >
+          Skip to main content
+        </a>
         <Navbar activePage={state.page} onNavigate={handleNavigate} />
         <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
-          <main>{renderPage()}</main>
+          <main id="main-content">{renderPage()}</main>
         </ErrorBoundary>
         <Analytics />
         <SpeedInsights />

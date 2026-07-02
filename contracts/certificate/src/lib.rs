@@ -314,6 +314,33 @@ impl CertificateContract {
             .has(&DataKey::RevokedCertificate(token_id))
     }
 
+    // ─── Pause / Unpause (emergency stop) ────────────────────────────────────
+
+    /// Pause certificate minting – only callable by the contract owner.
+    /// Once paused, `mint_quest_certificate` will fail with `Error::Paused`.
+    #[only_owner]
+    pub fn pause(env: Env) -> Result<(), Error> {
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "paused"), &true);
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        env.events().publish((Symbol::new(&env, "paused"),), ());
+        Ok(())
+    }
+
+    /// Unpause certificate minting – only callable by the contract owner.
+    #[only_owner]
+    pub fn unpause(env: Env) -> Result<(), Error> {
+        env.storage()
+            .instance()
+            .set(&Symbol::new(&env, "paused"), &false);
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        env.events().publish((Symbol::new(&env, "unpaused"),), ());
+        Ok(())
+    }
+
+    // ─── Internal helpers ────────────────────────────────────────────────────
+
     fn require_not_paused(env: &Env) -> Result<(), Error> {
         if env
             .storage()

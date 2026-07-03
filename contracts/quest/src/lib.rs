@@ -489,52 +489,53 @@ impl QuestContract {
     }
 
     /// Allow a learner to enroll themselves in a public quest.
-    pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
-        enrollee.require_auth();
-        Self::require_not_paused(&env)?;
+    E
+        /// Allow a learner to enroll themselves in a public quest.
+pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
+    enrollee.require_auth();
+    Self::require_not_paused(&env)?;
 
-        let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
-            return Err(Error::EnrollmentClosed);
-        }
-        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
-            return Err(Error::DeadlineExpired);
-        }
-        if quest.visibility == Visibility::Private {
-            return Err(Error::InviteOnly);
-        }
-
-        let enrollees = Self::load_enrollees(&env, quest_id);
-
-        if let Some(max) = quest.max_enrollees {
-            if enrollees.len() >= max {
-                return Err(Error::QuestFull);
-            }
-        }
-
-        if enrollees.contains(&enrollee) {
-            return Err(Error::AlreadyEnrolled);
-        }
-
-        let mut new_enrollees = enrollees;
-        new_enrollees.push_back(enrollee.clone());
-        env.storage()
-            .persistent()
-            .set(&DataKey::Enrollees(quest_id), &new_enrollees);
-        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
-
-        // Emit enrollment event with distinct join_mode for self-enrollment
-        let timestamp = env.ledger().timestamp();
-        let join_mode = Symbol::new(&env, "self");  // FIXED: use "self" instead of "owner"
-        env.events().publish(
-            (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
-        );
-
-        Self::bump(&env, quest_id);
-        Ok(())
+    let quest = Self::load_quest(&env, quest_id)?;
+    if quest.status == QuestStatus::Archived {
+        return Err(Error::EnrollmentClosed);
+    }
+    if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+        return Err(Error::DeadlineExpired);
+    }
+    if quest.visibility == Visibility::Private {
+        return Err(Error::InviteOnly);
     }
 
+    let enrollees = Self::load_enrollees(&env, quest_id);
+
+    if let Some(max) = quest.max_enrollees {
+        if enrollees.len() >= max {
+            return Err(Error::QuestFull);
+        }
+    }
+
+    if enrollees.contains(&enrollee) {
+        return Err(Error::AlreadyEnrolled);
+    }
+
+    let mut new_enrollees = enrollees;
+    new_enrollees.push_back(enrollee.clone());
+    env.storage()
+        .persistent()
+        .set(&DataKey::Enrollees(quest_id), &new_enrollees);
+    Self::add_id_to_index(&env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
+
+    // Emit enrollment event with distinct join_mode for self-enrollment
+    let timestamp = env.ledger().timestamp();
+    let join_mode = Symbol::new(&env, "self");  // <-- CHANGED HERE
+    env.events().publish(
+        (Symbol::new(&env, "enrollee_added"),),
+        (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+    );
+
+    Self::bump(&env, quest_id);
+    Ok(())
+}
     /// Register an invite commitment for a private quest. Owner only.
     ///
     /// The owner generates a random secret off-chain, computes

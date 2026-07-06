@@ -3,8 +3,7 @@ import { Check, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import React from "react"
 
-// ─── Zod schemas ─────────────────────────────────────────────────────────────
-
+// Zod schemas
 export const step1Schema = z.object({
   name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
   description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
@@ -22,13 +21,10 @@ export const step2Schema = z.object({
 })
 export type Step2Values = z.infer<typeof step2Schema>
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type FormStep = 1 | 2 | 3
 export type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
-// ─── Helper components ────────────────────────────────────────────────────────
-
+// Helper components
 export function FieldError({ message }: { message?: string }) {
   if (!message) return null
   return (
@@ -39,13 +35,7 @@ export function FieldError({ message }: { message?: string }) {
   )
 }
 
-export function FormLabel({
-  children,
-  required,
-}: {
-  children: React.ReactNode
-  required?: boolean
-}) {
+export function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
     <label className="mb-1.5 block text-sm font-semibold">
       {children}

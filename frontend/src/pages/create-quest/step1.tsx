@@ -3,15 +3,12 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowRight, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
+import { step1Schema, Step1Values, FieldError, FormLabel } from "./types"
+import { useQuestCreation } from "./context"
 
-export function Step1Form({
-  defaultValues,
-  onNext,
-}: {
-  defaultValues: Step1Values
-  onNext: (data: Step1Values) => void
-}) {
+export function Step1Form() {
+  const { step1Data, setStep1Data, goToNext } = useQuestCreation()
+
   const {
     register,
     handleSubmit,
@@ -19,14 +16,19 @@ export function Step1Form({
     formState: { errors },
   } = useForm<Step1Values>({
     resolver: zodResolver(step1Schema),
-    defaultValues,
+    defaultValues: step1Data,
   })
 
   const nameValue = watch("name", "")
   const descValue = watch("description", "")
 
+  const onSubmit = (data: Step1Values) => {
+    setStep1Data(data)
+    goToNext()
+  }
+
   return (
-    <form onSubmit={handleSubmit(onNext)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
         <div className="bg-accent border-border border-b px-6 py-3">
           <div className="flex items-center gap-2">

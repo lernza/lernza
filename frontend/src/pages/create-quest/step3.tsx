@@ -5,19 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens, cn } from "@/lib/utils"
 import { track } from "@/lib/analytics"
-import { milestoneSchema, type Step1Values, type Step2Values, type TxPhase } from "./types"
+import { milestoneSchema, Step1Values, Step2Values, TxPhase } from "./types"
+import { useQuestCreation } from "./context"
 
-export function Step3Review({
-  step1Data,
-  step2Data,
-  onBack,
-  onComplete,
-}: {
-  step1Data: Step1Values
-  step2Data: Step2Values
-  onBack: () => void
+interface Step3ReviewProps {
   onComplete: () => void
-}) {
+}
+
+export function Step3Review({ onComplete }: Step3ReviewProps) {
+  const { step1Data, step2Data, goToBack } = useQuestCreation()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
 
   const totalReward = step2Data.milestones.reduce(
@@ -178,7 +174,7 @@ export function Step3Review({
         <Button
           type="button"
           variant="outline"
-          onClick={onBack}
+          onClick={goToBack}
           disabled={txPhase === "funding" || txPhase === "creating"}
         >
           <ArrowLeft className="h-4 w-4" />

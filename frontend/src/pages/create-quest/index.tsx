@@ -2,11 +2,12 @@ import { useState, Suspense, lazy } from "react"
 import { ArrowLeft, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
-import { type FormStep, type Step1Values, type Step2Values, StepIndicator } from "./types"
+import { QuestCreationProvider, useQuestCreation } from "./context"
+import { StepIndicator } from "./types"
 
-const Step1Form = lazy(() => import("./step1").then(m => ({ default: m.Step1Form })))
-const Step2Form = lazy(() => import("./step2").then(m => ({ default: m.Step2Form })))
-const Step3Review = lazy(() => import("./step3").then(m => ({ default: m.Step3Review })))
+const Step1Form = lazy(() => import("./step-1").then(m => ({ default: m.Step1Form })))
+const Step2Form = lazy(() => import("./step-2").then(m => ({ default: m.Step2Form })))
+const Step3Review = lazy(() => import("./step-3").then(m => ({ default: m.Step3Review })))
 
 const StepFallback = () => (
   <div className="bg-muted border-border h-[400px] animate-pulse border shadow-md" />
@@ -16,19 +17,52 @@ interface CreateQuestProps {
   onBack: () => void
 }
 
+function CreateQuestContent({ onBack }: CreateQuestProps) {
+  const { currentStep } = useQuestCreation()
+
+  return (
+    <div className="relative mx-auto max-w-2xl px-4 py-8 sm:px-6">
+      <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
+
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
+      >
+        <div className="border-border bg-background neo-press hover:bg-accent flex h-7 w-7 items-center justify-center border shadow-sm transition-colors">
+          <ArrowLeft className="h-3.5 w-3.5" />
+        </div>
+        Back to Dashboard
+      </button>
+
+      {/* Page heading */}
+      <div className="animate-fade-in-up relative mb-6">
+        <h1 className="text-3xl font-semibold">Create a Quest</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Set up milestones and fund the reward pool to incentivize learners.
+        </p>
+      </div>
+
+      {/* Step indicator */}
+      <div className="animate-fade-in-up stagger-1 relative">
+        <StepIndicator current={currentStep} />
+      </div>
+
+      {/* Step content */}
+      <div className="animate-fade-in-up stagger-2 relative">
+        <Suspense fallback={<StepFallback />}>
+          {currentStep === 1 && <Step1Form />}
+          {currentStep === 2 && <Step2Form />}
+          {currentStep === 3 && <Step3Review onComplete={onBack} />}
+        </Suspense>
+      </div>
+    </div>
+  )
+}
+
 export function CreateQuest({ onBack }: CreateQuestProps) {
   const { connected, connect, loading } = useWallet()
-  const [step, setStep] = useState<FormStep>(1)
 
-  const [step1Data, setStep1Data] = useState<Step1Values>({
-    name: "",
-    description: "",
-  })
-  const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0 }],
-  })
-
-  // Wallet not connected guard
   if (!connected) {
     return (
       <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
@@ -75,75 +109,8 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
   }
 
   return (
-    <div className="relative mx-auto max-w-2xl px-4 py-8 sm:px-6">
-      <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
-
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="text-muted-foreground hover:text-foreground group mb-6 flex cursor-pointer items-center gap-2 text-sm font-bold transition-colors"
-      >
-        <div className="border-border bg-background neo-press hover:bg-accent flex h-7 w-7 items-center justify-center border shadow-sm transition-colors">
-          <ArrowLeft className="h-3.5 w-3.5" />
-        </div>
-        Back to Dashboard
-      </button>
-
-      {/* Page heading */}
-      <div className="animate-fade-in-up relative mb-6">
-        <h1 className="text-3xl font-semibold">Create a Quest</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Set up milestones and fund the reward pool to incentivize learners.
-        </p>
-      </div>
-
-      {/* Step indicator */}
-      <div className="animate-fade-in-up stagger-1 relative">
-        <StepIndicator current={step} />
-      </div>
-
-      {/* Step content */}
-      <div className="animate-fade-in-up stagger-2 relative">
-        <Suspense fallback={<StepFallback />}>
-          {step === 1 && (
-            <Step1Form
-              defaultValues={step1Data}
-              onNext={data => {
-                setStep1Data(data)
-                setStep(2)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-            />
-          )}
-
-          {step === 2 && (
-            <Step2Form
-              defaultValues={step2Data}
-              onNext={data => {
-                setStep2Data(data)
-                setStep(3)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-              onBack={() => {
-                setStep(1)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-            />
-          )}
-
-          {step === 3 && (
-            <Step3Review
-              step1Data={step1Data}
-              step2Data={step2Data}
-              onBack={() => {
-                setStep(2)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-              onComplete={onBack}
-            />
-          )}
-        </Suspense>
-      </div>
-    </div>
+    <QuestCreationProvider>
+      <CreateQuestContent onBack={onBack} />
+    </QuestCreationProvider>
   )
 }

@@ -13,17 +13,12 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatTokens, cn } from "@/lib/utils"
-import { step2Schema, milestoneSchema, type Step2Values, FieldError, FormLabel } from "./types"
+import { step2Schema, milestoneSchema, Step2Values, FieldError, FormLabel } from "./types"
+import { useQuestCreation } from "./context"
 
-export function Step2Form({
-  defaultValues,
-  onNext,
-  onBack,
-}: {
-  defaultValues: Step2Values
-  onNext: (data: Step2Values) => void
-  onBack: () => void
-}) {
+export function Step2Form() {
+  const { step2Data, setStep2Data, goToNext, goToBack } = useQuestCreation()
+
   const {
     register,
     control,
@@ -32,7 +27,7 @@ export function Step2Form({
     formState: { errors },
   } = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
-    defaultValues,
+    defaultValues: step2Data,
   })
 
   const { fields, append, remove, swap } = useFieldArray({
@@ -46,8 +41,13 @@ export function Step2Form({
     return sum + (isNaN(n) ? 0 : n)
   }, 0)
 
+  const onSubmit = (data: Step2Values) => {
+    setStep2Data(data)
+    goToNext()
+  }
+
   return (
-    <form onSubmit={handleSubmit(onNext)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
         <div className="bg-accent border-border flex items-center justify-between border-b px-6 py-3">
           <div className="flex items-center gap-2">
@@ -197,7 +197,7 @@ export function Step2Form({
       </div>
 
       <div className="flex items-center justify-between">
-        <Button type="button" variant="outline" onClick={onBack}>
+        <Button type="button" variant="outline" onClick={goToBack}>
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>

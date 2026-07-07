@@ -1,6 +1,6 @@
 #![no_std]
 
-use common::{ERR_INVALID_INPUT, ERR_NOT_FOUND, ERR_PAUSED, ERR_UNAUTHORIZED};
+use common::{extend_instance_ttl, extend_persistent_ttl, BUMP, THRESHOLD};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
 };
@@ -22,12 +22,15 @@ pub struct CertificateMetadata {
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    CertificateMetadata(u32),       // token_id -> metadata
-    QuestCertificate(u32, Address), // quest_id -> recipient -> token_id
-    UserCertificates(Address),      // user -> Vec<token_id>
-    MetadataBase,                   // Issue #719: base URI for tokenURI resolution
-    RevokedCertificate(u32),        // Issue #720: tombstone for revoked token_ids
+    CertificateMetadata(u32),
+    QuestCertificate(u32, Address),
+    UserCertificates(Address),
+    MetadataBase,
+    RevokedCertificate(u32),
 }
+
+// -- add IsDataKey implementation --
+impl common::IsDataKey for DataKey {}
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -38,38 +41,31 @@ pub enum Error {
     AlreadyIssued = 20,
     NotFound = 1,
     InvalidQuest = 5,
-    AlreadyRevoked = 6,     // Issue #720
-    MetadataBaseNotSet = 7, // Issue #719
+    AlreadyRevoked = 6,
+    MetadataBaseNotSet = 7,
     InvalidInput = 3,
     Paused = 400,
 }
 
-const BUMP: u32 = 518_400;
-const THRESHOLD: u32 = 120_960;
+// BUMP and THRESHOLD now come from common
 
 #[contract]
 pub struct CertificateContract;
 
 #[contractimpl]
 impl CertificateContract {
-    /// Initialize the certificate contract
     pub fn __constructor(env: Env, owner: Address) {
-        // Set token metadata
         Base::set_metadata(
             &env,
             String::from_str(&env, "https://lernza.io/certificates"),
             String::from_str(&env, "Lernza Quest Completion Certificates"),
             String::from_str(&env, "LERNZA_CERT"),
         );
-
-        // Set the contract owner
         ownable::set_owner(&env, &owner);
-
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        // before: env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
     }
 
-    /// Mint a certificate for quest completion
-    /// Only authorized addresses can mint certificates
     #[only_owner]
     pub fn mint_certificate(
         env: Env,
@@ -79,16 +75,13 @@ impl CertificateContract {
         recipient: Address,
         issuer: Address,
     ) -> Result<u32, Error> {
-        // Check if certificate already exists for this quest and recipient
         let cert_key = DataKey::QuestCertificate(quest_id, recipient.clone());
         if env.storage().persistent().has(&cert_key) {
             return Err(Error::AlreadyIssued);
         }
 
-        // Mint the NFT first to get the canonical token_id
         let token_id = Base::sequential_mint(&env, &recipient);
 
-        // Create metadata
         let metadata = CertificateMetadata {
             quest_id,
             quest_name: quest_name.clone(),
@@ -98,20 +91,13 @@ impl CertificateContract {
             recipient: recipient.clone(),
         };
 
-        // Store metadata at the canonical token_id
         let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().set(&metadata_key, &metadata);
-        env.storage()
-            .persistent()
-            .extend_ttl(&metadata_key, THRESHOLD, BUMP);
+        extend_persistent_ttl(&env, &metadata_key);
 
-        // Store quest -> recipient -> token_id mapping
         env.storage().persistent().set(&cert_key, &token_id);
-        env.storage()
-            .persistent()
-            .extend_ttl(&cert_key, THRESHOLD, BUMP);
+        extend_persistent_ttl(&env, &cert_key);
 
-        // Update user certificates list
         let user_key = DataKey::UserCertificates(recipient.clone());
         let mut certificates: Vec<u32> = env
             .storage()
@@ -120,15 +106,10 @@ impl CertificateContract {
             .unwrap_or(Vec::new(&env));
         certificates.push_back(token_id);
         env.storage().persistent().set(&user_key, &certificates);
-        env.storage()
-            .persistent()
-            .extend_ttl(&user_key, THRESHOLD, BUMP);
+        extend_persistent_ttl(&env, &user_key);
 
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
 
-        // Emit certificate minted event
-        // Event topics: (certificate_minted,)
-        // Event data: (token_id, quest_id, recipient, quest_name)
         env.events().publish(
             (Symbol::new(&env, "certificate_minted"),),
             (token_id, quest_id, recipient, quest_name),
@@ -137,13 +118,11 @@ impl CertificateContract {
         Ok(token_id)
     }
 
-    /// Get certificate metadata
     pub fn get_certificate_metadata(env: Env, token_id: u32) -> Result<CertificateMetadata, Error> {
         let key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().get(&key).ok_or(Error::NotFound)
     }
 
-    /// Get certificate ID for a quest and recipient
     pub fn get_quest_certificate(
         env: Env,
         quest_id: u32,
@@ -153,7 +132,6 @@ impl CertificateContract {
         env.storage().persistent().get(&key).ok_or(Error::NotFound)
     }
 
-    /// Get all certificates for a user
     pub fn get_user_certificates(env: Env, user: Address) -> Vec<u32> {
         let key = DataKey::UserCertificates(user);
         env.storage()
@@ -162,13 +140,11 @@ impl CertificateContract {
             .unwrap_or(Vec::new(&env))
     }
 
-    /// Check if a user has completed a specific quest
     pub fn has_quest_certificate(env: Env, quest_id: u32, recipient: Address) -> bool {
         let key = DataKey::QuestCertificate(quest_id, recipient);
         env.storage().persistent().has(&key)
     }
 
-    /// Mint a certificate for quest completion (internal function called by milestone contract)
     pub fn mint_quest_certificate(
         env: Env,
         quest_id: u32,
@@ -177,14 +153,10 @@ impl CertificateContract {
         recipient: Address,
     ) -> Result<u32, Error> {
         Self::require_not_paused(&env)?;
-        // Get contract owner (will be the milestone contract)
         let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
-
-        // Call the owner-only mint function
         Self::mint_certificate(env, quest_id, quest_name, quest_category, recipient, owner)
     }
 
-    /// Get certificate details including metadata and NFT info
     pub fn get_certificate_details(
         env: Env,
         token_id: u32,
@@ -194,7 +166,6 @@ impl CertificateContract {
         Ok((metadata, owner))
     }
 
-    /// Get all certificate details for a user
     pub fn get_user_certificate_details(
         env: Env,
         user: Address,
@@ -213,13 +184,7 @@ impl CertificateContract {
         details
     }
 
-    /// Revoke a certificate (owner only, for exceptional cases)
     #[only_owner]
-    /// Revoke a certificate for fraud or disqualification — Issue #720.
-    ///
-    /// Owner-only. `caller` must match the stored contract owner.
-    /// Removes all Lernza metadata and mappings, sets a `RevokedCertificate`
-    /// tombstone, burns the NFT, and emits `certificate_revoked`.
     pub fn revoke_certificate(env: Env, caller: Address, token_id: u32) -> Result<(), Error> {
         caller.require_auth();
         let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
@@ -227,7 +192,6 @@ impl CertificateContract {
             return Err(Error::NotOwner);
         }
 
-        // Prevent double-revoke
         if env
             .storage()
             .persistent()
@@ -238,7 +202,6 @@ impl CertificateContract {
 
         let metadata = Self::get_certificate_metadata(env.clone(), token_id)?;
 
-        // Remove from user's certificate list
         let user_key = DataKey::UserCertificates(metadata.recipient.clone());
         let certificates: Vec<u32> = env
             .storage()
@@ -246,7 +209,6 @@ impl CertificateContract {
             .get(&user_key)
             .unwrap_or(Vec::new(&env));
 
-        // Remove the certificate ID from the list
         let mut new_certificates = Vec::new(&env);
         for i in 0..certificates.len() {
             if let Some(cert_id) = certificates.get(i) {
@@ -257,29 +219,20 @@ impl CertificateContract {
         }
 
         env.storage().persistent().set(&user_key, &new_certificates);
-        env.storage()
-            .persistent()
-            .extend_ttl(&user_key, THRESHOLD, BUMP);
+        extend_persistent_ttl(&env, &user_key);
 
-        // Remove quest mapping
         let quest_key = DataKey::QuestCertificate(metadata.quest_id, metadata.recipient.clone());
         env.storage().persistent().remove(&quest_key);
 
-        // Remove metadata
         let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().remove(&metadata_key);
 
-        // Mark as revoked (tombstone) — Issue #720
         env.storage()
             .persistent()
             .set(&DataKey::RevokedCertificate(token_id), &true);
 
-        // Burn the NFT — caller (owner) already authorized above
         Base::burn(&env, &metadata.recipient, token_id);
 
-        // Emit revocation event
-        // Event topics: (certificate_revoked,)
-        // Event data: (token_id, quest_id, recipient)
         env.events().publish(
             (Symbol::new(&env, "certificate_revoked"),),
             (token_id, metadata.quest_id, metadata.recipient),
@@ -288,9 +241,6 @@ impl CertificateContract {
         Ok(())
     }
 
-    /// Update the base URI used to resolve certificate metadata — Issue #719.
-    /// Owner-only so existing tokenIds still resolve after a host migration.
-    /// Trade-off: centralised control — consider moving to IPFS to decentralise.
     #[only_owner]
     pub fn set_metadata_base(env: Env, uri: String) -> Result<(), Error> {
         env.storage().instance().set(&DataKey::MetadataBase, &uri);
@@ -299,7 +249,6 @@ impl CertificateContract {
         Ok(())
     }
 
-    /// Return the current metadata base URI — Issue #719.
     pub fn get_metadata_base(env: Env) -> Result<String, Error> {
         env.storage()
             .instance()
@@ -307,39 +256,31 @@ impl CertificateContract {
             .ok_or(Error::MetadataBaseNotSet)
     }
 
-    /// Check whether a certificate has been revoked — Issue #720.
     pub fn is_revoked(env: Env, token_id: u32) -> bool {
         env.storage()
             .persistent()
             .has(&DataKey::RevokedCertificate(token_id))
     }
 
-    // ─── Pause / Unpause (emergency stop) ────────────────────────────────────
-
-    /// Pause certificate minting – only callable by the contract owner.
-    /// Once paused, `mint_quest_certificate` will fail with `Error::Paused`.
     #[only_owner]
     pub fn pause(env: Env) -> Result<(), Error> {
         env.storage()
             .instance()
             .set(&Symbol::new(&env, "paused"), &true);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         env.events().publish((Symbol::new(&env, "paused"),), ());
         Ok(())
     }
 
-    /// Unpause certificate minting – only callable by the contract owner.
     #[only_owner]
     pub fn unpause(env: Env) -> Result<(), Error> {
         env.storage()
             .instance()
             .set(&Symbol::new(&env, "paused"), &false);
-        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        extend_instance_ttl(&env);
         env.events().publish((Symbol::new(&env, "unpaused"),), ());
         Ok(())
     }
-
-    // ─── Internal helpers ────────────────────────────────────────────────────
 
     fn require_not_paused(env: &Env) -> Result<(), Error> {
         if env

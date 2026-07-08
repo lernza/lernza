@@ -1,120 +1,67 @@
-import { useState, useEffect, useCallback, useRef } from "react"
-
-export interface AsyncDataState<T> {
-  data: T | null
-  isLoading: boolean
-  error: string | null
-  isEmpty: boolean
-}
-
-export interface UseAsyncDataOptions<T> {
-  initialData?: T | null
-  dependencies?: React.DependencyList
-  enabled?: boolean
-}
-
-export function useAsyncData<T>(
-  fetcher: () => Promise<T>,
-  options: UseAsyncDataOptions<T> = {}
-): AsyncDataState<T> & { refetch: () => Promise<void> } {
-  const { initialData = null, dependencies = [], enabled = true } = options
-
-  const [state, setState] = useState<AsyncDataState<T>>({
-    data: initialData,
-    isLoading: false,
-    error: null,
-    isEmpty: !initialData,
-  })
-
-  // Use a ref for the fetcher to avoid re-triggering the effect when the
-  // fetcher function identity changes (which happens every render since
-  // callers pass inline arrow functions).
-  const fetcherRef = useRef(fetcher)
-
-  // Wrap fetcher in useCallback to stabilize its identity across renders.
-  // Deps are forwarded dynamically by callers, so the array can't be a literal.
-  // eslint-disable-next-line react-hooks/use-memo
-  const stableFetcher = useCallback(fetcher, [...dependencies])
-
-  // Update the ref with the stable fetcher after render to avoid ref mutation during render
-  useEffect(() => {
-    fetcherRef.current = stableFetcher
-  }, [stableFetcher])
-
-  // Track whether a fetch is already in-flight to prevent overlapping calls.
-  const inflightRef = useRef(false)
-
-  const execute = useCallback((): Promise<void> => {
-    if (!enabled || inflightRef.current) return Promise.resolve()
-
-    inflightRef.current = true
-    setState(prev => ({ ...prev, isLoading: true, error: null }))
-
-    return fetcherRef
-      .current()
-      .then(result => {
-        setState({
-          data: result,
-          isLoading: false,
-          error: null,
-          isEmpty: !result || (Array.isArray(result) && result.length === 0),
-        })
-      })
-      .catch(err => {
-        const message = err instanceof Error ? err.message : "An error occurred"
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: message,
-        }))
-      })
-      .finally(() => {
-        inflightRef.current = false
-      })
-  }, [enabled])
-
-  const refetch = useCallback(() => execute(), [execute])
-
-  // Only re-run when `enabled` changes or when the caller's explicit
-  // `dependencies` array values change. The fetcher ref keeps us from
-  // needing `execute` in the dep array (which previously caused loops).
-  useEffect(() => {
-    if (enabled) {
-      void execute()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, ...dependencies])
-
-  return {
-    ...state,
-    refetch,
-  }
-}
-
-// --- Contract-specific hook ---
-
-export interface UseContractDataOptions<T> extends UseAsyncDataOptions<T> {
-  contractUnavailableMessage?: string
-}
-
-export function useContractData<T>(
-  contractName: string,
-  fetcher: () => Promise<T>,
-  options: UseContractDataOptions<T> = {}
-): AsyncDataState<T> & { refetch: () => Promise<void> } {
-  const { contractUnavailableMessage, ...asyncOptions } = options
-
-  const state = useAsyncData(fetcher, asyncOptions)
-
-  // Override error message for contract unavailability
-  if (state.error?.includes("not configured")) {
-    return {
-      ...state,
-      error:
-        contractUnavailableMessage ||
-        `On-chain data is unavailable until the ${contractName} contract is configured.`,
-    }
-  }
-
-  return state
+import { useQuery } from "@tanstack/react-query"  
+  
+export interface AsyncDataState<T> {  
+  data: T | null  
+  isLoading: boolean  
+  error: string | null  
+  isEmpty: boolean  
+}  
+  
+export interface UseAsyncDataOptions<T> {  
+  initialData?: T | null  
+  queryKey: unknown[]  
+  enabled?: boolean  
+}  
+  
+export function useAsyncData<T>(  
+  queryFn: () => Promise<T>,  
+  options: UseAsyncDataOptions<T>  
+): AsyncDataState<T> & { refetch: () => Promise<void> } {  
+  const { initialData = null, queryKey, enabled = true } = options  
+  
+  const query = useQuery({  
+    queryKey,  
+    queryFn,  
+    enabled,  
+    initialData,  
+  })  
+  
+  return {  
+    data: query.data ?? null,  
+    isLoading: query.isPending,  
+    error: query.error?.message ?? null,  
+    isEmpty: !query.data || (Array.isArray(query.data) && query.data.length === 0),  
+    refetch: () => query.refetch(),  
+  }  
+}  
+  
+// --- Contract-specific hook ---  
+  
+export interface UseContractDataOptions<T> extends UseAsyncDataOptions<T> {  
+  contractUnavailableMessage?: string  
+}  
+  
+export function useContractData<T>(  
+  contractName: string,  
+  queryFn: () => Promise<T>,  
+  options: UseContractDataOptions<T>  
+): AsyncDataState<T> & { refetch: () => Promise<void> } {  
+  const { contractUnavailableMessage, ...asyncOptions } = options  
+  
+  const state = useAsyncData(queryFn, {  
+    ...asyncOptions,  
+    queryKey: ['contract', contractName, ...asyncOptions.queryKey],  
+  })  
+  
+  // Override error message for contract unavailability  
+  if (state.error?.includes("not configured")) {  
+    return {  
+      ...state,  
+      error:  
+        contractUnavailableMessage ||  
+        `On-chain data is unavailable until the ${contractName} contract is configured.`,  
+    }  
+  }  
+  
+  return state  
 }

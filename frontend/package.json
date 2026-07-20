@@ -49,7 +49,7 @@
   },
   "devDependencies": {
     "@axe-core/react": "^4.12.1",
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^9.39.5",
     "@hookform/resolvers": "^5.2.2",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.2",

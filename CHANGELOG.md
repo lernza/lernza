@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.0 (2026-07-20)
+
+
+### Features
+
+* **create-quest:** add QuestCreationProvider and useQuestCreation ([8b6f899](https://github.com/lernza/lernza/commit/8b6f89979a76218b5d70e6f2e148f7eb5cddc06b))
+* **create-quest:** extract schemas, types, and helper components ([b744f22](https://github.com/lernza/lernza/commit/b744f22c41094067cdc0b8a3878df34025a02ab0))
+* **create-quest:** extract schemas, types, and helper components ([fa86061](https://github.com/lernza/lernza/commit/fa8606195ce120079e90cc875f2b9169cb60db18))
+* **dx:** bootstrap script, mainnet env validator, pre-commit tsc+lin… ([068bb06](https://github.com/lernza/lernza/commit/068bb06aa10131c1f3920a6298d6f489310cb3b3))
+* **ops:** add RPC health check, failover, and ops documentation ([2172ed8](https://github.com/lernza/lernza/commit/2172ed8312be291ce55d93a1bc3274cd654270fb))
+* **quest:** extract QuestProgress component from quest.tsx ([a860ac7](https://github.com/lernza/lernza/commit/a860ac703cb1c4ed23911a42072d1a8e6fae3bd0))
+* **quest:** extract QuestTabs navigation component ([e4b1c02](https://github.com/lernza/lernza/commit/e4b1c029e0bc4e38155ca3f04b72a150251e7c92))
+* Soroban smart contracts for learn-to-earn quests ([56d3f61](https://github.com/lernza/lernza/commit/56d3f61ba4b05b2926e8743187c50451859d0885))
+* web app — React, Vite, Tailwind, Freighter wallet, editorial UI ([58efdd9](https://github.com/lernza/lernza/commit/58efdd9bca7fa3847d265f65d31d4ba2e45a2439))
+
+
+### Bug Fixes
+
+* **a11y:** add visible skip-to-content link above sticky navbar ([8551887](https://github.com/lernza/lernza/commit/8551887066d459b77590a11c6f30f10c77fc74f2)), closes [#952](https://github.com/lernza/lernza/issues/952)
+* **certificate:** add pause/unpause functions to enable emergency stop ([1b19559](https://github.com/lernza/lernza/commit/1b19559a9ff4ed2e0dcd2ce33b02a73114a91a37))
+* **contracts:** extend TTL for TotalReservedReward key ([7ffcbf5](https://github.com/lernza/lernza/commit/7ffcbf552b5ec15c3c147318fe4cc4024409472a))
+* emit distinct join_mode for self-enrollment in join_quest ([a7a3ecc](https://github.com/lernza/lernza/commit/a7a3eccea7c9bf03da98ee7503e00210022908a1))
+* emit distinct join_mode for self-enrollment in join_quest ([a7a3ecc](https://github.com/lernza/lernza/commit/a7a3eccea7c9bf03da98ee7503e00210022908a1))
+
 ## [Unreleased]
 
 ### ⚠ BREAKING CHANGES

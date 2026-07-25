@@ -143,6 +143,10 @@ impl RewardsContract {
     pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
+        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+            return Err(Error::Paused);
+        }
+
         if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
         }
@@ -264,6 +268,10 @@ impl RewardsContract {
         amount: i128,
     ) -> Result<(), Error> {
         authority.require_auth();
+
+        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+            return Err(Error::Paused);
+        }
 
         if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
@@ -389,6 +397,10 @@ impl RewardsContract {
         amount: i128,
     ) -> Result<(), Error> {
         authority.require_auth();
+
+        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+            return Err(Error::Paused);
+        }
 
         if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
@@ -706,6 +718,10 @@ impl RewardsContract {
     ///   - There is actually something to refund
     pub fn refund_unused_pool(env: Env, authority: Address, quest_id: u32) -> Result<i128, Error> {
         authority.require_auth();
+
+        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+            return Err(Error::Paused);
+        }
 
         // Verify authority
         let auth_key = DataKey::QuestAuthority(quest_id);

@@ -762,6 +762,9 @@ impl MilestoneContract {
             return Err(Error::NotEnrolled);
         }
 
+        // Verify prerequisite milestone is completed if required
+        Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
+
         // Snapshot the distribution-mode parameters at submission time so
         // the approval flow is paid under the rules the enrollee signed up
         // for. See issue #863.
@@ -1074,9 +1077,9 @@ impl MilestoneContract {
         enrollee: Address,
         offset: u32,
         limit: u32,
-    ) -> EnrolleeProgress {
+    ) -> Result<EnrolleeProgress, Error> {
         if limit == 0 || limit > 100 {
-            panic!("unbounded range");
+            return Err(Error::InvalidInput);
         }
 
         let completions: u32 = env
@@ -1118,14 +1121,14 @@ impl MilestoneContract {
             }
         }
 
-        EnrolleeProgress {
+        Ok(EnrolleeProgress {
             quest_id,
             enrollee,
             completions,
             total_milestones,
             total_earned,
             completion_details,
-        }
+        })
     }
 
     /// Paginated quest completion rate (issue #865).

@@ -5,11 +5,19 @@ export interface Quest {
   owner: string
   name: string
   description: string
+  category: string
+  tags: string[]
   tokenAddr: string
-  enrolleeCount: number
-  milestoneCount: number
-  poolBalance: number
   createdAt: number
+  visibility: 'Public' | 'Private'
+  status: 'Active' | 'Archived'
+  deadline: number
+  archivedAt: number
+  maxEnrollees: number | null
+  verified: boolean
+  enrolleeCount?: number
+  milestoneCount?: number
+  poolBalance?: number
 }
 
 export interface Milestone {
@@ -40,11 +48,19 @@ export const MOCK_QUESTS: Quest[] = [
     name: "Learn to Code with Alex",
     description:
       "Teaching my brother the fundamentals of programming. From basic syntax to deploying a real application.",
+    category: "Programming",
+    tags: ["javascript", "web-dev", "beginner"],
     tokenAddr: "USDC...STELLAR",
+    createdAt: 1710000000,
+    visibility: "Public",
+    status: "Active",
+    deadline: 0,
+    archivedAt: 0,
+    maxEnrollees: null,
+    verified: true,
     enrolleeCount: 3,
     milestoneCount: 5,
     poolBalance: 2500,
-    createdAt: 1710000000,
   },
   {
     id: 1,
@@ -52,22 +68,38 @@ export const MOCK_QUESTS: Quest[] = [
     name: "Stellar Development Bootcamp",
     description:
       "A structured path to becoming a Stellar developer. Smart contracts, Soroban, DeFi.",
+    category: "Blockchain",
+    tags: ["stellar", "soroban", "smart-contracts", "rust"],
     tokenAddr: "USDC...STELLAR",
+    createdAt: 1709500000,
+    visibility: "Public",
+    status: "Active",
+    deadline: 0,
+    archivedAt: 0,
+    maxEnrollees: null,
+    verified: true,
     enrolleeCount: 8,
     milestoneCount: 10,
     poolBalance: 10000,
-    createdAt: 1709500000,
   },
   {
     id: 2,
     owner: "GCMN...P8TL",
     name: "Design Fundamentals",
     description: "Learn UI/UX design principles. From Figma basics to shipping a design system.",
+    category: "Design",
+    tags: ["ui/ux", "figma", "design-systems"],
     tokenAddr: "USDC...STELLAR",
+    createdAt: 1709800000,
+    visibility: "Public",
+    status: "Active",
+    deadline: 0,
+    archivedAt: 0,
+    maxEnrollees: null,
+    verified: true,
     enrolleeCount: 5,
     milestoneCount: 4,
     poolBalance: 1200,
-    createdAt: 1709800000,
   },
 ]
 

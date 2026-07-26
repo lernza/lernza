@@ -28,12 +28,6 @@ test.describe("Navigation", () => {
     expect(body).toBeTruthy()
   })
 
-  test("/workspace/:id redirects to /quest/ route", async ({ page }) => {
-    await page.goto("/workspace/1")
-    // React Router Navigate replaces the route pattern — URL ends up at /quest/:id (literal)
-    // because the redirect is <Navigate replace to="/quest/:id" /> (no dynamic interpolation)
-    await expect(page).toHaveURL(/\/quest\//)
-  })
 
   test("navigates back to landing from leaderboard via logo", async ({ page }) => {
     await page.goto("/leaderboard")

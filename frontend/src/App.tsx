@@ -52,12 +52,6 @@ function pathToPage(pathname: string): {
     return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null }
   }
 
-  // Legacy /workspace/:id links redirect to the renamed /quest/:id route.
-  const legacyMatch = clean.match(/^\/workspace\/(\d+)$/)
-  if (legacyMatch) {
-    return { page: "quest", questId: Number(legacyMatch[1]), creatorAddress: null }
-  }
-
   const creatorMatch = clean.match(/^\/creator\/([^/]+)$/)
   if (creatorMatch) {
     return {

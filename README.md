@@ -5,10 +5,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/lernza/lernza"><img src="https://img.shields.io/github/stars/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=github&logoColor=FACC15" alt="Stars"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/lernza/lernza/ci.yml?branch=main&style=flat-square&color=FACC15&labelColor=000&logo=githubactions&logoColor=FACC15&label=CI" alt="CI"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza/actions/workflows/pr-checks.yml"><img src="https://img.shields.io/github/actions/workflow/status/lernza/lernza/pr-checks.yml?branch=main&style=flat-square&color=FACC15&labelColor=000&logo=githubactions&logoColor=FACC15&label=PR%20Checks" alt="PR Checks"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza/releases/latest"><img src="https://img.shields.io/github/v/release/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=semanticrelease&logoColor=FACC15" alt="Latest Release"></a>&nbsp;
   <a href="https://stellar.org"><img src="https://img.shields.io/badge/Stellar-Soroban-FACC15?style=flat-square&logo=stellar&logoColor=FACC15&labelColor=000" alt="Stellar Soroban"></a>&nbsp;
-  <a href="https://github.com/lernza/lernza/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/lernza/lernza/good%20first%20issue?style=flat-square&color=FACC15&labelColor=000&label=good%20first%20issues&logo=git&logoColor=FACC15" alt="Good First Issues"></a>&nbsp;
   <a href="https://github.com/lernza/lernza/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-FACC15?style=flat-square&labelColor=000&logo=opensourceinitiative&logoColor=FACC15" alt="MIT License"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza/graphs/contributors"><img src="https://img.shields.io/github/contributors/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=github&logoColor=FACC15" alt="Contributors"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza"><img src="https://img.shields.io/github/stars/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=github&logoColor=FACC15" alt="Stars"></a>&nbsp;
+  <a href="https://github.com/lernza/lernza/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22"><img src="https://img.shields.io/github/issues/lernza/lernza/good%20first%20issue?style=flat-square&color=FACC15&labelColor=000&label=good%20first%20issues&logo=git&logoColor=FACC15" alt="Good First Issues"></a>&nbsp;
   <a href="https://codecov.io/gh/lernza/lernza"><img src="https://img.shields.io/codecov/c/github/lernza/lernza?style=flat-square&color=FACC15&labelColor=000&logo=codecov&logoColor=FACC15" alt="Coverage"></a>
 </p>
 

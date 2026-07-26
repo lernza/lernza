@@ -16,6 +16,7 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
       <div
         role="status"
         aria-live="polite"
+        aria-atomic="true"
         aria-busy="true"
         className="flex items-center gap-2 text-sm font-bold"
       >
@@ -32,6 +33,7 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
           <div
             role="status"
             aria-live="polite"
+            aria-atomic="true"
             aria-busy="true"
             className="flex items-center gap-3"
           >
@@ -49,6 +51,7 @@ export function LoadingState({ message, variant = "default" }: LoadingStateProps
         <div
           role="status"
           aria-live="polite"
+          aria-atomic="true"
           aria-busy="true"
           className="flex flex-col items-center"
         >
@@ -82,7 +85,12 @@ export function ErrorState({
 
   if (variant === "inline") {
     return (
-      <div role="alert" className="text-destructive flex items-center gap-2 text-sm font-bold">
+      <div
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        className="text-destructive flex items-center gap-2 text-sm font-bold"
+      >
         <ErrorIcon className="h-4 w-4" aria-hidden="true" />
         {message}
       </div>
@@ -93,7 +101,7 @@ export function ErrorState({
     return (
       <Card className="border-destructive">
         <CardContent className="flex items-center gap-3 py-4">
-          <div role="alert" className="flex flex-1 items-center gap-3">
+          <div role="alert" aria-live="assertive" aria-atomic="true" className="flex flex-1 items-center gap-3">
             <ErrorIcon className="text-destructive h-4 w-4" aria-hidden="true" />
             <span className="text-destructive text-sm font-bold">{message}</span>
           </div>
@@ -110,7 +118,7 @@ export function ErrorState({
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
-        <div role="alert" className="flex flex-col items-center">
+        <div role="alert" aria-live="assertive" aria-atomic="true" className="flex flex-col items-center">
           <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border shadow-md">
             <ErrorIcon className="text-destructive h-6 w-6" aria-hidden="true" />
           </div>
@@ -327,11 +335,18 @@ export function EmptyState(props: EmptyStateProps) {
       <CardContent
         role="status"
         aria-live="polite"
+        aria-atomic="true"
         className="flex flex-col items-center py-12 text-center"
       >
         {illustrationSrc ? (
           <div className="mb-6">
-            <img src={illustrationSrc} alt={config.title} className="h-32 w-32 sm:h-40 sm:w-40" />
+            <img
+              src={illustrationSrc}
+              alt={config.title}
+              className="h-32 w-32 sm:h-40 sm:w-40"
+              role="img"
+              aria-label={config.title}
+            />
           </div>
         ) : (
           <div className="bg-accent border-border mb-4 flex h-14 w-14 items-center justify-center border shadow-md">

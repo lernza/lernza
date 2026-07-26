@@ -147,3 +147,94 @@ fn test_get_metadata_base_not_set_returns_error() {
     let result = client.try_get_metadata_base();
     assert_eq!(result, Err(Ok(Error::MetadataBaseNotSet)));
 }
+
+#[test]
+fn test_pause_prevents_minting() {
+    // Issue #1105 — pause() blocks certificate minting until unpaused.
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+
+    client.pause(&owner);
+
+    let result = client.try_mint_certificate(
+        &1u32,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+        &owner,
+    );
+    assert_eq!(result, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_unpause_allows_minting() {
+    // Issue #1105 — unpause() restores certificate minting.
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+
+    client.pause(&owner);
+    client.unpause(&owner);
+
+    let result = client.try_mint_certificate(
+        &1u32,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+        &owner,
+    );
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_pause_blocks_mint_quest_certificate() {
+    // Issue #1105 — pause() also blocks mint_quest_certificate.
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+
+    client.pause(&owner);
+
+    let result = client.try_mint_quest_certificate(
+        &1u32,
+        &String::from_str(&env, "Test Quest"),
+        &String::from_str(&env, "Test"),
+        &recipient,
+    );
+    assert_eq!(result, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_pause_unpause_sequence() {
+    // Issue #1105 — multiple pause/unpause cycles work correctly.
+    let (env, client, owner) = setup();
+    let recipient = Address::generate(&env);
+    let quest_name = String::from_str(&env, "Test Quest");
+    let quest_category = String::from_str(&env, "Test");
+
+    client.pause(&owner);
+    let result1 = client.try_mint_certificate(&1u32, &quest_name, &quest_category, &recipient, &owner);
+    assert_eq!(result1, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    let result2 = client.try_mint_certificate(&1u32, &quest_name, &quest_category, &recipient, &owner);
+    assert!(result2.is_ok());
+
+    client.pause(&owner);
+    let result3 = client.try_mint_certificate(
+        &2u32,
+        &String::from_str(&env, "Another Quest"),
+        &quest_category,
+        &recipient,
+        &owner,
+    );
+    assert_eq!(result3, Err(Ok(Error::Paused)));
+
+    client.unpause(&owner);
+    let result4 = client.try_mint_certificate(
+        &2u32,
+        &String::from_str(&env, "Another Quest"),
+        &quest_category,
+        &recipient,
+        &owner,
+    );
+    assert!(result4.is_ok());
+}

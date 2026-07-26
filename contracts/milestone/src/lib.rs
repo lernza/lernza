@@ -591,6 +591,13 @@ impl MilestoneContract {
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
 
+        // Re-validate the stored reward against current contract bounds — a
+        // reduced MAX_REWARD_AMOUNT after a contract upgrade must not let an
+        // old, now out-of-bounds milestone silently distribute (Issue #1174).
+        if milestone.reward_amount <= 0 || milestone.reward_amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
         Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
 
         let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
@@ -601,8 +608,8 @@ impl MilestoneContract {
         // Increment total reserved reward if this completion wasn't already pending review
         let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
         let had_pending = env.storage().persistent().has(&submit_key);
+        let reserved_key = DataKey::TotalReservedReward(quest_id);
         if !had_pending {
-            let reserved_key = DataKey::TotalReservedReward(quest_id);
             let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
             env.storage()
                 .persistent()
@@ -829,6 +836,13 @@ impl MilestoneContract {
             .persistent()
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
+
+        // Re-validate the stored reward against current contract bounds — a
+        // reduced MAX_REWARD_AMOUNT after a contract upgrade must not let an
+        // old, now out-of-bounds milestone silently distribute (Issue #1174).
+        if milestone.reward_amount <= 0 || milestone.reward_amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
 
         // Check if already completed
         let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());

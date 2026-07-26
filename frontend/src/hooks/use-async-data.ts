@@ -17,9 +17,12 @@ export function useAsyncData<T>(
   queryFn: () => Promise<T>,  
   options: UseAsyncDataOptions<T>  
 ): AsyncDataState<T> & { refetch: () => Promise<void> } {  
-  const { initialData = null, queryKey, enabled = true } = options  
-  
-  const query = useQuery({  
+  const { initialData = null, queryKey, enabled = true } = options
+
+  // queryFn re-runs whenever queryKey changes, so callers don't need to
+  // memoize it — unlike the old useCallback + manual-dependencies version,
+  // there's no suppressed lint rule for a stale closure to hide behind.
+  const query = useQuery({
     queryKey,  
     queryFn,  
     enabled,  

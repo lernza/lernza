@@ -1042,11 +1042,6 @@ impl MilestoneContract {
         result
     }
 
-    /// List all milestones for a quest.
-    pub fn list_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
-        Self::get_milestones(env, quest_id)
-    }
-
     /// Get milestone count for a quest.
     pub fn get_milestone_count(env: Env, quest_id: u32) -> u32 {
         env.storage()

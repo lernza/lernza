@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 import { PageContainer } from "@/components/page-container"
-import { PageMetadata } from "@/components/page-metadata"
+import { PageMetadata } from "@/components/PageMetadata"
 
 interface LegalPageLayoutProps {
   title: string

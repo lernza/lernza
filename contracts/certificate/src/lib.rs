@@ -187,13 +187,7 @@ impl CertificateContract {
     }
 
     #[only_owner]
-    pub fn revoke_certificate(env: Env, caller: Address, token_id: u32) -> Result<(), Error> {
-        caller.require_auth();
-        let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
-        if caller != owner {
-            return Err(Error::NotOwner);
-        }
-
+    pub fn revoke_certificate(env: Env, token_id: u32) -> Result<(), Error> {
         if env
             .storage()
             .persistent()

@@ -3,6 +3,23 @@ import { Check, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import React from "react"
 
+// Constants matching contract bounds
+const MAX_REWARD_AMOUNT = 1_000_000_000_000_000 // 10^15 raw token units
+
+// Helper to format token amount for display
+function formatTokens(amount: number): string {
+  if (amount >= 1_000_000_000_000) {
+    return `${(amount / 1_000_000_000_000).toFixed(0)}T`
+  }
+  if (amount >= 1_000_000_000) {
+    return `${(amount / 1_000_000_000).toFixed(0)}B`
+  }
+  if (amount >= 1_000_000) {
+    return `${(amount / 1_000_000).toFixed(0)}M`
+  }
+  return amount.toLocaleString()
+}
+
 // Zod schemas
 export const step1Schema = z.object({
   name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
@@ -11,13 +28,21 @@ export const step1Schema = z.object({
 export type Step1Values = z.infer<typeof step1Schema>
 
 export const milestoneSchema = z.object({
-  title: z.string().min(1, "Title is required").max(100, "Max 100 characters"),
-  description: z.string().min(1, "Description is required").max(500, "Max 500 characters"),
-  rewardAmount: z.number().positive("Must be greater than 0"),
+  title: z.string()
+    .min(1, "Title is required")
+    .max(128, "Title max 128 characters"),
+  description: z.string()
+    .min(1, "Description is required")
+    .max(1000, "Description max 1000 characters"),
+  rewardAmount: z.number()
+    .positive("Reward must be greater than 0")
+    .max(MAX_REWARD_AMOUNT, `Reward max ${formatTokens(MAX_REWARD_AMOUNT)} tokens`),
 })
 
 export const step2Schema = z.object({
-  milestones: z.array(milestoneSchema).min(1, "At least one milestone is required"),
+  milestones: z.array(milestoneSchema)
+    .min(1, "At least one milestone is required")
+    .max(50, "Maximum 50 milestones per quest"),
 })
 export type Step2Values = z.infer<typeof step2Schema>
 

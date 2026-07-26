@@ -28,8 +28,8 @@ export function useQuest(id: number) {
       return quest
     },
     enabled,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
   })
 
   const errMsg = query.error
@@ -61,8 +61,8 @@ export function useMilestones(questId: number) {
       return milestoneClient.getMilestones(questId)
     },
     enabled,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
   })
 
   const errMsg = query.error
@@ -94,8 +94,8 @@ export function useEnrollees(questId: number) {
       return questClient.getEnrollees(questId)
     },
     enabled,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
   })
 
   const errMsg = query.error

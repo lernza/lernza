@@ -265,13 +265,13 @@ impl RewardsContract {
     /// Idempotent: a second call for the same (quest, milestone, enrollee) returns AlreadyPaid.
     pub fn distribute_reward(
         env: Env,
-        authority: Address,
+        caller: Address,
         quest_id: u32,
         milestone_id: u32,
         enrollee: Address,
         amount: i128,
     ) -> Result<(), Error> {
-        authority.require_auth();
+        caller.require_auth();
 
         if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
             return Err(Error::Paused);
@@ -287,17 +287,17 @@ impl RewardsContract {
             return Err(Error::AlreadyPaid);
         }
 
-        // Verify authority
+        // Verify caller is the quest authority
         let auth_key = DataKey::QuestAuthority(quest_id);
-        let stored: Address = env
+        let authority: Address = env
             .storage()
             .persistent()
             .get::<DataKey, Address>(&auth_key)
             .ok_or(Error::QuestNotFunded)?;
-        if stored != authority {
+        if caller != authority {
             return Err(Error::Unauthorized);
         }
-        if authority == enrollee {
+        if caller == enrollee {
             return Err(Error::Unauthorized);
         }
 

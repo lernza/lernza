@@ -237,3 +237,31 @@ export const MOCK_EARNINGS_HISTORY: EarningsDataPoint[] = [
   { date: "Mar", amount: 400 },
   { date: "Apr", amount: 750 },
 ]
+
+export function generateMockQuest(id: number, overrides?: Partial<Quest>): Quest {
+  return {
+    id,
+    owner: `G${Math.random().toString(36).substring(2, 6).toUpperCase()}...MOCK`,
+    name: `Generated Quest #${id}`,
+    description: `Auto-generated mock quest description for quest #${id}`,
+    category: "General",
+    tags: ["mock", "test"],
+    tokenAddr: "USDC...STELLAR",
+    createdAt: Math.floor(Date.now() / 1000),
+    visibility: "Public",
+    status: "Active",
+    deadline: 0,
+    archivedAt: 0,
+    maxEnrollees: null,
+    verified: true,
+    enrolleeCount: Math.floor(Math.random() * 10),
+    milestoneCount: 3,
+    poolBalance: 1000,
+    ...overrides,
+  }
+}
+
+export function generateMockDataset(count: number = 5): Quest[] {
+  return Array.from({ length: count }, (_, i) => generateMockQuest(i + 100))
+}
+

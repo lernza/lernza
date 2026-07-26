@@ -997,13 +997,19 @@ fn test_archived_quest_rejects_update() {
 }
 
 #[test]
-fn test_archive_quest_twice_is_idempotent() {
+fn test_archive_quest_twice_rejected() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);
     client.archive_quest(&0);
-    client.archive_quest(&0);
+    let archived_at = client.get_quest(&0).archived_at;
+
+    let result = client.try_archive_quest(&0);
+    assert_eq!(result, Err(Ok(Error::QuestArchived)));
+
+    // Re-archiving must not mutate the original archived_at timestamp.
     let quest = client.get_quest(&0);
     assert_eq!(quest.status, QuestStatus::Archived);
+    assert_eq!(quest.archived_at, archived_at);
 }
 
 #[test]

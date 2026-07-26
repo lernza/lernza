@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing. Lernza is an open source learn-to-earn platform on Stellar, and we welcome contributions of all kinds: code, documentation, bug reports, feature suggestions, and design feedback.
 
+New to the project vocabulary? See [docs/GLOSSARY.md](docs/GLOSSARY.md) for short definitions of quest, milestone, enrollee, and pool.
+
 ## Getting Started
 
 1. Fork the repository

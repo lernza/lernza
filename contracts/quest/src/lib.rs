@@ -426,6 +426,10 @@ impl QuestContract {
         let mut quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
         quest.status = QuestStatus::Archived;
         quest.archived_at = env.ledger().timestamp();
 

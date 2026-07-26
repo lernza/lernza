@@ -170,11 +170,11 @@ fn test_get_milestones() {
 }
 
 #[test]
-fn test_list_milestones_empty() {
+fn test_get_milestones_empty() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
 
-    let milestones = client.list_milestones(&q_id);
+    let milestones = client.get_milestones(&q_id);
     assert_eq!(milestones.len(), 0);
     assert_eq!(client.get_milestone_count(&q_id), 0);
 
@@ -182,13 +182,13 @@ fn test_list_milestones_empty() {
 }
 
 #[test]
-fn test_list_milestones_with_milestones() {
+fn test_get_milestones_with_milestones() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "A", 10);
     create_ms(&env, &client, &owner, q_id, "B", 20);
 
-    let milestones = client.list_milestones(&q_id);
+    let milestones = client.get_milestones(&q_id);
     assert_eq!(milestones.len(), 2);
     assert_eq!(
         milestones.get(0).unwrap().title,

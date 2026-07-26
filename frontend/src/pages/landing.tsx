@@ -449,6 +449,10 @@ export function Landing({ onNavigate }: LandingProps) {
                 {[
                   { label: "Documentation", href: "https://github.com/lernza/lernza" },
                   {
+                    label: "Feature Status",
+                    href: "https://github.com/lernza/lernza#feature-matrix",
+                  },
+                  {
                     label: "Contributing",
                     href: "https://github.com/lernza/lernza/blob/main/CONTRIBUTING.md",
                   },

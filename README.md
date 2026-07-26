@@ -91,6 +91,24 @@ See the full [project board](https://github.com/orgs/lernza/projects/1) for all 
 
 <br />
 
+## Feature Matrix
+
+Know what's real on mainnet day-one vs still simulated:
+
+| Feature | Status | Available | Notes |
+|:--------|:-------|:----------|:------|
+| **Create Quest** | Production | July 30, 2026 | Full quest setup with title, description, reward token |
+| **Enroll Learners** | Production | July 30, 2026 | Add or invite learners to quest |
+| **Create Milestones** | Production | July 30, 2026 | Define milestone titles, descriptions, reward amounts |
+| **Verify Completion** | Production | July 30, 2026 | Owner/peer review and approve milestone submissions |
+| **Distribute Rewards** | Production | July 30, 2026 | Transfer USDC from pool to learner wallet |
+| **Leaderboard** | Production | July 30, 2026 | View quest completion rankings and earnings |
+| **Certificates (NFT)** | Simulated | TBD | On-chain certificate mints for quest completion |
+| **Advanced Analytics** | Simulated | TBD | Detailed learner progress dashboards |
+| **Peer Verification** | Simulated | TBD | Community-based milestone approval |
+
+<br />
+
 ## Dive Deeper
 
 <details>

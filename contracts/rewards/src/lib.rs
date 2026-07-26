@@ -90,6 +90,10 @@ pub enum Error {
 
 // TTL constants moved to common.
 
+// Bounds for the configurable refund grace period — Issue #1172
+const MIN_REFUND_GRACE_PERIOD: u64 = 86_400; // 1 day
+const MAX_REFUND_GRACE_PERIOD: u64 = 31_536_000; // 1 year
+
 // IsDataKey implementation — restricts TTL extension to Rewards DataKey only
 impl common::IsDataKey for DataKey {}
 
@@ -578,6 +582,10 @@ impl RewardsContract {
             .ok_or(Error::NotInitialized)?;
         if stored_admin != admin {
             return Err(Error::Unauthorized);
+        }
+
+        if !(MIN_REFUND_GRACE_PERIOD..=MAX_REFUND_GRACE_PERIOD).contains(&grace_period_seconds) {
+            return Err(Error::InvalidInput);
         }
 
         env.storage()

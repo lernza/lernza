@@ -227,6 +227,7 @@ impl QuestContract {
         new_admin: Address,
     ) -> Result<(), Error> {
         Self::require_admin(&env, &current_admin)?;
+        Self::require_not_paused(&env)?;
 
         env.storage().instance().set(&DataKey::Admin, &new_admin);
         extend_instance_ttl(&env);

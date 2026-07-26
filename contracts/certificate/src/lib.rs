@@ -27,6 +27,7 @@ pub enum DataKey {
     UserCertificates(Address),
     MetadataBase,
     RevokedCertificate(u32),
+    Paused,
 }
 
 // -- add IsDataKey implementation --
@@ -75,6 +76,7 @@ impl CertificateContract {
         recipient: Address,
         issuer: Address,
     ) -> Result<u32, Error> {
+        Self::require_not_paused(&env)?;
         let cert_key = DataKey::QuestCertificate(quest_id, recipient.clone());
         if env.storage().persistent().has(&cert_key) {
             return Err(Error::AlreadyIssued);
@@ -264,9 +266,7 @@ impl CertificateContract {
 
     #[only_owner]
     pub fn pause(env: Env) -> Result<(), Error> {
-        env.storage()
-            .instance()
-            .set(&Symbol::new(&env, "paused"), &true);
+        env.storage().instance().set(&DataKey::Paused, &true);
         extend_instance_ttl(&env);
         env.events().publish((Symbol::new(&env, "paused"),), ());
         Ok(())
@@ -274,9 +274,7 @@ impl CertificateContract {
 
     #[only_owner]
     pub fn unpause(env: Env) -> Result<(), Error> {
-        env.storage()
-            .instance()
-            .set(&Symbol::new(&env, "paused"), &false);
+        env.storage().instance().set(&DataKey::Paused, &false);
         extend_instance_ttl(&env);
         env.events().publish((Symbol::new(&env, "unpaused"),), ());
         Ok(())
@@ -286,7 +284,7 @@ impl CertificateContract {
         if env
             .storage()
             .instance()
-            .get(&Symbol::new(env, "paused"))
+            .get(&DataKey::Paused)
             .unwrap_or(false)
         {
             return Err(Error::Paused);

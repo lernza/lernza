@@ -46,7 +46,7 @@ Returned by `get_quest`, `list_public_quests`, `list_quests_by_owner`, `list_que
 
 ### `MilestoneInfo`
 
-Returned by `get_milestone`, `get_milestones`, `list_milestones`.
+Returned by `get_milestone`, `get_milestones`.
 
 | Field | Type | Description |
 |:------|:-----|:------------|
@@ -620,13 +620,12 @@ get_milestone(env: Env, quest_id: u32, milestone_id: u32) -> Result<MilestoneInf
 
 ---
 
-### `get_milestones` / `list_milestones`
+### `get_milestones`
 
-All milestones for a quest (both functions are equivalent).
+All milestones for a quest.
 
 ```rust
 get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo>
-list_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo>
 ```
 
 ---

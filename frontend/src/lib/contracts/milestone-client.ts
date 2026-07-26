@@ -102,6 +102,14 @@ export class MilestoneClient {
     return result.map(raw => this.parseMilestoneInfo(raw))
   }
 
+  async getMilestones(questId: number): Promise<MilestoneInfo[]> {
+    const result = await this.invokeRead("get_milestones", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    if (!Array.isArray(result)) return []
+    return result.map(raw => this.parseMilestoneInfo(raw))
+  }
+
   async getMilestoneCount(questId: number): Promise<number> {
     const result = await this.invokeRead("get_milestone_count", [
       nativeToScVal(questId, { type: "u32" }),

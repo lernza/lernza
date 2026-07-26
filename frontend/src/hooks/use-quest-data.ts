@@ -58,7 +58,7 @@ export function useMilestones(questId: number) {
     queryKey: ["milestones", questId],
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
-      return milestoneClient.listMilestones(questId)
+      return milestoneClient.getMilestones(questId)
     },
     enabled,
     staleTime: 5 * 60 * 1000,

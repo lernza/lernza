@@ -124,3 +124,21 @@ pub fn extend_instance_ttl(env: &Env) {
 pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
     env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
 }
+
+pub fn is_paused_by_key<K: IsDataKey>(env: &Env, key: &K) -> bool {
+    env.storage().instance().get(key).unwrap_or(false)
+}
+
+pub fn get_instance<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(
+    env: &Env,
+    key: &K,
+) -> Option<T> {
+    env.storage().instance().get(key)
+}
+
+pub fn get_persistent<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(
+    env: &Env,
+    key: &K,
+) -> Option<T> {
+    env.storage().persistent().get(key)
+}

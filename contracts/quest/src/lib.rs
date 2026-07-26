@@ -999,12 +999,7 @@ impl QuestContract {
     }
 
     fn require_not_paused(env: &Env) -> Result<(), Error> {
-        if env
-            .storage()
-            .instance()
-            .get(&DataKey::Paused)
-            .unwrap_or(false)
-        {
+        if common::is_paused_by_key(env, &DataKey::Paused) {
             Err(Error::Paused)
         } else {
             Ok(())

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Learn-to-earn platform on Stellar",
   "scripts": {
+    "setup": "./scripts/bootstrap.sh",
     "check:docs": "node scripts/check-docs.js"
   },
   "repository": {

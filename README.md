@@ -61,10 +61,19 @@ Traditional learning platforms rely on willpower alone. Lernza adds **skin in th
 
 ## Getting Started
 
+The quickest way to get a full development environment is the one-command bootstrap:
+
 ```bash
 git clone https://github.com/lernza/lernza.git
 cd lernza
+./scripts/bootstrap.sh   # or: make setup
+```
 
+This installs Rust, the WASM target, Stellar CLI, Node.js, pnpm, frontend dependencies, and runs the contract test suite. For a step-by-step walkthrough, see [DEV_SETUP.md](DEV_SETUP.md).
+
+### Manual Setup
+
+```bash
 # Smart contracts
 cargo test --workspace      # 33 tests
 stellar contract build      # Optimized WASM

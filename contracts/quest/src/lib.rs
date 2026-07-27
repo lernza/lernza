@@ -1,6 +1,7 @@
 #![no_std]
 use common::{
-    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
+    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, Visibility,
+    BUMP, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -39,6 +40,8 @@ pub enum DataKey {
     /// While set, `leave_quest` is rejected so the submission record never
     /// ends up pointing at a non-enrollee. Key: (quest_id, enrollee).
     LeaveHold(u32, Address),
+    /// Version history for a quest. Stores a Vec of QuestVersion snapshots.
+    QuestVersionHistory(u32),
 }
 
 // QuestInfo moved to common.
@@ -295,6 +298,7 @@ impl QuestContract {
             archived_at: 0,
             max_enrollees,
             verified,
+            version: 1,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -404,16 +408,50 @@ impl QuestContract {
             quest.max_enrollees = Some(m);
         }
 
+        // Store version snapshot before updating
+        let old_version = QuestVersion {
+            version: quest.version,
+            name: quest.name.clone(),
+            description: quest.description.clone(),
+            category: quest.category.clone(),
+            tags: quest.tags.clone(),
+            visibility: quest.visibility,
+            max_enrollees: quest.max_enrollees,
+            updated_at: env.ledger().timestamp(),
+        };
+
+        // Increment version
+        quest.version += 1;
+
         env.storage()
             .persistent()
             .set(&DataKey::Quest(quest_id), &quest);
 
+        // Append old version to history
+        let history_key = DataKey::QuestVersionHistory(quest_id);
+        let mut history: Vec<QuestVersion> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or(Vec::new(&env));
+        history.push_back(old_version);
+        env.storage().persistent().set(&history_key, &history);
+        common::extend_persistent_ttl(&env, &history_key);
+
         // Emit quest updated event with the fields that were actually changed
         // Event topics: (quest_updated,)
-        // Event data: (quest_id, name, description, category, tags, max_enrollees)
+        // Event data: (quest_id, new_version, name, description, category, tags, max_enrollees)
         env.events().publish(
             (Symbol::new(&env, "quest_updated"),),
-            (quest_id, name, description, category, tags, max_enrollees),
+            (
+                quest_id,
+                quest.version,
+                name,
+                description,
+                category,
+                tags,
+                max_enrollees,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -804,6 +842,22 @@ impl QuestContract {
         Ok(quest)
     }
 
+    /// Get the version history for a quest.
+    ///
+    /// Returns all historical snapshots in chronological order (oldest first).
+    /// Each snapshot captures the quest fields at the time of a previous update.
+    pub fn get_quest_version_history(env: Env, quest_id: u32) -> Result<Vec<QuestVersion>, Error> {
+        Self::load_quest(&env, quest_id)?; // verify exists
+        let history_key = DataKey::QuestVersionHistory(quest_id);
+        let history: Vec<QuestVersion> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or(Vec::new(&env));
+        Self::bump(&env, quest_id);
+        Ok(history)
+    }
+
     /// Get all enrollees for a quest.
     ///
     /// Like `get_quest`, this is readable for any existing quest id regardless
@@ -1137,6 +1191,7 @@ impl QuestContract {
         extend_instance_ttl(env);
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
+        common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
     }
 }
 

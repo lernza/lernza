@@ -63,6 +63,21 @@ pub struct QuestInfo {
     pub archived_at: u64,
     pub max_enrollees: Option<u32>,
     pub verified: bool,
+    pub version: u32,
+}
+
+/// A snapshot of quest fields at a specific version, stored for history.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct QuestVersion {
+    pub version: u32,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub visibility: Visibility,
+    pub max_enrollees: Option<u32>,
+    pub updated_at: u64,
 }
 
 /// Validate that an address is a Stellar contract address (not an account).

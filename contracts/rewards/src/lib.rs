@@ -164,7 +164,14 @@ impl RewardsContract {
 
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        // Log outgoing cross-contract call (params left empty to avoid heavy formatting in contract)
+        common::log_cross_call(&env, &quest_contract_addr, "get_quest", &String::from_str(&env, ""));
         let quest_info_result = quest_client.try_get_quest(&quest_id);
+        // Emit return log indicating success/failure
+        match &quest_info_result {
+            Ok(Ok(_)) => common::log_cross_return(&env, &quest_contract_addr, "get_quest", true, &String::from_str(&env, "")),
+            Ok(Err(_)) | Err(_) => common::log_cross_return(&env, &quest_contract_addr, "get_quest", false, &String::from_str(&env, "")),
+        }
         let quest_info = match quest_info_result {
             Ok(Ok(quest)) => quest,
             Ok(Err(_)) => return Err(Error::QuestLookupFailed),
@@ -309,7 +316,11 @@ impl RewardsContract {
             .ok_or(Error::MilestoneContractNotInitialized)?;
 
         let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
-        if !milestone_client.is_completed(&quest_id, &milestone_id, &enrollee) {
+        // Log outgoing check and capture result
+        common::log_cross_call(&env, &milestone_contract_addr, "is_completed", &String::from_str(&env, ""));
+        let completed = milestone_client.is_completed(&quest_id, &milestone_id, &enrollee);
+        common::log_cross_return(&env, &milestone_contract_addr, "is_completed", completed, &String::from_str(&env, ""));
+        if !completed {
             return Err(Error::MilestoneNotCompleted);
         }
 
@@ -373,9 +384,10 @@ impl RewardsContract {
         // Update quest specific total distributed
         let q_dist_key = DataKey::QuestDistributed(quest_id);
         let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
+        let q_new = q_total.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
         env.storage()
             .persistent()
-            .set(&q_dist_key, &(q_total + amount));
+            .set(&q_dist_key, &q_new);
         common::extend_persistent_ttl(&env, &q_dist_key);
 
         extend_instance_ttl(&env);

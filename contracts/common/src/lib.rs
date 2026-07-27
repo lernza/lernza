@@ -140,6 +140,54 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
     env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
 }
 
+/// Basic URL format checker used by contract metadata validation.
+/// Lightweight acceptance of http/https and rejects whitespace.
+pub fn is_valid_url(s: &String) -> bool {
+    if s.len() == 0 || s.len() > 2048 {
+        return false;
+    }
+    let mut buf = [0u8; 2048];
+    let len = s.len() as usize;
+    s.copy_into_slice(&mut buf[..len]);
+    for &b in buf[..len].iter() {
+        if b == b' ' || b == b'\n' || b == b'\r' || b == b'\t' {
+            return false;
+        }
+    }
+    if len < 7 {
+        return false;
+    }
+    let prefix_http = b"http://";
+    let prefix_https = b"https://";
+    if len >= 7 && &buf[..7] == prefix_http {
+        return true;
+    }
+    if len >= 8 && &buf[..8] == prefix_https {
+        return true;
+    }
+    false
+}
+
+/// Emit a structured event for outgoing cross-contract call attempts.
+/// Topics: (cross_contract_call,)
+/// Data: (caller_contract, target_contract, method_symbol, params)
+pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
+        (env.current_contract_address(), target.clone(), soroban_sdk::Symbol::new(&env, method), params.clone()),
+    );
+}
+
+/// Emit a structured event for cross-contract call returns.
+/// Topics: (cross_contract_return,)
+/// Data: (caller_contract, target_contract, method_symbol, success, result)
+pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
+        (env.current_contract_address(), target.clone(), soroban_sdk::Symbol::new(&env, method), success, result.clone()),
+    );
+}
+
 pub fn is_paused_by_key<K: IsDataKey>(env: &Env, key: &K) -> bool {
     env.storage().instance().get(key).unwrap_or(false)
 }

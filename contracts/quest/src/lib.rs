@@ -529,7 +529,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -578,7 +584,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "self");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);

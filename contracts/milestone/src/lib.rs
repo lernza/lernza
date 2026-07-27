@@ -630,9 +630,7 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
             .unwrap_or(0);
-        let next_completion_count = current_completions
-            .checked_add(1)
-            .ok_or(Error::Overflow)?;
+        let next_completion_count = current_completions.checked_add(1).ok_or(Error::Overflow)?;
         Self::maybe_mint_certificate(
             env.clone(),
             quest_id,
@@ -895,10 +893,16 @@ impl MilestoneContract {
 
         // Track approver for cleanup
         let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
-        let mut approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+        let mut approvers: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&approvers_key)
+            .unwrap_or_else(|| Vec::new(&env));
         approvers.push_back(peer.clone());
         env.storage().persistent().set(&approvers_key, &approvers);
-        env.storage().persistent().extend_ttl(&approvers_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&approvers_key, THRESHOLD, BUMP);
 
         // Increment approval count
         let count_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
@@ -934,9 +938,8 @@ impl MilestoneContract {
                 .persistent()
                 .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
                 .unwrap_or(0);
-            let next_completion_count = current_completions
-                .checked_add(1)
-                .ok_or(Error::Overflow)?;
+            let next_completion_count =
+                current_completions.checked_add(1).ok_or(Error::Overflow)?;
             Self::maybe_mint_certificate(
                 env.clone(),
                 quest_id,
@@ -957,9 +960,14 @@ impl MilestoneContract {
 
             // Clean up PeerApproval tombstones and tracking
             let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
-            let approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+            let approvers: Vec<Address> = env
+                .storage()
+                .persistent()
+                .get(&approvers_key)
+                .unwrap_or_else(|| Vec::new(&env));
             for approver in approvers.iter() {
-                let p_key = DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), approver);
+                let p_key =
+                    DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), approver);
                 env.storage().persistent().remove(&p_key);
             }
             env.storage().persistent().remove(&approvers_key);

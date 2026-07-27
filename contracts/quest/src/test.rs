@@ -29,6 +29,7 @@ fn create_quest_helper(
         token,
         &Visibility::Public,
         &None,
+        &None,
     )
 }
 
@@ -47,6 +48,7 @@ fn create_quest_with_visibility(
         &Vec::<String>::new(env),
         token,
         &visibility,
+        &None,
         &None,
     )
 }
@@ -69,6 +71,7 @@ fn create_quest_with_category_and_tags(
         token,
         &visibility,
         &None,
+        &None,
     )
 }
 
@@ -85,6 +88,62 @@ fn test_create_quest() {
 }
 
 #[test]
+fn test_create_quest_accepts_future_deadline() {
+    let (env, client, owner, token) = setup();
+    env.ledger().set_timestamp(1_000);
+    let id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Timed Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &Some(2_000),
+    );
+    assert_eq!(client.get_quest(&id).deadline, 2_000);
+}
+
+#[test]
+fn test_create_quest_rejects_past_or_current_deadline() {
+    let (env, client, owner, token) = setup();
+    env.ledger().set_timestamp(1_000);
+    for deadline in [999, 1_000] {
+        let result = client.try_create_quest(
+            &owner,
+            &String::from_str(&env, "Timed Quest"),
+            &String::from_str(&env, "Description"),
+            &String::from_str(&env, "Programming"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &Some(deadline),
+        );
+        assert_eq!(result, Err(Ok(Error::InvalidInput)));
+    }
+}
+
+#[test]
+fn test_create_quest_zero_deadline_means_no_deadline() {
+    let (env, client, owner, token) = setup();
+    env.ledger().set_timestamp(1_000);
+    let id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Open Quest"),
+        &String::from_str(&env, "Description"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &Some(0),
+    );
+    assert_eq!(client.get_quest(&id).deadline, 0);
+}
+
+#[test]
 fn test_create_quest_empty_name_fails() {
     let (env, client, owner, token) = setup();
     let result = client.try_create_quest(
@@ -95,6 +154,7 @@ fn test_create_quest_empty_name_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
         &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
@@ -112,6 +172,7 @@ fn test_create_quest_whitespace_name_fails() {
         &token,
         &Visibility::Public,
         &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -127,6 +188,7 @@ fn test_create_quest_empty_description_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
         &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
@@ -146,6 +208,7 @@ fn test_create_quest_oversized_name_fails() {
         &token,
         &Visibility::Public,
         &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::NameTooLong)));
 }
@@ -163,6 +226,7 @@ fn test_create_quest_oversized_description_fails() {
         &Vec::<String>::new(&env),
         &token,
         &Visibility::Public,
+        &None,
         &None,
     );
     assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
@@ -357,6 +421,7 @@ fn test_create_quest_rejects_too_many_tags() {
         &token,
         &Visibility::Public,
         &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -378,6 +443,7 @@ fn test_create_quest_rejects_tag_too_long() {
         &tags,
         &token,
         &Visibility::Public,
+        &None,
         &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
@@ -1139,6 +1205,7 @@ fn test_pause_blocks_state_changes_until_unpaused() {
         &token,
         &Visibility::Public,
         &None,
+        &None,
     );
     assert_eq!(create_result, Err(Ok(Error::Paused)));
 
@@ -1393,6 +1460,7 @@ fn test_enrollee_cap() {
         &token,
         &Visibility::Public,
         &Some(2),
+        &None,
     );
 
     let e1 = Address::generate(&env);
@@ -1718,6 +1786,7 @@ fn test_invite_respects_enrollment_cap() {
         &token,
         &Visibility::Private,
         &Some(1u32),
+        &None,
     );
 
     let preimage_a = b"seat-one";

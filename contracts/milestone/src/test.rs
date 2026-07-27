@@ -51,6 +51,7 @@ fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Address) 
         &Address::generate(env),
         &Visibility::Public,
         &None,
+        &None,
     )
 }
 
@@ -434,6 +435,15 @@ fn test_competitive_mode_fails_with_zero_winners() {
 }
 
 #[test]
+fn test_competitive_mode_rejects_excessive_winner_limit() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let result =
+        client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1_001), &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
 fn test_competitive_mode_first_winners_rewarded() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
@@ -804,6 +814,19 @@ fn test_set_verification_mode() {
 
     // Set peer review mode requiring 2 approvals
     client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+}
+
+#[test]
+fn test_peer_review_rejects_invalid_approval_bounds() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let zero = client.try_set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(0));
+    assert_eq!(zero, Err(Ok(Error::InvalidInput)));
+
+    let excessive =
+        client.try_set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(101));
+    assert_eq!(excessive, Err(Ok(Error::InvalidInput)));
 }
 
 #[test]
@@ -1632,6 +1655,20 @@ fn test_completion_rate_offset_beyond_total_returns_zero() {
 
     // 1 enrollee total; offset=10 is past the end → 0.
     assert_eq!(client.get_quest_completion_rate(&q_id, &10, &5), 0);
+}
+
+#[test]
+fn test_enrollee_progress_offset_beyond_milestones_returns_empty_page() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "M1", 100);
+    let enrollee = Address::generate(&env);
+
+    let progress = client.get_enrollee_progress(&q_id, &enrollee, &u32::MAX, &100);
+    assert_eq!(progress.total_milestones, 1);
+    assert_eq!(progress.completions, 0);
+    assert_eq!(progress.total_earned, 0);
+    assert!(progress.completion_details.is_empty());
 }
 
 #[test]

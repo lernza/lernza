@@ -63,6 +63,7 @@ proptest! {
             &token_addr,
             &common::Visibility::Public,
             &None,
+            &None,
         );
         
         // Create some milestones
@@ -215,6 +216,7 @@ proptest! {
             &soroban_sdk::Vec::<soroban_sdk::String>::new(&env),
             &token_addr,
             &common::Visibility::Public,
+            &None,
             &None,
         );
         

@@ -1,19 +1,22 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { Analytics } from "@vercel/analytics/react"
 import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Navbar } from "@/components/navbar"
 import { ToastContainer } from "@/components/toast"
 import { Landing } from "@/pages/landing"
-import { Dashboard } from "@/pages/dashboard"
-import { QuestView } from "@/pages/quest"
 import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
 import { ErrorBoundary, SectionErrorBoundary } from "@/components/error-boundary"
-import { CreateQuest } from "@/pages/create-quest"
 import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
-import { Leaderboard } from "@/pages/leaderboard"
-import { CreatorProfile } from "@/pages/creator"
+import { PageSkeleton } from "@/components/page-skeleton"
+
+// Code-split heavy pages — they load on first visit to that route.
+const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })))
+const QuestView = lazy(() => import("@/pages/quest").then((m) => ({ default: m.QuestView })))
+const CreateQuest = lazy(() => import("@/pages/create-quest").then((m) => ({ default: m.CreateQuest })))
+const Leaderboard = lazy(() => import("@/pages/leaderboard").then((m) => ({ default: m.Leaderboard })))
+const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 
@@ -105,27 +108,47 @@ function App() {
   }, [addToast])
 
   const renderPage = () => {
-    if (state.page === "quest" && state.questId !== null) {
-      return <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
+    const page = state.page
+    if (page === "quest" && state.questId !== null) {
+      return (
+        <Suspense fallback={<PageSkeleton />}>
+          <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
+        </Suspense>
+      )
     }
-    switch (state.page) {
+
+    switch (page) {
       case "landing":
         return <Landing onNavigate={handleNavigate} />
       case "dashboard":
         return (
-          <Dashboard
-            onSelectQuest={handleSelectQuest}
-            onCreateQuest={() => handleNavigate("create-quest")}
-          />
+          <Suspense fallback={<PageSkeleton />}>
+            <Dashboard
+              onSelectQuest={handleSelectQuest}
+              onCreateQuest={() => handleNavigate("create-quest")}
+            />
+          </Suspense>
         )
       case "create-quest":
-        return <CreateQuest onBack={() => handleNavigate("dashboard")} />
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <CreateQuest onBack={() => handleNavigate("dashboard")} />
+          </Suspense>
+        )
       case "profile":
         return <Profile />
       case "leaderboard":
-        return <Leaderboard />
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <Leaderboard />
+          </Suspense>
+        )
       case "creator":
-        return <CreatorProfile address={state.creatorAddress} />
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <CreatorProfile address={state.creatorAddress} />
+          </Suspense>
+        )
       case "terms":
         return <TermsOfService />
       case "privacy":

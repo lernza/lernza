@@ -16,6 +16,7 @@
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/check-env.mjs && node scripts/validate-public-assets.mjs",
     "build": "tsc -b && vite build",
+    "build:analyze": "vite build --config vite.config.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate:bindings": "bash ../scripts/generate-bindings.sh",

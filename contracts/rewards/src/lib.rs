@@ -260,10 +260,8 @@ impl RewardsContract {
         // Emit quest funding event
         // Event topics: (reward_funded,)
         // Event data: (quest_id, funder, amount)
-        env.events().publish(
-            (Symbol::new(&env, "reward_funded"),),
-            (quest_id, funder, amount),
-        );
+        // Emit quest funding event via shared helper
+        common::emit_reward_funded(&env, quest_id, &funder, amount);
 
         Ok(())
     }
@@ -396,10 +394,8 @@ impl RewardsContract {
         // Emit reward distribution event
         // Event topics: (reward_distributed,)
         // Event data: (quest_id, milestone_id, enrollee, amount)
-        env.events().publish(
-            (Symbol::new(&env, "reward_distributed"),),
-            (quest_id, milestone_id, enrollee, amount),
-        );
+        // Emit reward distribution event via shared helper
+        common::emit_reward_distributed(&env, quest_id, milestone_id, &enrollee, amount);
 
         Ok(())
     }

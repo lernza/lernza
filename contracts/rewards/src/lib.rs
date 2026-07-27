@@ -251,9 +251,10 @@ impl RewardsContract {
                 .instance()
                 .get(&DataKey::QuestCount)
                 .unwrap_or(0);
+            let new_qc = quest_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
             env.storage()
                 .instance()
-                .set(&DataKey::QuestCount, &(quest_count + 1));
+                .set(&DataKey::QuestCount, &new_qc);
         }
 
         // Emit quest funding event

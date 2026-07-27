@@ -153,8 +153,12 @@ pub struct PendingSubmissionSnapshot {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotFound = 1,
-    Unauthorized = 2,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     AlreadyCompleted = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     InvalidAmount = 6,
@@ -170,15 +174,13 @@ pub enum Error {
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
     FlatRewardNotConfigured = 18,
-    /// Contract is administratively paused; all mutating calls are rejected.
-    /// System band: code 400 is identical across all Lernza contracts.
-    Paused = 400,
     Overflow = 19,
     /// The cross-contract call to mint a quest-completion certificate
     /// failed. The whole transaction rolls back so milestone state stays
     /// consistent with the certificate state (see issues #860, #869).
     CertificateMintFailed = 20,
-    InvalidInput = 3,
+    /// Contract is administratively paused (shared code 400).
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // Certificate client interface for cross-contract calls

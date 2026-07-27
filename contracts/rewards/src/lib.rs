@@ -68,9 +68,12 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 99, // moved away from standard range
-    NotInitialized = 100,    // moved away from standard range
-    Unauthorized = 2,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
@@ -83,9 +86,10 @@ pub enum Error {
     RewardAmountMismatch = 13,
     QuestNotArchived = 14,
     RefundWindowNotOpen = 15,
-    NotFound = 1,
-    InvalidInput = 3,
-    Paused = 400,
+    AlreadyInitialized = 99, // moved away from standard range
+    NotInitialized = 100,    // moved away from standard range
+    /// Contract is administratively paused (shared code 400).
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // TTL constants moved to common.

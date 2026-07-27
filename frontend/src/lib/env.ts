@@ -1,7 +1,17 @@
 // frontend/src/lib/env.ts
+/**
+ * Centralized environment configuration for the Lernza frontend.
+ *
+ * All environment variables are validated via Zod at import time.
+ * Defaults are aligned with config/development.yaml.
+ *
+ * To switch environments, generate the correct .env.local:
+ *   node scripts/load-config.mjs <environment> > frontend/.env.local
+ *
+ * Supported environments: development, staging, production
+ */
 import { z } from "zod";
 
-// Helper: treat empty string as missing (undefined)
 const emptyToUndefined = <T>(val: T) => (val === "" ? undefined : val);
 
 const schema = z.object({
@@ -11,7 +21,7 @@ const schema = z.object({
 
   VITE_SOROBAN_NETWORK_PASSPHRASE: z
     .preprocess(emptyToUndefined, z.string().optional())
-    .default("Test SDF Network ; September 2023"),
+    .default("Standalone Network ; February 2017"),
 
   VITE_HORIZON_URL: z
     .preprocess(emptyToUndefined, z.string().url().optional())
@@ -28,6 +38,30 @@ const schema = z.object({
   VITE_SENTRY_DSN: z
     .preprocess(emptyToUndefined, z.string().optional())
     .default(""),
+
+  VITE_QUEST_CONTRACT_ID: z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .default(""),
+
+  VITE_MILESTONE_CONTRACT_ID: z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .default(""),
+
+  VITE_REWARDS_CONTRACT_ID: z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .default(""),
+
+  VITE_REWARDS_TOKEN_CONTRACT_ID: z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .default(""),
+
+  VITE_USDC_TOKEN_ADDRESS: z
+    .preprocess(emptyToUndefined, z.string().optional())
+    .default(""),
+
+  VITE_ENVIRONMENT: z
+    .preprocess(emptyToUndefined, z.enum(["development", "staging", "production"]).optional())
+    .default("development"),
 });
 
 export const env = schema.parse({
@@ -38,7 +72,12 @@ export const env = schema.parse({
   VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND:
     import.meta.env.VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND,
   VITE_SENTRY_DSN: import.meta.env.VITE_SENTRY_DSN,
+  VITE_QUEST_CONTRACT_ID: import.meta.env.VITE_QUEST_CONTRACT_ID,
+  VITE_MILESTONE_CONTRACT_ID: import.meta.env.VITE_MILESTONE_CONTRACT_ID,
+  VITE_REWARDS_CONTRACT_ID: import.meta.env.VITE_REWARDS_CONTRACT_ID,
+  VITE_REWARDS_TOKEN_CONTRACT_ID: import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID,
+  VITE_USDC_TOKEN_ADDRESS: import.meta.env.VITE_USDC_TOKEN_ADDRESS,
+  VITE_ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT,
 });
 
-// Optional: export the inferred type for use elsewhere
 export type Env = z.infer<typeof schema>;

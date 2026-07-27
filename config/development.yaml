@@ -1,0 +1,30 @@
+# Lernza Development Environment Configuration
+# Used for local development with standalone Stellar network.
+# Copy to config/active.yaml or set ENVIRONMENT=development.
+
+environment: development
+
+stellar:
+  network: standalone
+  rpc_url: http://localhost:8000/soroban/rpc
+  network_passphrase: "Standalone Network ; February 2017"
+  horizon_url: "http://localhost:8000"
+
+contracts:
+  quest: CC24Y3HPO4P4UPQ3CRORTCU6QV7YNZL4UNT4EKZUM2NIPPMH2OSTCPC6
+  milestone: CAUQGMW72Z63QD6SVUBLUXJNWTUGCKINFZMFBR7I5WFX7QUI3RE6Q2B3
+  rewards: CBZN7TRWULHY6LQZH6YCSHDTPZRY6B6SQPW44JFO7EJCSWASH6ZW3TBD
+  rewards_token: CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG
+  usdc_token: CDLZFC3SYJYDZXTEVRXTHNKVYKKEFZQJ2HW4QGHZ3KIZZMJDJPTKJ7QG
+
+rpc_rate_limits:
+  capacity: 100
+  refill_per_second: 10
+
+features:
+  analytics: true
+  sentry: false
+
+sentry:
+  dsn: ""
+  environment: development

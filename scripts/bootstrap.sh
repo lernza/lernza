@@ -158,10 +158,10 @@ info "pnpm: $(pnpm --version)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FRONTEND_DIR="$REPO_ROOT/frontend"
 
-if [[ ! -f "$FRONTEND_DIR/.env.local" ]]; then
-  info "Copying .env.example → .env.local (fill in contract IDs before running the app)"
-  cp "$FRONTEND_DIR/.env.example" "$FRONTEND_DIR/.env.local"
-fi
+# Generate env vars from centralized config (config/development.yaml)
+info "Generating frontend .env.local from config/development.yaml..."
+node "$REPO_ROOT/scripts/load-config.mjs" development | grep VITE_ > "$FRONTEND_DIR/.env.local"
+info "Generated .env.local with development environment defaults."
 
 info "Installing frontend dependencies..."
 (cd "$FRONTEND_DIR" && pnpm install --frozen-lockfile)

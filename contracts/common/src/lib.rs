@@ -24,6 +24,12 @@ pub const THRESHOLD: u32 = 120_960;
 /// Prevents overflow-adjacent abuse and unbounded storage costs.
 pub const MAX_REWARD_AMOUNT: i128 = 1_000_000_000_000_000; // 10^15
 
+/// Metadata validation bounds for quest fields
+pub const MIN_QUEST_NAME_LEN: u32 = 1;
+pub const MAX_QUEST_NAME_LEN: u32 = 64; // duplicate of quest crate; canonicalized here for shared use
+pub const MIN_QUEST_DESCRIPTION_LEN: u32 = 1;
+pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
+
 // Shared error codes
 pub const ERR_NOT_FOUND: u32 = 1;
 pub const ERR_UNAUTHORIZED: u32 = 2;

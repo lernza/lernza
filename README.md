@@ -128,41 +128,43 @@ Know what's real on mainnet day-one vs still simulated:
 <summary><strong>Architecture</strong></summary>
 <br/>
 
-Three independent Soroban smart contracts orchestrated by the frontend:
+Four independent Soroban smart contracts orchestrated by the frontend:
 
 ```mermaid
 sequenceDiagram
-    participant Admin
+    participant Owner
     participant Quest as Quest Contract
     participant Milestone as Milestone Contract
     participant Rewards as Rewards Contract
-    participant Lerner
+    participant Certificate as Certificate Contract
+    participant Learner
 
-    Note over Admin, Quest: Phase 1: Setup
-    Admin->>Quest: create_quest(owner, name, ...)
-    Admin->>Rewards: fund_quest(funder, quest_id, amount)
-    
-    Note over Admin, Milestone: Phase 2: Engagement
-    Admin->>Quest: add_enrollee(quest_id, lerner_addr)
-    Admin->>Milestone: create_milestone(owner, quest_id, title, ...)
-    
-    Note over Admin, Lerner: Phase 3: Completion
-    Lerner->>Admin: Proves completion (external)
-    Admin->>Milestone: verify_completion(owner, quest_id, ms_id, lerner_addr)
-    Admin->>Rewards: distribute_reward(authority, quest_id, lerner_addr, amount)
-    Rewards->>Lerner: Transfers USDC
+    Note over Owner,Quest: Phase 1 — Setup
+    Owner->>Quest: create_quest(owner, name, ...)
+    Owner->>Milestone: create_milestone(owner, quest_id, title, reward_amount, ...)
+    Owner->>Rewards: fund_quest(funder, quest_id, amount)
+
+    Note over Owner,Quest: Phase 2 — Enrollment
+    Owner->>Quest: add_enrollee(quest_id, learner)
+
+    Note over Owner,Learner: Phase 3 — Completion + Reward
+    Learner-->>Owner: Proves completion (off-chain)
+    Owner->>Milestone: verify_completion(owner, quest_id, ms_id, learner)
+    Milestone->>Certificate: mint_quest_certificate(...) [if all milestones done]
+    Owner->>Rewards: distribute_reward(authority, quest_id, ms_id, learner, amount)
+    Rewards->>Learner: Token transfer via SAC
 ```
 
 <p align="center">
   <img src=".github/assets/architecture.svg" alt="Lernza architecture" width="100%" />
 </p>
 
-Need the transaction-by-transaction flow? See the [contract interaction diagrams](docs/contract-interaction-diagrams.md) for quest creation, enrollment, funding, and reward distribution sequences rendered with GitHub-native Mermaid.
+For the full transaction-by-transaction breakdown — enrollment variants, peer review, funding, refunds — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Why three contracts?**
+**Why four contracts?**
 - **Separation of concerns** — each contract has a single responsibility
 - **Independent upgradability** — update rewards logic without touching quest management
-- **Smaller WASM binaries** — each stays well under Soroban's 256KB limit
+- **Smaller WASM binaries** — each stays well under Soroban's 256 KB limit
 - **Clearer security boundaries** — auth and permissions are scoped per contract
 
 **Why no backend?**

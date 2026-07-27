@@ -1,18 +1,13 @@
 # Contract Interaction Diagrams
 
-These diagrams document how the frontend coordinates Lernza's contracts for the main MVP flows.
+The Mermaid sequence diagrams for every contract flow have moved to [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-The current codebase uses `quest` as the quest contract name. The diagrams use "Quest Contract" so the user-facing concept and the on-chain module stay aligned.
+## Flows covered
 
-## Flows
-
-- [Quest creation flow](./quest-creation-flow.md)
-- [Enrollment flow](./enrollment-flow.md)
-- [Funding flow](./funding-flow.md)
-- [Milestone completion and reward distribution flow](./milestone-reward-flow.md)
-
-## Notes
-
-- The frontend is the orchestration layer for MVP flows. Lernza contracts do not call each other directly.
-- Not every flow touches all three contracts. The frontend only calls the contracts needed for that user action.
-- Funding and payout flows also interact with the Stellar asset contract that backs the reward token.
+1. [Quest Creation](./ARCHITECTURE.md#1-quest-creation)
+2. [Enrollment](./ARCHITECTURE.md#2-enrollment)
+3. [Quest Funding](./ARCHITECTURE.md#3-quest-funding)
+4. [Milestone Completion — Owner Verification](./ARCHITECTURE.md#4-milestone-completion--owner-verification)
+5. [Milestone Completion — Peer Review](./ARCHITECTURE.md#5-milestone-completion--peer-review)
+6. [Reward Distribution](./ARCHITECTURE.md#6-reward-distribution)
+7. [Pool Refund After Archival](./ARCHITECTURE.md#7-pool-refund-after-archival)

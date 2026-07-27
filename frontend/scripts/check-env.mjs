@@ -9,6 +9,11 @@
  *   node scripts/check-env.mjs --mode mainnet         # mainnet validation
  *   node scripts/check-env.mjs --env-file .env.prod   # custom env file
  *   node scripts/check-env.mjs --help                 # print this help
+ *
+ * The script first tries to load from a .env file (see resolution below).
+ * If no .env file is found, it falls back to running:
+ *   node scripts/load-config.mjs <mode> > frontend/.env.local
+ * which generates env vars from the centralized config/<environment>.yaml.
  */
 
 import fs from "node:fs"
@@ -88,8 +93,28 @@ function parseDotenv(filePath) {
 
 // Build the vars map: file values take priority over process.env so that a
 // CI pipeline can place vars in a file and have them validated consistently.
-const envFilePath = resolveEnvFile()
-const fileVars = envFilePath ? parseDotenv(envFilePath) : new Map()
+let envFilePath = resolveEnvFile()
+let fileVars = envFilePath ? parseDotenv(envFilePath) : new Map()
+
+// If no env file was found, generate one from the centralized config.
+if (!envFilePath || fileVars.size === 0) {
+  const envName = mode === "mainnet" ? "production" : "staging"
+  const loadConfigPath = path.resolve(frontendRoot, "..", "scripts", "load-config.mjs")
+  if (fs.existsSync(loadConfigPath)) {
+    console.log(`check-env: no env file found, generating from config/${envName}.yaml...`)
+    const { execSync } = await import("node:child_process")
+    try {
+      execSync(`node "${loadConfigPath}" ${envName} | grep VITE_ > "${path.join(frontendRoot, ".env.local")}"`, {
+        stdio: "inherit",
+      })
+      envFilePath = path.join(frontendRoot, ".env.local")
+      fileVars = parseDotenv(envFilePath)
+      console.log(`check-env: generated .env.local from config/${envName}.yaml`)
+    } catch {
+      console.warn(`check-env: could not generate env file from config/${envName}.yaml, falling back to process env`)
+    }
+  }
+}
 
 function getVar(key) {
   return fileVars.get(key) ?? process.env[key] ?? ""

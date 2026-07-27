@@ -31,10 +31,34 @@ pub const MIN_QUEST_DESCRIPTION_LEN: u32 = 1;
 pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 
 // Shared error codes
+// Shared error codes — standardised across all Lernza contracts.
+//
+// Every contract defines its own `#[contracterror]` enum because Soroban
+// requires error types to live in the contract crate. These constants ensure
+// the numeric codes stay consistent across contracts so the frontend and
+// tooling can interpret errors uniformly.
+
+/// The requested entity does not exist.
 pub const ERR_NOT_FOUND: u32 = 1;
+/// The caller is not authorized to perform this action.
 pub const ERR_UNAUTHORIZED: u32 = 2;
+/// One or more inputs failed validation.
 pub const ERR_INVALID_INPUT: u32 = 3;
+/// Contract is administratively paused.
 pub const ERR_PAUSED: u32 = 400;
+
+/// Human-readable descriptions for the standard error codes.
+/// Useful for logging and debugging — call `error_info(code)` to get the
+/// corresponding message.
+pub fn error_info(code: u32) -> &'static str {
+    match code {
+        ERR_NOT_FOUND => "entity not found",
+        ERR_UNAUTHORIZED => "unauthorized",
+        ERR_INVALID_INPUT => "invalid input",
+        ERR_PAUSED => "contract is paused",
+        _ => "unknown error",
+    }
+}
 
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

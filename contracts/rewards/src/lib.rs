@@ -68,9 +68,12 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    AlreadyInitialized = 99, // moved away from standard range
-    NotInitialized = 100,    // moved away from standard range
-    Unauthorized = 2,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
@@ -83,9 +86,10 @@ pub enum Error {
     RewardAmountMismatch = 13,
     QuestNotArchived = 14,
     RefundWindowNotOpen = 15,
-    NotFound = 1,
-    InvalidInput = 3,
-    Paused = 400,
+    AlreadyInitialized = 99, // moved away from standard range
+    NotInitialized = 100,    // moved away from standard range
+    /// Contract is administratively paused (shared code 400).
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // TTL constants moved to common.
@@ -116,9 +120,7 @@ impl RewardsContract {
         if env.storage().instance().has(&DataKey::TokenAddr) {
             return Err(Error::AlreadyInitialized);
         }
-        env.storage()
-            .instance()
-            .set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage()
             .instance()
             .set(&DataKey::TokenAddr, &token_addr);
@@ -135,9 +137,7 @@ impl RewardsContract {
         env.storage()
             .instance()
             .set(&DataKey::RefundGracePeriod, &604_800_u64);
-        env.storage()
-            .instance()
-            .set(&DataKey::Paused, &false);
+        env.storage().instance().set(&DataKey::Paused, &false);
         extend_instance_ttl(&env);
         Ok(())
     }
@@ -147,7 +147,12 @@ impl RewardsContract {
     pub fn fund_quest(env: Env, funder: Address, quest_id: u32, amount: i128) -> Result<(), Error> {
         funder.require_auth();
 
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::Paused);
         }
 
@@ -239,7 +244,9 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalFunded)
             .unwrap_or(0);
-        let new_total_funded = total_funded.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
+        let new_total_funded = total_funded
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
         env.storage()
             .instance()
             .set(&DataKey::TotalFunded, &new_total_funded);
@@ -279,7 +286,12 @@ impl RewardsContract {
     ) -> Result<(), Error> {
         caller.require_auth();
 
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::Paused);
         }
 
@@ -411,7 +423,12 @@ impl RewardsContract {
     ) -> Result<(), Error> {
         authority.require_auth();
 
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::Paused);
         }
 
@@ -539,7 +556,9 @@ impl RewardsContract {
         let new_refunded = q_refunded
             .checked_add(amount)
             .ok_or(Error::ArithmeticOverflow)?;
-        env.storage().persistent().set(&q_refunded_key, &new_refunded);
+        env.storage()
+            .persistent()
+            .set(&q_refunded_key, &new_refunded);
         common::extend_persistent_ttl(env, &q_refunded_key);
         Ok(())
     }
@@ -577,9 +596,14 @@ impl RewardsContract {
         grace_period_seconds: u64,
     ) -> Result<(), Error> {
         admin.require_auth();
-        
+
         // Check if paused
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::Paused);
         }
 
@@ -651,7 +675,10 @@ impl RewardsContract {
 
     /// Check if the contract is paused.
     pub fn is_paused(env: Env) -> bool {
-        env.storage().instance().get(&DataKey::Paused).unwrap_or(false)
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
     }
 
     /// Get the reward token address.
@@ -736,7 +763,12 @@ impl RewardsContract {
     pub fn refund_unused_pool(env: Env, authority: Address, quest_id: u32) -> Result<i128, Error> {
         authority.require_auth();
 
-        if env.storage().instance().get(&DataKey::Paused).unwrap_or(false) {
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
             return Err(Error::Paused);
         }
 

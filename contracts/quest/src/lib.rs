@@ -50,9 +50,12 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotFound = 1,
-    Unauthorized = 2,
-    InvalidInput = 3,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     AlreadyEnrolled = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
@@ -75,7 +78,7 @@ pub enum Error {
     InviteAlreadyUsed = 16,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
-    Paused = 400,
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // TTL constants and address validation moved to common.
@@ -522,7 +525,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -571,7 +580,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "self");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);

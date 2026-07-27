@@ -27,13 +27,48 @@ Project maintainers are responsible for clarifying the standards of acceptable b
 
 Project maintainers have the right and responsibility to remove, edit, or reject comments, commits, code, wiki edits, issues, and other contributions that are not aligned to this Code of Conduct.
 
-## Scope
+### Enforcement Levels
 
-This Code of Conduct applies within all project spaces, and also applies when an individual is representing the project in public spaces.
+Enforcement actions are proportional to the severity of the violation:
 
-## Reporting
+**Level 1 — Warning**
+For minor or first-time violations. The individual receives a private written warning with clarification of the violation and expectations for future behavior.
 
-Report unacceptable behavior by opening an issue or contacting the maintainers directly. All complaints will be reviewed and investigated and will result in a response that is deemed necessary and appropriate.
+**Level 2 — Temporary Restriction**
+For repeated violations or moderately severe incidents. The individual is temporarily banned from interacting with the project (issues, discussions, pull requests, Discord, etc.) for a defined period (typically 7–30 days).
+
+**Level 3 — Permanent Ban**
+For severe violations, repeated offenses after temporary restriction, or any behavior that poses a safety risk. The individual is permanently banned from all project spaces.
+
+### Investigation Process
+
+1. **Report received** — via GitHub issue, email to maintainers, or direct message.
+2. **Acknowledgment** — the reporting party receives confirmation within 48 hours.
+3. **Investigation** — maintainers review evidence, interview involved parties, and consult the reporting party as needed.
+4. **Decision** — the maintenance team determines the appropriate enforcement level.
+5. **Response** — the involved parties are notified of the outcome and any consequences.
+6. **Record** — the incident is documented privately for future reference.
+
+### Consequences
+
+Depending on the severity and context, enforcement actions may include:
+
+- A private or public warning
+- Request to remove offending content
+- Temporary or permanent ban from the repository and all associated spaces
+- Revocation of collaborator or maintainer permissions
+- Reporting to platform providers (GitHub, Discord, etc.) for Terms of Service violations
+
+### Appeals
+
+Individuals subject to enforcement may appeal by contacting the project maintainers within 14 days. Appeals are reviewed by a maintainer not involved in the original decision.
+
+### Maintainer Responsibilities
+
+- All reports are treated confidentially.
+- No retaliation against individuals who report violations in good faith.
+- Enforcement decisions are made by at least two maintainers when possible.
+- Maintainers who are parties to a conflict recuse themselves from the decision.
 
 ## Attribution
 

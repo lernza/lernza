@@ -1,0 +1,4 @@
+{
+  "*.rs": ["cargo fmt --check"],
+  "contracts/**/*.rs": ["cargo clippy --workspace --all-targets -- -D warnings"]
+}

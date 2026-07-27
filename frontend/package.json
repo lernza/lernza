@@ -16,6 +16,7 @@
     "validate:assets": "node scripts/validate-public-assets.mjs",
     "prebuild": "node scripts/check-env.mjs && node scripts/validate-public-assets.mjs",
     "build": "tsc -b && vite build",
+    "build:analyze": "vite build --config vite.config.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate:bindings": "bash ../scripts/generate-bindings.sh",
@@ -24,7 +25,9 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "prepare": "cd .. && husky"
+    "prepare": "cd .. && husky",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@sentry/react": "^10.68.0",
@@ -78,6 +81,17 @@
     "vite": "^8.1.5",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.1.10",
-    "vitest-axe": "^0.1.0"
+    "vitest-axe": "^0.1.0",
+    "storybook": "^10.5.5",
+    "@storybook/react-vite": "^10.5.5",
+    "@chromatic-com/storybook": "^5.2.1",
+    "@storybook/addon-vitest": "^10.5.5",
+    "@storybook/addon-a11y": "^10.5.5",
+    "@storybook/addon-docs": "^10.5.5",
+    "@storybook/addon-mcp": "^0.7.0",
+    "eslint-plugin-storybook": "^10.5.5",
+    "@vitest/browser-playwright": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.10",
+    "playwright": "^1.62.0"
   }
 }

@@ -782,13 +782,23 @@ fn test_initialize_no_auth_guard() {
     // Any random address can initialize - no deployer auth required
     let attacker_token = Address::generate(&env);
     let milestone_id = env.register(MilestoneContract, ());
-    client.initialize(&Address::generate(&env), &attacker_token, &quest_id, &milestone_id);
+    client.initialize(
+        &Address::generate(&env),
+        &attacker_token,
+        &quest_id,
+        &milestone_id,
+    );
 
     assert_eq!(client.get_token(), attacker_token);
 
     // Legitimate deployer cannot override it
     let real_token = Address::generate(&env);
-    let result = client.try_initialize(&Address::generate(&env), &real_token, &quest_id, &milestone_id);
+    let result = client.try_initialize(
+        &Address::generate(&env),
+        &real_token,
+        &quest_id,
+        &milestone_id,
+    );
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
@@ -976,7 +986,12 @@ fn test_fund_quest_broken_contract_linkage() {
     // Initialize rewards contract with a fake quest contract address (not deployed)
     let fake_quest_contract = Address::generate(&env);
     let fake_milestone_contract = Address::generate(&env);
-    client.initialize(&Address::generate(&env), &token_addr, &fake_quest_contract, &fake_milestone_contract);
+    client.initialize(
+        &Address::generate(&env),
+        &token_addr,
+        &fake_quest_contract,
+        &fake_milestone_contract,
+    );
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -1005,7 +1020,12 @@ fn test_fund_quest_nonexistent_fails() {
     // Deploy rewards contract
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
-    client.initialize(&Address::generate(&env), &token_addr, &quest_id, &Address::generate(&env));
+    client.initialize(
+        &Address::generate(&env),
+        &token_addr,
+        &quest_id,
+        &Address::generate(&env),
+    );
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -2071,7 +2091,7 @@ fn test_default_refund_grace_period() {
         _certificate_id,
         _admin,
     ) = setup();
-    
+
     // Default should be 7 days (604,800 seconds)
     assert_eq!(client.get_refund_grace_period(), 604_800);
 }
@@ -2091,11 +2111,11 @@ fn test_set_refund_grace_period() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     // Set to 3 days (259,200 seconds)
     client.set_refund_grace_period(&admin, &259_200);
     assert_eq!(client.get_refund_grace_period(), 259_200);
-    
+
     // Set to 14 days (1,209,600 seconds)
     client.set_refund_grace_period(&admin, &1_209_600);
     assert_eq!(client.get_refund_grace_period(), 1_209_600);
@@ -2116,7 +2136,7 @@ fn test_set_refund_grace_period_unauthorized() {
         _certificate_id,
         _admin,
     ) = setup();
-    
+
     let unauthorized = Address::generate(&env);
     let result = client.try_set_refund_grace_period(&unauthorized, &259_200);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
@@ -2137,15 +2157,15 @@ fn test_refund_with_custom_grace_period() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     let owner = Address::generate(&env);
-    
+
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
-    
+
     // Set custom grace period to 1 day (86,400 seconds)
     client.set_refund_grace_period(&admin, &86_400);
-    
+
     // Create and fund a quest
     let q_id = quest_client.create_quest(
         &owner,
@@ -2157,19 +2177,20 @@ fn test_refund_with_custom_grace_period() {
         &Visibility::Public,
         &None,
     );
-    
+
     client.fund_quest(&owner, &q_id, &10_000);
-    
+
     // Archive the quest
     quest_client.archive_quest(&q_id);
-    
+
     // Try to refund before grace period (should fail)
     let result = client.try_refund_pool(&owner, &q_id, &5_000);
     assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
-    
+
     // Advance time by 1 day + 1 second
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86_400 + 1);
-    
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 86_400 + 1);
+
     // Now refund should work
     client.refund_pool(&owner, &q_id, &5_000);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
@@ -2190,19 +2211,19 @@ fn test_pause_blocks_grace_period_updates() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     // Pause the contract
     client.pause(&admin);
     assert!(client.is_paused());
-    
+
     // Try to update grace period while paused (should fail)
     let result = client.try_set_refund_grace_period(&admin, &259_200);
     assert_eq!(result, Err(Ok(Error::Paused)));
-    
+
     // Unpause and try again (should work)
     client.unpause(&admin);
     assert!(!client.is_paused());
-    
+
     client.set_refund_grace_period(&admin, &259_200);
     assert_eq!(client.get_refund_grace_period(), 259_200);
 }

@@ -153,8 +153,12 @@ pub struct PendingSubmissionSnapshot {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotFound = 1,
-    Unauthorized = 2,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     AlreadyCompleted = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     InvalidAmount = 6,
@@ -170,15 +174,13 @@ pub enum Error {
     DescriptionTooLong = 16,
     BatchTooLarge = 17,
     FlatRewardNotConfigured = 18,
-    /// Contract is administratively paused; all mutating calls are rejected.
-    /// System band: code 400 is identical across all Lernza contracts.
-    Paused = 400,
     Overflow = 19,
     /// The cross-contract call to mint a quest-completion certificate
     /// failed. The whole transaction rolls back so milestone state stays
     /// consistent with the certificate state (see issues #860, #869).
     CertificateMintFailed = 20,
-    InvalidInput = 3,
+    /// Contract is administratively paused (shared code 400).
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // Certificate client interface for cross-contract calls
@@ -629,9 +631,7 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
             .unwrap_or(0);
-        let next_completion_count = current_completions
-            .checked_add(1)
-            .ok_or(Error::Overflow)?;
+        let next_completion_count = current_completions.checked_add(1).ok_or(Error::Overflow)?;
         Self::maybe_mint_certificate(
             env.clone(),
             quest_id,
@@ -895,10 +895,16 @@ impl MilestoneContract {
 
         // Track approver for cleanup
         let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
-        let mut approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+        let mut approvers: Vec<Address> = env
+            .storage()
+            .persistent()
+            .get(&approvers_key)
+            .unwrap_or_else(|| Vec::new(&env));
         approvers.push_back(peer.clone());
         env.storage().persistent().set(&approvers_key, &approvers);
-        env.storage().persistent().extend_ttl(&approvers_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&approvers_key, THRESHOLD, BUMP);
 
         // Increment approval count
         let count_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
@@ -934,9 +940,8 @@ impl MilestoneContract {
                 .persistent()
                 .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
                 .unwrap_or(0);
-            let next_completion_count = current_completions
-                .checked_add(1)
-                .ok_or(Error::Overflow)?;
+            let next_completion_count =
+                current_completions.checked_add(1).ok_or(Error::Overflow)?;
             Self::maybe_mint_certificate(
                 env.clone(),
                 quest_id,
@@ -957,9 +962,14 @@ impl MilestoneContract {
 
             // Clean up PeerApproval tombstones and tracking
             let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
-            let approvers: Vec<Address> = env.storage().persistent().get(&approvers_key).unwrap_or_else(|| Vec::new(&env));
+            let approvers: Vec<Address> = env
+                .storage()
+                .persistent()
+                .get(&approvers_key)
+                .unwrap_or_else(|| Vec::new(&env));
             for approver in approvers.iter() {
-                let p_key = DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), approver);
+                let p_key =
+                    DataKey::PeerApproval(quest_id, milestone_id, enrollee.clone(), approver);
                 env.storage().persistent().remove(&p_key);
             }
             env.storage().persistent().remove(&approvers_key);

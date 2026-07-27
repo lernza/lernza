@@ -37,15 +37,19 @@ impl common::IsDataKey for DataKey {}
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     NotOwner = 10,
-    Unauthorized = 2,
     AlreadyIssued = 20,
-    NotFound = 1,
     InvalidQuest = 5,
     AlreadyRevoked = 6,
     MetadataBaseNotSet = 7,
-    InvalidInput = 3,
-    Paused = 400,
+    /// Contract is administratively paused (shared code 400).
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // BUMP and THRESHOLD now come from common

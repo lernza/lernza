@@ -168,6 +168,52 @@ chore: update soroban-sdk to v26
 - Ensure all tests pass before requesting review
 - Fill out the PR template completely
 
+## Code Review Guidelines
+
+### For Contributors (PR Authors)
+
+Before requesting review:
+
+1. **Self-review first** — Read through your own diff. Catch obvious issues before a reviewer spends time on them.
+2. **Write a clear description** — Explain _what_ changed and _why_. Link to the issue. Reviewers shouldn't have to reverse-engineer your intent.
+3. **Keep PRs small** — PRs under 400 lines get reviewed faster and more thoroughly. Split large changes into stacked PRs if possible.
+4. **Run all checks locally** — `cargo test --workspace`, `cargo clippy`, `pnpm build`, `pnpm lint`. Don't rely on CI to catch formatting issues.
+5. **Respond to feedback promptly** — Active PRs get merged faster. If you need time, acknowledge the review and give a timeline.
+
+### For Reviewers
+
+Review expectations:
+
+1. **Review within 2 business days** — If you're assigned, prioritize it. If you're busy, reassign or note your availability.
+2. **Focus on correctness first** — Does the code do what it claims? Are there edge cases or security issues?
+3. **Check test coverage** — New code needs new tests. Bug fixes need regression tests.
+4. **Verify CI passes** — All checks must be green before approving.
+5. **Be constructive** — Suggest improvements, don't just point out problems. Use "nit:" prefix for non-blocking style suggestions.
+
+### Review Checklist
+
+- [ ] Tests pass locally and in CI
+- [ ] New code has corresponding tests
+- [ ] No `any` types in TypeScript code
+- [ ] No `unwrap()` without error handling in Rust (except tests)
+- [ ] Documentation updated if public API changed
+- [ ] Commit messages follow Conventional Commits
+- [ ] PR description is complete and links the issue
+
+### Approval Requirements
+
+- **Minimum 1 approving review** from a maintainer or trusted contributor
+- **All CI checks must pass** (lint, type-check, tests)
+- **No unresolved conversations** — all feedback must be addressed or acknowledged
+- **Merge strategy** — Maintainers will squash-merge to keep main history clean
+
+### Handling Feedback
+
+- **Blockers** must be fixed before merge
+- **Suggestions** are non-blocking — apply if reasonable, discuss if not
+- **Nit picks** are style preferences — apply at your discretion
+- If you disagree with feedback, explain your reasoning. Healthy debate improves code quality.
+
 ## Issues
 
 Before creating a new issue, search existing issues to avoid duplicates.

@@ -194,6 +194,36 @@ pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool
     );
 }
 
+/// Helper: emit a canonical quest_created event
+/// Topics: (quest_created,)
+/// Data: (quest_id, owner, name)
+pub fn emit_quest_created(env: &Env, quest_id: u32, owner: &Address, name: &String) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "quest_created"),),
+        (quest_id, owner.clone(), name.clone()),
+    );
+}
+
+/// Helper: emit reward_funded event
+/// Topics: (reward_funded,)
+/// Data: (quest_id, funder, amount)
+pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i128) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "reward_funded"),),
+        (quest_id, funder.clone(), amount),
+    );
+}
+
+/// Helper: emit reward_distributed event
+/// Topics: (reward_distributed,)
+/// Data: (quest_id, milestone_id, enrollee, amount)
+pub fn emit_reward_distributed(env: &Env, quest_id: u32, milestone_id: u32, enrollee: &Address, amount: i128) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
+        (quest_id, milestone_id, enrollee.clone(), amount),
+    );
+}
+
 pub fn is_paused_by_key<K: IsDataKey>(env: &Env, key: &K) -> bool {
     env.storage().instance().get(key).unwrap_or(false)
 }

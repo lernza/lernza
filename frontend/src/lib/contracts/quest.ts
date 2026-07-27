@@ -185,7 +185,7 @@ export class QuestClient {
         nativeToScVal(name, { type: "string" }),
         nativeToScVal(description, { type: "string" }),
         nativeToScVal(category, { type: "string" }),
-        nativeToScVal(tags, { type: "string_vec" }),
+        nativeToScVal(tags),
         new Address(tokenAddr).toScVal(),
         nativeToScVal(visibility, { type: "u32" }),
         maxEnrollees !== undefined
@@ -218,7 +218,7 @@ export class QuestClient {
           ? nativeToScVal(description, { type: "string" })
           : nativeToScVal(null),
         category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
-        tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
+        tags !== undefined ? nativeToScVal(tags) : nativeToScVal(null),
         visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
         maxEnrollees !== undefined
           ? nativeToScVal(maxEnrollees, { type: "u32" })

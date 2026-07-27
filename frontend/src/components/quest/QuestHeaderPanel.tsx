@@ -10,7 +10,7 @@ interface QuestHeaderPanelProps {
   onBack: () => void
   onAddEnrollee: () => void
   onAddMilestone: () => void
-  onToast: (msg: { message: string; type: string }) => void
+  onToast: (message: string, type?: "success" | "error" | "info") => void
 }
 
 export function QuestHeaderPanel({
@@ -26,7 +26,7 @@ export function QuestHeaderPanel({
   const handleShare = () => {
     const url = `${window.location.origin}?questId=${questId}`
     navigator.clipboard.writeText(url)
-    onToast({ message: "Quest link copied to clipboard", type: "success" })
+    onToast("Quest link copied to clipboard", "success")
   }
 
   return (

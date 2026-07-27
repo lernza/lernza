@@ -32,8 +32,8 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
       <div className="space-y-4">
         {quests.map(quest => {
           const stats = statsByQuest?.[quest.id] ?? {
-            enrolleeCount: "enrolleeCount" in quest ? quest.enrolleeCount : 0,
-            poolBalance: "poolBalance" in quest ? quest.poolBalance : 0,
+            enrolleeCount: ("enrolleeCount" in quest ? quest.enrolleeCount : 0) ?? 0,
+            poolBalance: ("poolBalance" in quest ? quest.poolBalance : 0) ?? 0,
           }
 
           return (

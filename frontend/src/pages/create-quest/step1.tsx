@@ -3,7 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowRight, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { step1Schema, Step1Values, FieldError, FormLabel } from "./types"
+import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
 
 export function Step1Form() {

@@ -1,5 +1,5 @@
 import * as rpc from "@stellar/stellar-sdk/rpc"
-import { Transaction } from "@stellar/stellar-sdk/minimal"
+import { Transaction } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails, getAddress } from "@stellar/freighter-api"
 import { env } from "../env"
 import { pushToast } from "../notifications"
@@ -17,8 +17,10 @@ const isMainnet = SOROBAN_RPC_URL.includes("mainnet")
 export const RPC_TIMEOUT_MS = isMainnet ? 8000 : 15000
 
 // Initialize RPC health manager with fallback endpoints
-const rpcUrls = parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS)
-  .length > 0 ? parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS) : [SOROBAN_RPC_URL]
+const rpcUrls =
+  parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS).length > 0
+    ? parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS)
+    : [SOROBAN_RPC_URL]
 
 export const rpcHealthManager = new RpcHealthManager({
   urls: rpcUrls,

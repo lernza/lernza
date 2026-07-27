@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from "react"
-import { Step1Values, Step2Values, FormStep } from "./types"
+import { createContext, useContext, useState, type ReactNode, useCallback } from "react"
+import type { Step1Values, Step2Values, FormStep } from "./types"
 
 interface QuestCreationContextType {
   step1Data: Step1Values
@@ -25,12 +25,12 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
   const [currentStep, setCurrentStep] = useState<FormStep>(1)
 
   const goToNext = useCallback(() => {
-    setCurrentStep((prev) => (prev + 1) as FormStep)
+    setCurrentStep(prev => (prev + 1) as FormStep)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const goToBack = useCallback(() => {
-    setCurrentStep((prev) => (prev - 1) as FormStep)
+    setCurrentStep(prev => (prev - 1) as FormStep)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
@@ -45,11 +45,7 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     setCurrentStep,
   }
 
-  return (
-    <QuestCreationContext.Provider value={value}>
-      {children}
-    </QuestCreationContext.Provider>
-  )
+  return <QuestCreationContext.Provider value={value}>{children}</QuestCreationContext.Provider>
 }
 
 export function useQuestCreation() {

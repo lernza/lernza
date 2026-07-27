@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest"
+import { describe, it, expect } from "vitest"
 import {
   cn,
   shortenAddress,
@@ -83,4 +83,3 @@ describe("deadline helpers", () => {
     expect(formatDeadlineLabel(Math.floor(nowMs / 1000) + 2 * 60 * 60, nowMs)).toBe("Expires in 2h")
   })
 })
-

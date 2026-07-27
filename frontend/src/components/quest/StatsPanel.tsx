@@ -8,12 +8,7 @@ interface StatsPanelProps {
   totalReward: number
 }
 
-export function StatsPanel({
-  enrolleesCount,
-  milestonesCount,
-  poolBalance,
-  totalReward,
-}: StatsPanelProps) {
+export function StatsPanel({ enrolleesCount, milestonesCount, totalReward }: StatsPanelProps) {
   const stats = [
     {
       label: "Enrollees",
@@ -46,7 +41,7 @@ export function StatsPanel({
             <Icon className="text-foreground h-5 w-5" />
           </div>
           <div>
-            <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+            <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
               {label}
             </p>
             <p className="text-lg font-bold">{value}</p>

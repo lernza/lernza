@@ -1,13 +1,13 @@
-import { useState, Suspense, lazy } from "react"
+import { Suspense, lazy } from "react"
 import { ArrowLeft, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { QuestCreationProvider, useQuestCreation } from "./context"
 import { StepIndicator } from "./types"
 
-const Step1Form = lazy(() => import("./step-1").then(m => ({ default: m.Step1Form })))
-const Step2Form = lazy(() => import("./step-2").then(m => ({ default: m.Step2Form })))
-const Step3Review = lazy(() => import("./step-3").then(m => ({ default: m.Step3Review })))
+const Step1Form = lazy(() => import("./step1").then(m => ({ default: m.Step1Form })))
+const Step2Form = lazy(() => import("./step2").then(m => ({ default: m.Step2Form })))
+const Step3Review = lazy(() => import("./step3").then(m => ({ default: m.Step3Review })))
 
 const StepFallback = () => (
   <div className="bg-muted border-border h-[400px] animate-pulse border shadow-md" />

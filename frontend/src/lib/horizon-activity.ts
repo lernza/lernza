@@ -1,4 +1,4 @@
-import { scValToNative, xdr } from "@stellar/stellar-sdk/minimal"
+import { scValToNative, xdr } from "@stellar/stellar-sdk"
 import { env } from "@/lib/env"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
 import { questClient } from "@/lib/contracts/quest"

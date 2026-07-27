@@ -149,7 +149,7 @@ export class MilestoneClient {
       nativeToScVal(title, { type: "string" }),
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(rewardAmount, { type: "i128" }),
-      nativeToScVal(requiresPrevious, { type: "bool" }),
+      nativeToScVal(requiresPrevious),
     ])
     return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
   }

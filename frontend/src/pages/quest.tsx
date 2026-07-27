@@ -25,8 +25,16 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
   const quest = MOCK_QUESTS.find(q => q.id === questId)
   const milestones = MOCK_MILESTONES[questId] || []
-  const enrollees = MOCK_ENROLLEES[questId] || []
+  const enrolleeAddresses = MOCK_ENROLLEES[questId] || []
   const completions = MOCK_COMPLETIONS[questId] || []
+
+  // MOCK_ENROLLEES (like the real get_enrollees contract call) is a plain list
+  // of addresses; the section components render a richer enrollee shape, so
+  // adapt each address into one here.
+  const enrollees = useMemo(
+    () => enrolleeAddresses.map((address, index) => ({ id: index, address })),
+    [enrolleeAddresses]
+  )
 
   // Memoised derivations — avoids re-running array traversals on every render (#921)
   const { totalReward, completedMilestones, isComplete, earnedReward } = useMemo(() => {
@@ -45,17 +53,17 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
   const handleAddEnrollee = () => {
     // TODO: Implement add enrollee logic
-    addToast({ message: "Add enrollee clicked", type: "info" })
+    addToast("Add enrollee clicked", "info")
   }
 
   const handleAddMilestone = () => {
     // TODO: Implement add milestone logic
-    addToast({ message: "Add milestone clicked", type: "info" })
+    addToast("Add milestone clicked", "info")
   }
 
   const handleVerifyCompletion = (milestoneId: number) => {
     // TODO: Implement verify completion logic
-    addToast({ message: `Verified milestone ${milestoneId}`, type: "success" })
+    addToast(`Verified milestone ${milestoneId}`, "success")
   }
 
   if (!quest) {
@@ -91,7 +99,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         <StatsPanel
           enrolleesCount={enrollees.length}
           milestonesCount={milestones.length}
-          poolBalance={quest.poolBalance}
+          poolBalance={quest.poolBalance ?? 0}
           totalReward={totalReward}
         />
 

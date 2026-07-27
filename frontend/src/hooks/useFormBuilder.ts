@@ -1,4 +1,4 @@
-import { useState, useCallback, ChangeEvent } from 'react'
+import { useState, useCallback, type ChangeEvent } from "react"
 
 export type Validator<T> = (values: T) => Partial<Record<keyof T, string>>
 
@@ -18,18 +18,19 @@ export function useFormBuilder<T extends Record<string, unknown>>({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
 
   const handleChange = useCallback(
-    (name: keyof T) => (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      const val = e.target.value
-      setValues((prev) => ({ ...prev, [name]: val }))
-      if (errors[name]) {
-        setErrors((prev) => ({ ...prev, [name]: undefined }))
-      }
-    },
+    (name: keyof T) =>
+      (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const val = e.target.value
+        setValues(prev => ({ ...prev, [name]: val }))
+        if (errors[name]) {
+          setErrors(prev => ({ ...prev, [name]: undefined }))
+        }
+      },
     [errors]
   )
 
   const setValue = useCallback((name: keyof T, value: unknown) => {
-    setValues((prev) => ({ ...prev, [name]: value }))
+    setValues(prev => ({ ...prev, [name]: value }))
   }, [])
 
   const resetForm = useCallback(() => {

@@ -52,7 +52,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   return (
     <div
       className={cn(
-        "flex max-w-sm min-w-[260px] items-center gap-3 border px-4 py-3 shadow-md",
+        "flex w-full items-center gap-3 border px-4 py-3 shadow-md sm:w-auto sm:max-w-sm sm:min-w-[260px]",
         "transition-all duration-300 ease-out",
         accents[type],
         visible && !leaving ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
@@ -83,11 +83,11 @@ export function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
 
   return (
     <div
-      className="pointer-events-none fixed right-6 bottom-6 z-[100] flex flex-col items-end gap-3"
+      className="pointer-events-none fixed inset-x-4 bottom-6 z-[100] flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:items-end"
       aria-label="Notifications"
     >
       {toasts.map(toast => (
-        <div key={toast.id} className="pointer-events-auto">
+        <div key={toast.id} className="pointer-events-auto w-full sm:w-auto">
           <ToastItem toast={toast} onRemove={onRemove} />
         </div>
       ))}

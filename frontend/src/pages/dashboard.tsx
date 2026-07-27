@@ -8,6 +8,8 @@ import {
   Wallet,
   Sparkles,
   LayoutDashboard,
+  Search,
+  X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,6 +20,7 @@ import { useContractData } from "@/hooks/use-async-data"
 import { EmptyState } from "@/components/ui/async-states"
 import { SkeletonQuestList } from "@/components/ui/skeleton"
 import { SmartError } from "@/components/error-states"
+import { SectionErrorBoundary } from "@/components/error-boundary"
 import { useWallet } from "@/hooks/use-wallet"
 import { questClient } from "@/lib/contracts/quest"
 import { milestoneClient } from "@/lib/contracts/milestone"
@@ -48,6 +51,11 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
   const [preset, setPreset] = useState<
     "none" | "ending-soon" | "recently-funded" | "recently-verified"
   >("none")
+  const [search, setSearch] = useState("")
+  const [category, setCategory] = useState("all")
+  const [sortBy, setSortBy] = useState<
+    "newest" | "ending-soon" | "most-enrolled" | "highest-reward"
+  >("newest")
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
@@ -113,7 +121,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
     },
     {
       enabled: connected,
-      dependencies: [connected, address],
+      queryKey: [connected, address],
     }
   )
 
@@ -167,7 +175,46 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
     return filteredQuests
   })()
 
-  const visibleQuests = presetFilteredQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
+  const availableCategories = Array.from(
+    new Set(filteredQuests.map(q => q.category).filter((c): c is string => !!c))
+  ).sort()
+
+  const categoryFilteredQuests =
+    category === "all"
+      ? presetFilteredQuests
+      : presetFilteredQuests.filter(q => q.category === category)
+
+  const searchQuery = search.trim().toLowerCase()
+  const searchedQuests = searchQuery
+    ? categoryFilteredQuests.filter(q => {
+        const haystack = [q.name, q.description, q.category, ...(q.tags ?? [])]
+          .join(" ")
+          .toLowerCase()
+        return haystack.includes(searchQuery)
+      })
+    : categoryFilteredQuests
+
+  const sortedQuests = [...searchedQuests].sort((a, b) => {
+    const statsA = questStats[a.id]
+    const statsB = questStats[b.id]
+
+    switch (sortBy) {
+      case "ending-soon": {
+        const deadlineA = a.deadline > 0 ? a.deadline : Infinity
+        const deadlineB = b.deadline > 0 ? b.deadline : Infinity
+        return deadlineA - deadlineB
+      }
+      case "most-enrolled":
+        return (statsB?.enrolleeCount ?? 0) - (statsA?.enrolleeCount ?? 0)
+      case "highest-reward":
+        return (statsB?.poolBalance ?? 0) - (statsA?.poolBalance ?? 0)
+      case "newest":
+      default:
+        return b.createdAt - a.createdAt
+    }
+  })
+
+  const visibleQuests = sortedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -325,225 +372,290 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
           {/* Personal Stats */}
-          <PersonalProgress stats={personalStats} />
+          <SectionErrorBoundary label="Personal stats">
+            <PersonalProgress stats={personalStats} />
+          </SectionErrorBoundary>
 
           {/* Earnings Chart (Lazy Loaded) */}
-          <Suspense
-            fallback={
-              <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
-            }
-          >
-            <EarningsChart data={earningsHistory} />
-          </Suspense>
+          <SectionErrorBoundary label="Earnings chart">
+            <Suspense
+              fallback={
+                <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
+              }
+            >
+              <EarningsChart data={earningsHistory} />
+            </Suspense>
+          </SectionErrorBoundary>
 
           {/* Your Quests Section */}
-          <div>
-            <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-              <h2 className="flex items-center gap-2 text-xl font-semibold">
-                <LayoutDashboard className="h-5 w-5" /> Your Quests
-              </h2>
-              <div className="border-border flex gap-0 border shadow-md">
-                {(["all", "owned", "enrolled"] as const).map(f => (
+          <SectionErrorBoundary label="Your quests">
+            <div>
+              <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                <h2 className="flex items-center gap-2 text-xl font-semibold">
+                  <LayoutDashboard className="h-5 w-5" /> Your Quests
+                </h2>
+                <div className="border-border flex gap-0 border shadow-md">
+                  {(["all", "owned", "enrolled"] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
+                        filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
+                      }`}
+                    >
+                      {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Search, category filter, and sort */}
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search quests by name, description, or tag"
+                    aria-label="Search quests"
+                    className="border-border bg-background w-full border py-2.5 pr-9 pl-9 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      aria-label="Clear search"
+                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value)}
+                  aria-label="Filter by category"
+                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
+                >
+                  <option value="all">All categories</option>
+                  {availableCategories.map(c => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                  aria-label="Sort quests"
+                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
+                >
+                  <option value="newest">Newest</option>
+                  <option value="ending-soon">Ending soon</option>
+                  <option value="most-enrolled">Most enrolled</option>
+                  <option value="highest-reward">Highest reward</option>
+                </select>
+              </div>
+
+              {/* Preset Filter Chips */}
+              <div className="mb-5 flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: "none", label: "Show all" },
+                    { value: "ending-soon", label: "Show ending soon" },
+                    { value: "recently-funded", label: "Show recently funded" },
+                    { value: "recently-verified", label: "Show recently verified" },
+                  ] as const
+                ).map(p => (
                   <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
-                      filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
+                    key={p.value}
+                    onClick={() => setPreset(p.value)}
+                    className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
+                      preset === p.value
+                        ? "bg-accent"
+                        : "bg-background hover:bg-secondary hover:shadow-md"
                     }`}
                   >
-                    {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
+                    {p.label}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Preset Filter Chips */}
-            <div className="mb-5 flex flex-wrap gap-2">
-              {(
-                [
-                  { value: "none", label: "Show all" },
-                  { value: "ending-soon", label: "Show ending soon" },
-                  { value: "recently-funded", label: "Show recently funded" },
-                  { value: "recently-verified", label: "Show recently verified" },
-                ] as const
-              ).map(p => (
-                <button
-                  key={p.value}
-                  onClick={() => setPreset(p.value)}
-                  className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
-                    preset === p.value
-                      ? "bg-accent"
-                      : "bg-background hover:bg-secondary hover:shadow-md"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+              {loadError && (
+                <div className="mb-5">
+                  <SmartError message={loadError} onRetry={() => void refetch()} />
+                </div>
+              )}
 
-            {loadError && (
-              <div className="mb-5">
-                <SmartError message={loadError} onRetry={() => void refetch()} />
-              </div>
-            )}
+              {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
 
-            {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
+              <div className="relative grid gap-5">
+                {visibleQuests.map((ws, i) => {
+                  const stats = questStats[ws.id] || {
+                    enrolleeCount: 0,
+                    milestoneCount: 0,
+                    poolBalance: 0,
+                  }
+                  const totalMilestones = stats.milestoneCount
+                  const completedCount = questCompletions[ws.id] || 0
+                  const totalReward = stats.poolBalance
+                  const earnedReward =
+                    totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
+                  const isOwned = !!address && ws.owner === address
 
-            <div className="relative grid gap-5">
-              {visibleQuests.map((ws, i) => {
-                const stats = questStats[ws.id] || {
-                  enrolleeCount: 0,
-                  milestoneCount: 0,
-                  poolBalance: 0,
-                }
-                const totalMilestones = stats.milestoneCount
-                const completedCount = questCompletions[ws.id] || 0
-                const totalReward = stats.poolBalance
-                const earnedReward =
-                  totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
-                const isOwned = !!address && ws.owner === address
-
-                return (
-                  <button
-                    key={ws.id}
-                    type="button"
-                    onClick={() => goToQuest(ws.id)}
-                    aria-label={`Open quest ${ws.name}`}
-                    className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
-                  >
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="mb-1 flex items-center gap-3">
-                              <CardTitle className="group-hover:text-accent text-base transition-colors">
-                                {ws.name}
-                              </CardTitle>
-                              {completedCount === totalMilestones && totalMilestones > 0 && (
-                                <Badge variant="success" className="gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Complete
+                  return (
+                    <button
+                      key={ws.id}
+                      type="button"
+                      onClick={() => goToQuest(ws.id)}
+                      aria-label={`Open quest ${ws.name}`}
+                      className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
+                    >
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="mb-1 flex items-center gap-3">
+                                <CardTitle className="group-hover:text-accent text-base transition-colors">
+                                  {ws.name}
+                                </CardTitle>
+                                {completedCount === totalMilestones && totalMilestones > 0 && (
+                                  <Badge variant="success" className="gap-1">
+                                    <Sparkles className="h-3 w-3" />
+                                    Complete
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant={isOwned ? "default" : "secondary"}
+                                  className="text-[10px]"
+                                >
+                                  {isOwned ? "Owner" : "Enrolled"}
                                 </Badge>
+                              </div>
+                              <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
+                                {ws.description}
+                              </p>
+                            </div>
+                            <div className="bg-secondary border-border group-hover:bg-accent ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border transition-all group-hover:shadow-sm">
+                              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+                            <Badge variant="secondary" className="gap-1">
+                              <Users className="h-3 w-3" />
+                              {ws.maxEnrollees ? (
+                                <>
+                                  {stats.enrolleeCount}/{ws.maxEnrollees} enrolled (
+                                  {Math.max(0, ws.maxEnrollees - stats.enrolleeCount)} left)
+                                </>
+                              ) : (
+                                <>{stats.enrolleeCount} enrolled</>
                               )}
-                              <Badge
-                                variant={isOwned ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {isOwned ? "Owner" : "Enrolled"}
-                              </Badge>
-                            </div>
-                            <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
-                              {ws.description}
-                            </p>
+                            </Badge>
+                            <Badge variant="secondary" className="gap-1">
+                              <Target className="h-3 w-3" />
+                              {stats.milestoneCount} milestones
+                            </Badge>
+                            <Badge variant="default" className="gap-1">
+                              <Coins className="h-3 w-3" />
+                              {formatTokens(stats.poolBalance)} USDC
+                            </Badge>
                           </div>
-                          <div className="bg-secondary border-border group-hover:bg-accent ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border transition-all group-hover:shadow-sm">
-                            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-                          <Badge variant="secondary" className="gap-1">
-                            <Users className="h-3 w-3" />
-                            {ws.maxEnrollees ? (
-                              <>
-                                {stats.enrolleeCount}/{ws.maxEnrollees} enrolled (
-                                {Math.max(0, ws.maxEnrollees - stats.enrolleeCount)} left)
-                              </>
-                            ) : (
-                              <>{stats.enrolleeCount} enrolled</>
-                            )}
-                          </Badge>
-                          <Badge variant="secondary" className="gap-1">
-                            <Target className="h-3 w-3" />
-                            {stats.milestoneCount} milestones
-                          </Badge>
-                          <Badge variant="default" className="gap-1">
-                            <Coins className="h-3 w-3" />
-                            {formatTokens(stats.poolBalance)} USDC
-                          </Badge>
-                        </div>
 
-                        {totalMilestones > 0 && (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <Progress
-                                value={completedCount}
-                                max={totalMilestones}
-                                className="flex-1"
-                              />
-                              <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                                {completedCount}/{totalMilestones}
-                              </span>
-                            </div>
-                            {earnedReward > 0 && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground text-xs font-bold">
-                                  Earned so far
-                                </span>
-                                <span className="text-xs font-semibold text-green-700">
-                                  +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
+                          {totalMilestones > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-3">
+                                <Progress
+                                  value={completedCount}
+                                  max={totalMilestones}
+                                  className="flex-1"
+                                />
+                                <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
+                                  {completedCount}/{totalMilestones}
                                 </span>
                               </div>
-                            )}
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </button>
-                )
-              })}
-            </div>
-
-            {filteredQuests.length > visibleQuests.length && !isLoading && !loadError && (
-              <p className="text-muted-foreground mt-4 text-xs font-bold">
-                Showing the first {visibleQuests.length} quests to keep dashboard loading fast.
-              </p>
-            )}
-
-            {presetFilteredQuests.length === 0 && !isLoading && !loadError && (
-              <div className="mt-5">
-                <EmptyState
-                  variant="default"
-                  illustration="dashboard"
-                  title={
-                    preset !== "none"
-                      ? `No ${preset.replace("-", " ")} quests`
-                      : filter === "all"
-                        ? "No quests yet"
-                        : `No ${filter} quests`
-                  }
-                  description={
-                    preset !== "none"
-                      ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
-                      : filter === "all"
-                        ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                        : filter === "owned"
-                          ? "You haven't created any quests yet. Start one to incentivize learners."
-                          : "You haven't enrolled in any quests yet. Browse available quests to get started."
-                  }
-                  action={
-                    filter === "all" || filter === "owned"
-                      ? {
-                          label: "Create quest",
-                          onClick: goToCreateQuest,
-                        }
-                      : undefined
-                  }
-                />
+                              {earnedReward > 0 && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground text-xs font-bold">
+                                    Earned so far
+                                  </span>
+                                  <span className="text-xs font-semibold text-green-700">
+                                    +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </button>
+                  )
+                })}
               </div>
-            )}
-          </div>
+
+              {sortedQuests.length > visibleQuests.length && !isLoading && !loadError && (
+                <p className="text-muted-foreground mt-4 text-xs font-bold">
+                  Showing the first {visibleQuests.length} of {sortedQuests.length} quests.
+                </p>
+              )}
+
+              {sortedQuests.length === 0 && !isLoading && !loadError && (
+                <div className="mt-5">
+                  <EmptyState
+                    variant="default"
+                    illustration="dashboard"
+                    title={
+                      searchQuery || category !== "all"
+                        ? "No matching quests"
+                        : preset !== "none"
+                          ? `No ${preset.replace("-", " ")} quests`
+                          : filter === "all"
+                            ? "No quests yet"
+                            : `No ${filter} quests`
+                    }
+                    description={
+                      searchQuery || category !== "all"
+                        ? "No quests match your search and filters. Try broadening them."
+                        : preset !== "none"
+                          ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
+                          : filter === "all"
+                            ? "Create your first quest to start incentivizing learning with on-chain rewards."
+                            : filter === "owned"
+                              ? "You haven't created any quests yet. Start one to incentivize learners."
+                              : "You haven't enrolled in any quests yet. Browse available quests to get started."
+                    }
+                    action={
+                      filter === "all" || filter === "owned"
+                        ? {
+                            label: "Create quest",
+                            onClick: goToCreateQuest,
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          </SectionErrorBoundary>
         </div>
 
         {/* Right Column (Trending & Recent Activity) */}
         <div className="animate-fade-in-up stagger-3 space-y-8">
-          <TrendingQuests
-            quests={trendingQuests}
-            statsByQuest={questStats}
-            onSelectQuest={goToQuest}
-          />
-          <RecentActivity activities={recentActivity} />
+          <SectionErrorBoundary label="Trending quests">
+            <TrendingQuests
+              quests={trendingQuests}
+              statsByQuest={questStats}
+              onSelectQuest={goToQuest}
+            />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary label="Recent activity">
+            <RecentActivity activities={recentActivity} />
+          </SectionErrorBoundary>
         </div>
       </div>
     </div>

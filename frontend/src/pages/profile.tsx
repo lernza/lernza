@@ -108,7 +108,7 @@ export function Profile() {
     },
     {
       enabled: connected && !!address,
-      dependencies: [connected, address],
+      queryKey: [connected, address],
     }
   )
 
@@ -174,7 +174,7 @@ export function Profile() {
     },
     {
       enabled: connected && !!address,
-      dependencies: [connected, address],
+      queryKey: [connected, address],
     }
   )
 

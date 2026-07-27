@@ -79,7 +79,7 @@ export function CreatorProfile({ address }: CreatorProfileProps) {
     },
     {
       enabled: !!address,
-      dependencies: [address],
+      queryKey: [address],
     }
   )
 

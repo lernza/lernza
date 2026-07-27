@@ -11,11 +11,7 @@ const WALLET_WATCH_INTERVAL_MS = 3000
 export type WalletNetwork = "mainnet" | "testnet" | "standalone" | "futurenet" | "unknown"
 
 export type WalletErrorCode =
-  | "freighter_not_installed"
-  | "network_error"
-  | "timeout"
-  | "missing_api"
-  | "unknown"
+  "freighter_not_installed" | "network_error" | "timeout" | "missing_api" | "unknown"
 
 export interface WalletErrorState {
   code: WalletErrorCode
@@ -151,8 +147,11 @@ function useWalletState(): WalletContextValue {
       ...s,
       address: null,
       connected: false,
+      network: null,
+      networkName: null,
       networkPassphrase: null,
       isSupportedNetwork: true,
+      wrongNetwork: false,
       loading: false,
       error: null,
     }))
@@ -347,7 +346,20 @@ function useWalletState(): WalletContextValue {
 
       if (error || !address) {
         // Wallet locked or access revoked from inside the extension.
-        setState(s => (s.connected ? { ...s, address: null, connected: false } : s))
+        setState(s =>
+          s.connected
+            ? {
+                ...s,
+                address: null,
+                connected: false,
+                network: null,
+                networkName: null,
+                networkPassphrase: null,
+                isSupportedNetwork: true,
+                wrongNetwork: false,
+              }
+            : s
+        )
         return
       }
 

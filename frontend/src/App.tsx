@@ -8,7 +8,7 @@ import { Dashboard } from "@/pages/dashboard"
 import { QuestView } from "@/pages/quest"
 import { Profile } from "@/pages/profile"
 import { NotFound } from "@/pages/not-found"
-import { ErrorBoundary } from "@/components/error-boundary"
+import { ErrorBoundary, SectionErrorBoundary } from "@/components/error-boundary"
 import { CreateQuest } from "@/pages/create-quest"
 import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
@@ -141,11 +141,13 @@ function App() {
         {/* Skip-to-content link: sr-only until focused, z-index above sticky navbar */}
         <a
           href="#main-content"
-          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[9999] focus:rounded focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
+          className="focus:bg-background sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:rounded focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
         >
           Skip to main content
         </a>
-        <Navbar activePage={state.page} onNavigate={handleNavigate} />
+        <SectionErrorBoundary label="Navigation">
+          <Navbar activePage={state.page} onNavigate={handleNavigate} />
+        </SectionErrorBoundary>
         <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
           <main id="main-content">{renderPage()}</main>
         </ErrorBoundary>

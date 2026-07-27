@@ -8,7 +8,16 @@ import {
   type ErrorInfo,
   type ReactNode,
 } from "react"
-import { Lightbulb, RotateCcw, RefreshCw, FileCode2, Wifi, Package, Zap } from "lucide-react"
+import {
+  Lightbulb,
+  RotateCcw,
+  RefreshCw,
+  FileCode2,
+  Wifi,
+  Package,
+  Zap,
+  AlertTriangle,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import * as Sentry from "@sentry/react"
 import { useWallet } from "@/hooks/use-wallet"
@@ -343,3 +352,51 @@ function ContextBridge(props: Omit<ErrorBoundaryProps, "_ctx">) {
 
 // Re-export ContextBridge as the public API so all call sites stay unchanged.
 export { ContextBridge as ErrorBoundary }
+
+// ─── Section-level boundary ──────────────────────────────────────────────────
+
+interface SectionFallbackProps {
+  label: string
+  onReset: () => void
+}
+
+function SectionFallback({ label, onReset }: SectionFallbackProps) {
+  return (
+    <div
+      role="alert"
+      className="border-border bg-background animate-fade-in-up border p-6 text-center shadow-md"
+    >
+      <div className="border-destructive bg-destructive/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center border">
+        <AlertTriangle className="text-destructive h-5 w-5" />
+      </div>
+      <p className="mb-1 text-sm font-semibold">{label} failed to load</p>
+      <p className="text-muted-foreground mb-4 text-xs">
+        This section hit an error. The rest of the page is unaffected.
+      </p>
+      <Button size="sm" variant="outline" onClick={onReset}>
+        <RotateCcw size={12} />
+        Retry
+      </Button>
+    </div>
+  )
+}
+
+interface SectionErrorBoundaryProps {
+  children?: ReactNode
+  /** Short, human-readable name for the wrapped widget, e.g. "Earnings chart". */
+  label: string
+}
+
+/**
+ * A smaller-footprint ErrorBoundary for a single widget within a page (a chart,
+ * a quest card list, an activity feed). Renders an inline retry card sized for
+ * its slot instead of the full-page ErrorFallbackUI, so one broken widget
+ * doesn't take the rest of an otherwise-working page down with it.
+ */
+export function SectionErrorBoundary({ children, label }: SectionErrorBoundaryProps) {
+  return (
+    <ContextBridge fallback={(_error, reset) => <SectionFallback label={label} onReset={reset} />}>
+      {children}
+    </ContextBridge>
+  )
+}

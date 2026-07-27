@@ -112,14 +112,20 @@ export function Leaderboard() {
     isLoading: earnersLoading,
     error: earnersError,
     refetch: refetchEarners,
-  } = useAsyncData(() => fetchTopEarners(0), { enabled: activeTab === "earners" })
+  } = useAsyncData(() => fetchTopEarners(0), {
+    enabled: activeTab === "earners",
+    queryKey: ["leaderboard-earners"],
+  })
 
   const {
     data: questsData,
     isLoading: questsLoading,
     error: questsError,
     refetch: refetchQuests,
-  } = useAsyncData(() => fetchMostActiveQuests(0), { enabled: activeTab === "quests" })
+  } = useAsyncData(() => fetchMostActiveQuests(0), {
+    enabled: activeTab === "quests",
+    queryKey: ["leaderboard-quests"],
+  })
 
   // Update allEarners when earnersData changes
   useEffect(() => {

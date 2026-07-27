@@ -10,6 +10,7 @@ import { TabsNavigation } from "@/components/quest/TabsNavigation"
 import { MilestonesSection } from "@/components/quest/MilestonesSection"
 import { EnrolleesSection } from "@/components/quest/EnrolleesSection"
 import { Button } from "@/components/ui/button"
+import { SectionErrorBoundary } from "@/components/error-boundary"
 
 interface QuestViewProps {
   questId: number
@@ -73,29 +74,33 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
       {/* Background */}
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
-      <QuestHeaderPanel
-        questId={questId}
-        questName={quest.name}
-        questDescription={quest.description}
-        isComplete={isComplete}
-        onBack={onBack}
-        onAddEnrollee={handleAddEnrollee}
-        onAddMilestone={handleAddMilestone}
-        onToast={addToast}
-      />
+      <SectionErrorBoundary label="Quest header">
+        <QuestHeaderPanel
+          questId={questId}
+          questName={quest.name}
+          questDescription={quest.description}
+          isComplete={isComplete}
+          onBack={onBack}
+          onAddEnrollee={handleAddEnrollee}
+          onAddMilestone={handleAddMilestone}
+          onToast={addToast}
+        />
+      </SectionErrorBoundary>
 
-      <StatsPanel
-        enrolleesCount={enrollees.length}
-        milestonesCount={milestones.length}
-        poolBalance={quest.poolBalance}
-        totalReward={totalReward}
-      />
+      <SectionErrorBoundary label="Quest stats">
+        <StatsPanel
+          enrolleesCount={enrollees.length}
+          milestonesCount={milestones.length}
+          poolBalance={quest.poolBalance}
+          totalReward={totalReward}
+        />
 
-      <ProgressPanel
-        completedMilestones={completedMilestones}
-        totalMilestones={milestones.length}
-        earnedReward={earnedReward}
-      />
+        <ProgressPanel
+          completedMilestones={completedMilestones}
+          totalMilestones={milestones.length}
+          earnedReward={earnedReward}
+        />
+      </SectionErrorBoundary>
 
       <TabsNavigation
         activeTab={activeTab}
@@ -105,23 +110,27 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
       />
 
       {activeTab === "milestones" && (
-        <MilestonesSection
-          milestones={milestones}
-          completions={completions}
-          enrollees={enrollees}
-          questId={questId}
-          onAddMilestone={handleAddMilestone}
-          onVerifyCompletion={handleVerifyCompletion}
-        />
+        <SectionErrorBoundary label="Milestones">
+          <MilestonesSection
+            milestones={milestones}
+            completions={completions}
+            enrollees={enrollees}
+            questId={questId}
+            onAddMilestone={handleAddMilestone}
+            onVerifyCompletion={handleVerifyCompletion}
+          />
+        </SectionErrorBoundary>
       )}
 
       {activeTab === "enrollees" && (
-        <EnrolleesSection
-          enrollees={enrollees}
-          milestones={milestones}
-          completions={completions}
-          onAddEnrollee={handleAddEnrollee}
-        />
+        <SectionErrorBoundary label="Enrollees">
+          <EnrolleesSection
+            enrollees={enrollees}
+            milestones={milestones}
+            completions={completions}
+            onAddEnrollee={handleAddEnrollee}
+          />
+        </SectionErrorBoundary>
       )}
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />

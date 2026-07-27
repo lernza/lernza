@@ -1,3 +1,5 @@
+/** SEP-41 token contract client for balance queries, transfers, and metadata. */
+import { isDev, env } from "@/lib/env"
 import { Contract, scValToNative, Keypair, Account, TransactionBuilder } from "@stellar/stellar-sdk"
 import { server, NETWORK_PASSPHRASE, RPC_TIMEOUT_MS, withTimeout, withRpcReadThrottle } from "./client"
 
@@ -19,7 +21,7 @@ export class TokenClient {
         this.contract = new Contract(tokenAddress)
       } catch {
         this.contract = null
-        if (import.meta.env.DEV) {
+        if (isDev) {
           console.error(`[TokenClient] Invalid token address: "${tokenAddress}"`)
         }
       }
@@ -114,7 +116,7 @@ export class TokenClient {
 
       return metadata
     } catch (error) {
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.error("Failed to fetch token metadata:", error)
       }
       // Return fallback metadata
@@ -133,8 +135,8 @@ export class TokenClient {
   private getContractAddress(): string {
     const addr =
       this.tokenAddress ||
-      import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
-      import.meta.env.VITE_USDC_TOKEN_ADDRESS
+      env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
+      env.VITE_USDC_TOKEN_ADDRESS
 
     if (!addr) {
       throw new Error(

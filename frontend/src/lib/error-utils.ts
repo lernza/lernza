@@ -1,3 +1,4 @@
+import { isDev } from "@/lib/env"
 import * as Sentry from "@sentry/react"
 import { env } from "./env"
 
@@ -8,7 +9,7 @@ export function setupGlobalErrorHandlers() {
     const reason = event.reason
     const error = reason instanceof Error ? reason : new Error(String(reason))
 
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.group(
         "%c[GlobalErrorHandler] Unhandled Promise Rejection",
         "color:#e11d48;font-weight:bold"
@@ -25,7 +26,7 @@ export function setupGlobalErrorHandlers() {
   })
 
   window.addEventListener("error", event => {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.group("%c[GlobalErrorHandler] Uncaught Error", "color:#e11d48;font-weight:bold")
       console.error(event.error ?? event.message)
       console.groupEnd()

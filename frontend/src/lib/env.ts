@@ -62,6 +62,10 @@ const schema = z.object({
   VITE_ENVIRONMENT: z
     .preprocess(emptyToUndefined, z.enum(["development", "staging", "production"]).optional())
     .default("development"),
+
+  VITE_APP_URL: z
+    .preprocess(emptyToUndefined, z.string().url().optional())
+    .default(""),
 });
 
 export const env = schema.parse({
@@ -78,6 +82,13 @@ export const env = schema.parse({
   VITE_REWARDS_TOKEN_CONTRACT_ID: import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID,
   VITE_USDC_TOKEN_ADDRESS: import.meta.env.VITE_USDC_TOKEN_ADDRESS,
   VITE_ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT,
+  VITE_APP_URL: import.meta.env.VITE_APP_URL,
 });
 
 export type Env = z.infer<typeof schema>;
+
+/** True when running in Vite dev server (replaces scattered import.meta.env.DEV reads). */
+export const isDev: boolean = import.meta.env.DEV;
+
+/** True when running a production build (replaces scattered import.meta.env.PROD reads). */
+export const isProd: boolean = import.meta.env.PROD;

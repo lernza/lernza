@@ -1,3 +1,5 @@
+/** Tracks Soroban transactions on Horizon and fetches operation details. */
+import { isDev, env } from "@/lib/env"
 const HORIZON_MAINNET = "https://horizon.stellar.org"
 const HORIZON_TESTNET = "https://horizon-testnet.stellar.org"
 
@@ -23,7 +25,7 @@ export interface HorizonTransactionMeta {
 }
 
 function horizonUrl(): string {
-  const rpcUrl = import.meta.env.VITE_SOROBAN_RPC_URL ?? ""
+  const rpcUrl = env.VITE_SOROBAN_RPC_URL ?? ""
   return rpcUrl.includes("mainnet") ? HORIZON_MAINNET : HORIZON_TESTNET
 }
 
@@ -40,7 +42,7 @@ export async function trackTransaction(txHash: string): Promise<HorizonTransacti
     ])
 
     if (!txRes.ok) {
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.warn(`[TxTracker] Horizon returned ${txRes.status} for ${txHash}`)
       }
       return null
@@ -66,7 +68,7 @@ export async function trackTransaction(txHash: string): Promise<HorizonTransacti
       operations,
     }
 
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.group(`[TxTracker] On-chain meta — ${txHash.slice(0, 8)}…`)
       console.log("ledger:", meta.ledger, "| created_at:", meta.created_at)
       console.log("fee_charged:", meta.fee_charged, "| successful:", meta.successful)
@@ -77,7 +79,7 @@ export async function trackTransaction(txHash: string): Promise<HorizonTransacti
 
     return meta
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.warn("[TxTracker] Horizon lookup failed:", err)
     }
     return null

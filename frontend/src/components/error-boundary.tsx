@@ -1,3 +1,4 @@
+import { isDev } from "@/lib/env"
 import {
   Component,
   createContext,
@@ -138,7 +139,7 @@ const ERROR_COPY: Record<
 }
 
 function devLog(error: Error, info: ErrorInfo | null) {
-  if (import.meta.env.DEV) {
+  if (isDev) {
     console.group("%c[ErrorBoundary]", "color:#e11d48;font-weight:bold;font-size:14px")
     console.error("Error:", error)
     console.error("Message:", error.message)
@@ -261,7 +262,7 @@ function ErrorFallbackUI({
         </div>
 
         {/* Dev-only stack trace panel */}
-        {import.meta.env.DEV && (
+        {isDev && (
           <details className="border-border mt-4 border bg-black shadow-lg">
             <summary className="text-accent flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs font-semibold tracking-[2px] uppercase select-none">
               <Zap size={12} /> DEV — STACK TRACE

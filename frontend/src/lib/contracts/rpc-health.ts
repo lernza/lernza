@@ -1,3 +1,4 @@
+/** Health-aware Soroban RPC endpoint manager with automatic failover. */
 import * as rpc from "@stellar/stellar-sdk/rpc"
 
 // `getHealth` exists on the runtime Server but isn't part of the SDK's public

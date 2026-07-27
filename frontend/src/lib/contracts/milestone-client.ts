@@ -1,3 +1,5 @@
+/** Soroban contract client for quest milestones (create, verify completion, claim rewards). */
+import { isDev, env } from "@/lib/env"
 import {
   Address,
   Contract,
@@ -19,7 +21,7 @@ import {
 } from "./client"
 import { withContractLogging } from "./logger"
 
-const CONTRACT_ID = import.meta.env.VITE_MILESTONE_CONTRACT_ID || ""
+const CONTRACT_ID = env.VITE_MILESTONE_CONTRACT_ID
 
 const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
   1: "Milestone not found.",
@@ -71,7 +73,7 @@ export class MilestoneClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        if (import.meta.env.DEV) {
+        if (isDev) {
           console.error(`[MilestoneClient] Invalid VITE_MILESTONE_CONTRACT_ID: "${CONTRACT_ID}"`)
         }
       }
@@ -230,7 +232,7 @@ export class MilestoneClient {
       }
       return null
     }).catch((e: unknown) => {
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.error(`Read error ${method}:`, e)
       }
       return null

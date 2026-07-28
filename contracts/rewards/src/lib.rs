@@ -86,6 +86,8 @@ pub enum Error {
     RewardAmountMismatch = 13,
     QuestNotArchived = 14,
     RefundWindowNotOpen = 15,
+    /// Quest has no deadline, or its deadline has not yet passed — issue #1187.
+    QuestNotExpired = 16,
     AlreadyInitialized = 99, // moved away from standard range
     NotInitialized = 100,    // moved away from standard range
     /// Contract is administratively paused (shared code 400).
@@ -850,6 +852,128 @@ impl RewardsContract {
             .extend_ttl(&DataKey::QuestPool(quest_id), THRESHOLD, BUMP);
 
         // Keep aggregate counters in sync — issue #864.
+        Self::record_refund(&env, quest_id, refundable)?;
+
+        // Emit event — reuse reward_refunded topic for indexer compatibility
+        env.events().publish(
+            (Symbol::new(&env, "reward_refunded"),),
+            (quest_id, authority, refundable),
+        );
+
+        Ok(refundable)
+    }
+
+    /// Reclaim unused pool tokens once a quest's deadline has passed,
+    /// even if the owner never explicitly archived it — issue #1187.
+    ///
+    /// `refund_unused_pool` and `refund_pool` both require `QuestStatus::Archived`,
+    /// which only the quest owner can set via `archive_quest`. If a creator funds a
+    /// quest, sets a deadline, and then goes silent — never completing enough
+    /// milestones to spend the pool and never archiving — those tokens were
+    /// previously stuck with no recovery path. This entry point only requires
+    /// that the quest defines a deadline which has passed (plus the same
+    /// configurable grace period used for archived refunds), so the funding
+    /// authority can always reclaim leftover tokens from an abandoned quest.
+    ///
+    /// Refunds the same "pool minus reserved-but-unpaid obligations" amount as
+    /// `refund_unused_pool`, so milestones an enrollee already qualified for
+    /// remain payable after the refund.
+    pub fn refund_expired_pool(env: Env, authority: Address, quest_id: u32) -> Result<i128, Error> {
+        authority.require_auth();
+
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
+
+        // Verify authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let stored: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if stored != authority {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify the quest has a deadline that has passed the grace period —
+        // deliberately independent of QuestStatus so an un-archived, abandoned
+        // quest is still recoverable.
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = match quest_client.try_get_quest(&quest_id) {
+            Ok(Ok(q)) => q,
+            Ok(Err(_)) | Err(_) => return Err(Error::QuestLookupFailed),
+        };
+
+        if quest_info.deadline == 0 {
+            return Err(Error::QuestNotExpired);
+        }
+
+        let grace_period = Self::get_refund_grace_period(env.clone());
+        let now = env.ledger().timestamp();
+        if now <= quest_info.deadline {
+            return Err(Error::QuestNotExpired);
+        }
+        if now < quest_info.deadline + grace_period {
+            return Err(Error::RefundWindowNotOpen);
+        }
+
+        // Calculate refundable amount
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let total_reserved = milestone_client.get_total_reserved_reward(&quest_id);
+        let distributed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestDistributed(quest_id))
+            .unwrap_or(0_i128);
+        let obligations = total_reserved
+            .checked_sub(distributed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        let pool: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestPool(quest_id))
+            .unwrap_or(0);
+        let refundable = pool
+            .checked_sub(obligations)
+            .ok_or(Error::ArithmeticOverflow)?;
+
+        if refundable <= 0 {
+            return Ok(0);
+        }
+
+        // Transfer unused tokens back to authority
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+        token_client.transfer(&env.current_contract_address(), &authority, &refundable);
+
+        // Zero out the refunded portion of the pool
+        let new_pool = pool
+            .checked_sub(refundable)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestPool(quest_id), &new_pool);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::QuestPool(quest_id), THRESHOLD, BUMP);
+
+        // Keep aggregate counters in sync — see record_refund doc comment.
         Self::record_refund(&env, quest_id, refundable)?;
 
         // Emit event — reuse reward_refunded topic for indexer compatibility

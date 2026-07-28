@@ -8,6 +8,7 @@ import {
   Wallet,
   Sparkles,
   LayoutDashboard,
+  Loader2,
   Search,
   X,
 } from "lucide-react"
@@ -46,7 +47,7 @@ interface DashboardProps {
 }
 
 export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} as DashboardProps) {
-  const { connected, connect, shortAddress, address } = useWallet()
+  const { connected, connect, shortAddress, address, loading: walletConnecting } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<
     "none" | "ending-soon" | "recently-funded" | "recently-verified"
@@ -300,10 +301,20 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
               <Button
                 size="lg"
                 onClick={connect}
+                disabled={walletConnecting}
                 className="shimmer-on-hover animate-fade-in-up stagger-3"
               >
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
+                {walletConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="h-4 w-4" />
+                    Connect Wallet
+                  </>
+                )}
               </Button>
 
               {/* Mini feature list */}

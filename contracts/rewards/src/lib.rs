@@ -461,15 +461,17 @@ impl RewardsContract {
             Err(_) => return Err(Error::QuestLookupFailed),
         };
 
-        if quest_info.status != QuestStatus::Archived {
+        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled {
             return Err(Error::QuestNotArchived);
         }
 
-        // Check grace period using configurable value
-        let grace_period = Self::get_refund_grace_period(env.clone());
-        let now = env.ledger().timestamp();
-        if now < quest_info.archived_at + grace_period {
-            return Err(Error::RefundWindowNotOpen);
+        // Check grace period for archived quests (cancelled quests can be refunded immediately)
+        if quest_info.status == QuestStatus::Archived {
+            let grace_period = Self::get_refund_grace_period(env.clone());
+            let now = env.ledger().timestamp();
+            if now < quest_info.archived_at + grace_period {
+                return Err(Error::RefundWindowNotOpen);
+            }
         }
 
         // Calculate reserved obligations
@@ -740,7 +742,10 @@ impl RewardsContract {
             _ => return (0, 0), // quest not found or error
         };
 
-        // Refunds only available after archiving + configurable grace period
+        // Refunds available after archiving + grace period, or immediately if cancelled
+        if quest_info.status == QuestStatus::Cancelled {
+            return (quest_info.archived_at, u64::MAX);
+        }
         if quest_info.status != QuestStatus::Archived {
             return (0, 0);
         }
@@ -795,13 +800,15 @@ impl RewardsContract {
             Ok(Err(_)) | Err(_) => return Err(Error::QuestLookupFailed),
         };
 
-        if quest_info.status != QuestStatus::Archived {
+        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled {
             return Err(Error::QuestNotArchived);
         }
-        let grace_period = Self::get_refund_grace_period(env.clone());
-        let now = env.ledger().timestamp();
-        if now < quest_info.archived_at + grace_period {
-            return Err(Error::RefundWindowNotOpen);
+        if quest_info.status == QuestStatus::Archived {
+            let grace_period = Self::get_refund_grace_period(env.clone());
+            let now = env.ledger().timestamp();
+            if now < quest_info.archived_at + grace_period {
+                return Err(Error::RefundWindowNotOpen);
+            }
         }
 
         // Calculate refundable amount

@@ -11,7 +11,11 @@ export function getQuestStatusLabel(
   status: QuestStatus,
   deadline: number,
   poolBalance?: number
-): "Active" | "Ended" | "Archived" {
+): "Active" | "Ended" | "Archived" | "Cancelled" {
+  if (status === QuestStatus.Cancelled) {
+    return "Cancelled"
+  }
+
   if (status === QuestStatus.Archived) {
     return "Archived"
   }
@@ -41,6 +45,7 @@ export function getQuestStatusVariant(
     case "Active":
       return "active"
     case "Archived":
+    case "Cancelled":
       return "archived"
     case "Ended":
       return "ended"

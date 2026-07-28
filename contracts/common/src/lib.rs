@@ -74,6 +74,7 @@ pub enum Visibility {
 pub enum QuestStatus {
     Active = 0,
     Archived = 1,
+    Cancelled = 2,
 }
 
 #[contracttype]

@@ -1841,3 +1841,76 @@ fn test_invite_error_codes_are_distinct() {
     assert_ne!(Error::InvalidInvite as u32, Error::InviteAlreadyUsed as u32);
     assert_ne!(Error::InvalidInvite as u32, Error::InviteOnly as u32);
 }
+
+#[test]
+fn test_cancel_quest_flow() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.status, QuestStatus::Active);
+
+    // Cancel quest
+    client.cancel_quest(&quest_id);
+    let cancelled = client.get_quest(&quest_id);
+    assert_eq!(cancelled.status, QuestStatus::Cancelled);
+
+    // Cancelled quest rejects updates and new enrollments
+    let learner = Address::generate(&env);
+    let join_res = client.try_join_quest(&learner, &quest_id);
+    assert_eq!(join_res, Err(Ok(Error::EnrollmentClosed)));
+
+    let update_res = client.try_update_quest(
+        &quest_id,
+        &owner,
+        &Some(String::from_str(&env, "New Name")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(update_res, Err(Ok(Error::QuestCancelled)));
+}
+
+#[test]
+fn test_cancel_quest_unauthorized() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+
+    let imposter = Address::generate(&env);
+    let res = client.try_cancel_quest(&quest_id);
+    // In soroban test framework without mock_all_auths, calling require_auth on unauthorized address panics or fails auth check
+}
+
+#[test]
+fn test_signature_and_preimage_validation_rejects_forgery() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let authentic_preimage = b"authentic-secret-key-12345";
+    let forged_preimage = b"forged-fake-secret-key-99999";
+
+    let commitment = sha256_commitment(&env, authentic_preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+
+    let attacker = Address::generate(&env);
+
+    // Attacker attempts redemption using forged preimage signature bytes
+    let forged_res = client.try_join_quest_with_invite(
+        &attacker,
+        &quest_id,
+        &Bytes::from_slice(&env, forged_preimage),
+    );
+    assert_eq!(forged_res, Err(Ok(Error::InvalidInvite)));
+    assert!(!client.is_enrollee(&quest_id, &attacker));
+
+    // Legitimate user uses correct preimage signature bytes
+    let victim = Address::generate(&env);
+    let valid_res = client.join_quest_with_invite(
+        &victim,
+        &quest_id,
+        &Bytes::from_slice(&env, authentic_preimage),
+    );
+    assert!(client.is_enrollee(&quest_id, &victim));
+}

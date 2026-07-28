@@ -76,6 +76,8 @@ pub enum Error {
     InvalidInvite = 15,
     /// The invite code has already been redeemed.
     InviteAlreadyUsed = 16,
+    /// Quest has been cancelled.
+    QuestCancelled = 17,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
     Paused = common::ERR_PAUSED as u32,
@@ -361,6 +363,9 @@ impl QuestContract {
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
         }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
 
         // Input validation & update
         if let Some(n) = name.clone() {
@@ -466,6 +471,9 @@ impl QuestContract {
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
         }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
 
         quest.status = QuestStatus::Archived;
         quest.archived_at = env.ledger().timestamp();
@@ -484,13 +492,63 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Cancel an active quest. Owner only.
+    /// Cancelling a quest prevents any further updates, enrollments, or milestone verifications.
+    /// Cleans up state by removing the quest from public discovery indices.
+    pub fn cancel_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        quest.status = QuestStatus::Cancelled;
+        quest.archived_at = env.ledger().timestamp();
+
+        // Cleanup: remove from public discovery indices if public
+        if quest.visibility == Visibility::Public {
+            Self::remove_id_from_index(
+                &env,
+                DataKey::PublicCategoryQuests(quest.category.clone()),
+                quest_id,
+            );
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(&env));
+            if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::PublicQuests, &public_ids);
+            }
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest cancelled event
+        env.events()
+            .publish((Symbol::new(&env, "quest_cancelled"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Add an enrollee to a quest. Owner only.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -544,7 +602,7 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -615,7 +673,7 @@ impl QuestContract {
         if quest.owner != owner {
             return Err(Error::Unauthorized);
         }
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         let key = DataKey::InviteCommitment(quest_id, commitment.clone());
@@ -682,7 +740,7 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {

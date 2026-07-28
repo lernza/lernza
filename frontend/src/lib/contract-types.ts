@@ -29,6 +29,7 @@ export type Visibility = (typeof Visibility)[keyof typeof Visibility]
 export const QuestStatus = {
   Active: 0,
   Archived: 1,
+  Cancelled: 2,
 } as const
 export type QuestStatus = (typeof QuestStatus)[keyof typeof QuestStatus]
 

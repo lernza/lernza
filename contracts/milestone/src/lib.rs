@@ -179,6 +179,8 @@ pub enum Error {
     /// failed. The whole transaction rolls back so milestone state stays
     /// consistent with the certificate state (see issues #860, #869).
     CertificateMintFailed = 20,
+    /// Submission or verification is rejected because the quest deadline has passed.
+    DeadlineExpired = 21,
     /// Contract is administratively paused (shared code 400).
     Paused = common::ERR_PAUSED as u32,
 }
@@ -298,6 +300,9 @@ impl MilestoneContract {
         if quest_info.owner != owner {
             return Err(Error::OwnerMismatch);
         }
+        if quest_info.status != common::QuestStatus::Active {
+            return Err(Error::OwnerMismatch);
+        }
 
         let next_key = DataKey::NextMilestoneId(quest_id);
         let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
@@ -371,6 +376,9 @@ impl MilestoneContract {
         let quest_info = quest_client.get_quest(&quest_id);
 
         if quest_info.owner != owner {
+            return Err(Error::OwnerMismatch);
+        }
+        if quest_info.status != common::QuestStatus::Active {
             return Err(Error::OwnerMismatch);
         }
 
@@ -580,6 +588,12 @@ impl MilestoneContract {
         if quest_info.owner != owner {
             return Err(Error::Unauthorized);
         }
+        if quest_info.status != common::QuestStatus::Active {
+            return Err(Error::Unauthorized);
+        }
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
+        }
 
         // Verify enrollee is enrolled in the quest (Issue #162)
         if !Self::is_enrolled(&env, quest_id, &enrollee)? {
@@ -733,6 +747,20 @@ impl MilestoneContract {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
 
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        if quest_info.status != common::QuestStatus::Active {
+            return Err(Error::Unauthorized);
+        }
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
+        }
+
         // Check if milestone exists
         let ms_key = DataKey::Milestone(quest_id, milestone_id);
         let milestone: MilestoneInfo = env
@@ -830,6 +858,20 @@ impl MilestoneContract {
     ) -> Result<Option<i128>, Error> {
         peer.require_auth();
         Self::require_not_paused(&env)?;
+
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        if quest_info.status != common::QuestStatus::Active {
+            return Err(Error::Unauthorized);
+        }
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
+        }
 
         // Check if milestone exists
         let ms_key = DataKey::Milestone(quest_id, milestone_id);

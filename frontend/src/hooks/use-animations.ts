@@ -51,7 +51,6 @@ export function useTypewriter(text: string, speed = 35, active = true) {
 
   useEffect(() => {
     if (!active) return;
-    //  Removed: setDisplayed("") – was causing an extra render cycle
     let i = 0;
     const interval = setInterval(() => {
       if (i < text.length) {

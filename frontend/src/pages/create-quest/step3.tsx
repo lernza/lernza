@@ -59,6 +59,22 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             </p>
             <h3 className="text-xl font-semibold">{step1Data.name}</h3>
             <p className="text-muted-foreground text-sm">{step1Data.description}</p>
+            {step1Data.category && (
+              <div className="mt-3 flex items-center gap-2">
+                <span className="text-muted-foreground text-xs font-bold uppercase">Category:</span>
+                <Badge variant="outline">{step1Data.category}</Badge>
+              </div>
+            )}
+            {step1Data.tags && step1Data.tags.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground text-xs font-bold uppercase">Tags:</span>
+                {step1Data.tags.map((t, idx) => (
+                  <span key={idx} className="bg-accent border-border border px-2 py-0.5 text-xs font-semibold">
+                    #{t}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Milestones list */}

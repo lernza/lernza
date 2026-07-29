@@ -18,6 +18,8 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
   const [step1Data, setStep1Data] = useState<Step1Values>({
     name: "",
     description: "",
+    category: "",
+    tags: [],
   })
   const [step2Data, setStep2Data] = useState<Step2Values>({
     milestones: [{ title: "", description: "", rewardAmount: 0 }],

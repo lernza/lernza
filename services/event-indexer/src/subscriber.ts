@@ -2,6 +2,7 @@ import { rpc } from "@stellar/stellar-sdk"
 import type { ContractConfig } from "./config.js"
 import { getCursor, insertEvent, setCursor } from "./db/client.js"
 import { captureIndexerError } from "./sentry.js"
+import { notificationDispatcher } from "./notification-dispatcher.js"
 
 const PAGE_SIZE = 200
 
@@ -77,7 +78,15 @@ export class EventSubscriber {
           payload: scValToJson(event.value),
         })
 
-        if (stored) inserted++
+        if (stored) {
+          inserted++
+          await notificationDispatcher.handleEvent({
+            contractType: contract.type,
+            eventName,
+            payload: scValToJson(event.value),
+            txHash: event.txHash,
+          })
+        }
         if (event.ledger > maxLedger) maxLedger = event.ledger
       }
 

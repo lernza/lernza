@@ -10,6 +10,7 @@ import { ErrorBoundary, ErrorBoundaryProvider, SectionErrorBoundary } from "@/co
 import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
 import { PageSkeleton } from "@/components/page-skeleton"
+import { NotificationProvider } from "@/contexts/notification-context"
 
 // Code-split heavy pages — they load on first visit to that route.
 const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })))
@@ -159,28 +160,30 @@ function App() {
   }
 
   return (
-    <ErrorBoundaryProvider>
-      <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
-        <div className="bg-background text-foreground min-h-screen">
-          {/* Skip-to-content link: sr-only until focused, z-index above sticky navbar */}
-          <a
-            href="#main-content"
-            className="focus:bg-background sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:rounded focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
-          >
-            Skip to main content
-          </a>
-          <SectionErrorBoundary label="Navigation">
-            <Navbar activePage={state.page} onNavigate={handleNavigate} />
-          </SectionErrorBoundary>
-          <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
-            <main id="main-content">{renderPage()}</main>
-          </ErrorBoundary>
-        <Analytics />
-        <SpeedInsights />
-        <ToastContainer toasts={toasts} onRemove={removeToast} />
-      </div>
-    </ErrorBoundary>
-    </ErrorBoundaryProvider>
+    <NotificationProvider>
+      <ErrorBoundaryProvider>
+        <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
+          <div className="bg-background text-foreground min-h-screen">
+            {/* Skip-to-content link: sr-only until focused, z-index above sticky navbar */}
+            <a
+              href="#main-content"
+              className="focus:bg-background sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:rounded focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
+            >
+              Skip to main content
+            </a>
+            <SectionErrorBoundary label="Navigation">
+              <Navbar activePage={state.page} onNavigate={handleNavigate} />
+            </SectionErrorBoundary>
+            <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
+              <main id="main-content">{renderPage()}</main>
+            </ErrorBoundary>
+            <Analytics />
+            <SpeedInsights />
+            <ToastContainer toasts={toasts} onRemove={removeToast} />
+          </div>
+        </ErrorBoundary>
+      </ErrorBoundaryProvider>
+    </NotificationProvider>
   )
 }
 

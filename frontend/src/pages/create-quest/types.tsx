@@ -22,19 +22,47 @@ function formatTokens(amount: number): string {
 
 // Zod schemas
 export const step1Schema = z.object({
-  name: z.string().min(1, "Quest name is required").max(64, "Max 64 characters"),
-  description: z.string().min(1, "Description is required").max(2000, "Max 2000 characters"),
+  name: z
+    .string()
+    .min(1, "Quest name is required")
+    .max(64, "Max 64 characters")
+    .refine(val => val.trim().length > 0, "Quest name cannot be blank"),
+  description: z
+    .string()
+    .min(1, "Description is required")
+    .max(2000, "Max 2000 characters")
+    .refine(val => val.trim().length > 0, "Description cannot be blank"),
+  category: z
+    .string()
+    .min(1, "Category is required")
+    .max(32, "Max 32 characters")
+    .refine(val => val.trim().length > 0, "Category cannot be blank"),
+  tags: z
+    .array(
+      z
+        .string()
+        .min(1, "Tag cannot be empty")
+        .max(32, "Tag max 32 characters")
+        .refine(val => val.trim().length > 0, "Tag cannot be blank")
+    )
+    .max(5, "Maximum 5 tags allowed")
+    .default([]),
 })
 export type Step1Values = z.infer<typeof step1Schema>
 
 export const milestoneSchema = z.object({
-  title: z.string().min(1, "Title is required").max(128, "Title max 128 characters"),
+  title: z
+    .string()
+    .min(1, "Title is required")
+    .max(128, "Title max 128 characters")
+    .refine(val => val.trim().length > 0, "Title cannot be blank"),
   description: z
     .string()
     .min(1, "Description is required")
-    .max(1000, "Description max 1000 characters"),
+    .max(1000, "Description max 1000 characters")
+    .refine(val => val.trim().length > 0, "Description cannot be blank"),
   rewardAmount: z
-    .number()
+    .number({ invalid_type_error: "Reward amount is required" })
     .positive("Reward must be greater than 0")
     .max(MAX_REWARD_AMOUNT, `Reward max ${formatTokens(MAX_REWARD_AMOUNT)} tokens`),
 })
@@ -51,10 +79,10 @@ export type FormStep = 1 | 2 | 3
 export type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
 
 // Helper components
-export function FieldError({ message }: { message?: string }) {
+export function FieldError({ message, id }: { message?: string; id?: string }) {
   if (!message) return null
   return (
-    <p className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold">
+    <p id={id} className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold" role="alert">
       <AlertCircle className="h-3 w-3 flex-shrink-0" />
       {message}
     </p>
@@ -64,12 +92,14 @@ export function FieldError({ message }: { message?: string }) {
 export function FormLabel({
   children,
   required,
+  htmlFor,
 }: {
   children: React.ReactNode
   required?: boolean
+  htmlFor?: string
 }) {
   return (
-    <label className="mb-1.5 block text-sm font-semibold">
+    <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-semibold">
       {children}
       {required && <span className="text-destructive ml-0.5">*</span>}
     </label>

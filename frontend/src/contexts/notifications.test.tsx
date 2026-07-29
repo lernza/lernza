@@ -1,6 +1,6 @@
 import React from "react"
-import { describe, it, expect, vi } from "vitest"
-import { render, screen, act, fireEvent } from "@testing-library/react"
+import { describe, it, expect } from "vitest"
+import { render, screen, fireEvent } from "@testing-library/react"
 import { NotificationProvider, useNotifications } from "./notification-context"
 import { ToastContainer } from "@/components/toast"
 import { NotificationPreferencesCard } from "@/components/notification-preferences"
@@ -20,22 +20,22 @@ function TestComponent() {
       <button
         onClick={() => notifyQuestStatusChange("Rust Basics", "created")}
       >
-        Trigger Quest Created
+        Create Quest Notification
       </button>
       <button
         onClick={() => notifyQuestStatusChange("Rust Basics", "archived")}
       >
-        Trigger Quest Archived
+        Show Archival
       </button>
       <button
         onClick={() => notifyMilestoneCompletion("Build Smart Contract", "approved")}
       >
-        Trigger Milestone Approved
+        Approve Milestone Notification
       </button>
       <button
         onClick={() => notifyRewardDistribution("100 USDC", "claimed")}
       >
-        Trigger Reward Claimed
+        Show Rewards
       </button>
       <button
         onClick={() =>
@@ -47,7 +47,7 @@ function TestComponent() {
           })
         }
       >
-        Trigger Warning Toast
+        Show Warning Notification
       </button>
     </div>
   )
@@ -62,7 +62,7 @@ describe("Notification System Frontend Tests", () => {
       </NotificationProvider>
     )
 
-    const btn = screen.getByText("Trigger Quest Created")
+    const btn = screen.getByText("Create Quest Notification")
     fireEvent.click(btn)
 
     expect(await screen.findByText("Quest Live!")).toBeDefined()
@@ -77,7 +77,7 @@ describe("Notification System Frontend Tests", () => {
       </NotificationProvider>
     )
 
-    fireEvent.click(screen.getByText("Trigger Milestone Approved"))
+    fireEvent.click(screen.getByText("Approve Milestone Notification"))
 
     expect(await screen.findByText("Milestone Approved!")).toBeDefined()
     expect(screen.getByText(/has been verified/i)).toBeDefined()
@@ -91,7 +91,7 @@ describe("Notification System Frontend Tests", () => {
       </NotificationProvider>
     )
 
-    fireEvent.click(screen.getByText("Trigger Reward Claimed"))
+    fireEvent.click(screen.getByText("Show Rewards"))
 
     expect(await screen.findByText("Reward Claimed!")).toBeDefined()
     expect(screen.getByText(/You claimed 100 USDC/i)).toBeDefined()
@@ -105,7 +105,7 @@ describe("Notification System Frontend Tests", () => {
       </NotificationProvider>
     )
 
-    fireEvent.click(screen.getByText("Trigger Warning Toast"))
+    fireEvent.click(screen.getByText("Show Warning Notification"))
 
     expect(await screen.findByText("Custom Title")).toBeDefined()
     expect(screen.getByText("Custom Message")).toBeDefined()

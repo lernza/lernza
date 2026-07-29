@@ -3,11 +3,7 @@ use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 use rewards::{RewardsContract, RewardsContractClient};
-use soroban_sdk::{
-    testutils::Address as _,
-    token::StellarAssetClient,
-    Address, Env, String, Vec,
-};
+use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Env, String, Vec};
 
 #[test]
 fn test_fund_quest_emits_cross_contract_log() {

@@ -19,7 +19,8 @@ export function Step1Form() {
     setValue,
     formState: { errors, isValid },
   } = useForm<Step1Values>({
-    resolver: zodResolver(step1Schema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(step1Schema as any),
     defaultValues: {
       name: step1Data.name || "",
       description: step1Data.description || "",

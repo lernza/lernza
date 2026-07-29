@@ -158,6 +158,7 @@ export function TransactionConfirmDialog({
               type="button"
               onClick={handleClose}
               disabled={isPending}
+              aria-label="Close transaction dialog"
               className="border-border bg-background hover:bg-secondary neo-press flex h-6 w-6 cursor-pointer items-center justify-center border disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" />

@@ -1,8 +1,8 @@
-use common::Visibility;
-use quest::{QuestContract, QuestContractClient};
-use rewards::{RewardsContract, RewardsContractClient, Error as RewardsError};
-use milestone::{MilestoneContract, MilestoneContractClient};
 use certificate::CertificateContract;
+use common::Visibility;
+use milestone::{MilestoneContract, MilestoneContractClient};
+use quest::{QuestContract, QuestContractClient};
+use rewards::{Error as RewardsError, RewardsContract, RewardsContractClient};
 use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Env, String, Vec};
 
 #[test]
@@ -21,8 +21,17 @@ fn test_insufficient_pool_rejects_large_distribution() {
     let rewards_id = env.register(RewardsContract, ());
 
     let admin = Address::generate(&env);
-    MilestoneContractClient::new(&env, &milestone_id).initialize(&admin, &quest_id, &certificate_id);
-    RewardsContractClient::new(&env, &rewards_id).initialize(&admin, &token_addr, &quest_id, &milestone_id);
+    MilestoneContractClient::new(&env, &milestone_id).initialize(
+        &admin,
+        &quest_id,
+        &certificate_id,
+    );
+    RewardsContractClient::new(&env, &rewards_id).initialize(
+        &admin,
+        &token_addr,
+        &quest_id,
+        &milestone_id,
+    );
 
     let owner = Address::generate(&env);
     let enrollee = Address::generate(&env);
@@ -55,15 +64,11 @@ fn test_insufficient_pool_rejects_large_distribution() {
         &1000_i128,
         &false,
     );
-    MilestoneContractClient::new(&env, &milestone_id).verify_completion(&owner, &0u32, &ms_id, &enrollee);
+    MilestoneContractClient::new(&env, &milestone_id)
+        .verify_completion(&owner, &0u32, &ms_id, &enrollee);
 
     // attempt distribution larger than pool -> should fail with InsufficientPool
-    let res = RewardsContractClient::new(&env, &rewards_id).try_distribute_reward(
-        &owner,
-        &0u32,
-        &ms_id,
-        &enrollee,
-        &1000_i128,
-    );
+    let res = RewardsContractClient::new(&env, &rewards_id)
+        .try_distribute_reward(&owner, &0u32, &ms_id, &enrollee, &1000_i128);
     assert_eq!(res, Err(Ok(RewardsError::InsufficientPool)));
 }

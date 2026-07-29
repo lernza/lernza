@@ -42,7 +42,7 @@ export const Full: Story = {
     action: (
       <Button size="sm" variant="secondary">
         <Settings className="h-4 w-4" />
-        Options
+        Manage Options
       </Button>
     ),
   },

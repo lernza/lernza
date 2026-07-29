@@ -50,7 +50,7 @@ export class BackupManager {
           }
         }
       } catch (err) {
-        logger.error({ err }, "Error exporting backup data")
+        logger.error("Error exporting backup data", { err })
       }
     }
 
@@ -109,7 +109,7 @@ export class BackupManager {
         logger.info("Backup successfully restored")
         return true
       } catch (err) {
-        logger.error({ err }, "Failed to restore backup")
+        logger.error("Failed to restore backup", { err })
         return false
       }
     }

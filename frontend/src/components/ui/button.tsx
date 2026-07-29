@@ -17,8 +17,8 @@ const buttonVariants = cva(
           "bg-destructive text-destructive-foreground border border-border shadow-md hover:shadow-lg active:shadow-sm neo-press",
         outline:
           "bg-transparent text-foreground border border-border shadow-md hover:shadow-lg active:shadow-sm neo-press",
-        ghost: "border-0 shadow-none hover:bg-secondary transition-colors",
-        link: "border-0 shadow-none underline-offset-4 hover:underline text-foreground",
+        ghost: "border-0 shadow-none hover:bg-secondary hover:shadow-sm transition-all",
+        link: "border-0 shadow-none underline-offset-4 hover:underline text-foreground hover:text-accent transition-colors",
       },
       size: {
         default: "h-11 px-5 py-2 text-sm",

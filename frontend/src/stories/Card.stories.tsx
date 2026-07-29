@@ -22,7 +22,7 @@ export const Default: Story = {
         <p className="text-sm">Card content goes here. This can be any React node.</p>
       </CardContent>
       <CardFooter>
-        <Button size="sm">Action</Button>
+        <Button size="sm">Start Now</Button>
       </CardFooter>
     </Card>
   ),

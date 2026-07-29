@@ -26,6 +26,7 @@ export function Breadcrumb({ items }: BreadcrumbProps) {
             ) : (
               <button
                 onClick={item.onClick}
+                aria-label={`Go to ${item.label}`}
                 className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 {item.label}

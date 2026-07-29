@@ -642,10 +642,10 @@ impl MilestoneContract {
         let reserved_key = DataKey::TotalReservedReward(quest_id);
         if !had_pending {
             let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
-            let new_reserved = current_reserved.checked_add(milestone.reward_amount).ok_or(Error::Overflow)?;
-            env.storage()
-                .persistent()
-                .set(&reserved_key, &new_reserved);
+            let new_reserved = current_reserved
+                .checked_add(milestone.reward_amount)
+                .ok_or(Error::Overflow)?;
+            env.storage().persistent().set(&reserved_key, &new_reserved);
         }
 
         // Predict whether this completion finishes the quest. We need the
@@ -840,10 +840,10 @@ impl MilestoneContract {
         // Increment total reserved reward for pending review
         let reserved_key = DataKey::TotalReservedReward(quest_id);
         let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
-        let new_reserved = current_reserved.checked_add(milestone.reward_amount).ok_or(Error::Overflow)?;
-        env.storage()
-            .persistent()
-            .set(&reserved_key, &new_reserved);
+        let new_reserved = current_reserved
+            .checked_add(milestone.reward_amount)
+            .ok_or(Error::Overflow)?;
+        env.storage().persistent().set(&reserved_key, &new_reserved);
         env.storage()
             .persistent()
             .extend_ttl(&reserved_key, THRESHOLD, BUMP);

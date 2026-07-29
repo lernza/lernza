@@ -62,7 +62,7 @@ export const milestoneSchema = z.object({
     .max(1000, "Description max 1000 characters")
     .refine(val => val.trim().length > 0, "Description cannot be blank"),
   rewardAmount: z
-    .number({ invalid_type_error: "Reward amount is required" })
+    .number({ message: "Reward amount is required" })
     .positive("Reward must be greater than 0")
     .max(MAX_REWARD_AMOUNT, `Reward max ${formatTokens(MAX_REWARD_AMOUNT)} tokens`),
 })

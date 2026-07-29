@@ -232,8 +232,10 @@ export function Leaderboard() {
       />
 
       {/* Tabs */}
-      <div className="border-border mb-6 flex gap-0 border shadow-md">
+      <div role="tablist" className="border-border mb-6 flex gap-0 border shadow-md">
         <button
+          role="tab"
+          aria-selected={activeTab === "earners"}
           onClick={() => setActiveTab("earners")}
           className={cn(
             "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
@@ -244,6 +246,8 @@ export function Leaderboard() {
           View top earners
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === "quests"}
           onClick={() => setActiveTab("quests")}
           className={cn(
             "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",

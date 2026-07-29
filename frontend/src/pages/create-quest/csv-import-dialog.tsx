@@ -139,7 +139,7 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
                 className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
               >
                 <Download className="h-3.5 w-3.5" />
-                Download CSV Template
+                View Template
               </button>
             </div>
           </div>

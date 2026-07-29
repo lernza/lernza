@@ -1,6 +1,6 @@
 import React from "react"
 import { describe, it, expect, vi } from "vitest"
-import { render, screen, fireEvent } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { parseCsvMilestones, generateCsvTemplate } from "./csv-parser"
 import { CsvImportDialog } from "./csv-import-dialog"
 
@@ -61,7 +61,7 @@ describe("CsvImportDialog Component Tests", () => {
     )
 
     expect(screen.getByText("Import Milestones from CSV")).toBeDefined()
-    expect(screen.getByText("Download CSV Template")).toBeDefined()
+    expect(screen.getByText("View Template")).toBeDefined()
     expect(screen.getByText("Browse Files")).toBeDefined()
   })
 

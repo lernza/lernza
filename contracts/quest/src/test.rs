@@ -1449,8 +1449,9 @@ fn test_migrate_quest_data_validates_entire_batch_before_writing() {
 
     assert_eq!(result, Err(Ok(Error::NotFound)));
     let version_key = DataKey::QuestSchemaVersion(0);
-    let migrated =
-        env.as_contract(&client.address, || env.storage().persistent().has(&version_key));
+    let migrated = env.as_contract(&client.address, || {
+        env.storage().persistent().has(&version_key)
+    });
     assert!(!migrated);
 }
 

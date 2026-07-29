@@ -405,11 +405,12 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
                   <LayoutDashboard className="h-5 w-5" /> Your Quests
                 </h2>
-                <div className="border-border flex gap-0 border shadow-md">
+                <div className="border-border flex gap-0 border shadow-md" role="group" aria-label="Quest filter">
                   {(["all", "owned", "enrolled"] as const).map(f => (
                     <button
                       key={f}
                       onClick={() => setFilter(f)}
+                      aria-pressed={filter === f}
                       className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
                         filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
                       }`}
@@ -472,7 +473,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
               </div>
 
               {/* Preset Filter Chips */}
-              <div className="mb-5 flex flex-wrap gap-2">
+              <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Preset filters">
                 {(
                   [
                     { value: "none", label: "Show all" },
@@ -484,6 +485,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                   <button
                     key={p.value}
                     onClick={() => setPreset(p.value)}
+                    aria-pressed={preset === p.value}
                     className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
                       preset === p.value
                         ? "bg-accent"

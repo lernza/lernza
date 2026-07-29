@@ -22,7 +22,7 @@ export interface NotificationToast {
     label: string
     onClick: () => void
   }
-  createdAt: number
+  createdAt?: number
 }
 
 export interface NotificationPreferences {

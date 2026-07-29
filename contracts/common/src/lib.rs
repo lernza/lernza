@@ -205,7 +205,12 @@ pub fn is_valid_url(s: &String) -> bool {
 pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
     env.events().publish(
         (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
-        (env.current_contract_address(), target.clone(), soroban_sdk::Symbol::new(&env, method), params.clone()),
+        (
+            env.current_contract_address(),
+            target.clone(),
+            soroban_sdk::Symbol::new(&env, method),
+            params.clone(),
+        ),
     );
 }
 
@@ -215,7 +220,13 @@ pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String
 pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
     env.events().publish(
         (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
-        (env.current_contract_address(), target.clone(), soroban_sdk::Symbol::new(&env, method), success, result.clone()),
+        (
+            env.current_contract_address(),
+            target.clone(),
+            soroban_sdk::Symbol::new(&env, method),
+            success,
+            result.clone(),
+        ),
     );
 }
 
@@ -242,7 +253,13 @@ pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i1
 /// Helper: emit reward_distributed event
 /// Topics: (reward_distributed,)
 /// Data: (quest_id, milestone_id, enrollee, amount)
-pub fn emit_reward_distributed(env: &Env, quest_id: u32, milestone_id: u32, enrollee: &Address, amount: i128) {
+pub fn emit_reward_distributed(
+    env: &Env,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: &Address,
+    amount: i128,
+) {
     env.events().publish(
         (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
         (quest_id, milestone_id, enrollee.clone(), amount),

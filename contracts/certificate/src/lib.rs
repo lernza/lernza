@@ -2,8 +2,7 @@
 
 use common::{extend_instance_ttl, extend_persistent_ttl, BUMP, THRESHOLD};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};

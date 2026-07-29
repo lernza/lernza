@@ -192,12 +192,29 @@ impl RewardsContract {
         // Using QuestClient trait-based client to avoid WASM requirement in CI
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         // Log outgoing cross-contract call (params left empty to avoid heavy formatting in contract)
-        common::log_cross_call(&env, &quest_contract_addr, "get_quest", &String::from_str(&env, ""));
+        common::log_cross_call(
+            &env,
+            &quest_contract_addr,
+            "get_quest",
+            &String::from_str(&env, ""),
+        );
         let quest_info_result = quest_client.try_get_quest(&quest_id);
         // Emit return log indicating success/failure
         match &quest_info_result {
-            Ok(Ok(_)) => common::log_cross_return(&env, &quest_contract_addr, "get_quest", true, &String::from_str(&env, "")),
-            Ok(Err(_)) | Err(_) => common::log_cross_return(&env, &quest_contract_addr, "get_quest", false, &String::from_str(&env, "")),
+            Ok(Ok(_)) => common::log_cross_return(
+                &env,
+                &quest_contract_addr,
+                "get_quest",
+                true,
+                &String::from_str(&env, ""),
+            ),
+            Ok(Err(_)) | Err(_) => common::log_cross_return(
+                &env,
+                &quest_contract_addr,
+                "get_quest",
+                false,
+                &String::from_str(&env, ""),
+            ),
         }
         let quest_info = match quest_info_result {
             Ok(Ok(quest)) => quest,
@@ -280,10 +297,10 @@ impl RewardsContract {
                 .instance()
                 .get(&DataKey::QuestCount)
                 .unwrap_or(0);
-            let new_qc = quest_count.checked_add(1).ok_or(Error::ArithmeticOverflow)?;
-            env.storage()
-                .instance()
-                .set(&DataKey::QuestCount, &new_qc);
+            let new_qc = quest_count
+                .checked_add(1)
+                .ok_or(Error::ArithmeticOverflow)?;
+            env.storage().instance().set(&DataKey::QuestCount, &new_qc);
         }
 
         // Emit quest funding event
@@ -350,9 +367,20 @@ impl RewardsContract {
 
         let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
         // Log outgoing check and capture result
-        common::log_cross_call(&env, &milestone_contract_addr, "is_completed", &String::from_str(&env, ""));
+        common::log_cross_call(
+            &env,
+            &milestone_contract_addr,
+            "is_completed",
+            &String::from_str(&env, ""),
+        );
         let completed = milestone_client.is_completed(&quest_id, &milestone_id, &enrollee);
-        common::log_cross_return(&env, &milestone_contract_addr, "is_completed", completed, &String::from_str(&env, ""));
+        common::log_cross_return(
+            &env,
+            &milestone_contract_addr,
+            "is_completed",
+            completed,
+            &String::from_str(&env, ""),
+        );
         if !completed {
             return Err(Error::MilestoneNotCompleted);
         }
@@ -417,10 +445,10 @@ impl RewardsContract {
         // Update quest specific total distributed
         let q_dist_key = DataKey::QuestDistributed(quest_id);
         let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
-        let q_new = q_total.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
-        env.storage()
-            .persistent()
-            .set(&q_dist_key, &q_new);
+        let q_new = q_total
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&q_dist_key, &q_new);
         common::extend_persistent_ttl(&env, &q_dist_key);
 
         extend_instance_ttl(&env);
@@ -483,7 +511,8 @@ impl RewardsContract {
             Err(_) => return Err(Error::QuestLookupFailed),
         };
 
-        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled {
+        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled
+        {
             return Err(Error::QuestNotArchived);
         }
 
@@ -822,7 +851,8 @@ impl RewardsContract {
             Ok(Err(_)) | Err(_) => return Err(Error::QuestLookupFailed),
         };
 
-        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled {
+        if quest_info.status != QuestStatus::Archived && quest_info.status != QuestStatus::Cancelled
+        {
             return Err(Error::QuestNotArchived);
         }
         if quest_info.status == QuestStatus::Archived {

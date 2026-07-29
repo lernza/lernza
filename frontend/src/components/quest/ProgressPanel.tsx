@@ -1,4 +1,4 @@
-import { CheckCircle2, Coins, Sparkles } from "lucide-react"
+import { CheckCircle2, Sparkles } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 
@@ -17,7 +17,7 @@ export function ProgressPanel({
   const progressPercent = totalMilestones > 0 ? (completedMilestones / totalMilestones) * 100 : 0
 
   return (
-    <div className="mb-8 border-border bg-card border p-6 shadow-md">
+    <div className="border-border bg-card mb-8 border p-6 shadow-md">
       <div className="mb-4 flex items-center justify-between">
         <span className="text-sm font-semibold tracking-wider uppercase">Quest Progress</span>
         {isComplete && (
@@ -38,7 +38,7 @@ export function ProgressPanel({
       <div className="flex items-center gap-3">
         <CheckCircle2 className="text-success h-5 w-5" />
         <div className="flex-1">
-          <p className="text-muted-foreground text-xs font-medium uppercase tracking-wider">
+          <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
             Earned Reward
           </p>
           <p className="text-lg font-bold text-green-700">+{earnedReward} USDC</p>

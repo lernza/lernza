@@ -1,3 +1,5 @@
+/** Soroban contract client for Lernza quests (create, enroll, complete, verify). */
+import { isDev, env } from "@/lib/env"
 import {
   Address,
   Contract,
@@ -20,7 +22,7 @@ import {
 import { safeContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
 
-const CONTRACT_ID = import.meta.env.VITE_QUEST_CONTRACT_ID || ""
+const CONTRACT_ID = env.VITE_QUEST_CONTRACT_ID
 
 // Re-export so consumers can import the canonical contract types from either
 // `@/lib/contracts/quest` or `@/lib/contract-types`. Keeping both import paths
@@ -37,7 +39,7 @@ export class QuestClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        if (import.meta.env.DEV) {
+        if (isDev) {
           console.error(`[QuestClient] Invalid VITE_QUEST_CONTRACT_ID: "${CONTRACT_ID}"`)
         }
       }
@@ -185,7 +187,7 @@ export class QuestClient {
         nativeToScVal(name, { type: "string" }),
         nativeToScVal(description, { type: "string" }),
         nativeToScVal(category, { type: "string" }),
-        nativeToScVal(tags, { type: "string_vec" }),
+        nativeToScVal(tags),
         new Address(tokenAddr).toScVal(),
         nativeToScVal(visibility, { type: "u32" }),
         maxEnrollees !== undefined
@@ -218,7 +220,7 @@ export class QuestClient {
           ? nativeToScVal(description, { type: "string" })
           : nativeToScVal(null),
         category !== undefined ? nativeToScVal(category, { type: "string" }) : nativeToScVal(null),
-        tags !== undefined ? nativeToScVal(tags, { type: "string_vec" }) : nativeToScVal(null),
+        tags !== undefined ? nativeToScVal(tags) : nativeToScVal(null),
         visibility !== undefined ? nativeToScVal(visibility, { type: "u32" }) : nativeToScVal(null),
         maxEnrollees !== undefined
           ? nativeToScVal(maxEnrollees, { type: "u32" })
@@ -406,7 +408,7 @@ export class QuestClient {
       }
       return null
     }).catch((e: unknown) => {
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.error(`Read error ${method}:`, e)
       }
       return null

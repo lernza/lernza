@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens, cn } from "@/lib/utils"
 import { track } from "@/lib/analytics"
-import { milestoneSchema, Step1Values, Step2Values, TxPhase } from "./types"
+import { milestoneSchema, type TxPhase } from "./types"
 import { useQuestCreation } from "./context"
 
 interface Step3ReviewProps {

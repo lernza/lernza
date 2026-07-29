@@ -1,0 +1,30 @@
+# Lernza Production Environment Configuration
+# Used for live deployment on Stellar mainnet.
+# Copy to config/active.yaml or set ENVIRONMENT=production.
+
+environment: production
+
+stellar:
+  network: mainnet
+  rpc_url: https://soroban.stellar.org
+  network_passphrase: "Public Global Stellar Network ; September 2015"
+  horizon_url: "https://horizon.stellar.org"
+
+contracts:
+  quest: ""
+  milestone: ""
+  rewards: ""
+  rewards_token: ""
+  usdc_token: ""
+
+rpc_rate_limits:
+  capacity: 40
+  refill_per_second: 5
+
+features:
+  analytics: true
+  sentry: true
+
+sentry:
+  dsn: ""
+  environment: production

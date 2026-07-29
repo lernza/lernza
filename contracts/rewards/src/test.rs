@@ -796,13 +796,23 @@ fn test_initialize_no_auth_guard() {
     // Any random address can initialize - no deployer auth required
     let attacker_token = Address::generate(&env);
     let milestone_id = env.register(MilestoneContract, ());
-    client.initialize(&Address::generate(&env), &attacker_token, &quest_id, &milestone_id);
+    client.initialize(
+        &Address::generate(&env),
+        &attacker_token,
+        &quest_id,
+        &milestone_id,
+    );
 
     assert_eq!(client.get_token(), attacker_token);
 
     // Legitimate deployer cannot override it
     let real_token = Address::generate(&env);
-    let result = client.try_initialize(&Address::generate(&env), &real_token, &quest_id, &milestone_id);
+    let result = client.try_initialize(
+        &Address::generate(&env),
+        &real_token,
+        &quest_id,
+        &milestone_id,
+    );
     assert_eq!(result, Err(Ok(Error::AlreadyInitialized)));
 }
 
@@ -993,7 +1003,12 @@ fn test_fund_quest_broken_contract_linkage() {
     // Initialize rewards contract with a fake quest contract address (not deployed)
     let fake_quest_contract = Address::generate(&env);
     let fake_milestone_contract = Address::generate(&env);
-    client.initialize(&Address::generate(&env), &token_addr, &fake_quest_contract, &fake_milestone_contract);
+    client.initialize(
+        &Address::generate(&env),
+        &token_addr,
+        &fake_quest_contract,
+        &fake_milestone_contract,
+    );
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -1022,7 +1037,12 @@ fn test_fund_quest_nonexistent_fails() {
     // Deploy rewards contract
     let contract_id = env.register(RewardsContract, ());
     let client = RewardsContractClient::new(&env, &contract_id);
-    client.initialize(&Address::generate(&env), &token_addr, &quest_id, &Address::generate(&env));
+    client.initialize(
+        &Address::generate(&env),
+        &token_addr,
+        &quest_id,
+        &Address::generate(&env),
+    );
 
     let funder = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -2111,7 +2131,7 @@ fn test_default_refund_grace_period() {
         _certificate_id,
         _admin,
     ) = setup();
-    
+
     // Default should be 7 days (604,800 seconds)
     assert_eq!(client.get_refund_grace_period(), 604_800);
 }
@@ -2131,11 +2151,11 @@ fn test_set_refund_grace_period() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     // Set to 3 days (259,200 seconds)
     client.set_refund_grace_period(&admin, &259_200);
     assert_eq!(client.get_refund_grace_period(), 259_200);
-    
+
     // Set to 14 days (1,209,600 seconds)
     client.set_refund_grace_period(&admin, &1_209_600);
     assert_eq!(client.get_refund_grace_period(), 1_209_600);
@@ -2156,7 +2176,7 @@ fn test_set_refund_grace_period_unauthorized() {
         _certificate_id,
         _admin,
     ) = setup();
-    
+
     let unauthorized = Address::generate(&env);
     let result = client.try_set_refund_grace_period(&unauthorized, &259_200);
     assert_eq!(result, Err(Ok(Error::Unauthorized)));
@@ -2177,15 +2197,15 @@ fn test_refund_with_custom_grace_period() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     let owner = Address::generate(&env);
-    
+
     let sac = StellarAssetClient::new(&env, &token_addr);
     sac.mint(&owner, &10_000);
-    
+
     // Set custom grace period to 1 day (86,400 seconds)
     client.set_refund_grace_period(&admin, &86_400);
-    
+
     // Create and fund a quest
     let q_id = quest_client.create_quest(
         &owner,
@@ -2198,19 +2218,20 @@ fn test_refund_with_custom_grace_period() {
         &None,
         &None,
     );
-    
+
     client.fund_quest(&owner, &q_id, &10_000);
-    
+
     // Archive the quest
     quest_client.archive_quest(&q_id);
-    
+
     // Try to refund before grace period (should fail)
     let result = client.try_refund_pool(&owner, &q_id, &5_000);
     assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
-    
+
     // Advance time by 1 day + 1 second
-    env.ledger().set_timestamp(env.ledger().timestamp() + 86_400 + 1);
-    
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 86_400 + 1);
+
     // Now refund should work
     client.refund_pool(&owner, &q_id, &5_000);
     assert_eq!(client.get_pool_balance(&q_id), 5_000);
@@ -2231,19 +2252,19 @@ fn test_pause_blocks_grace_period_updates() {
         _certificate_id,
         admin,
     ) = setup();
-    
+
     // Pause the contract
     client.pause(&admin);
     assert!(client.is_paused());
-    
+
     // Try to update grace period while paused (should fail)
     let result = client.try_set_refund_grace_period(&admin, &259_200);
     assert_eq!(result, Err(Ok(Error::Paused)));
-    
+
     // Unpause and try again (should work)
     client.unpause(&admin);
     assert!(!client.is_paused());
-    
+
     client.set_refund_grace_period(&admin, &259_200);
     assert_eq!(client.get_refund_grace_period(), 259_200);
 }
@@ -2305,4 +2326,325 @@ fn test_refund_pool_decrements_total_funded() {
 
     client.refund_pool(&owner, &q_id, &1_500);
     assert_eq!(client.get_quest_refunded(&q_id), 3_500);
+}
+
+// --- refund_expired_pool: issue #1187 — recover funds from an abandoned,
+// never-archived quest once its deadline has passed. ---
+
+#[test]
+fn test_refund_expired_pool_success_without_archiving() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    // Creator funds the pool but the quest is never completed or archived.
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+
+    // Deadline hasn't passed yet — no recovery available.
+    let result = client.try_refund_expired_pool(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::QuestNotExpired)));
+
+    // Advance past the deadline plus the default 7-day grace period.
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_expired_pool(&owner, &q_id);
+
+    assert_eq!(refunded, 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 5_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 5_000);
+}
+
+#[test]
+fn test_refund_expired_pool_no_deadline() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // No deadline was ever set — expiry-based refund is not available.
+    let result = client.try_refund_expired_pool(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::QuestNotExpired)));
+}
+
+#[test]
+fn test_refund_expired_pool_grace_period_enforced() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+
+    // Deadline just passed, but the grace period has not elapsed yet.
+    env.ledger().set_timestamp(deadline + 1);
+    let result = client.try_refund_expired_pool(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+}
+
+#[test]
+fn test_refund_expired_pool_unauthorized() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    let result = client.try_refund_expired_pool(&attacker, &q_id);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_refund_expired_pool_not_funded() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    // Quest was never funded — no authority stored.
+    let result = client.try_refund_expired_pool(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::QuestNotFunded)));
+}
+
+#[test]
+fn test_refund_expired_pool_respects_reserved_obligations() {
+    // A milestone was verified as completed (reserving its reward) but not
+    // yet paid out. The expired-quest refund path must not let the owner
+    // reclaim tokens still owed to an enrollee for qualifying work.
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let enrollee = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let m_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Milestone"),
+        &String::from_str(&env, "Desc"),
+        &2_000,
+        &false,
+    );
+
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &m_id, &enrollee);
+
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    // Only the unreserved 3_000 should be refundable; the 2_000 reserved for
+    // the verified-but-unpaid milestone must stay in the pool.
+    let refunded = client.refund_expired_pool(&owner, &q_id);
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 2_000);
+
+    // The enrollee can still be paid out of what remains.
+    client.distribute_reward(&owner, &q_id, &m_id, &enrollee, &2_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_expired_pool_paused() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    client.pause(&admin);
+
+    let result = client.try_refund_expired_pool(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::Paused)));
 }

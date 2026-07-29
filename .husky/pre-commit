@@ -1,1 +1,30 @@
-cd frontend && npx lint-staged && pnpm run lint && npx tsc -b --noEmit
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Pre-commit hook: runs linting and formatting checks before each commit.
+# All checks must pass for the commit to proceed.
+
+echo "Running pre-commit checks..."
+
+# --- Rust checks (contracts) ---
+if command -v cargo >/dev/null 2>&1; then
+  echo "Checking Rust formatting..."
+  cargo fmt --all -- --check || {
+    echo "❌ Rust formatting check failed. Run 'cargo fmt --all' to fix."
+    exit 1
+  }
+
+  echo "Running clippy..."
+  cargo clippy --workspace --all-targets -- -D warnings 2>&1 || {
+    echo "❌ Clippy check failed. Fix the warnings above."
+    exit 1
+  }
+fi
+
+# --- Frontend checks (lint-staged + ESLint + TypeScript) ---
+cd frontend && npx lint-staged && pnpm run lint && npx tsc -b --noEmit || {
+  echo "❌ Frontend checks failed."
+  exit 1
+}
+
+echo "✅ All pre-commit checks passed."

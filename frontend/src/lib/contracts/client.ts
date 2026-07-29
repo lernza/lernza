@@ -1,5 +1,7 @@
+/** Core Soroban RPC client — connection, signing, submission, and rate limiting. */
+import { isDev } from "@/lib/env"
 import * as rpc from "@stellar/stellar-sdk/rpc"
-import { Transaction } from "@stellar/stellar-sdk/minimal"
+import { Transaction } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails, getAddress } from "@stellar/freighter-api"
 import { env } from "../env"
 import { pushToast } from "../notifications"
@@ -7,18 +9,18 @@ import { logContractCall } from "./logger"
 import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
 import { RpcHealthManager, parseRpcUrls } from "./rpc-health"
 
-export const SOROBAN_RPC_URL =
-  import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
-export const NETWORK_PASSPHRASE =
-  import.meta.env.VITE_SOROBAN_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015"
+export const SOROBAN_RPC_URL = env.VITE_SOROBAN_RPC_URL
+export const NETWORK_PASSPHRASE = env.VITE_SOROBAN_NETWORK_PASSPHRASE
 
 // Determine timeout based on network (testnet: 15s, mainnet: 8s)
 const isMainnet = SOROBAN_RPC_URL.includes("mainnet")
 export const RPC_TIMEOUT_MS = isMainnet ? 8000 : 15000
 
 // Initialize RPC health manager with fallback endpoints
-const rpcUrls = parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS)
-  .length > 0 ? parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS) : [SOROBAN_RPC_URL]
+const rpcUrls =
+  parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS).length > 0
+    ? parseRpcUrls(import.meta.env.VITE_SOROBAN_RPC_URLS)
+    : [SOROBAN_RPC_URL]
 
 export const rpcHealthManager = new RpcHealthManager({
   urls: rpcUrls,
@@ -416,7 +418,7 @@ export async function signAndSubmit(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error during signing/submission"
     logTx("sign_and_submit", "error", { error: message })
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Transaction submission error:", err)
     }
     return { status: "FAILED", txHash: "", error: message }

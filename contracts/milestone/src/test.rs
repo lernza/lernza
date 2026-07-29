@@ -1713,3 +1713,35 @@ fn test_set_distribution_mode_emits_event() {
         "set_distribution_mode should publish a distribution_mode_set event"
     );
 }
+
+#[test]
+fn test_verify_completion_past_deadline_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // Set deadline in past
+    quest_client.set_deadline(&q_id, &999);
+
+    let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    assert_eq!(res, Err(Ok(Error::DeadlineExpired)));
+}
+
+#[test]
+fn test_verify_completion_cancelled_quest_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // Cancel quest
+    quest_client.cancel_quest(&q_id);
+
+    let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}

@@ -1,3 +1,4 @@
+import { isDev } from "@/lib/env"
 import { useCallback, useRef, useState, useEffect } from "react"
 
 export type TransactionQueuePhase = "signing" | "confirming"
@@ -66,7 +67,7 @@ function saveTransactionsToStorage<TType extends string, TMeta>(
     localStorage.setItem(TRANSACTION_QUEUE_STORAGE_KEY, serializeTransactions(transactions))
   } catch {
     // Storage unavailable — fail silently
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.warn("Failed to persist transaction queue to localStorage")
     }
   }

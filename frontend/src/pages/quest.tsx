@@ -10,6 +10,7 @@ import { TabsNavigation } from "@/components/quest/TabsNavigation"
 import { MilestonesSection } from "@/components/quest/MilestonesSection"
 import { EnrolleesSection } from "@/components/quest/EnrolleesSection"
 import { Button } from "@/components/ui/button"
+import { SectionErrorBoundary } from "@/components/error-boundary"
 
 interface QuestViewProps {
   questId: number
@@ -24,8 +25,16 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
   const quest = MOCK_QUESTS.find(q => q.id === questId)
   const milestones = MOCK_MILESTONES[questId] || []
-  const enrollees = MOCK_ENROLLEES[questId] || []
+  const enrolleeAddresses = MOCK_ENROLLEES[questId] || []
   const completions = MOCK_COMPLETIONS[questId] || []
+
+  // MOCK_ENROLLEES (like the real get_enrollees contract call) is a plain list
+  // of addresses; the section components render a richer enrollee shape, so
+  // adapt each address into one here.
+  const enrollees = useMemo(
+    () => enrolleeAddresses.map((address, index) => ({ id: index, address })),
+    [enrolleeAddresses]
+  )
 
   // Memoised derivations — avoids re-running array traversals on every render (#921)
   const { totalReward, completedMilestones, isComplete, earnedReward } = useMemo(() => {
@@ -44,17 +53,17 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
   const handleAddEnrollee = () => {
     // TODO: Implement add enrollee logic
-    addToast({ message: "Add enrollee clicked", type: "info" })
+    addToast("Add enrollee clicked", "info")
   }
 
   const handleAddMilestone = () => {
     // TODO: Implement add milestone logic
-    addToast({ message: "Add milestone clicked", type: "info" })
+    addToast("Add milestone clicked", "info")
   }
 
   const handleVerifyCompletion = (milestoneId: number) => {
     // TODO: Implement verify completion logic
-    addToast({ message: `Verified milestone ${milestoneId}`, type: "success" })
+    addToast(`Verified milestone ${milestoneId}`, "success")
   }
 
   if (!quest) {
@@ -73,29 +82,33 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
       {/* Background */}
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
-      <QuestHeaderPanel
-        questId={questId}
-        questName={quest.name}
-        questDescription={quest.description}
-        isComplete={isComplete}
-        onBack={onBack}
-        onAddEnrollee={handleAddEnrollee}
-        onAddMilestone={handleAddMilestone}
-        onToast={addToast}
-      />
+      <SectionErrorBoundary label="Quest header">
+        <QuestHeaderPanel
+          questId={questId}
+          questName={quest.name}
+          questDescription={quest.description}
+          isComplete={isComplete}
+          onBack={onBack}
+          onAddEnrollee={handleAddEnrollee}
+          onAddMilestone={handleAddMilestone}
+          onToast={addToast}
+        />
+      </SectionErrorBoundary>
 
-      <StatsPanel
-        enrolleesCount={enrollees.length}
-        milestonesCount={milestones.length}
-        poolBalance={quest.poolBalance}
-        totalReward={totalReward}
-      />
+      <SectionErrorBoundary label="Quest stats">
+        <StatsPanel
+          enrolleesCount={enrollees.length}
+          milestonesCount={milestones.length}
+          poolBalance={quest.poolBalance ?? 0}
+          totalReward={totalReward}
+        />
 
-      <ProgressPanel
-        completedMilestones={completedMilestones}
-        totalMilestones={milestones.length}
-        earnedReward={earnedReward}
-      />
+        <ProgressPanel
+          completedMilestones={completedMilestones}
+          totalMilestones={milestones.length}
+          earnedReward={earnedReward}
+        />
+      </SectionErrorBoundary>
 
       <TabsNavigation
         activeTab={activeTab}
@@ -105,23 +118,27 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
       />
 
       {activeTab === "milestones" && (
-        <MilestonesSection
-          milestones={milestones}
-          completions={completions}
-          enrollees={enrollees}
-          questId={questId}
-          onAddMilestone={handleAddMilestone}
-          onVerifyCompletion={handleVerifyCompletion}
-        />
+        <SectionErrorBoundary label="Milestones">
+          <MilestonesSection
+            milestones={milestones}
+            completions={completions}
+            enrollees={enrollees}
+            questId={questId}
+            onAddMilestone={handleAddMilestone}
+            onVerifyCompletion={handleVerifyCompletion}
+          />
+        </SectionErrorBoundary>
       )}
 
       {activeTab === "enrollees" && (
-        <EnrolleesSection
-          enrollees={enrollees}
-          milestones={milestones}
-          completions={completions}
-          onAddEnrollee={handleAddEnrollee}
-        />
+        <SectionErrorBoundary label="Enrollees">
+          <EnrolleesSection
+            enrollees={enrollees}
+            milestones={milestones}
+            completions={completions}
+            onAddEnrollee={handleAddEnrollee}
+          />
+        </SectionErrorBoundary>
       )}
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />

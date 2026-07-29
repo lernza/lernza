@@ -28,19 +28,20 @@ export const step1Schema = z.object({
 export type Step1Values = z.infer<typeof step1Schema>
 
 export const milestoneSchema = z.object({
-  title: z.string()
-    .min(1, "Title is required")
-    .max(128, "Title max 128 characters"),
-  description: z.string()
+  title: z.string().min(1, "Title is required").max(128, "Title max 128 characters"),
+  description: z
+    .string()
     .min(1, "Description is required")
     .max(1000, "Description max 1000 characters"),
-  rewardAmount: z.number()
+  rewardAmount: z
+    .number()
     .positive("Reward must be greater than 0")
     .max(MAX_REWARD_AMOUNT, `Reward max ${formatTokens(MAX_REWARD_AMOUNT)} tokens`),
 })
 
 export const step2Schema = z.object({
-  milestones: z.array(milestoneSchema)
+  milestones: z
+    .array(milestoneSchema)
     .min(1, "At least one milestone is required")
     .max(50, "Maximum 50 milestones per quest"),
 })
@@ -60,7 +61,13 @@ export function FieldError({ message }: { message?: string }) {
   )
 }
 
-export function FormLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+export function FormLabel({
+  children,
+  required,
+}: {
+  children: React.ReactNode
+  required?: boolean
+}) {
   return (
     <label className="mb-1.5 block text-sm font-semibold">
       {children}

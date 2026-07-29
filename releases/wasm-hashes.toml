@@ -1,0 +1,56 @@
+# releases/wasm-hashes.toml
+#
+# Authoritative record of every WASM binary deployed to Testnet and Mainnet.
+# Update this file as part of every upgrade — see docs/UPGRADES.md for the
+# full procedure and docs/operations/contract-upgrade-runbook.md for the
+# step-by-step checklist.
+#
+# Field reference
+# ───────────────
+# network     : "testnet" | "mainnet"
+# contract    : crate name matching contracts/<name>/Cargo.toml
+# version     : semver tag for the release that introduced this binary
+# wasm_hash   : 64-hex-char SHA-256 returned by `stellar contract upload`
+#               Must match `sha256sum target/wasm32v1-none/release/<contract>.wasm`
+# deployed_at : Stellar ledger sequence number at which the upgrade was confirmed
+# tx_hash     : Transaction hash of the upgrade invocation
+# notes       : Free-text summary of the change (one line preferred)
+#
+# Adding an entry
+# ───────────────
+# 1. Build: stellar contract build
+# 2. Compute local hash: sha256sum target/wasm32v1-none/release/<contract>.wasm
+# 3. Upload: stellar contract upload --network <net> --source lernza-admin --wasm ...
+# 4. Cross-check the two hashes. If they differ, stop.
+# 5. Add an entry below with wasm_hash from step 3.
+# 6. After the upgrade succeeds, fill in deployed_at and tx_hash.
+# 7. Commit this file in the same PR as the CHANGELOG entry.
+
+# ── Testnet deployments ──────────────────────────────────────────────────────
+
+# Initial testnet deployment — 2026-03-24 (see docs/deploy-testnet.md §9)
+# These contract IDs are for reference only; do not reuse for new deployments.
+#
+# [[contracts]]
+# network     = "testnet"
+# contract    = "rewards"
+# version     = "0.1.0"
+# wasm_hash   = ""          # not recorded at initial deploy; hash unknown
+# deployed_at = 0
+# tx_hash     = ""
+# notes       = "Initial deployment — CCF2BR6PDYW4BAEPXHIXDNKBBCYWURFSFACHL5SG45XTSF3CT5YY753W"
+
+# ── Mainnet deployments ──────────────────────────────────────────────────────
+
+# (none yet — add entries here when mainnet is live)
+
+# ── Template for next upgrade ────────────────────────────────────────────────
+#
+# [[contracts]]
+# network     = "testnet"
+# contract    = "milestone"
+# version     = "0.2.0"
+# wasm_hash   = ""          # fill in from `stellar contract upload`
+# deployed_at = 0           # fill in after upgrade confirms
+# tx_hash     = ""          # fill in after upgrade confirms
+# notes       = "Adds MilestoneInfo.tags field; lazy migration on first read"

@@ -1,4 +1,9 @@
+/** Health-aware Soroban RPC endpoint manager with automatic failover. */
 import * as rpc from "@stellar/stellar-sdk/rpc"
+
+// `getHealth` exists on the runtime Server but isn't part of the SDK's public
+// TS surface, so it's typed here rather than reaching for `any`.
+type ServerWithHealthCheck = rpc.Server & { getHealth?: () => Promise<unknown> }
 
 export interface RpcHealthConfig {
   urls: string[]
@@ -20,7 +25,7 @@ export class RpcHealthManager {
   private healthCheckIntervalMs: number
   private maxConsecutiveFailures: number
   private timeoutMs: number
-  private healthCheckInterval: NodeJS.Timeout | null = null
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(config: RpcHealthConfig) {
     this.endpoints = config.urls.map(url => ({
@@ -114,9 +119,7 @@ export class RpcHealthManager {
    * Check health of all endpoints
    */
   private async performHealthChecks(): Promise<void> {
-    const checks = this.endpoints.map(endpoint =>
-      this.checkEndpointHealth(endpoint)
-    )
+    const checks = this.endpoints.map(endpoint => this.checkEndpointHealth(endpoint))
 
     await Promise.allSettled(checks)
   }
@@ -133,10 +136,10 @@ export class RpcHealthManager {
       try {
         // Use getHealth as a lightweight health check
         await Promise.race([
-          (server as any).getHealth?.() || Promise.resolve(),
+          (server as ServerWithHealthCheck).getHealth?.() || Promise.resolve(),
           new Promise((_, reject) =>
-            controller.signal.addEventListener('abort', () => {
-              reject(new Error('Health check timeout'))
+            controller.signal.addEventListener("abort", () => {
+              reject(new Error("Health check timeout"))
             })
           ),
         ])
@@ -202,7 +205,7 @@ export function parseRpcUrls(rpcUrlEnv: string | undefined): string[] {
   // Try JSON array first
   try {
     const parsed = JSON.parse(rpcUrlEnv)
-    if (Array.isArray(parsed) && parsed.every(url => typeof url === 'string')) {
+    if (Array.isArray(parsed) && parsed.every(url => typeof url === "string")) {
       return parsed
     }
   } catch {
@@ -211,7 +214,7 @@ export function parseRpcUrls(rpcUrlEnv: string | undefined): string[] {
 
   // Comma-separated fallback
   return rpcUrlEnv
-    .split(',')
+    .split(",")
     .map(url => url.trim())
     .filter(url => url.length > 0)
 }

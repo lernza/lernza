@@ -1,3 +1,5 @@
+/** Soroban contract client for the Lernza rewards system (claim, distribute, track). */
+import { isDev, env } from "@/lib/env"
 import {
   Address,
   Contract,
@@ -21,7 +23,7 @@ import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-ty
 import { safeContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
 
-const CONTRACT_ID = import.meta.env.VITE_REWARDS_CONTRACT_ID || ""
+const CONTRACT_ID = env.VITE_REWARDS_CONTRACT_ID
 
 export class RewardsClient {
   private contract: Contract | null
@@ -32,7 +34,7 @@ export class RewardsClient {
         this.contract = new Contract(CONTRACT_ID)
       } catch {
         this.contract = null
-        if (import.meta.env.DEV) {
+        if (isDev) {
           console.error(`[RewardsClient] Invalid VITE_REWARDS_CONTRACT_ID: "${CONTRACT_ID}"`)
         }
       }
@@ -160,7 +162,7 @@ export class RewardsClient {
       }
       return null
     }).catch((e: unknown) => {
-      if (import.meta.env.DEV) {
+      if (isDev) {
         console.error(`Read error ${method}:`, e)
       }
       return null

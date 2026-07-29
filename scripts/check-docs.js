@@ -12,11 +12,13 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
 
 // Configuration
+/** @type {string[]} */
 const DOCS_DIRS = ["docs", ".github", "."];
+/** @type {string[]} */
 const DOC_EXTENSIONS = [".md", ".yml", ".yaml"];
+/** @type {string[]} */
 const IGNORE_PATTERNS = [
   "node_modules",
   "target",
@@ -25,7 +27,18 @@ const IGNORE_PATTERNS = [
   "CHANGELOG.md", // Auto-generated
 ];
 
+/**
+ * @typedef {{ pattern: RegExp, replacement: string, context: string }} StaleTerm
+ * @typedef {{ text: string, url: string, type: "markdown" | "html" }} LinkInfo
+ * @typedef {{ file: string, link: string, text: string, reason: string }} BrokenLink
+ * @typedef {{ file: string, term: string, replacement: string, context: string, count: number }} StaleReference
+ * @typedef {{ file: string, function: string, reason: string }} InvalidFunction
+ * @typedef {{ file: string, path: string, reason: string }} MissingFile
+ * @typedef {{ brokenLinks: BrokenLink[], staleReferences: StaleReference[], invalidFunctions: InvalidFunction[], missingFiles: MissingFile[] }} Results
+ */
+
 // Contract function mappings (actual vs documented)
+/** @type {Record<string, string[]>} */
 const CONTRACT_FUNCTIONS = {
   quest: [
     "create_quest",
@@ -68,6 +81,7 @@ const CONTRACT_FUNCTIONS = {
 };
 
 // Deprecated/stale terminology
+/** @type {StaleTerm[]} */
 const STALE_TERMS = [
   {
     pattern: /\bworkspace_id\b/g,
@@ -107,6 +121,7 @@ const STALE_TERMS = [
 ];
 
 // Results tracking
+/** @type {Results} */
 const results = {
   brokenLinks: [],
   staleReferences: [],
@@ -117,6 +132,9 @@ const results = {
 
 /**
  * Get all documentation files
+ * @param {string} dir
+ * @param {string[]} [files]
+ * @returns {string[]}
  */
 function getDocFiles(dir, files = []) {
   if (!fs.existsSync(dir)) return files;
@@ -143,6 +161,8 @@ function getDocFiles(dir, files = []) {
 
 /**
  * Check if a file exists relative to repo root
+ * @param {string} filePath
+ * @returns {boolean}
  */
 function fileExists(filePath) {
   const fullPath = path.resolve(filePath);
@@ -151,6 +171,8 @@ function fileExists(filePath) {
 
 /**
  * Extract markdown links from content
+ * @param {string} content
+ * @returns {LinkInfo[]}
  */
 function extractLinks(content) {
   const links = [];
@@ -183,6 +205,8 @@ function extractLinks(content) {
 
 /**
  * Check internal file links
+ * @param {string} filePath
+ * @param {string} content
  */
 function checkInternalLinks(filePath, content) {
   const links = extractLinks(content);
@@ -227,6 +251,8 @@ function checkInternalLinks(filePath, content) {
 
 /**
  * Check for stale terminology
+ * @param {string} filePath
+ * @param {string} content
  */
 function checkStaleTerms(filePath, content) {
   for (const term of STALE_TERMS) {
@@ -246,6 +272,8 @@ function checkStaleTerms(filePath, content) {
 
 /**
  * Check contract function references
+ * @param {string} filePath
+ * @param {string} content
  */
 function checkContractFunctions(filePath, content) {
   // Look for function calls in code blocks
@@ -286,6 +314,8 @@ function checkContractFunctions(filePath, content) {
 
 /**
  * Check file path references
+ * @param {string} filePath
+ * @param {string} content
  */
 function checkFilePaths(filePath, content) {
   // Look for file paths in various formats

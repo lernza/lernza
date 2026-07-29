@@ -1,6 +1,7 @@
 #![no_std]
 use common::{
-    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, Visibility, BUMP, THRESHOLD,
+    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, Visibility,
+    BUMP, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -39,6 +40,8 @@ pub enum DataKey {
     /// While set, `leave_quest` is rejected so the submission record never
     /// ends up pointing at a non-enrollee. Key: (quest_id, enrollee).
     LeaveHold(u32, Address),
+    /// Version history for a quest. Stores a Vec of QuestVersion snapshots.
+    QuestVersionHistory(u32),
 }
 
 // QuestInfo moved to common.
@@ -47,9 +50,12 @@ pub enum DataKey {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum Error {
-    NotFound = 1,
-    Unauthorized = 2,
-    InvalidInput = 3,
+    /// Entity not found (shared code 1).
+    NotFound = common::ERR_NOT_FOUND as u32,
+    /// Caller is not authorized (shared code 2).
+    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    /// Invalid input provided (shared code 3).
+    InvalidInput = common::ERR_INVALID_INPUT as u32,
     AlreadyEnrolled = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
@@ -70,14 +76,14 @@ pub enum Error {
     InvalidInvite = 15,
     /// The invite code has already been redeemed.
     InviteAlreadyUsed = 16,
+    /// Quest has been cancelled.
+    QuestCancelled = 17,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
-    Paused = 400,
+    Paused = common::ERR_PAUSED as u32,
 }
 
 // TTL constants and address validation moved to common.
-pub const MAX_QUEST_NAME_LEN: u32 = 64;
-pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
 
@@ -106,7 +112,7 @@ fn validate_name(name: &String) -> Result<(), Error> {
     if is_blank_ascii(name) {
         return Err(Error::InvalidInput);
     }
-    if name.len() > MAX_QUEST_NAME_LEN {
+    if name.len() > common::MAX_QUEST_NAME_LEN {
         return Err(Error::NameTooLong);
     }
     Ok(())
@@ -117,7 +123,7 @@ fn validate_description(description: &String) -> Result<(), Error> {
     if is_blank_ascii(description) {
         return Err(Error::InvalidInput);
     }
-    if description.len() > MAX_QUEST_DESCRIPTION_LEN {
+    if description.len() > common::MAX_QUEST_DESCRIPTION_LEN {
         return Err(Error::DescriptionTooLong);
     }
     Ok(())
@@ -301,6 +307,7 @@ impl QuestContract {
             archived_at: 0,
             max_enrollees,
             verified,
+            version: 1,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -331,10 +338,8 @@ impl QuestContract {
         // Emit quest creation event
         // Event topics: (quest_created,)
         // Event data: (quest_id, owner, name)
-        env.events().publish(
-            (Symbol::new(&env, "quest_created"),),
-            (id, quest.owner.clone(), quest.name.clone()),
-        );
+        // Emit quest creation event via shared helper for consistent schema
+        common::emit_quest_created(&env, id, &quest.owner.clone(), &quest.name.clone());
 
         Self::bump(&env, id);
         Ok(id)
@@ -363,6 +368,9 @@ impl QuestContract {
 
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
+        }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
         }
 
         // Input validation & update
@@ -410,16 +418,50 @@ impl QuestContract {
             quest.max_enrollees = Some(m);
         }
 
+        // Store version snapshot before updating
+        let old_version = QuestVersion {
+            version: quest.version,
+            name: quest.name.clone(),
+            description: quest.description.clone(),
+            category: quest.category.clone(),
+            tags: quest.tags.clone(),
+            visibility: quest.visibility,
+            max_enrollees: quest.max_enrollees,
+            updated_at: env.ledger().timestamp(),
+        };
+
+        // Increment version
+        quest.version += 1;
+
         env.storage()
             .persistent()
             .set(&DataKey::Quest(quest_id), &quest);
 
+        // Append old version to history
+        let history_key = DataKey::QuestVersionHistory(quest_id);
+        let mut history: Vec<QuestVersion> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or(Vec::new(&env));
+        history.push_back(old_version);
+        env.storage().persistent().set(&history_key, &history);
+        common::extend_persistent_ttl(&env, &history_key);
+
         // Emit quest updated event with the fields that were actually changed
         // Event topics: (quest_updated,)
-        // Event data: (quest_id, name, description, category, tags, max_enrollees)
+        // Event data: (quest_id, new_version, name, description, category, tags, max_enrollees)
         env.events().publish(
             (Symbol::new(&env, "quest_updated"),),
-            (quest_id, name, description, category, tags, max_enrollees),
+            (
+                quest_id,
+                quest.version,
+                name,
+                description,
+                category,
+                tags,
+                max_enrollees,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -434,6 +476,9 @@ impl QuestContract {
 
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
+        }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
         }
 
         quest.status = QuestStatus::Archived;
@@ -453,13 +498,63 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Cancel an active quest. Owner only.
+    /// Cancelling a quest prevents any further updates, enrollments, or milestone verifications.
+    /// Cleans up state by removing the quest from public discovery indices.
+    pub fn cancel_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        quest.status = QuestStatus::Cancelled;
+        quest.archived_at = env.ledger().timestamp();
+
+        // Cleanup: remove from public discovery indices if public
+        if quest.visibility == Visibility::Public {
+            Self::remove_id_from_index(
+                &env,
+                DataKey::PublicCategoryQuests(quest.category.clone()),
+                quest_id,
+            );
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(&env));
+            if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::PublicQuests, &public_ids);
+            }
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest cancelled event
+        env.events()
+            .publish((Symbol::new(&env, "quest_cancelled"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Add an enrollee to a quest. Owner only.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -494,7 +589,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -507,7 +608,7 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -543,7 +644,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "self");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -572,7 +679,7 @@ impl QuestContract {
         if quest.owner != owner {
             return Err(Error::Unauthorized);
         }
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         let key = DataKey::InviteCommitment(quest_id, commitment.clone());
@@ -639,7 +746,7 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -808,6 +915,22 @@ impl QuestContract {
         let quest = Self::load_quest(&env, quest_id)?;
         Self::bump(&env, quest_id);
         Ok(quest)
+    }
+
+    /// Get the version history for a quest.
+    ///
+    /// Returns all historical snapshots in chronological order (oldest first).
+    /// Each snapshot captures the quest fields at the time of a previous update.
+    pub fn get_quest_version_history(env: Env, quest_id: u32) -> Result<Vec<QuestVersion>, Error> {
+        Self::load_quest(&env, quest_id)?; // verify exists
+        let history_key = DataKey::QuestVersionHistory(quest_id);
+        let history: Vec<QuestVersion> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or(Vec::new(&env));
+        Self::bump(&env, quest_id);
+        Ok(history)
     }
 
     /// Get all enrollees for a quest.
@@ -1143,6 +1266,7 @@ impl QuestContract {
         extend_instance_ttl(env);
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
+        common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
     }
 }
 

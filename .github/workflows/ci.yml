@@ -131,6 +131,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Audit npm dependencies
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
       - name: Lint
         run: pnpm run lint
 
@@ -333,6 +337,21 @@ jobs:
           name: contracts-wasm
           path: target/wasm32v1-none/release/*.wasm
           retention-days: 14
+
+  # ── Event doc sync: verify EVENT_REFERENCE.md covers all symbols ──
+  event-doc-sync:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true' || needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.12.0
+
+      - name: Check event symbols are documented
+        run: node scripts/check-events.js
 
   # ── Security: cargo-deny advisory check ───────────────────────────
   # Fails the build if security advisories are detected in dependencies.

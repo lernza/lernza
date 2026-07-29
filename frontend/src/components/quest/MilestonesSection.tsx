@@ -33,8 +33,6 @@ interface MilestonesSectionProps {
 export function MilestonesSection({
   milestones,
   completions,
-  enrollees,
-  questId,
   onAddMilestone,
   onVerifyCompletion,
 }: MilestonesSectionProps) {

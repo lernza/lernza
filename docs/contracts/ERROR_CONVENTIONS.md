@@ -91,6 +91,7 @@ which contract raised the error.
 | 13 | `RewardAmountMismatch` |
 | 14 | `QuestNotArchived` |
 | 15 | `RefundWindowNotOpen` |
+| 16 | `QuestNotExpired` |
 
 ## Adding new errors
 

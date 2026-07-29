@@ -81,7 +81,7 @@ function WalletAvatar({ address }: { address: string }) {
 }
 
 export function Profile() {
-  const { connected, connect, address } = useWallet()
+  const { connected, connect, address, loading: walletConnecting } = useWallet()
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
   const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
@@ -108,7 +108,7 @@ export function Profile() {
     },
     {
       enabled: connected && !!address,
-      dependencies: [connected, address],
+      queryKey: [connected, address],
     }
   )
 
@@ -174,7 +174,7 @@ export function Profile() {
     },
     {
       enabled: connected && !!address,
-      dependencies: [connected, address],
+      queryKey: [connected, address],
     }
   )
 
@@ -301,10 +301,20 @@ export function Profile() {
               <Button
                 size="lg"
                 onClick={connect}
+                disabled={walletConnecting}
                 className="shimmer-on-hover animate-fade-in-up stagger-3"
               >
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
+                {walletConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="h-4 w-4" />
+                    Connect Wallet
+                  </>
+                )}
               </Button>
 
               <div className="border-border animate-fade-in-up stagger-4 mt-8 border-t-2 pt-6">

@@ -67,7 +67,7 @@ export function useUserRole(): UserRoleData {
     },
     {
       enabled: connected && !!address,
-      dependencies: [address, connected],
+      queryKey: [address, connected],
     }
   )
 

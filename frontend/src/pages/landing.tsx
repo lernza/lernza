@@ -195,7 +195,7 @@ export function Landing({ onNavigate }: LandingProps) {
                 Built on Stellar
               </div>
 
-              <h1 className="font-display mb-10 text-6xl leading-[0.95] tracking-tight sm:text-7xl lg:text-[5.25rem] xl:text-[6rem]">
+              <h1 className="font-display mb-10 text-4xl leading-[0.95] tracking-tight sm:text-6xl md:text-7xl lg:text-[5.25rem] xl:text-[6rem]">
                 <span className="animate-fade-in-up block">Learn.</span>
                 <span className="animate-fade-in-up stagger-2 text-accent block italic">Earn.</span>
                 <span className="animate-fade-in-up stagger-3 block">On-chain.</span>

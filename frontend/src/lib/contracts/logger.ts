@@ -1,3 +1,4 @@
+import { isDev } from "@/lib/env"
 /**
  * Structured logger for contract call lifecycles.
  *
@@ -38,7 +39,7 @@ function addSentryBreadcrumb(entry: ContractLogEntry) {
 export function logContractCall(entry: ContractLogEntry) {
   addSentryBreadcrumb(entry)
 
-  if (import.meta.env.DEV) {
+  if (isDev) {
     const prefix = `[contract:${entry.contract}] ${entry.fn}`
     if (entry.result === "success") {
       console.info(prefix, { ...entry })

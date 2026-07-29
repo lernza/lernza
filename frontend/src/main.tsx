@@ -5,7 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query"
 import { HelmetProvider } from "react-helmet-async"
 import { queryClient } from "@/lib/query-client"
 import * as Sentry from "@sentry/react"
-import { env } from "@/lib/env"
+import { env, isDev, isProd } from "@/lib/env"
 import { setupGlobalErrorHandlers } from "@/lib/error-utils"
 import { reportWebVitals } from "@/lib/analytics"
 import { ThemeProvider } from "@/contexts/theme-context"
@@ -31,7 +31,7 @@ if (env.VITE_SENTRY_DSN) {
 // unhandled promise rejections are forwarded with correct Sentry context.
 setupGlobalErrorHandlers()
 
-if (import.meta.env.DEV) {
+if (isDev) {
   Promise.all([import("@axe-core/react"), import("react"), import("react-dom")]).then(
     ([axe, React, ReactDOM]) => {
       axe.default(React.default, ReactDOM.default, 1000)
@@ -44,10 +44,10 @@ if (import.meta.env.DEV) {
     registerSW({
       // Silently pre-cache the new SW; next reload will pick up the update.
       onRegisteredSW(swUrl, r) {
-        if (import.meta.env.DEV) console.info("[SW] registered at", swUrl, r)
+        if (isDev) console.info("[SW] registered at", swUrl, r)
       },
       onOfflineReady() {
-        if (import.meta.env.DEV) console.info("[SW] app ready to work offline")
+        if (isDev) console.info("[SW] app ready to work offline")
       },
     })
   })
@@ -64,7 +64,7 @@ if (import.meta.env.DEV) {
 //
 // Note: we only call inject() in production — analytics in dev creates noise.
 
-if (import.meta.env.PROD) {
+if (isProd) {
   const scheduleAnalytics = () => {
     import("@vercel/analytics").then(({ inject }) => inject())
   }

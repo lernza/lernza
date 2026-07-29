@@ -1,3 +1,4 @@
+import { isDev } from "@/lib/env"
 /**
  * Transaction Queue Storage Utilities
  * Handles persistence and retrieval of pending transactions from localStorage
@@ -34,7 +35,7 @@ export function getStoredTransactionQueue(): QueuedTransaction[] {
     const now = Date.now()
     return data.transactions.filter(tx => !tx.expiresAt || tx.expiresAt > now)
   } catch (error) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Failed to retrieve transaction queue from storage:", error)
     }
     return []
@@ -54,7 +55,7 @@ export function storeTransactionQueue(transactions: QueuedTransaction[]): boolea
     localStorage.setItem(TRANSACTION_QUEUE_STORAGE_KEY, JSON.stringify(data))
     return true
   } catch (error) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Failed to store transaction queue:", error)
     }
     return false
@@ -69,7 +70,7 @@ export function clearStoredTransactionQueue(): boolean {
     localStorage.removeItem(TRANSACTION_QUEUE_STORAGE_KEY)
     return true
   } catch (error) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Failed to clear transaction queue:", error)
     }
     return false
@@ -150,7 +151,7 @@ export function importTransactionQueue(data: string): boolean {
     
     return storeTransactionQueue(transactions)
   } catch (error) {
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Failed to import transaction queue:", error)
     }
     return false

@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatTokens, cn } from "@/lib/utils"
-import { step2Schema, milestoneSchema, Step2Values, FieldError, FormLabel } from "./types"
+import { step2Schema, milestoneSchema, type Step2Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
 
 export function Step2Form() {

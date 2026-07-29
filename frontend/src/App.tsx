@@ -20,6 +20,7 @@ const QuestView = lazy(() => import("@/pages/quest").then((m) => ({ default: m.Q
 const CreateQuest = lazy(() => import("@/pages/create-quest").then((m) => ({ default: m.CreateQuest })))
 const Leaderboard = lazy(() => import("@/pages/leaderboard").then((m) => ({ default: m.Leaderboard })))
 const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
+const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 
@@ -30,12 +31,13 @@ const VALID_PAGES = [
   "dashboard",
   "profile",
   "create-quest",
+  "creator-dashboard",
   "leaderboard",
   "terms",
   "privacy",
 ] as const
 type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "404"
-const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["dashboard", "profile", "create-quest"])
+const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["dashboard", "profile", "create-quest", "creator-dashboard"])
 
 function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: () => void }) {
   const { verifySession } = useWallet()
@@ -68,6 +70,9 @@ function pathToPage(pathname: string): {
   if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null }
   if (clean === "/create-quest" || clean === "/quest/create") {
     return { page: "create-quest", questId: null, creatorAddress: null }
+  }
+  if (clean === "/creator-dashboard") {
+    return { page: "creator-dashboard", questId: null, creatorAddress: null }
   }
   if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null }
   if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null }
@@ -175,6 +180,12 @@ function App() {
         return (
           <Suspense fallback={<PageSkeleton />}>
             <CreatorProfile address={state.creatorAddress} />
+          </Suspense>
+        )
+      case "creator-dashboard":
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <CreatorDashboard />
           </Suspense>
         )
       case "terms":

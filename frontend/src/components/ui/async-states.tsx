@@ -1,6 +1,7 @@
 import { Loader2, AlertCircle, Search, Wallet, Coins, Target, Users } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { OptimizedImage } from "@/components/optimized-image"
 
 // ─── Loading States ─────────────────────────────────────────────────────────────
 
@@ -331,7 +332,12 @@ export function EmptyState(props: EmptyStateProps) {
       >
         {illustrationSrc ? (
           <div className="mb-6">
-            <img src={illustrationSrc} alt={config.title} className="h-32 w-32 sm:h-40 sm:w-40" />
+            <OptimizedImage 
+              src={illustrationSrc} 
+              alt={config.title} 
+              className="h-32 w-32 sm:h-40 sm:w-40" 
+              lazy={true}
+            />
           </div>
         ) : (
           <div className="bg-accent border-border mb-4 flex h-14 w-14 items-center justify-center border shadow-md">

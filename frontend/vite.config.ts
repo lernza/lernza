@@ -32,8 +32,34 @@ export default defineConfig({
       },
 
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,woff2}"],
-        runtimeCaching: [],
+        globPatterns: ["**/*.{js,css,html,svg,woff2,png,jpg,jpeg}"],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-cache",
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "image-cache",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+        ],
         skipWaiting: true,
         clientsClaim: true,
       },
@@ -68,6 +94,17 @@ export default defineConfig({
           if (id.includes("transaction-confirm-dialog.tsx")) return "shared-dialogs";
           if (id.includes("quest-status-badge.tsx") || id.includes("progress-ring.tsx") || id.includes("share-button.tsx")) return "shared-quest-ui";
         },
+        assetFileNames: (assetInfo) => {
+          // Organize assets by type
+          const info = assetInfo.name || ""
+          if (/\.(png|jpe?g|svg|gif|webp|avif)$/.test(info)) {
+            return "assets/images/[name]-[hash][extname]"
+          }
+          if (/\.(woff2?|eot|ttf|otf)$/.test(info)) {
+            return "assets/fonts/[name]-[hash][extname]"
+          }
+          return "assets/[name]-[hash][extname]"
+        },
       },
     },
     // Warn if any chunk exceeds 244KB (roughly 0.5s on 3G)
@@ -78,6 +115,8 @@ export default defineConfig({
     minify: "esbuild",
     // Generate source maps for production debugging (but not for vendors)
     sourcemap: false,
+    // Optimize image assets
+    assetsInlineLimit: 4096, // Inline assets smaller than 4KB as base64
   },
   resolve: {
     alias: {

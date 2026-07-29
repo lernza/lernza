@@ -60,14 +60,23 @@ function loadYaml(path) {
   return result;
 }
 
+function resolveEnvName(name) {
+  if (!name) return null;
+  const lower = name.toLowerCase();
+  if (["staging", "testnet"].includes(lower)) return "staging";
+  if (["production", "mainnet"].includes(lower)) return "production";
+  if (["development", "dev", "standalone", "local"].includes(lower)) return "development";
+  return null;
+}
+
 function getEnvironment() {
   const envArg = process.argv[2];
-  if (envArg && ["development", "staging", "production"].includes(envArg)) {
-    return envArg;
-  }
-  if (process.env.ENVIRONMENT && ["development", "staging", "production"].includes(process.env.ENVIRONMENT)) {
-    return process.env.ENVIRONMENT;
-  }
+  const resolvedArg = resolveEnvName(envArg);
+  if (resolvedArg) return resolvedArg;
+
+  const envVar = resolveEnvName(process.env.ENVIRONMENT);
+  if (envVar) return envVar;
+
   return "development";
 }
 

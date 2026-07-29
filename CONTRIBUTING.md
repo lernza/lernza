@@ -16,11 +16,27 @@ The fastest way to get both the contracts and the frontend running is the one-co
 
 ```bash
 ./scripts/bootstrap.sh
+# or: make setup
 ```
 
 This detects your OS and installs Rust, the `wasm32-unknown-unknown` target, Stellar CLI, Node.js, pnpm, frontend dependencies, and runs the contract test suite once to confirm everything works. For a step-by-step walkthrough see [DEV_SETUP.md](DEV_SETUP.md).
 
-> **Contract changes require an extra step.** If your work touches any file under `contracts/`, you must deploy to testnet and regenerate the TypeScript bindings before the frontend will see your changes — see [Tooling: Generating TypeScript Contract Bindings](#generating-typescript-contract-bindings) below. This is the single most common thing new contributors miss.
+### Switching Stellar Networks
+
+To switch your local development environment between Stellar testnet, mainnet, or local standalone network:
+
+```bash
+# Switch to testnet
+./scripts/switch-network.sh testnet
+
+# Switch to local standalone network
+./scripts/switch-network.sh standalone
+
+# Switch to mainnet
+./scripts/switch-network.sh mainnet
+```
+
+> **Contract changes require an extra step.** If your work touches any file under `contracts/`, you must deploy to testnet and regenerate the TypeScript bindings before the frontend will see your changes — see [Deploying Contracts](#deploying-contracts) and [Tooling: Generating TypeScript Contract Bindings](#generating-typescript-contract-bindings) below. This is the single most common thing new contributors miss.
 
 ## Contracts (Rust/Soroban)
 
@@ -42,39 +58,67 @@ cargo test -p milestone
 
 # Build WASM
 cargo build --target wasm32-unknown-unknown --release
+# or: stellar contract build
 ```
 
-### Contract Code Style
+### Deploying Contracts
+
+Deploy all contracts automatically with error handling, checkpointing, and rollback support:
+
+```bash
+# Automated build and deploy to testnet
+./scripts/deploy-contracts.sh --network testnet --build
+
+# Automated deploy to local standalone network
+./scripts/deploy-contracts.sh --network standalone --config-env development
+
+# Test deployment without execution (dry-run)
+./scripts/deploy-contracts.sh --network testnet --dry-run
+```
+
+See [docs/deploy-testnet.md](docs/deploy-testnet.md) for full deployment details and runbooks.
+
+### Contract Code Style & Standards
 
 - Follow standard Rust formatting: `cargo fmt --all -- --check`
 - Run `cargo clippy --workspace --all-targets` and address warnings
 - Every public function needs error handling (return `Result<T, Error>`)
-- Every new feature needs tests
-- Use the existing storage patterns (Instance/Persistent/Temporary) — see [ADR-005](docs/adr/005-storage-patterns-and-ttl-strategy.md)
+- Every new feature needs unit tests
+- Use the existing storage patterns (Instance/Persistent/Temporary) and TTL strategy (`BUMP = 518,400`, `THRESHOLD = 120,960`) — see [ADR-005](docs/adr/005-storage-patterns-and-ttl-strategy.md)
+- Consider gas and resource costs for on-chain state mutations — see [docs/GAS_COSTS.md](docs/GAS_COSTS.md)
 
 ## Frontend (React/TypeScript)
 
 ```bash
 cd frontend
-cp .env.example .env.local  # Copy environment variables
+cp .env.example .env.local  # Copy environment variables (or run ./scripts/switch-network.sh testnet)
 pnpm install
 pnpm dev        # Start dev server at localhost:5173
 pnpm build      # Type-check (tsc -b) + production build
 pnpm lint       # Run linter
 ```
 
-The `.env.example` file contains optional configuration for connecting to Stellar testnet. These variables will be required once contract integration is complete.
+The `.env.example` file contains configuration for connecting to Stellar testnet.
 
 If your change depends on updated contract behavior, remember to regenerate the bindings first — see [Generating TypeScript Contract Bindings](#generating-typescript-contract-bindings).
 
 ### Frontend Code Style
 
 - TypeScript strict mode. No `any` types.
-- Use the existing shadcn/ui components before creating custom ones
-- Follow the existing file naming conventions (kebab-case for files)
+- Use existing shadcn/ui components before creating custom ones
+- Follow existing file naming conventions (kebab-case for files)
 - Tailwind for styling. No inline styles or CSS modules.
+- Environment variables MUST be accessed via `import { env } from '@/lib/env'` for Zod validation
 
 ## Tooling
+
+### Checking Documentation Links
+
+Before opening a PR with doc changes, validate file paths and contract references:
+
+```bash
+npm run check:docs
+```
 
 ### Generating TypeScript Contract Bindings
 

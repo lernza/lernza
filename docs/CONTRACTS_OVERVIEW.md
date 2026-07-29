@@ -156,3 +156,9 @@ fn __constructor(env: Env, owner: Address)
 3. **Owner** creates milestones in `milestone` contract
 4. **Owner** verifies milestone completion → frontend calls `rewards::distribute_reward()`
 5. **Optional** — owner calls `certificate::mint_certificate()` for completion proof
+
+---
+
+## Further Reading & Resource Costs
+
+For detailed gas cost estimations, CPU/memory resource metering, and fee optimization guidance, see [GAS_COSTS.md](GAS_COSTS.md).

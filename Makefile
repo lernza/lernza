@@ -1,4 +1,4 @@
-.PHONY: setup test test-quest test-milestone test-rewards fmt lint build clean
+.PHONY: setup test test-quest test-milestone test-rewards fmt lint build deploy clean
 
 setup:
 	./scripts/bootstrap.sh
@@ -26,5 +26,9 @@ build:
 	stellar contract build --manifest-path contracts/milestone/Cargo.toml --release
 	stellar contract build --manifest-path contracts/rewards/Cargo.toml --release
 
+deploy:
+	./scripts/deploy-contracts.sh --network testnet --build
+
 clean:
 	cargo clean
+

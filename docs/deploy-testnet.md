@@ -9,7 +9,25 @@ Contracts in this repo:
 
 `quest` is the contract name for quests.
 
-## 1. Prerequisites
+## Automated Deployment (Recommended)
+
+To deploy all contracts automatically with error handling, checkpointing, and rollback capability:
+
+```bash
+# Automated build & deploy to testnet
+./scripts/deploy-contracts.sh --network testnet --build
+
+# Deploy to standalone local network
+./scripts/deploy-contracts.sh --network standalone --config-env development
+
+# Rollback deployment checkpoint if an error occurred
+./scripts/deploy-contracts.sh --rollback
+```
+
+---
+
+## 1. Manual Prerequisites
+
 
 - Stellar CLI v25.1.0 or later (`stellar --version`; tested with v25.2.0)
 - Rust installed (`rustc --version`, `cargo --version`)

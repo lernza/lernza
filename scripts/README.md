@@ -69,3 +69,51 @@ This script runs automatically on PRs that modify documentation files via the `d
 Generates TypeScript contract bindings from compiled WASM files.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md#generating-typescript-contract-bindings) for usage.
+
+## deploy-contracts.sh
+
+Automated deployment script for Soroban contracts (`rewards`, `quest`, `milestone`, `certificate`) with proper error handling, checkpointing, and rollback capabilities.
+
+### Usage
+
+```bash
+# Basic deployment to testnet (with automatic WASM build)
+./scripts/deploy-contracts.sh --network testnet --build
+
+# Deploy to standalone local network
+./scripts/deploy-contracts.sh --network standalone --config-env development
+
+# Dry-run deployment simulation
+./scripts/deploy-contracts.sh --network testnet --dry-run
+
+# Rollback deployment checkpoint and restore original configs
+./scripts/deploy-contracts.sh --rollback
+```
+
+### Options
+
+- `-n, --network <network>`: Target network (`testnet`, `standalone`, `mainnet`). Default: `testnet`.
+- `-s, --source <account>`: Deployer key or account alias. Default: `lernza-deployer`.
+- `-t, --token-addr <address>`: SAC Token contract address for rewards contract initialization.
+- `-c, --config-env <env>`: Config file target (`development`, `staging`, `production`).
+- `-b, --build`: Rebuild WASM binaries before deploying.
+- `--dry-run`: Simulate deployment without making on-chain transactions.
+- `--rollback`: Clean state file checkpoint (`.deploy-state.json`) and restore config backups.
+
+## switch-network.sh
+
+Helper script to quickly switch local frontend environment configuration between Stellar `testnet`, `mainnet`, and `standalone` networks.
+
+### Usage
+
+```bash
+# Switch to testnet configuration
+./scripts/switch-network.sh testnet
+
+# Switch to mainnet configuration
+./scripts/switch-network.sh mainnet
+
+# Switch to standalone local network
+./scripts/switch-network.sh standalone
+```
+

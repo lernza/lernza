@@ -22,7 +22,7 @@
 //! | 9 | `test_broken_quest_linkage_propagates_error` | Cross-contract error propagation |
 
 use certificate::{CertificateContract, CertificateContractClient};
-use common::Visibility;
+use common::{EnrolleeStatus, Visibility};
 use milestone::{Error as MilestoneError, MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 use rewards::{Error as RewardsError, RewardsContract, RewardsContractClient};
@@ -151,6 +151,32 @@ impl QuestSystemTest {
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
+
+/// Issue #1325 — a suspended participant must not receive a verified reward.
+#[test]
+fn test_distribute_reward_rejects_suspended_enrollee() {
+    let ctx = QuestSystemTest::setup();
+    let owner = Address::generate(&ctx.env);
+    let enrollee = Address::generate(&ctx.env);
+
+    ctx.mint_tokens(&owner, &5_000);
+    let q_id = ctx.create_quest(&owner);
+    ctx.quest().add_enrollee(&q_id, &enrollee);
+    ctx.rewards().fund_quest(&owner, &q_id, &5_000);
+    let ms_id = ctx.create_milestone(&owner, q_id, "Suspended Milestone", 500);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    ctx.quest()
+        .set_enrollee_status(&q_id, &enrollee, &EnrolleeStatus::Suspended);
+
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+    assert_eq!(result, Err(Ok(RewardsError::RecipientNotEnrolled)));
+    assert_eq!(ctx.token_balance(&enrollee), 0);
+    assert_eq!(ctx.rewards().get_pool_balance(&q_id), 5_000);
+}
 
 /// 1. Happy Path — Create → Enroll → Fund → Complete → Claim
 ///
@@ -544,4 +570,85 @@ fn test_broken_quest_linkage_propagates_error() {
     // try_get_quest on a ghost address fails → rewards wraps it as QuestLookupFailed
     let result = rewards.try_fund_quest(&funder, &1, &500);
     assert_eq!(result, Err(Ok(RewardsError::QuestLookupFailed)));
+}
+
+/// 10. Issue #1325 — reward_user (distribute_reward) must reject recipients who
+///     are no longer active participants in the quest.
+///
+/// Scenario:
+///   1. Enrollee completes a milestone while still enrolled.
+///   2. Owner removes the enrollee before reward distribution (simulating suspension).
+///   3. `distribute_reward` must return `RecipientNotEnrolled` and transfer no tokens.
+///
+/// This guards against the window between milestone completion and reward
+/// payout where a user could be suspended or removed from the quest.
+#[test]
+fn test_distribute_reward_rejects_removed_enrollee() {
+    let ctx = QuestSystemTest::setup();
+    let owner = Address::generate(&ctx.env);
+    let enrollee = Address::generate(&ctx.env);
+
+    ctx.mint_tokens(&owner, &5_000);
+
+    let q_id = ctx.create_quest(&owner);
+    ctx.quest().add_enrollee(&q_id, &enrollee);
+    ctx.rewards().fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = ctx.create_milestone(&owner, q_id, "Milestone", 500);
+
+    // Enrollee completes the milestone while still enrolled
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    // Simulate suspension: owner removes the enrollee before reward is distributed
+    ctx.quest().remove_enrollee(&q_id, &enrollee);
+    assert!(!ctx.quest().is_enrollee(&q_id, &enrollee));
+
+    // distribute_reward must now reject — recipient is no longer an active participant
+    let result = ctx
+        .rewards()
+        .try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+    assert_eq!(result, Err(Ok(RewardsError::RecipientNotEnrolled)));
+
+    // No tokens transferred, pool unchanged
+    assert_eq!(ctx.token_balance(&enrollee), 0);
+    assert_eq!(ctx.rewards().get_pool_balance(&q_id), 5_000);
+}
+
+/// 10b. Issue #1325 — claim_batch must also reject a claimant who is no longer
+///      an active participant.
+///
+/// Mirrors test 10 but exercises the self-service `claim_batch` path.
+#[test]
+fn test_claim_batch_rejects_removed_enrollee() {
+    let ctx = QuestSystemTest::setup();
+    let owner = Address::generate(&ctx.env);
+    let claimant = Address::generate(&ctx.env);
+
+    ctx.mint_tokens(&owner, &5_000);
+
+    let q_id = ctx.create_quest(&owner);
+    ctx.quest().add_enrollee(&q_id, &claimant);
+    ctx.rewards().fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = ctx.create_milestone(&owner, q_id, "Batch Milestone", 500);
+
+    // Claimant completes the milestone while still enrolled
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &claimant);
+
+    // Simulate suspension: owner removes the claimant before they self-claim
+    ctx.quest().remove_enrollee(&q_id, &claimant);
+    assert!(!ctx.quest().is_enrollee(&q_id, &claimant));
+
+    // claim_batch must now reject — claimant is no longer an active participant
+    let milestone_ids = soroban_sdk::vec![&ctx.env, ms_id];
+    let result = ctx
+        .rewards()
+        .try_claim_batch(&claimant, &q_id, &milestone_ids);
+    assert_eq!(result, Err(Ok(RewardsError::RecipientNotEnrolled)));
+
+    // No tokens transferred, pool unchanged
+    assert_eq!(ctx.token_balance(&claimant), 0);
+    assert_eq!(ctx.rewards().get_pool_balance(&q_id), 5_000);
 }

@@ -1,5 +1,7 @@
 #![no_std]
-use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
+use common::{
+    extend_instance_ttl, EnrolleeStatus, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
+};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, BytesN,
     Env, String, Symbol, Vec,
@@ -10,6 +12,12 @@ use soroban_sdk::{
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
+    fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, soroban_sdk::Val>;
+    fn get_enrollee_status(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+    ) -> Result<EnrolleeStatus, soroban_sdk::Val>;
 }
 
 #[contractclient(name = "MilestoneClient")]
@@ -103,6 +111,8 @@ pub enum Error {
     /// Contract is administratively paused (shared code 400).
     Paused = 400,
     BatchTooLarge = 17,
+    /// Reward recipient is no longer an active participant in the quest (issue #1325).
+    RecipientNotEnrolled = 18,
 }
 
 // TTL constants moved to common.
@@ -511,6 +521,28 @@ impl RewardsContract {
             return Err(Error::MilestoneNotCompleted);
         }
 
+        // Issue #1325: Verify the recipient is still an active participant.
+        // A user who was removed or left the quest after completing a milestone
+        // must not receive a reward payout.
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let is_active = quest_client
+            .try_is_enrollee(&quest_id, &enrollee)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false)
+            && quest_client
+                .try_get_enrollee_status(&quest_id, &enrollee)
+                .unwrap_or(Ok(EnrolleeStatus::Inactive))
+                .unwrap_or(EnrolleeStatus::Inactive)
+                == EnrolleeStatus::Active;
+        if !is_active {
+            return Err(Error::RecipientNotEnrolled);
+        }
+
         // Validate amount matches the milestone's configured reward to prevent
         // the authority from over- or under-paying relative to what was promised.
         match milestone_client.try_get_milestone_reward(&quest_id, &milestone_id) {
@@ -755,6 +787,27 @@ impl RewardsContract {
             .persistent()
             .get::<DataKey, Address>(&auth_key)
             .ok_or(Error::QuestNotFunded)?;
+
+        // Issue #1325: Verify the claimant is still an active participant.
+        // A user who was removed or left the quest after completing milestones
+        // must not be able to self-claim rewards.
+        let quest_contract_addr_cb = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let claimant_active = QuestClient::new(&env, &quest_contract_addr_cb)
+            .try_is_enrollee(&quest_id, &claimant)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false)
+            && QuestClient::new(&env, &quest_contract_addr_cb)
+                .try_get_enrollee_status(&quest_id, &claimant)
+                .unwrap_or(Ok(EnrolleeStatus::Inactive))
+                .unwrap_or(EnrolleeStatus::Inactive)
+                == EnrolleeStatus::Active;
+        if !claimant_active {
+            return Err(Error::RecipientNotEnrolled);
+        }
 
         let milestone_contract_addr = env
             .storage()

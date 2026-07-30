@@ -79,7 +79,6 @@ function questStruct(o: {
   tags?: string[]
   token?: string
   createdAt?: number
-  archivedAt?: number
   visibility?: number
   status?: number
   deadline?: number
@@ -98,7 +97,6 @@ function questStruct(o: {
     visibility: nativeToScVal(o.visibility ?? 0, { type: "u32" }),
     status: nativeToScVal(o.status ?? 0, { type: "u32" }),
     deadline: nativeToScVal(o.deadline ?? 0, { type: "u64" }),
-    archived_at: nativeToScVal(o.archivedAt ?? 0, { type: "u64" }),
     max_enrollees:
       o.maxEnrollees == null ? nativeToScVal(null) : nativeToScVal(o.maxEnrollees, { type: "u32" }),
     verified: nativeToScVal(o.verified ?? false),

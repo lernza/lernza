@@ -103,3 +103,11 @@ export type UserEarnings = bigint
  * Uses bigint to match i128 from Rust contract.
  */
 export type TotalDistributed = bigint
+
+// ─── Recipient Status ────────────────────────────────────────────────────────
+
+/**
+ * Status of a transfer recipient, used to surface warnings in confirmation dialogs.
+ * "active" = no warnings; other values render an alert before the user confirms.
+ */
+export type RecipientStatus = "active" | "suspended" | "opt_out" | "inactive"

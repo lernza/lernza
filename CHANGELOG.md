@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.0.0 (2026-07-30)
+
+
+### Features
+
+* add contract deployment script, testnet config, gas cost docs, … ([eba4af7](https://github.com/lernza/lernza/commit/eba4af70abb4be8405f34fea014d2b01410d0186))
+* add pre-commit hooks, code of conduct enforcement, shared error types, and dependency audit ([64c7d33](https://github.com/lernza/lernza/commit/64c7d331559e9822608be92a60f9b97702ca2cef))
+* centralize configuration management for dev/staging/production ([#1248](https://github.com/lernza/lernza/issues/1248)) ([d85a960](https://github.com/lernza/lernza/commit/d85a96071ab6d8c6fdd7fe3d44600d057136aff1))
+* **create-quest:** add QuestCreationProvider and useQuestCreation ([8b6f899](https://github.com/lernza/lernza/commit/8b6f89979a76218b5d70e6f2e148f7eb5cddc06b))
+* **create-quest:** extract schemas, types, and helper components ([b744f22](https://github.com/lernza/lernza/commit/b744f22c41094067cdc0b8a3878df34025a02ab0))
+* **create-quest:** extract schemas, types, and helper components ([fa86061](https://github.com/lernza/lernza/commit/fa8606195ce120079e90cc875f2b9169cb60db18))
+* **dx:** bootstrap script, mainnet env validator, pre-commit tsc+lin… ([068bb06](https://github.com/lernza/lernza/commit/068bb06aa10131c1f3920a6298d6f489310cb3b3))
+* enhance Toast component responsiveness and add error boundaries ([bbf92c3](https://github.com/lernza/lernza/commit/bbf92c3c1a4fbd768f442b35c7c469e2eacd7507))
+* expired-quest refunds, wallet-connect loading states, quest contract docs, and test coverage ([f9df520](https://github.com/lernza/lernza/commit/f9df5203a3ca87ef020678e01d231c6e5c5759d3)), closes [#1206](https://github.com/lernza/lernza/issues/1206) [#1187](https://github.com/lernza/lernza/issues/1187) [#1185](https://github.com/lernza/lernza/issues/1185) [#1184](https://github.com/lernza/lernza/issues/1184)
+* **frontend:** add batch milestone reward claiming with per-item status tracking ([1e40ff1](https://github.com/lernza/lernza/commit/1e40ff104c408c20b6426d1b59862274ae916493)), closes [#1339](https://github.com/lernza/lernza/issues/1339)
+* **frontend:** add guided onboarding tutorial flow for new users ([#1225](https://github.com/lernza/lernza/issues/1225)) ([c854f3c](https://github.com/lernza/lernza/commit/c854f3c863961b4b3b966e822acf7d668d60fd05))
+* **frontend:** reputation system, contract interaction suite and Freighter integration tests ([1f57ec9](https://github.com/lernza/lernza/commit/1f57ec9d4c7ae972a323adf4a4fbd8ea5c59b57b))
+* implement quest versioning, dev setup, type safety, and PR review guidelines ([ec295a7](https://github.com/lernza/lernza/commit/ec295a70a3092d6f19c8e1a48fb03a25acb89e82)), closes [#1246](https://github.com/lernza/lernza/issues/1246)
+* implement search, category filter, and sorting in Dashboard ([bbf92c3](https://github.com/lernza/lernza/commit/bbf92c3c1a4fbd768f442b35c7c469e2eacd7507))
+* **ops:** add RPC health check, failover, and ops documentation ([2172ed8](https://github.com/lernza/lernza/commit/2172ed8312be291ce55d93a1bc3274cd654270fb))
+* **ops:** k6 load test for the read path ([454bc13](https://github.com/lernza/lernza/commit/454bc13f900ccd77aff0fa5b71c0fbcc3c63dcea))
+* quest cancellation, deadline enforcement, soroban compatibility, and signature tests ([f6ba33a](https://github.com/lernza/lernza/commit/f6ba33a5f9f651eed6a6081e9fdb1c9f3e987902))
+* quest creation improvements (validation, CSV upload, notifications) ([fe486dd](https://github.com/lernza/lernza/commit/fe486dde1e2e506c0152919b42ffb4317b72d266))
+* **quest:** extract QuestProgress component from quest.tsx ([a860ac7](https://github.com/lernza/lernza/commit/a860ac703cb1c4ed23911a42072d1a8e6fae3bd0))
+* **quest:** extract QuestTabs navigation component ([e4b1c02](https://github.com/lernza/lernza/commit/e4b1c029e0bc4e38155ca3f04b72a150251e7c92))
+* Soroban smart contracts for learn-to-earn quests ([56d3f61](https://github.com/lernza/lernza/commit/56d3f61ba4b05b2926e8743187c50451859d0885))
+* **system:** implement client-side caching strategy, backup procedure, performance monitoring, and analytics ([01cfdba](https://github.com/lernza/lernza/commit/01cfdbacecab876749df17a1b949d9b514653868)), closes [#1264](https://github.com/lernza/lernza/issues/1264) [#1262](https://github.com/lernza/lernza/issues/1262) [#1259](https://github.com/lernza/lernza/issues/1259) [#1257](https://github.com/lernza/lernza/issues/1257)
+* web app — React, Vite, Tailwind, Freighter wallet, editorial UI ([58efdd9](https://github.com/lernza/lernza/commit/58efdd9bca7fa3847d265f65d31d4ba2e45a2439))
+
+
+### Bug Fixes
+
+* **a11y:** add visible skip-to-content link above sticky navbar ([8551887](https://github.com/lernza/lernza/commit/8551887066d459b77590a11c6f30f10c77fc74f2)), closes [#952](https://github.com/lernza/lernza/issues/952)
+* add pause checks and validation improvements ([890c6bc](https://github.com/lernza/lernza/commit/890c6bc79acc149ecb24b3140d4f860f30336133)), closes [#1160](https://github.com/lernza/lernza/issues/1160) [#1161](https://github.com/lernza/lernza/issues/1161) [#1163](https://github.com/lernza/lernza/issues/1163)
+* centralize env reads, bump Node to 24, add contract doc comments ([e8e0625](https://github.com/lernza/lernza/commit/e8e062502190c479087ecaa4eb8df654ffeee8d3))
+* **certificate:** add pause/unpause functions to enable emergency stop ([1b19559](https://github.com/lernza/lernza/commit/1b19559a9ff4ed2e0dcd2ce33b02a73114a91a37))
+* **ci:** change workflow trigger from pull_request_target to pull_request ([e2b4611](https://github.com/lernza/lernza/commit/e2b461155dfc2f776907a9ad7f371daa9504883f))
+* **ci:** resolve workflow bugs and add recipient status warning to tr… ([412ad43](https://github.com/lernza/lernza/commit/412ad4386b5502c88af2271bdca6767fd3d66e97))
+* **contracts:** add claim_batch with milestone ownership validation ([02b379e](https://github.com/lernza/lernza/commit/02b379e901693e6d782f7f6eb06a3e17cc5d9035)), closes [#1336](https://github.com/lernza/lernza/issues/1336)
+* **contracts:** add claim_batch with milestone ownership validation ([5ed3a70](https://github.com/lernza/lernza/commit/5ed3a70aba8f15e2764a666df355da0ce95b21e5)), closes [#1336](https://github.com/lernza/lernza/issues/1336)
+* **contracts:** add pause checks to transfer_admin and mint_certificate, remove duplicate list_milestones ([53cdc67](https://github.com/lernza/lernza/commit/53cdc676796c4674d25fc73fa6533b7c0e21308a))
+* **contracts:** exclude unpaid rewards from get_user_total ([77feeb6](https://github.com/lernza/lernza/commit/77feeb630d17658f049bcd6b7a67f60eec8f0b92))
+* **contracts:** extend TTL for TotalReservedReward key ([7ffcbf5](https://github.com/lernza/lernza/commit/7ffcbf552b5ec15c3c147318fe4cc4024409472a))
+* **contracts:** reject re-archiving an already-archived quest ([454bc13](https://github.com/lernza/lernza/commit/454bc13f900ccd77aff0fa5b71c0fbcc3c63dcea))
+* **contracts:** restore corrupted quest crate and emit detailed quest_updated event ([416a079](https://github.com/lernza/lernza/commit/416a079320c88a932bde60efe15cdbb7639d170d)), closes [#1173](https://github.com/lernza/lernza/issues/1173)
+* emit distinct join_mode for self-enrollment in join_quest ([a7a3ecc](https://github.com/lernza/lernza/commit/a7a3eccea7c9bf03da98ee7503e00210022908a1))
+* emit distinct join_mode for self-enrollment in join_quest ([a7a3ecc](https://github.com/lernza/lernza/commit/a7a3eccea7c9bf03da98ee7503e00210022908a1))
+* **frontend:** add deterministic tie-breaker to leaderboard sorting Closes [#1337](https://github.com/lernza/lernza/issues/1337) ([7d4bca2](https://github.com/lernza/lernza/commit/7d4bca292bb531de5430466746f87a8c3fcb9c65))
+* **frontend:** add validation and logging for dashboard deduplication ([4d55716](https://github.com/lernza/lernza/commit/4d55716ccabd4746e6cd66f71ab4f6a836c794ad)), closes [#1275](https://github.com/lernza/lernza/issues/1275)
+* **frontend:** improve copy feedback messaging ([d8006a0](https://github.com/lernza/lernza/commit/d8006a04a2e39dc424174d4e78b5dec956670a43))
+* **frontend:** include category in quest search placeholder and add test coverage ([e564dd0](https://github.com/lernza/lernza/commit/e564dd0f31bbbbf31348e87bb6b3a1b24406545a)), closes [#1343](https://github.com/lernza/lernza/issues/1343)
+* **frontend:** validate milestone description length against contract… ([21e3714](https://github.com/lernza/lernza/commit/21e37141614b40ec657c89ac050434b9c68c1285))
+* **frontend:** validate negative amounts in formatTokens utility ([7e282d0](https://github.com/lernza/lernza/commit/7e282d05d2fc36cb3c7affecc10a9e2628d890b8)), closes [#1281](https://github.com/lernza/lernza/issues/1281)
+* **frontend:** validate uploaded CSV file size ([6a519bf](https://github.com/lernza/lernza/commit/6a519bff719c585bc1f34b224df8597c4737cafd))
+* implement logging, state store, form builder, and mock data generator ([#1251](https://github.com/lernza/lernza/issues/1251), [#1252](https://github.com/lernza/lernza/issues/1252), [#1253](https://github.com/lernza/lernza/issues/1253), [#1254](https://github.com/lernza/lernza/issues/1254)) ([7b0f1a3](https://github.com/lernza/lernza/commit/7b0f1a320ad4623f57e621fbf424f3ae1f97176a))
+* **milestone:** add Percentage distribution mode with integer roundin… ([4ee4f7e](https://github.com/lernza/lernza/commit/4ee4f7eb1ed84b4deb2b472b70f0a92c54ca4764))
+* resolve issues [#1208](https://github.com/lernza/lernza/issues/1208) dark mode, [#1209](https://github.com/lernza/lernza/issues/1209) CSS dup, [#1210](https://github.com/lernza/lernza/issues/1210) a11y, [#1211](https://github.com/lernza/lernza/issues/1211)… ([1d438c2](https://github.com/lernza/lernza/commit/1d438c250469b3cc920ec0a8d05857decbab49b8))
+* secure quest upgrades and frontend sessions ([c0d8d04](https://github.com/lernza/lernza/commit/c0d8d04c79b7d80c439dde821091dcd8e3477e82))
+* update Leaderboard and Profile pages for queryKey consistency ([bbf92c3](https://github.com/lernza/lernza/commit/bbf92c3c1a4fbd768f442b35c7c469e2eacd7507))
+* update useUserRole and useWallet hooks for queryKey consistency ([bbf92c3](https://github.com/lernza/lernza/commit/bbf92c3c1a4fbd768f442b35c7c469e2eacd7507))
+* validation and event emission gaps across contracts and frontend ([9e284fa](https://github.com/lernza/lernza/commit/9e284faa8f1acfaa38aa64e435980d71a7e4c133)), closes [#1175](https://github.com/lernza/lernza/issues/1175)
+* wire ErrorBoundaryProvider for route+wallet Sentry context ([#1260](https://github.com/lernza/lernza/issues/1260)) ([5d4e9dd](https://github.com/lernza/lernza/commit/5d4e9ddf3c82a5e952fa651cdce8afa1debdccda))
+
+
+### Performance Improvements
+
+* optimize build with code splitting and lazy loading ([#1250](https://github.com/lernza/lernza/issues/1250)) ([aa78862](https://github.com/lernza/lernza/commit/aa788623cd56e1a281384916effdc3c56707a601))
+
 ## [Unreleased]
 
 ### ⚠ BREAKING CHANGES

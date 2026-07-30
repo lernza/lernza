@@ -68,6 +68,13 @@ describe("Quest Creation Validation Schema Tests", () => {
       rewardAmount: 10,
     })
     expect(blankTitle.success).toBe(false)
+
+    const tooLongDescription = milestoneSchema.safeParse({
+      title: "Title",
+      description: "a".repeat(1001),
+      rewardAmount: 10,
+    })
+    expect(tooLongDescription.success).toBe(false)
   })
 })
 

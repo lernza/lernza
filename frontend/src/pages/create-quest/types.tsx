@@ -2,6 +2,12 @@ import { z } from "zod"
 import { Check, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import React from "react"
+import {
+  MAX_QUEST_NAME_LEN,
+  MAX_QUEST_DESCRIPTION_LEN,
+  MAX_MILESTONE_TITLE_LEN,
+  MAX_MILESTONE_DESCRIPTION_LEN,
+} from "@/lib/contract-types"
 
 // Constants matching contract bounds
 const MAX_REWARD_AMOUNT = 1_000_000_000_000_000 // 10^15 raw token units
@@ -25,12 +31,12 @@ export const step1Schema = z.object({
   name: z
     .string()
     .min(1, "Quest name is required")
-    .max(64, "Max 64 characters")
+    .max(MAX_QUEST_NAME_LEN, `Max ${MAX_QUEST_NAME_LEN} characters`)
     .refine(val => val.trim().length > 0, "Quest name cannot be blank"),
   description: z
     .string()
     .min(1, "Description is required")
-    .max(2000, "Max 2000 characters")
+    .max(MAX_QUEST_DESCRIPTION_LEN, `Max ${MAX_QUEST_DESCRIPTION_LEN} characters`)
     .refine(val => val.trim().length > 0, "Description cannot be blank"),
   category: z
     .string()
@@ -54,12 +60,12 @@ export const milestoneSchema = z.object({
   title: z
     .string()
     .min(1, "Title is required")
-    .max(128, "Title max 128 characters")
+    .max(MAX_MILESTONE_TITLE_LEN, `Title max ${MAX_MILESTONE_TITLE_LEN} characters`)
     .refine(val => val.trim().length > 0, "Title cannot be blank"),
   description: z
     .string()
     .min(1, "Description is required")
-    .max(1000, "Description max 1000 characters")
+    .max(MAX_MILESTONE_DESCRIPTION_LEN, `Description max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`)
     .refine(val => val.trim().length > 0, "Description cannot be blank"),
   rewardAmount: z
     .number({ message: "Reward amount is required" })

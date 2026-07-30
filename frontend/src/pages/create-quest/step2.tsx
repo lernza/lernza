@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { formatTokens, cn } from "@/lib/utils"
+import { MAX_MILESTONE_TITLE_LEN, MAX_MILESTONE_DESCRIPTION_LEN } from "@/lib/contract-types"
 import { step2Schema, milestoneSchema, type Step2Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
 import { CsvImportDialog } from "./csv-import-dialog"
@@ -153,7 +154,7 @@ export function Step2Form() {
                         errors.milestones?.[index]?.title &&
                           "border-destructive focus:ring-1 focus:ring-destructive"
                       )}
-                      maxLength={128}
+                      maxLength={MAX_MILESTONE_TITLE_LEN}
                     />
                     <div className="mt-1 flex items-center justify-between">
                       <FieldError
@@ -163,10 +164,10 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          titleVal.length > 115 ? "text-destructive" : "text-muted-foreground"
+                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
                         )}
                       >
-                        {titleVal.length}/128
+                        {titleVal.length}/{MAX_MILESTONE_TITLE_LEN}
                       </span>
                     </div>
                   </div>
@@ -192,7 +193,7 @@ export function Step2Form() {
                         errors.milestones?.[index]?.description &&
                           "border-destructive focus:ring-1 focus:ring-destructive"
                       )}
-                      maxLength={1000}
+                      maxLength={MAX_MILESTONE_DESCRIPTION_LEN}
                     />
                     <div className="mt-1 flex items-center justify-between">
                       <FieldError
@@ -202,10 +203,10 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          descVal.length > 900 ? "text-destructive" : "text-muted-foreground"
+                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
                         )}
                       >
-                        {descVal.length}/1000
+                        {descVal.length}/{MAX_MILESTONE_DESCRIPTION_LEN}
                       </span>
                     </div>
                   </div>

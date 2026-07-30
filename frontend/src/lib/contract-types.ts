@@ -55,6 +55,7 @@ export interface QuestInfo {
   visibility: Visibility // Visibility enum
   status: QuestStatus // QuestStatus enum
   deadline: number // u64
+  archivedAt: number // u64 (archived_at in Rust)
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
 }

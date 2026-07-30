@@ -381,6 +381,7 @@ export class QuestClient {
       visibility: Number(r.visibility) as Visibility,
       status: Number(r.status) as QuestStatus,
       deadline: Number(r.deadline),
+      archivedAt: Number(r.archived_at),
       maxEnrollees: r.max_enrollees ? Number(r.max_enrollees) : undefined,
       verified: !!r.verified,
     }

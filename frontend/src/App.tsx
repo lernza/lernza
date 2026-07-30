@@ -13,6 +13,8 @@ import { PrivacyPolicy } from "@/pages/privacy"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { NotificationProvider } from "@/contexts/notification-context"
 import { useWallet } from "@/hooks/use-wallet"
+import { OnboardingTutorial } from "@/components/onboarding-tutorial"
+import { useOnboarding } from "@/hooks/use-onboarding"
 
 // Code-split heavy pages — they load on first visit to that route.
 const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })))
@@ -107,6 +109,17 @@ function pageToPath(page: Page, questId: number | null, creatorAddress: string |
 function App() {
   const [state, setState] = useState(() => pathToPage(window.location.pathname))
   const { toasts, addToast, removeToast } = useToast()
+  const onboarding = useOnboarding()
+  const { connected } = useWallet()
+
+  // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
+  useEffect(() => {
+    if (connected && !onboarding.completed && !onboarding.isOpen) {
+      onboarding.open(0)
+    }
+    // We only want this to fire when `connected` transitions to true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected])
 
   useEffect(() => {
     const onPopState = () => setState(pathToPage(window.location.pathname))
@@ -159,6 +172,7 @@ function App() {
             <Dashboard
               onSelectQuest={handleSelectQuest}
               onCreateQuest={() => handleNavigate("create-quest")}
+              onLaunchTutorial={() => onboarding.open(0)}
             />
           </Suspense>
         )
@@ -210,7 +224,7 @@ function App() {
               Skip to main content
             </a>
             <SectionErrorBoundary label="Navigation">
-              <Navbar activePage={state.page} onNavigate={handleNavigate} />
+              <Navbar activePage={state.page} onNavigate={handleNavigate} onLaunchTutorial={() => onboarding.open(0)} />
             </SectionErrorBoundary>
             <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
               <main id="main-content">
@@ -224,6 +238,20 @@ function App() {
             <Analytics />
             <SpeedInsights />
             <ToastContainer toasts={toasts} onRemove={removeToast} />
+            <OnboardingTutorial
+              isOpen={onboarding.isOpen}
+              currentStep={onboarding.currentStep}
+              step={onboarding.step}
+              totalSteps={onboarding.totalSteps}
+              isFirstStep={onboarding.isFirstStep}
+              isLastStep={onboarding.isLastStep}
+              onNext={onboarding.next}
+              onBack={onboarding.back}
+              onSkip={onboarding.skip}
+              onComplete={onboarding.complete}
+              onClose={onboarding.close}
+              onJumpTo={onboarding.open}
+            />
           </div>
         </ErrorBoundary>
       </ErrorBoundaryProvider>

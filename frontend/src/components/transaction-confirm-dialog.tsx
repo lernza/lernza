@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { X, Shield, AlertCircle, Loader2 } from "lucide-react"
+import { X, Shield, AlertCircle, Loader2, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatTokens } from "@/lib/utils"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
+import type { RecipientStatus } from "@/lib/contract-types"
 
 export interface TransactionDetails {
   actionName: string
@@ -15,6 +16,7 @@ export interface TransactionDetails {
   tokenAmount?: bigint
   tokenSymbol?: string
   description?: string
+  recipientStatus?: RecipientStatus
 }
 
 interface TransactionConfirmDialogProps {
@@ -225,6 +227,26 @@ export function TransactionConfirmDialog({
                   </p>
                   <p className="text-warning mt-0.5 text-sm font-medium">
                     ~{details.estimatedFee} XLM
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Recipient Status Warning */}
+            {details.recipientStatus && details.recipientStatus !== "active" && (
+              <div className="bg-destructive/10 border-destructive/30 flex items-start gap-2 rounded-md border p-3">
+                <UserX className="text-destructive mt-0.5 h-4 w-4 shrink-0" />
+                <div>
+                  <p className="text-destructive text-xs font-bold tracking-wider uppercase">
+                    Recipient account issue
+                  </p>
+                  <p className="text-destructive mt-0.5 text-sm">
+                    {details.recipientStatus === "suspended" &&
+                      "This account is currently suspended. Transfers to suspended accounts may be disallowed by quest rules."}
+                    {details.recipientStatus === "opt_out" &&
+                      "This user has opted out of receiving transfers. Proceeding may violate quest rules."}
+                    {details.recipientStatus === "inactive" &&
+                      "This account appears inactive. Verify the recipient is still participating before sending."}
                   </p>
                 </div>
               </div>

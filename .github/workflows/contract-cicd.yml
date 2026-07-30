@@ -72,14 +72,10 @@ jobs:
         run: cargo test --workspace --verbose
 
       - name: Run integration tests
-        run: |
-          cd contracts/rewards/tests
-          cargo test --test integration_test --verbose
+        run: cargo test -p rewards --test integration_test --verbose
 
       - name: Run property-based tests
-        run: |
-          cd contracts/rewards/tests
-          cargo test --test proptest_invariants --verbose
+        run: cargo test -p rewards --test proptest_invariants --verbose
 
       - name: Build WASM contracts
         run: stellar contract build

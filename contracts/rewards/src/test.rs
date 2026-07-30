@@ -139,6 +139,7 @@ fn test_fund_quest() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -179,6 +180,7 @@ fn test_fund_quest_adds_to_existing() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &3_000);
@@ -215,6 +217,7 @@ fn test_fund_quest_assigns_authority_on_first_funding() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -258,6 +261,7 @@ fn test_fund_quest_additional_funding_keeps_same_authority() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -308,6 +312,7 @@ fn test_fund_invalid_amount() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     let result = client.try_fund_quest(&owner, &q_id, &0);
@@ -340,6 +345,7 @@ fn test_fund_quest_overflow() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     // Amounts above MAX_REWARD_AMOUNT are rejected before any storage writes
@@ -374,6 +380,7 @@ fn test_distribute_reward_overflow() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     client.fund_quest(&owner, &q_id, &MAX_REWARD_AMOUNT);
@@ -422,6 +429,7 @@ fn test_distribute_reward_earnings_overflow() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &MAX_REWARD_AMOUNT);
     let ms_id = milestone_client.create_milestone(
@@ -468,6 +476,7 @@ fn test_zero_amount_edge_cases() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     // Zero fund
@@ -521,6 +530,7 @@ fn test_different_funder_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Owner funds first
@@ -560,6 +570,7 @@ fn test_distribute_reward() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -621,6 +632,7 @@ fn test_distribute_multiple_rewards() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -694,6 +706,7 @@ fn test_insufficient_pool() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &100);
@@ -733,6 +746,7 @@ fn test_distribute_unauthorized() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -832,6 +846,7 @@ fn test_authority_self_distribution() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -890,6 +905,7 @@ fn test_distribute_reward_requires_milestone_completion() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Fund quest
@@ -936,6 +952,7 @@ fn test_distribute_reward_after_milestone_completion() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1069,6 +1086,7 @@ fn test_fund_quest_not_owner_fails() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Attacker tries to fund and become authority - should FAIL with Unauthorized
@@ -1113,6 +1131,7 @@ fn test_distribute_reward_idempotent() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     client.fund_quest(&owner, &q_id, &5_000);
@@ -1170,6 +1189,7 @@ fn test_fund_quest_zero_amount_rejected() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     let result = client.try_fund_quest(&owner, &q_id, &0);
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
@@ -1199,6 +1219,7 @@ fn test_fund_quest_negative_amount_rejected() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     let result = client.try_fund_quest(&owner, &q_id, &-1);
@@ -1234,6 +1255,7 @@ fn test_distribute_reward_zero_amount_rejected() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     client.fund_quest(&owner, &q_id, &5_000);
@@ -1283,6 +1305,7 @@ fn test_distribute_reward_negative_amount_rejected() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &5_000);
 
@@ -1327,6 +1350,7 @@ fn test_fund_quest_amount_exceeds_max_rejected() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     let result = client.try_fund_quest(&owner, &q_id, &(MAX_REWARD_AMOUNT + 1));
@@ -1362,6 +1386,7 @@ fn test_distribute_reward_amount_exceeds_max_rejected() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1430,6 +1455,7 @@ fn test_fund_quest_invalid_token_address() {
         &real_token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Attempt to fund — rewards contract will try_symbol() on the fake addr.
@@ -1472,6 +1498,7 @@ fn test_fund_quest_valid_sac() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1525,6 +1552,7 @@ fn test_fund_quest_token_mismatch_rejected() {
         &token_a,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Mint token_b to the owner so the transfer could theoretically succeed.
@@ -1567,6 +1595,7 @@ fn test_refund_pool_success() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1618,6 +1647,7 @@ fn test_refund_pool_full_balance() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -1657,6 +1687,7 @@ fn test_refund_pool_requires_archive() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1702,6 +1733,7 @@ fn test_refund_pool_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -1743,6 +1775,7 @@ fn test_refund_pool_insufficient_balance() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &1_000);
@@ -1780,6 +1813,7 @@ fn test_refund_pool_not_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1819,6 +1853,7 @@ fn test_refund_pool_invalid_amount() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &1_000);
@@ -1856,6 +1891,7 @@ fn test_refund_pool_grace_period_enforced() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1907,6 +1943,7 @@ fn test_refund_pool_respects_reserved_obligations() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -1975,6 +2012,7 @@ fn test_get_refund_window_not_archived() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     // Quest is active; window closed
     let (open, close) = client.get_refund_window(&q_id);
@@ -2005,6 +2043,7 @@ fn test_get_refund_window_archived_before_grace() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     // Archive the quest; current timestamp becomes archived_at
@@ -2042,6 +2081,7 @@ fn test_get_refund_window_archived_after_grace() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     quest_client.archive_quest(&q_id);
@@ -2176,6 +2216,7 @@ fn test_refund_with_custom_grace_period() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &10_000);
@@ -2261,6 +2302,7 @@ fn test_refund_pool_decrements_total_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 

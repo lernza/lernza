@@ -346,6 +346,7 @@ impl QuestContract {
         token_addr: Address,
         visibility: Visibility,
         max_enrollees: Option<u32>,
+        deadline: Option<u64>,
     ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
@@ -358,6 +359,11 @@ impl QuestContract {
             return Err(Error::InvalidInput);
         }
         Self::validate_tags(&tags)?;
+
+        let deadline = deadline.unwrap_or(0);
+        if deadline != 0 && deadline <= env.ledger().timestamp() {
+            return Err(Error::InvalidInput);
+        }
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
         let verified = Self::is_creator_verified(env.clone(), owner.clone());
@@ -373,7 +379,7 @@ impl QuestContract {
             created_at: env.ledger().timestamp(),
             visibility,
             status: QuestStatus::Active,
-            deadline: 0,
+            deadline,
             archived_at: 0,
             max_enrollees,
             verified,

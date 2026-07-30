@@ -131,6 +131,7 @@ impl QuestSystemTest {
             &self.token_addr,
             &Visibility::Public,
             &None,
+            &None,
         )
     }
 
@@ -161,6 +162,7 @@ fn test_happy_path_full_lifecycle() {
 
     ctx.mint_tokens(&owner, &10_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -177,6 +179,35 @@ fn test_happy_path_full_lifecycle() {
     assert_eq!(ctx.rewards().get_total_distributed(), 500);
 }
 
+#[test]
+fn test_get_user_total_excludes_unpaid_rewards() {
+    let ctx = QuestSystemTest::setup();
+    let owner = Address::generate(&ctx.env);
+    let enrollee = Address::generate(&ctx.env);
+
+    ctx.mint_tokens(&owner, &10_000);
+
+    let q_id = ctx.create_quest(&owner);
+    ctx.quest().add_enrollee(&q_id, &enrollee);
+    ctx.rewards().fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = ctx.create_milestone(&owner, q_id, "Milestone", 500);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    let progress = ctx
+        .milestone()
+        .get_enrollee_progress(&q_id, &enrollee, &0, &100);
+    assert_eq!(progress.total_earned, 500);
+
+    assert_eq!(ctx.rewards().get_user_total(&enrollee), 0);
+
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+
+    assert_eq!(ctx.rewards().get_user_total(&enrollee), 500);
+}
+
 /// 2. Certificate auto-mint — completing all milestones triggers the
 ///    milestone→certificate cross-contract call.
 ///
@@ -191,6 +222,7 @@ fn test_completing_all_milestones_mints_certificate() {
 
     ctx.mint_tokens(&owner, &10_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -238,6 +270,7 @@ fn test_multiple_enrollees_share_single_milestone() {
 
     ctx.mint_tokens(&owner, &10_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &e1);
     ctx.quest().add_enrollee(&q_id, &e2);
@@ -285,6 +318,7 @@ fn test_insufficient_pool_rejects_distribution() {
 
     ctx.mint_tokens(&owner, &1_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &100); // pool = 100
@@ -315,6 +349,7 @@ fn test_unenrolled_address_cannot_complete_milestone() {
     let owner = Address::generate(&ctx.env);
     let stranger = Address::generate(&ctx.env); // never enrolled
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     let ms_id = ctx.create_milestone(&owner, q_id, "Gated Milestone", 100);
 
@@ -348,6 +383,7 @@ fn test_non_authority_distribute_unauthorized() {
 
     ctx.mint_tokens(&owner, &5_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -423,6 +459,7 @@ fn test_distribute_blocked_without_milestone_completion() {
 
     ctx.mint_tokens(&owner, &5_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -452,6 +489,7 @@ fn test_distribute_reward_idempotent() {
 
     ctx.mint_tokens(&owner, &5_000);
 
+        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Wallet, LogOut, Menu, X, Sun, Moon } from "lucide-react"
+import { Wallet, LogOut, Menu, X, Sun, Moon, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useColorScheme } from "@/hooks/use-color-scheme"
@@ -15,6 +15,8 @@ const NAV_ITEMS = [
 interface NavbarProps {
   activePage: string
   onNavigate: (page: string) => void
+  /** Optional callback to open the onboarding tutorial */
+  onLaunchTutorial?: () => void
 }
 
 function LogoMark({ className }: { className?: string }) {
@@ -59,7 +61,7 @@ function ThemeToggle() {
   )
 }
 
-export function Navbar({ activePage, onNavigate }: NavbarProps) {
+export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps) {
   const { connected, shortAddress, connect, disconnect, loading } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -102,9 +104,26 @@ export function Navbar({ activePage, onNavigate }: NavbarProps) {
           </ul>
         </nav>
 
-        {/* Right side: theme toggle + wallet + mobile menu */}
+        {/* Right side: theme toggle + tutorial + wallet + mobile menu */}
         <div className="flex items-center gap-2">
           <ThemeToggle />
+
+          {/* Tutorial launch button */}
+          {onLaunchTutorial && (
+            <button
+              onClick={onLaunchTutorial}
+              aria-label="Open getting started tutorial"
+              title="Getting started guide"
+              data-onboarding="tutorial-button"
+              className={cn(
+                "border-border h-11 w-11 border shadow-sm sm:h-9 sm:w-9",
+                "neo-press flex cursor-pointer items-center justify-center",
+                "bg-background text-foreground hover:bg-secondary transition-colors duration-300"
+              )}
+            >
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
 
           {connected ? (
             <>

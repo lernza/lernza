@@ -11,6 +11,7 @@ import {
   Loader2,
   Search,
   X,
+  BookOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,9 +45,11 @@ const RECENT_ACTIVITY_LIMIT = 5
 interface DashboardProps {
   onSelectQuest?: (id: number) => void
   onCreateQuest?: () => void
+  /** Optional callback to open the onboarding tutorial */
+  onLaunchTutorial?: () => void
 }
 
-export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} as DashboardProps) {
+export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps) {
   const { connected, connect, shortAddress, address, loading: walletConnecting } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<
@@ -76,23 +79,44 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
           ])
         : [[], []]
 
-      const accessibleQuests = Array.from(
-        new Map(
-          [...publicQuests, ...ownedQuests, ...enrolledQuests].map(
-            quest => [quest.id, quest] as const
-          )
-        ).values()
+      const allQuests = [...publicQuests, ...ownedQuests, ...enrolledQuests]
+      if (allQuests.length === 0) {
+        console.warn("[Dashboard] No quests loaded from any source")
+      }
+
+      const questMap = new Map(allQuests.map(quest => [quest.id, quest] as const))
+
+      if (questMap.size < allQuests.length) {
+        console.warn(
+          `[Dashboard] Deduplication lost ${allQuests.length - questMap.size} quest(s)`,
+          { before: allQuests.length, after: questMap.size }
+        )
+      }
+
+      const accessibleQuests = Array.from(questMap.values())
+
+      const previewAllQuests = [
+        ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+        ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+        ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+      ]
+
+      if (previewAllQuests.length === 0) {
+        console.warn("[Dashboard] No preview quests loaded from any source")
+      }
+
+      const previewQuestMap = new Map(
+        previewAllQuests.map(quest => [quest.id, quest] as const)
       )
 
-      const previewQuests = Array.from(
-        new Map(
-          [
-            ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-          ].map(quest => [quest.id, quest] as const)
-        ).values()
-      )
+      if (previewQuestMap.size < previewAllQuests.length) {
+        console.warn(
+          `[Dashboard] Preview deduplication lost ${previewAllQuests.length - previewQuestMap.size} quest(s)`,
+          { before: previewAllQuests.length, after: previewQuestMap.size }
+        )
+      }
+
+      const previewQuests = Array.from(previewQuestMap.values())
 
       let questCompletions: Record<number, number> = {}
       let userEarnings = 0n
@@ -374,6 +398,18 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
             <Plus className="h-4 w-4" />
             Create quest
           </Button>
+          {onLaunchTutorial && (
+            <Button
+              variant="outline"
+              onClick={onLaunchTutorial}
+              data-onboarding="tutorial-button"
+              className="flex-shrink-0 flex items-center gap-2"
+              aria-label="Open getting started tutorial"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+              Take the tour
+            </Button>
+          )}
         </div>
       </div>
 
@@ -405,7 +441,11 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
                   <LayoutDashboard className="h-5 w-5" /> Your Quests
                 </h2>
-                <div className="border-border flex gap-0 border shadow-md" role="group" aria-label="Quest filter">
+                <div
+                  className="border-border flex gap-0 border shadow-md"
+                  role="group"
+                  aria-label="Quest filter"
+                >
                   {(["all", "owned", "enrolled"] as const).map(f => (
                     <button
                       key={f}
@@ -429,7 +469,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                     type="text"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Search quests by name, description, or tag"
+                    placeholder="Search quests by name, description, category, or tag"
                     aria-label="Search quests"
                     className="border-border bg-background w-full border py-2.5 pr-9 pl-9 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none"
                   />

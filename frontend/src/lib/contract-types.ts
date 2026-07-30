@@ -103,3 +103,39 @@ export type UserEarnings = bigint
  * Uses bigint to match i128 from Rust contract.
  */
 export type TotalDistributed = bigint
+
+// ─── Recipient Status ────────────────────────────────────────────────────────
+
+/**
+ * Status of a transfer recipient, used to surface warnings in confirmation dialogs.
+ * "active" = no warnings; other values render an alert before the user confirms.
+ */
+export type RecipientStatus = "active" | "suspended" | "opt_out" | "inactive"
+
+// ─── Batch Claim Types ───────────────────────────────────────────────────────
+
+/**
+ * Per-milestone claim result for batch reward distribution.
+ * Tracks individual success/failure with error details for retryability.
+ */
+export interface MilestoneClaimResult {
+  milestoneId: number
+  milestoneTitle: string
+  status: "success" | "failed"
+  rewardAmount?: bigint
+  txHash?: string
+  error?: string
+}
+
+/**
+ * Summary of a batch claim operation.
+ * Includes all individual results plus aggregate counts.
+ */
+export interface BatchClaimSummary {
+  results: MilestoneClaimResult[]
+  successCount: number
+  failureCount: number
+  totalAmount: bigint
+  questId: number
+  enrollee: string
+}

@@ -2,7 +2,7 @@
 use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, BytesN,
-    Env, Symbol,
+    Env, String, Symbol, Vec,
 };
 
 // Visibility, QuestStatus, and QuestInfo moved to common.
@@ -92,6 +92,7 @@ pub enum Error {
     NotInitialized = 100,    // moved away from standard range
     /// Contract is administratively paused (shared code 400).
     Paused = common::ERR_PAUSED as u32,
+    BatchTooLarge = 17,
 }
 
 // TTL constants moved to common.
@@ -99,6 +100,10 @@ pub enum Error {
 // Bounds for the configurable refund grace period — Issue #1172
 const MIN_REFUND_GRACE_PERIOD: u64 = 86_400; // 1 day
 const MAX_REFUND_GRACE_PERIOD: u64 = 31_536_000; // 1 year
+
+/// Maximum number of milestones an enrollee can claim in a single `claim_batch` call.
+/// Aligned with milestone contract's MAX_BATCH_SIZE to keep gas costs predictable.
+const MAX_CLAIM_BATCH_SIZE: u32 = 20;
 
 // IsDataKey implementation — restricts TTL extension to Rewards DataKey only
 impl common::IsDataKey for DataKey {}
@@ -462,6 +467,195 @@ impl RewardsContract {
         Ok(())
     }
 
+    /// Self-service batch claim: an enrollee claims rewards for multiple
+    /// completed milestones in a single call.
+    ///
+    /// Each milestone is validated to ensure:
+    ///   - The claimant completed it (cross-contract is_completed check)
+    ///   - It hasn't already been paid (idempotency via PayoutRecord)
+    ///   - The reward amount matches the milestone's configured reward
+    ///   - No duplicate milestone IDs in the batch
+    ///
+    /// Returns the total amount of tokens claimed across all milestones.
+    /// All-or-nothing: if any milestone fails validation, the entire
+    /// transaction reverts.
+    pub fn claim_batch(
+        env: Env,
+        claimant: Address,
+        quest_id: u32,
+        milestone_ids: Vec<u32>,
+    ) -> Result<i128, Error> {
+        claimant.require_auth();
+
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
+
+        if milestone_ids.is_empty() || milestone_ids.len() > MAX_CLAIM_BATCH_SIZE {
+            return Err(Error::BatchTooLarge);
+        }
+
+        // Verify the quest exists and is funded. A quest with no authority
+        // has never been funded, so reject early (avoids wasted cross-contract
+        // calls for milestones on non-existent or unfunded quests).
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let _authority: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::MilestoneContractNotInitialized)?;
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+
+        let pool_key = DataKey::QuestPool(quest_id);
+        let token_addr = Self::get_token(&env)?;
+        let token_client = token::Client::new(&env, &token_addr);
+
+        let mut total_claimed: i128 = 0;
+        let mut amounts: Vec<i128> = Vec::new(&env);
+        // Track seen milestone IDs to prevent double-payment when the
+        // caller supplies the same milestone multiple times in the batch.
+        let mut seen_ids: Vec<u32> = Vec::new(&env);
+
+        // Phase 1: Validate all milestones before making any state changes.
+        for ms_id in milestone_ids.iter() {
+            // Deduplicate: reject duplicate milestone IDs in a single batch.
+            // Without this check, the same milestone would pass the
+            // PayoutRecord check twice (since Phase 1 never writes), leading
+            // to two token transfers for the same milestone.
+            if seen_ids.contains(&ms_id) {
+                return Err(Error::InvalidInput);
+            }
+            seen_ids.push_back(ms_id);
+
+            // Verify the claimant completed this milestone.
+            // This cross-contract call is the core security check:
+            // it ensures the claimant cannot claim rewards for milestones
+            // they didn't complete.
+            let completed =
+                milestone_client.is_completed(&quest_id, &ms_id, &claimant);
+            if !completed {
+                return Err(Error::MilestoneNotCompleted);
+            }
+
+            // Verify this payout hasn't already been made (idempotency).
+            let payout_key =
+                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            if env.storage().persistent().has(&payout_key) {
+                return Err(Error::AlreadyPaid);
+            }
+
+            // Resolve reward amount from the milestone contract.
+            // A non-existent milestone returns NotFound (distinct from
+            // RewardAmountMismatch which is reserved for amount mismatches).
+            let amount = match milestone_client
+                .try_get_milestone_reward(&quest_id, &ms_id)
+            {
+                Ok(Ok(a)) if a > 0 && a <= MAX_REWARD_AMOUNT => a,
+                Ok(Ok(_)) => return Err(Error::InvalidAmount),
+                Ok(Err(_)) | Err(_) => return Err(Error::NotFound),
+            };
+
+            amounts.push_back(amount);
+            total_claimed = total_claimed
+                .checked_add(amount)
+                .ok_or(Error::ArithmeticOverflow)?;
+        }
+
+        // Verify pool has sufficient balance for the entire batch.
+        let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
+        if pool < total_claimed {
+            return Err(Error::InsufficientPool);
+        }
+
+        // Phase 2: Process all claims. Since we validated everything above,
+        // the only failure modes here are arithmetic overflow (which would
+        // panic-revert the whole transaction) and token transfer failure.
+        let mut running_pool = pool;
+        for i in 0..milestone_ids.len() {
+            let ms_id = milestone_ids.get(i).unwrap();
+            let amount = amounts.get(i).unwrap();
+
+            // Record payout for idempotency BEFORE the token transfer.
+            let payout_key =
+                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            env.storage().persistent().set(&payout_key, &amount);
+            common::extend_persistent_ttl(&env, &payout_key);
+
+            // Deduct from pool (in-memory tracking).
+            running_pool = running_pool
+                .checked_sub(amount)
+                .ok_or(Error::ArithmeticOverflow)?;
+
+            // Transfer tokens to claimant.
+            token_client.transfer(
+                &env.current_contract_address(),
+                &claimant,
+                &amount,
+            );
+
+            // Emit reward distribution event.
+            common::emit_reward_distributed(
+                &env,
+                quest_id,
+                ms_id,
+                &claimant,
+                amount,
+            );
+        }
+
+        // Commit the final pool balance.
+        env.storage().persistent().set(&pool_key, &running_pool);
+        env.storage()
+            .persistent()
+            .extend_ttl(&pool_key, THRESHOLD, BUMP);
+
+        // Track user earnings.
+        let earn_key = DataKey::UserEarnings(claimant.clone());
+        let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
+        let new_earned = earned
+            .checked_add(total_claimed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&earn_key, &new_earned);
+        common::extend_persistent_ttl(&env, &earn_key);
+
+        // Update global total.
+        let total: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDistributed)
+            .unwrap_or(0);
+        let new_total = total
+            .checked_add(total_claimed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &new_total);
+
+        // Update quest-specific total distributed.
+        let q_dist_key = DataKey::QuestDistributed(quest_id);
+        let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
+        let q_new = q_total
+            .checked_add(total_claimed)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&q_dist_key, &q_new);
+        common::extend_persistent_ttl(&env, &q_dist_key);
+
+        extend_instance_ttl(&env);
+
+        Ok(total_claimed)
+    }
+
     /// Withdraw unallocated tokens from a quest's reward pool back to the authority.
     /// The quest must be archived before funds can be withdrawn to prevent withdrawing
     /// from an active quest that still has pending milestones.
@@ -630,6 +824,10 @@ impl RewardsContract {
             .persistent()
             .get(&DataKey::UserEarnings(user))
             .unwrap_or(0)
+    }
+
+    pub fn get_user_total(env: Env, user: Address) -> i128 {
+        Self::get_user_earnings(env, user)
     }
 
     /// Get global total distributed.

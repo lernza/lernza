@@ -3,18 +3,16 @@ name: PR Checks
 # Enforce semantic PR titles and linked issues
 # Closes #958
 #
-# pull_request_target runs in the BASE repo context, so GITHUB_TOKEN
-# has write access even when the PR comes from a fork.
-# SAFETY: This workflow only reads PR metadata (title, labels, body)
-# and applies labels — it never checks out or executes fork code.
+# pull_request runs with limited token/secret access, safely
+# checking out forked PR code for tests, lints, and builds.
 on:
-  pull_request_target:
+  pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}

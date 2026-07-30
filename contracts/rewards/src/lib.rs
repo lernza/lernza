@@ -632,6 +632,10 @@ impl RewardsContract {
             .unwrap_or(0)
     }
 
+    pub fn get_user_total(env: Env, user: Address) -> i128 {
+        Self::get_user_earnings(env, user)
+    }
+
     /// Get global total distributed.
     pub fn get_total_distributed(env: Env) -> i128 {
         env.storage()

@@ -177,6 +177,35 @@ fn test_happy_path_full_lifecycle() {
     assert_eq!(ctx.rewards().get_total_distributed(), 500);
 }
 
+#[test]
+fn test_get_user_total_excludes_unpaid_rewards() {
+    let ctx = QuestSystemTest::setup();
+    let owner = Address::generate(&ctx.env);
+    let enrollee = Address::generate(&ctx.env);
+
+    ctx.mint_tokens(&owner, &10_000);
+
+    let q_id = ctx.create_quest(&owner);
+    ctx.quest().add_enrollee(&q_id, &enrollee);
+    ctx.rewards().fund_quest(&owner, &q_id, &5_000);
+
+    let ms_id = ctx.create_milestone(&owner, q_id, "Milestone", 500);
+    ctx.milestone()
+        .verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    let progress = ctx
+        .milestone()
+        .get_enrollee_progress(&q_id, &enrollee, &0, &100);
+    assert_eq!(progress.total_earned, 500);
+
+    assert_eq!(ctx.rewards().get_user_total(&enrollee), 0);
+
+    ctx.rewards()
+        .distribute_reward(&owner, &q_id, &ms_id, &enrollee, &500);
+
+    assert_eq!(ctx.rewards().get_user_total(&enrollee), 500);
+}
+
 /// 2. Certificate auto-mint — completing all milestones triggers the
 ///    milestone→certificate cross-contract call.
 ///

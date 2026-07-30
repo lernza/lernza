@@ -1,5 +1,7 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, Address, Env, String, Vec};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events, vec, Address, Env, IntoVal, String, Val, Vec,
+};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -1699,6 +1701,65 @@ fn test_set_distribution_mode_emits_event() {
     assert!(
         after.len() > 0,
         "set_distribution_mode should publish a distribution_mode_set event"
+    );
+}
+
+// --- set_verification_mode emits event (issue #1268) ---
+
+/// The last event published, as a single-element Vec for comparison.
+fn last_event(env: &Env) -> Vec<(Address, Vec<Val>, Val)> {
+    let all = env.events().all();
+    assert!(all.len() > 0, "expected at least one published event");
+    all.slice(all.len() - 1..)
+}
+
+#[test]
+fn test_set_verification_mode_emits_event() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mode = VerificationMode::PeerReview(2);
+    client.set_verification_mode(&owner, &q_id, &mode);
+
+    assert_eq!(
+        last_event(&env),
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (Symbol::new(&env, "verification_mode_set"),).into_val(&env),
+                (q_id, mode, owner.clone(), env.ledger().timestamp()).into_val(&env),
+            ),
+        ],
+        "set_verification_mode should publish a verification_mode_set event"
+    );
+}
+
+#[test]
+fn test_set_verification_mode_owner_only_emits_event() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Switching back to owner-only must be visible to indexers too.
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::OwnerOnly);
+
+    assert_eq!(
+        last_event(&env),
+        vec![
+            &env,
+            (
+                client.address.clone(),
+                (Symbol::new(&env, "verification_mode_set"),).into_val(&env),
+                (
+                    q_id,
+                    VerificationMode::OwnerOnly,
+                    owner.clone(),
+                    env.ledger().timestamp()
+                )
+                    .into_val(&env),
+            ),
+        ]
     );
 }
 

@@ -90,6 +90,7 @@ pub enum DistributionMode {
     Custom,           // per-milestone reward_amount (default)
     Flat,             // equal reward for all milestones
     Competitive(u32), // max_winners: first N completers rewarded; rest get 0
+    Percentage(u32),  // percent (1..=100) of milestone.reward_amount, rounded to nearest
 }
 
 #[contracttype]
@@ -527,6 +528,10 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
 
+        if matches!(mode, DistributionMode::Percentage(p) if p == 0 || p > 100) {
+            return Err(Error::InvalidInput);
+        }
+
         let mode_key = DataKey::Mode(quest_id);
         env.storage().persistent().set(&mode_key, &mode);
         env.storage()
@@ -696,6 +701,16 @@ impl MilestoneContract {
                 .persistent()
                 .get(&DataKey::FlatReward(quest_id))
                 .ok_or(Error::FlatRewardNotConfigured)?,
+            DistributionMode::Percentage(pct) => {
+                // Compute reward = round(milestone.reward_amount * pct / 100)
+                let pct_i: i128 = pct as i128;
+                let prod = milestone
+                    .reward_amount
+                    .checked_mul(pct_i)
+                    .ok_or(Error::Overflow)?;
+                let with_round = prod.checked_add(50).ok_or(Error::Overflow)?; // round to nearest
+                with_round / 100
+            }
             DistributionMode::Competitive(max_winners) => {
                 let cnt_key = DataKey::MilestoneCompletionTotal(quest_id, milestone_id);
                 let cnt: u32 = env.storage().persistent().get(&cnt_key).unwrap_or(0);
@@ -1049,6 +1064,15 @@ impl MilestoneContract {
                         return Err(Error::FlatRewardNotConfigured);
                     }
                     snapshot.flat_reward
+                }
+                DistributionMode::Percentage(pct) => {
+                    let pct_i: i128 = pct as i128;
+                    let prod = snapshot
+                        .reward_amount
+                        .checked_mul(pct_i)
+                        .ok_or(Error::Overflow)?;
+                    let with_round = prod.checked_add(50).ok_or(Error::Overflow)?;
+                    with_round / 100
                 }
                 DistributionMode::Competitive(max_winners) => {
                     let cnt_key = DataKey::MilestoneCompletionTotal(quest_id, milestone_id);

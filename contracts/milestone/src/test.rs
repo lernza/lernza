@@ -636,6 +636,16 @@ fn test_mode_cannot_change_after_milestones_exist() {
 }
 
 #[test]
+fn test_same_distribution_mode_can_be_reapplied_after_milestones_exist() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
+    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+}
+
+#[test]
 fn test_flat_mode_with_zero_enrollees() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

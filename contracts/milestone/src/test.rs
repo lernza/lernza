@@ -367,6 +367,31 @@ fn test_get_distribution_mode_and_flat_reward_after_set() {
 }
 
 #[test]
+fn test_percentage_mode_rounding_to_nearest() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
+    create_ms(&env, &client, &owner, q_id, "Task", 101);
+
+    // Set Percentage mode to 75%
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Percentage(75), &0);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 75% of 101 = 75.75 -> rounded to nearest = 76
+    assert_eq!(client.verify_completion(&owner, &q_id, &0, &enrollee), 76);
+
+    // Now test exact case: 100 * 75% = 75
+    let q2 = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q2, "Task2", 100);
+    client.set_distribution_mode(&owner, &q2, &DistributionMode::Percentage(75), &0);
+    let e2 = Address::generate(&env);
+    quest_client.add_enrollee(&q2, &e2);
+    assert_eq!(client.verify_completion(&owner, &q2, &0, &e2), 75);
+}
+
+#[test]
 fn test_custom_mode_uses_per_milestone_amounts() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

@@ -10,6 +10,7 @@ use soroban_sdk::{
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
+    fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, soroban_sdk::Val>;
 }
 
 #[contractclient(name = "MilestoneClient")]
@@ -93,6 +94,8 @@ pub enum Error {
     /// Contract is administratively paused (shared code 400).
     Paused = common::ERR_PAUSED as u32,
     BatchTooLarge = 17,
+    /// Reward recipient is no longer an active participant in the quest (issue #1325).
+    RecipientNotEnrolled = 18,
 }
 
 // TTL constants moved to common.
@@ -363,6 +366,23 @@ impl RewardsContract {
             return Err(Error::Unauthorized);
         }
 
+        // Issue #1325: Verify the recipient is still an active participant.
+        // A user who was removed or left the quest after completing a milestone
+        // must not receive a reward payout.
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let is_active = quest_client
+            .try_is_enrollee(&quest_id, &enrollee)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false);
+        if !is_active {
+            return Err(Error::RecipientNotEnrolled);
+        }
+
         // Verify milestone completion before allowing reward distribution
         let milestone_contract_addr = env
             .storage()
@@ -509,6 +529,23 @@ impl RewardsContract {
             .persistent()
             .get::<DataKey, Address>(&auth_key)
             .ok_or(Error::QuestNotFunded)?;
+
+        // Issue #1325: Verify the claimant is still an active participant.
+        // A user who was removed or left the quest after completing milestones
+        // must not be able to self-claim rewards.
+        let quest_contract_addr_cb = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client_cb = QuestClient::new(&env, &quest_contract_addr_cb);
+        let claimant_active = quest_client_cb
+            .try_is_enrollee(&quest_id, &claimant)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false);
+        if !claimant_active {
+            return Err(Error::RecipientNotEnrolled);
+        }
 
         let milestone_contract_addr = env
             .storage()

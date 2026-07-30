@@ -76,23 +76,44 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
           ])
         : [[], []]
 
-      const accessibleQuests = Array.from(
-        new Map(
-          [...publicQuests, ...ownedQuests, ...enrolledQuests].map(
-            quest => [quest.id, quest] as const
-          )
-        ).values()
+      const allQuests = [...publicQuests, ...ownedQuests, ...enrolledQuests]
+      if (allQuests.length === 0) {
+        console.warn("[Dashboard] No quests loaded from any source")
+      }
+
+      const questMap = new Map(allQuests.map(quest => [quest.id, quest] as const))
+
+      if (questMap.size < allQuests.length) {
+        console.warn(
+          `[Dashboard] Deduplication lost ${allQuests.length - questMap.size} quest(s)`,
+          { before: allQuests.length, after: questMap.size }
+        )
+      }
+
+      const accessibleQuests = Array.from(questMap.values())
+
+      const previewAllQuests = [
+        ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+        ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+        ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
+      ]
+
+      if (previewAllQuests.length === 0) {
+        console.warn("[Dashboard] No preview quests loaded from any source")
+      }
+
+      const previewQuestMap = new Map(
+        previewAllQuests.map(quest => [quest.id, quest] as const)
       )
 
-      const previewQuests = Array.from(
-        new Map(
-          [
-            ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-            ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-          ].map(quest => [quest.id, quest] as const)
-        ).values()
-      )
+      if (previewQuestMap.size < previewAllQuests.length) {
+        console.warn(
+          `[Dashboard] Preview deduplication lost ${previewAllQuests.length - previewQuestMap.size} quest(s)`,
+          { before: previewAllQuests.length, after: previewQuestMap.size }
+        )
+      }
+
+      const previewQuests = Array.from(previewQuestMap.values())
 
       let questCompletions: Record<number, number> = {}
       let userEarnings = 0n

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect } from "vitest"
 import {
   localDateTimeToUTC,
   utcToLocalDateTime,
@@ -11,9 +11,6 @@ describe("date-utils", () => {
   describe("localDateTimeToUTC", () => {
     it("converts local datetime string to UTC timestamp", () => {
       // Mock a specific timezone offset (UTC+0 for simplicity)
-      const mockDate = new Date("2026-07-30T15:30:00Z")
-      const timestamp = Math.floor(mockDate.getTime() / 1000)
-      
       const result = localDateTimeToUTC("2026-07-30T15:30")
       expect(typeof result).toBe("number")
       expect(result).toBeGreaterThan(0)
@@ -28,7 +25,7 @@ describe("date-utils", () => {
     it("converts UTC timestamp to local datetime string", () => {
       const timestamp = Math.floor(new Date("2026-07-30T15:30:00Z").getTime() / 1000)
       const result = utcToLocalDateTime(timestamp)
-      
+
       expect(result).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
     })
 
@@ -52,7 +49,7 @@ describe("date-utils", () => {
     it("formats timestamp for display", () => {
       const timestamp = Math.floor(new Date("2026-07-30T15:30:00Z").getTime() / 1000)
       const result = formatUTCTimestamp(timestamp)
-      
+
       expect(result).toBeTruthy()
       expect(result).not.toBe("No deadline")
     })
@@ -78,7 +75,7 @@ describe("date-utils", () => {
       const originalTimestamp = Math.floor(new Date("2026-07-30T15:30:00Z").getTime() / 1000)
       const localString = utcToLocalDateTime(originalTimestamp)
       const backToUTC = localDateTimeToUTC(localString)
-      
+
       // Allow 60 second tolerance for timezone/rounding differences
       expect(Math.abs(backToUTC - originalTimestamp)).toBeLessThanOrEqual(60)
     })

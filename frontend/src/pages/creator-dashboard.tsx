@@ -43,7 +43,7 @@ export function CreatorDashboard() {
 
           // Estimate distributed amount based on milestone rewards
           const totalMilestoneRewards = milestones.reduce(
-            (sum, m) => sum + BigInt(m.reward_amount || 0),
+            (sum, m) => sum + BigInt(m.rewardAmount || 0),
             0n
           )
           const estimatedDistributed =
@@ -122,7 +122,11 @@ export function CreatorDashboard() {
               <RefreshCw className="h-4 w-4" />
               Refresh
             </Button>
-            <Button size="sm" className="shimmer-on-hover" onClick={() => navigateToPath("/create-quest")}>
+            <Button
+              size="sm"
+              className="shimmer-on-hover"
+              onClick={() => navigateToPath("/create-quest")}
+            >
               <Plus className="h-4 w-4" />
               Create Quest
             </Button>

@@ -719,7 +719,7 @@ impl MilestoneContract {
             .get(&DataKey::Mode(quest_id))
             .unwrap_or(DistributionMode::Custom);
 
-        let reward = match mode {
+        let reward = match mode.clone() {
             DistributionMode::Custom => milestone.reward_amount,
             DistributionMode::Flat => env
                 .storage()
@@ -782,10 +782,15 @@ impl MilestoneContract {
 
         // Emit milestone completion event
         // Event topics: (milestone_completed,)
-        // Event data: (quest_id, milestone_id, enrollee)
+        // Event data: (quest_id, milestone_id, enrollee, reward, distribution_mode)
+        //
+        // `reward` is the token amount awarded for this milestone under the
+        // active distribution mode.  `distribution_mode` lets indexers and
+        // auditors reconstruct the reward rules without a separate storage
+        // lookup — critical for historical replay if the mode changes later.
         env.events().publish(
             (Symbol::new(&env, "milestone_completed"),),
-            (quest_id, milestone_id, enrollee.clone()),
+            (quest_id, milestone_id, enrollee.clone(), reward, mode),
         );
 
         Ok(reward)
@@ -979,7 +984,7 @@ impl MilestoneContract {
             .get(&DataKey::VerificationMode(quest_id))
             .unwrap_or(VerificationMode::OwnerOnly);
 
-        let required_approvals = match verification_mode {
+        let required_approvals = match verification_mode.clone() {
             VerificationMode::PeerReview(approvals) => approvals,
             VerificationMode::OwnerOnly => return Err(Error::Unauthorized),
         };
@@ -1116,10 +1121,24 @@ impl MilestoneContract {
 
             // Emit peer approval completion event
             // Event topics: (peer_approved,)
-            // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount)
+            // Event data: (milestone_id, quest_id, enrollee, peer, reward,
+            //              verification_mode, approval_count)
+            //
+            // `verification_mode` captures the PeerReview(n) threshold that
+            // was in effect, and `new_approvals` records how many approvals
+            // were accumulated — giving indexers the full approval context
+            // without additional storage reads.
             env.events().publish(
                 (Symbol::new(&env, "peer_approved"),),
-                (milestone_id, quest_id, enrollee.clone(), peer, reward),
+                (
+                    milestone_id,
+                    quest_id,
+                    enrollee.clone(),
+                    peer,
+                    reward,
+                    verification_mode,
+                    new_approvals,
+                ),
             );
 
             Ok(Some(reward))

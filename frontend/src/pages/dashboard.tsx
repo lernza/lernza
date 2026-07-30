@@ -11,6 +11,7 @@ import {
   Loader2,
   Search,
   X,
+  BookOpen,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,9 +45,11 @@ const RECENT_ACTIVITY_LIMIT = 5
 interface DashboardProps {
   onSelectQuest?: (id: number) => void
   onCreateQuest?: () => void
+  /** Optional callback to open the onboarding tutorial */
+  onLaunchTutorial?: () => void
 }
 
-export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} as DashboardProps) {
+export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps) {
   const { connected, connect, shortAddress, address, loading: walletConnecting } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<
@@ -395,6 +398,18 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
             <Plus className="h-4 w-4" />
             Create quest
           </Button>
+          {onLaunchTutorial && (
+            <Button
+              variant="outline"
+              onClick={onLaunchTutorial}
+              data-onboarding="tutorial-button"
+              className="flex-shrink-0 flex items-center gap-2"
+              aria-label="Open getting started tutorial"
+            >
+              <BookOpen className="h-4 w-4" aria-hidden="true" />
+              Take the tour
+            </Button>
+          )}
         </div>
       </div>
 

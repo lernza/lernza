@@ -10,7 +10,14 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 export function formatTokens(amount: number | bigint, decimals = 7, symbol = "TOKEN"): string {
-  const adjusted = Number(amount) / Math.pow(10, decimals)
+  const numAmount = Number(amount)
+
+  if (numAmount < 0) {
+    console.error("[formatTokens] Negative amount encountered:", amount)
+    return `ERROR: Negative ${symbol}`
+  }
+
+  const adjusted = numAmount / Math.pow(10, decimals)
 
   if (adjusted >= 1_000_000) {
     return `${(adjusted / 1_000_000).toFixed(1)}M ${symbol}`

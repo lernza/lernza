@@ -1,7 +1,7 @@
 name: Auto Review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
@@ -23,10 +23,20 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Detect forked PR
+        id: detect_fork
+        run: |
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "is_fork=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Gather PR context
+        if: steps.detect_fork.outputs.is_fork == 'false'
         id: ctx
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
           PR_DATA=$(gh pr view "$PR_NUM" --json title,body,author,changedFiles,additions,deletions)
@@ -74,9 +84,14 @@ jobs:
           fi
           [ -s /tmp/issues-context.txt ] || echo "(No linked issue)" > /tmp/issues-context.txt
 
+      - name: Note for forked PRs
+        if: steps.detect_fork.outputs.is_fork == 'true'
+        run: |
+          echo "PR originates from a fork. Skipping automated review — repository secrets and elevated tokens are unavailable for forked PRs. A maintainer will review manually."
+
       # Empty diff: leave a kind nudge, then stop. No closing, ever.
       - name: Gentle nudge on empty diff
-        if: steps.ctx.outputs.is_empty == 'true'
+        if: steps.detect_fork.outputs.is_fork == 'false' && steps.ctx.outputs.is_empty == 'true'
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
           PR_NUM: ${{ github.event.pull_request.number }}
@@ -84,7 +99,7 @@ jobs:
           gh pr comment "$PR_NUM" --body "Hey! I don't see any code changes in this PR yet. If you still need to push your commits, go ahead and they'll show up here automatically. I'll take another look once they land."
 
       - name: AI review (Groq gpt-oss-120b)
-        if: steps.ctx.outputs.is_empty != 'true'
+        if: steps.detect_fork.outputs.is_fork == 'false' && steps.ctx.outputs.is_empty != 'true'
         id: review
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -213,7 +228,7 @@ jobs:
 
       # The only actions: approve + merge, or a friendly comment. Never close, never block.
       - name: Approve and merge, or comment
-        if: steps.ctx.outputs.is_empty != 'true'
+        if: steps.detect_fork.outputs.is_fork == 'false' && steps.ctx.outputs.is_empty != 'true'
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
           PR_NUM: ${{ github.event.pull_request.number }}

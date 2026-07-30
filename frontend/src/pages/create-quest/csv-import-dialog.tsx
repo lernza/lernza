@@ -19,24 +19,50 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
 
   if (!isOpen) return null
 
-  const handleFileSelect = (selectedFile: File) => {
-    if (!selectedFile.name.endsWith(".csv")) {
-      setParseResult({
-        milestones: [],
-        errors: [{ row: 0, field: "file", message: "Only .csv files are supported" }],
-      })
-      return
-    }
+const handleFileSelect = (selectedFile: File) => {
+  const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2 MB
 
-    setFile(selectedFile)
-    const reader = new FileReader()
-    reader.onload = e => {
-      const text = e.target?.result as string
-      const result = parseCsvMilestones(text || "")
-      setParseResult(result)
-    }
-    reader.readAsText(selectedFile)
+  if (selectedFile.size > MAX_FILE_SIZE) {
+    setFile(null)
+    setParseResult({
+      milestones: [],
+      errors: [
+        {
+          row: 0,
+          field: "file",
+          message: "File size must be 2 MB or smaller.",
+        },
+      ],
+    })
+    return
   }
+
+  if (!selectedFile.name.endsWith(".csv")) {
+    setFile(null)
+    setParseResult({
+      milestones: [],
+      errors: [
+        {
+          row: 0,
+          field: "file",
+          message: "Only .csv files are supported.",
+        },
+      ],
+    })
+    return
+  }
+
+  setFile(selectedFile)
+
+  const reader = new FileReader()
+  reader.onload = e => {
+    const text = e.target?.result as string
+    const result = parseCsvMilestones(text || "")
+    setParseResult(result)
+  }
+
+  reader.readAsText(selectedFile)
+}
 
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files

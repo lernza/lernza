@@ -405,7 +405,11 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
                   <LayoutDashboard className="h-5 w-5" /> Your Quests
                 </h2>
-                <div className="border-border flex gap-0 border shadow-md" role="group" aria-label="Quest filter">
+                <div
+                  className="border-border flex gap-0 border shadow-md"
+                  role="group"
+                  aria-label="Quest filter"
+                >
                   {(["all", "owned", "enrolled"] as const).map(f => (
                     <button
                       key={f}
@@ -429,7 +433,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest }: DashboardProps = {} 
                     type="text"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Search quests by name, description, or tag"
+                    placeholder="Search quests by name, description, category, or tag"
                     aria-label="Search quests"
                     className="border-border bg-background w-full border py-2.5 pr-9 pl-9 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none"
                   />

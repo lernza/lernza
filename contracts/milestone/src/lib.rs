@@ -532,6 +532,20 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
 
+        // Prevent reward-type changes once milestones exist. Reapplying the
+        // same mode is treated as a no-op and remains allowed.
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let current_mode: DistributionMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom);
+        if env.storage().persistent().get(&count_key).unwrap_or(0u32) > 0
+            && current_mode != mode
+        {
+            return Err(Error::InvalidInput);
+        }
+
         let mode_key = DataKey::Mode(quest_id);
         env.storage().persistent().set(&mode_key, &mode);
         env.storage()

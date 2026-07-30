@@ -501,6 +501,16 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&mode_key, THRESHOLD, BUMP);
 
+        // Emit a verification-mode-set event so indexers and frontends can
+        // detect when a quest switches between owner-only and peer review,
+        // mirroring `set_distribution_mode`. See issue #1268.
+        // Topic: ("verification_mode_set",)
+        // Data: (quest_id, mode, actor, timestamp)
+        env.events().publish(
+            (Symbol::new(&env, "verification_mode_set"),),
+            (quest_id, mode, owner, env.ledger().timestamp()),
+        );
+
         Ok(())
     }
 

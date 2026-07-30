@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect } from "@playwright/test"
+import { mockWallet } from "./helpers/mock-wallet"
 
 /**
  * The TransactionConfirmDialog is rendered inside the quest page when a
@@ -11,32 +12,8 @@ import { test, expect, type Page } from "@playwright/test"
  * verifying the ARIA attributes, focus-trap, and ESC-to-close behaviour.
  */
 
-async function mockWallet(page: Page) {
-  await page.addInitScript(() => {
-    const mockAddress = "GBMOCKADDRESS123STELLAR456WALLET789ABCDEFGH"
-    const stub = {
-      isConnected: () => Promise.resolve(true),
-      getAddress: () => Promise.resolve({ address: mockAddress }),
-      getNetwork: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      getNetworkDetails: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      requestAccess: () => Promise.resolve({ address: mockAddress }),
-      signTransaction: (xdr: string) => Promise.resolve({ signedTxXdr: xdr }),
-    }
-    Object.defineProperty(window, "freighter", { value: stub, writable: true })
-    Object.defineProperty(window, "freighterApi", { value: stub, writable: true })
-  })
-}
-
 /** Inject a mounted TransactionConfirmDialog into the page via a script tag. */
-async function openDialogViaInjection(page: Page) {
+async function openDialogViaInjection(page: import("@playwright/test").Page) {
   await page.evaluate(() => {
     // Find the React root and dispatch a custom event that the app can listen to,
     // or directly manipulate the DOM to simulate the dialog being open.

@@ -1,35 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
-
-/**
- * Stub window.freighter so the @stellar/freighter-api SDK sees a connected wallet.
- * This must run before any page scripts via addInitScript.
- */
-async function mockWallet(page: Page) {
-  await page.addInitScript(() => {
-    const mockAddress = "GBMOCKADDRESS123STELLAR456WALLET789ABCDEFGH"
-
-    const stub = {
-      isConnected: () => Promise.resolve(true),
-      getAddress: () => Promise.resolve({ address: mockAddress }),
-      getNetwork: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      getNetworkDetails: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      requestAccess: () => Promise.resolve({ address: mockAddress }),
-      signTransaction: (xdr: string) => Promise.resolve({ signedTxXdr: xdr }),
-    }
-
-    Object.defineProperty(window, "freighter", { value: stub, writable: true })
-    // Some versions of @stellar/freighter-api read from window.freighterApi
-    Object.defineProperty(window, "freighterApi", { value: stub, writable: true })
-  })
-}
+import { test, expect } from "@playwright/test"
+import { mockWallet } from "./helpers/mock-wallet"
 
 test.describe("Create Quest wizard — wallet not connected", () => {
   test.beforeEach(async ({ page }) => {

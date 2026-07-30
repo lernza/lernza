@@ -145,11 +145,25 @@ describe("Dashboard quest search, category filter, and sort", () => {
     } as unknown as ReturnType<typeof useWallet>)
   })
 
-  it("filters quests by search text across name, description, and tags", async () => {
+  it("filters quests by search text across name, description, category, and tags", async () => {
     const { container } = render(<Dashboard />)
 
     const search = await screen.findByPlaceholderText(/search quests/i)
     fireEvent.change(search, { target: { value: "soroban" } })
+
+    const grid = getQuestGrid(container)
+    expect(await within(grid).findByText("Advanced Soroban")).toBeInTheDocument()
+    expect(within(grid).queryByText("Rust Basics")).not.toBeInTheDocument()
+    expect(within(grid).queryByText("Design Fundamentals")).not.toBeInTheDocument()
+  })
+
+  it("finds quests by searching category name even when name and tags do not match", async () => {
+    const { container } = render(<Dashboard />)
+
+    const search = await screen.findByPlaceholderText(/search quests/i)
+    // "Blockchain" only appears in the category field of "Advanced Soroban",
+    // not in its name, description, or tags.
+    fireEvent.change(search, { target: { value: "blockchain" } })
 
     const grid = getQuestGrid(container)
     expect(await within(grid).findByText("Advanced Soroban")).toBeInTheDocument()

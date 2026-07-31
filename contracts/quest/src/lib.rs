@@ -413,9 +413,15 @@ impl QuestContract {
         }
         // Emit quest creation event
         // Event topics: (quest_created,)
-        // Event data: (quest_id, owner, name)
+        // Event data: (quest_id, owner, name, created_at)
         // Emit quest creation event via shared helper for consistent schema
-        common::emit_quest_created(&env, id, &quest.owner.clone(), &quest.name.clone());
+        common::emit_quest_created(
+            &env,
+            id,
+            &quest.owner.clone(),
+            &quest.name.clone(),
+            quest.created_at,
+        );
 
         Self::bump(&env, id);
         Ok(id)

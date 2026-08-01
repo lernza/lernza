@@ -62,7 +62,20 @@ export function useTransactionTimebounds(tx: Transaction | null) {
     // Check every 10 seconds to catch expiring transactions
     const interval = setInterval(checkTimebounds, 10000)
 
-    return () => clearInterval(interval)
+    // Re-sync immediately when the tab becomes visible again so the status is
+    // never stale after the browser throttled or paused the interval.
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkTimebounds()
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
+    }
   }, [checkTimebounds])
 
   return status

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2, Circle, Lock, Sparkles, Clock, Coins } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useDeadlineCountdown } from "@/hooks/use-deadline-countdown"
 
 interface Milestone {
   id: number
@@ -27,8 +28,7 @@ function getMilestoneState(index: number, milestones: Milestone[]): MilestoneSta
   return "locked"
 }
 
-// Precompute at module load: Math.random() and Date.now() must not be called during render
-const MODULE_NOW = Date.now()
+// Precompute at module load: Math.random() must not be called during render
 const CONFETTI_COUNT = 20
 const confettiStyles = Array.from({ length: CONFETTI_COUNT }, () => ({
   left: `${Math.random() * 100}%`,
@@ -61,11 +61,8 @@ export function QuestProgressTracker({
     }
   }, [isComplete])
 
-  const timeRemaining = useMemo(
-    () => (deadline ? Math.max(0, deadline - MODULE_NOW / 1000) : null),
-    [deadline]
-  )
-  const daysRemaining = timeRemaining ? Math.ceil(timeRemaining / 86400) : null
+  const secondsLeft = useDeadlineCountdown(deadline)
+  const daysRemaining = secondsLeft !== null ? Math.ceil(secondsLeft / 86400) : null
 
   return (
     <div className={cn("relative", className)}>

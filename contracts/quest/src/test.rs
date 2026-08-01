@@ -492,6 +492,108 @@ fn test_get_quests_by_category_only_public() {
     assert_eq!(res.len(), 2);
 }
 
+/// #1328 — when the category index TTL expires (entry removed), child quests
+/// must still be discoverable: `get_quests_by_category` rebuilds the index
+/// from `PublicQuests` instead of returning an empty orphaned list.
+#[test]
+fn test_get_quests_by_category_rebuilds_after_index_expiry() {
+    let (env, client, owner, token) = setup();
+    let category = "Blockchain";
+    let id_a = create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        category,
+        Vec::new(&env),
+        Visibility::Public,
+    );
+    let id_b = create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        category,
+        Vec::new(&env),
+        Visibility::Public,
+    );
+
+    let category_key = DataKey::PublicCategoryQuests(String::from_str(&env, category));
+    // Simulate TTL expiry of the category index entry.
+    env.as_contract(&client.address, || {
+        env.storage().persistent().remove(&category_key);
+    });
+    assert!(
+        !env.as_contract(&client.address, || {
+            env.storage().persistent().has(&category_key)
+        }),
+        "category index should be gone after simulated expiry"
+    );
+
+    let res = client.get_quests_by_category(&String::from_str(&env, category));
+    assert_eq!(res.len(), 2);
+    let returned_ids: Vec<u32> = (0..res.len()).map(|i| res.get(i).unwrap().id).collect();
+    assert!(returned_ids.contains(&id_a));
+    assert!(returned_ids.contains(&id_b));
+
+    // Index should have been rewritten.
+    assert!(env.as_contract(&client.address, || {
+        env.storage().persistent().has(&category_key)
+    }));
+}
+
+/// #1328 — mutating a public quest (via bump) re-attaches it to the category
+/// index if that index has expired, so quests do not stay orphaned.
+#[test]
+fn test_bump_reindexes_quest_after_category_index_expiry() {
+    let (env, client, owner, token) = setup();
+    let category = "Design";
+    let quest_id = create_quest_with_category_and_tags(
+        &env,
+        &client,
+        &owner,
+        &token,
+        category,
+        Vec::new(&env),
+        Visibility::Public,
+    );
+
+    let category_key = DataKey::PublicCategoryQuests(String::from_str(&env, category));
+    env.as_contract(&client.address, || {
+        env.storage().persistent().remove(&category_key);
+    });
+
+    // Any mutating owner call ends in bump(); update_quest is a convenient one.
+    client.update_quest(
+        &quest_id,
+        &owner,
+        &None,
+        &Some(String::from_str(
+            &env,
+            "Updated description for TTL cascade",
+        )),
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+
+    assert!(env.as_contract(&client.address, || {
+        env.storage().persistent().has(&category_key)
+    }));
+    let indexed: Vec<u32> = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&category_key)
+            .unwrap_or(Vec::new(&env))
+    });
+    assert!(indexed.contains(quest_id));
+
+    let res = client.get_quests_by_category(&String::from_str(&env, category));
+    assert_eq!(res.len(), 1);
+    assert_eq!(res.get(0).unwrap().id, quest_id);
+}
+
 #[test]
 fn test_list_public_quests_empty() {
     let (_env, client, _owner, _token) = setup();

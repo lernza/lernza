@@ -158,11 +158,11 @@ pub struct PendingSubmissionSnapshot {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     AlreadyCompleted = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     InvalidAmount = 6,
@@ -186,7 +186,7 @@ pub enum Error {
     /// Submission or verification is rejected because the quest deadline has passed.
     DeadlineExpired = 21,
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 // Certificate client interface for cross-contract calls
@@ -551,9 +551,7 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::Mode(quest_id))
             .unwrap_or(DistributionMode::Custom);
-        if env.storage().persistent().get(&count_key).unwrap_or(0u32) > 0
-            && current_mode != mode
-        {
+        if env.storage().persistent().get(&count_key).unwrap_or(0u32) > 0 && current_mode != mode {
             return Err(Error::InvalidInput);
         }
 
@@ -823,6 +821,8 @@ impl MilestoneContract {
             .persistent()
             .get(&ms_key)
             .ok_or(Error::NotFound)?;
+
+        Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
 
         // Check if already completed
         let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
@@ -1362,42 +1362,6 @@ impl MilestoneContract {
         } else {
             Ok(())
         }
-    }
-
-    /// Get quest info and verify ownership in a single call.
-    /// This caches the result to avoid redundant cross-contract calls within the same transaction.
-    ///
-    /// Returns the QuestInfo if the caller is the owner, or an error otherwise.
-    ///
-    /// # Usage
-    /// When a function needs both ownership verification and quest data:
-    /// ```ignore
-    /// let quest = Self::get_quest_and_verify_owner(&env, quest_id, &owner)?;
-    /// // Now reuse quest_info for all subsequent operations
-    /// ```
-    fn get_quest_and_verify_owner(
-        env: &Env,
-        quest_id: u32,
-        claimed_owner: &Address,
-    ) -> Result<QuestInfo, Error> {
-        // Get quest contract address
-        let quest_contract_addr: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::QuestContract)
-            .ok_or(Error::NotInitialized)?;
-
-        // Cross-contract call to fetch quest info (single call, cached result)
-        let quest_client = QuestClient::new(env, &quest_contract_addr);
-        let quest_info = quest_client.get_quest(&quest_id);
-
-        // Verify the caller is the owner
-        if quest_info.owner != *claimed_owner {
-            return Err(Error::OwnerMismatch);
-        }
-
-        // Return the cached result for reuse in the same transaction
-        Ok(quest_info)
     }
 
     fn require_quest_owner(env: &Env, quest_id: u32, owner: &Address) -> Result<(), Error> {

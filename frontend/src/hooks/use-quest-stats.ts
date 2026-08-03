@@ -12,14 +12,14 @@ export interface QuestStatSummary {
 export const questStatsQueryKey = (questId: number) => ["questStats", questId] as const
 
 export async function fetchQuestStatSummary(questId: number): Promise<QuestStatSummary> {
-  const [enrollees, milestoneCount, poolBalance] = await Promise.all([
-    questClient.getEnrollees(questId),
+  const [participants, milestoneCount, poolBalance] = await Promise.all([
+    questClient.getParticipants(questId),
     milestoneClient.getMilestoneCount(questId),
     rewardsClient.getPoolBalance(questId),
   ])
 
   return {
-    enrolleeCount: enrollees.length,
+    enrolleeCount: participants.length,
     milestoneCount,
     poolBalance:
       poolBalance > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(poolBalance),

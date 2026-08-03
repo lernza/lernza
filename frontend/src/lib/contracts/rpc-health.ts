@@ -57,7 +57,8 @@ export class RpcHealthManager {
    * Create a Soroban RPC server using the current healthy endpoint
    */
   getServer(): rpc.Server {
-    return new rpc.Server(this.getHealthyEndpoint())
+    const url = this.getHealthyEndpoint()
+    return new rpc.Server(url, { allowHttp: url.startsWith('http://') })
   }
 
   /**

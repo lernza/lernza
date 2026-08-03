@@ -31,10 +31,10 @@ const PAGE_SIZE = 50
 
 export async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
-  const enrolleeSets = await Promise.all(quests.map(q => questClient.getEnrollees(q.id)))
+  const participantSets = await Promise.all(quests.map(q => questClient.getParticipants(q.id)))
 
   const allAddresses = new Set<string>()
-  for (const list of enrolleeSets) {
+  for (const list of participantSets) {
     for (const addr of list) {
       allAddresses.add(addr)
     }
@@ -62,8 +62,8 @@ export async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQ
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
   const withCounts = await Promise.all(
     quests.map(async q => {
-      const enrollees = await questClient.getEnrollees(q.id)
-      return { id: q.id, name: q.name, enrolleeCount: enrollees.length }
+      const participants = await questClient.getParticipants(q.id)
+      return { id: q.id, name: q.name, enrolleeCount: participants.length }
     })
   )
 

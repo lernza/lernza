@@ -1,7 +1,7 @@
 #![no_std]
 use common::{
-    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, Visibility,
-    BUMP, THRESHOLD,
+    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, UserStatus,
+    Visibility, BUMP, MAX_QUEST_DESCRIPTION_LEN, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -29,6 +29,7 @@ pub enum DataKey {
     Admin,
     Paused,
     VerifiedCreator(Address),
+    UserStatus(Address),
     /// Registered invite commitment: SHA-256 hash stored by the quest owner.
     /// Key: (quest_id, commitment_hash). Value: true.
     InviteCommitment(u32, BytesN<32>),
@@ -54,11 +55,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     AlreadyEnrolled = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
@@ -83,7 +84,7 @@ pub enum Error {
     QuestCancelled = 17,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 // TTL constants and address validation moved to common.
@@ -1020,6 +1021,61 @@ impl QuestContract {
         Ok(enrollees)
     }
 
+    /// Get all active participants for a quest, excluding suspended or inactive users.
+    pub fn get_participants(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut active_participants = Vec::new(&env);
+        for enrollee in enrollees.iter() {
+            let status = Self::get_user_status(env.clone(), enrollee.clone());
+            if status != UserStatus::Suspended && status != UserStatus::Inactive {
+                active_participants.push_back(enrollee);
+            }
+        }
+        Self::bump(&env, quest_id);
+        Ok(active_participants)
+    }
+
+    /// Suspend a user address. Admin only.
+    pub fn suspend_user(env: Env, admin: Address, user: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
+        let key = DataKey::UserStatus(user.clone());
+        env.storage().persistent().set(&key, &UserStatus::Suspended);
+        common::extend_persistent_ttl(&env, &key);
+        let ts = env.ledger().timestamp();
+        env.events()
+            .publish((Symbol::new(&env, "user_suspended"),), (user, admin, ts));
+        Ok(())
+    }
+
+    /// Reactivate a suspended user address. Admin only.
+    pub fn reactivate_user(env: Env, admin: Address, user: Address) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
+        let key = DataKey::UserStatus(user.clone());
+        env.storage().persistent().set(&key, &UserStatus::Active);
+        common::extend_persistent_ttl(&env, &key);
+        let ts = env.ledger().timestamp();
+        env.events()
+            .publish((Symbol::new(&env, "user_reactivated"),), (user, admin, ts));
+        Ok(())
+    }
+
+    /// Returns the status of a user address (defaults to Active if unassigned).
+    pub fn get_user_status(env: Env, user: Address) -> UserStatus {
+        let key = DataKey::UserStatus(user);
+        let status = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(UserStatus::Active);
+        if env.storage().persistent().has(&key) {
+            common::extend_persistent_ttl(&env, &key);
+        }
+        status
+    }
+
     /// Check if a user is enrolled in a quest.
     ///
     /// Visibility does not restrict this check; callers that know the quest id
@@ -1342,7 +1398,13 @@ impl QuestContract {
         extend_instance_ttl(env);
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::QuestVersionHistory(quest_id))
+        {
+            common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        }
     }
 }
 

@@ -22,6 +22,8 @@ vi.mock("@/components/error-boundary", () => ({
     React.createElement(React.Fragment, null, children),
   SectionErrorBoundary: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
+  ErrorBoundaryProvider: ({ children }: { children: React.ReactNode }) =>
+    React.createElement(React.Fragment, null, children),
 }))
 vi.mock("@/pages/landing", () => ({ Landing: () => React.createElement("div", null, "Landing") }))
 vi.mock("@/pages/dashboard", () => ({ Dashboard: () => null }))
@@ -37,6 +39,9 @@ vi.mock("@/hooks/use-toast", () => ({
   useToast: () => ({ toasts: [], addToast: vi.fn(), removeToast: vi.fn() }),
 }))
 vi.mock("@/lib/notifications", () => ({ subscribeToasts: vi.fn(() => () => {}) }))
+vi.mock("@/hooks/use-wallet", () => ({
+  useWallet: () => ({ connected: false }),
+}))
 
 import App from "./App" // CHANGED from "../App"
 

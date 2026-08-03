@@ -85,7 +85,7 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
     const title = cols[titleIdx] || ""
     const description = cols[descIdx] || ""
     const rewardStr = cols[rewardIdx] || ""
-    const rewardAmount = parseFloat(rewardStr.replace(/[^0-9.]/g, ""))
+    const rewardAmount = parseFloat(rewardStr.replace(/[^0-9.-]/g, ""))
 
     const rawObj = {
       title,

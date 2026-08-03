@@ -52,8 +52,6 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 
-      - name: Refresh advisory database
-        run: cargo audit fetch
 
       - name: Run cargo audit
         id: audit
@@ -81,12 +79,16 @@ jobs:
             
             Run locally: \`cargo audit\``;
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            } catch (error) {
+              console.log("Failed to post comment (likely fork PR):", error.message);
+            }
 
       - name: Fail if vulnerabilities found
         if: steps.audit.outcome == 'failure'
@@ -118,7 +120,7 @@ jobs:
         id: deny
         run: |
           # Check advisories, licenses, bans, and sources
-          cargo deny check --config deny.toml
+          cargo deny check
         continue-on-error: true
 
       - name: Post deny results
@@ -140,12 +142,16 @@ jobs:
             
             Run locally: \`cargo deny check\``;
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
+            try {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            } catch (error) {
+              console.log("Failed to post comment (likely fork PR):", error.message);
+            }
 
       - name: Fail if policy violations found
         if: steps.deny.outcome == 'failure'

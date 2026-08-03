@@ -78,6 +78,15 @@ pub enum QuestStatus {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum UserStatus {
+    Active = 0,
+    Suspended = 1,
+    Inactive = 2,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,

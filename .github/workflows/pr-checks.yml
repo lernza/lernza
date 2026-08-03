@@ -36,6 +36,7 @@ jobs:
 
       - name: Auto-label PR
         uses: actions/labeler@v7
+        continue-on-error: true
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           sync-labels: true

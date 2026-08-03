@@ -2018,3 +2018,42 @@ fn test_signature_and_preimage_validation_rejects_forgery() {
     );
     assert!(client.is_enrollee(&quest_id, &victim));
 }
+
+#[test]
+fn test_get_participants_filters_suspended_users() {
+    let (env, client, admin, _token) = setup();
+    client.initialize(&admin);
+    let owner = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let user1 = Address::generate(&env);
+    let user2 = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &user1);
+    client.add_enrollee(&quest_id, &user2);
+
+    // Initially both user1 and user2 are in get_enrollees and get_participants
+    let enrollees = client.get_enrollees(&quest_id);
+    let participants = client.get_participants(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert_eq!(participants.len(), 2);
+
+    // Admin suspends user1
+    client.suspend_user(&admin, &user1);
+    assert_eq!(client.get_user_status(&user1), UserStatus::Suspended);
+
+    // get_enrollees still contains both, but get_participants excludes user1
+    let enrollees_after = client.get_enrollees(&quest_id);
+    let participants_after = client.get_participants(&quest_id);
+    assert_eq!(enrollees_after.len(), 2);
+    assert_eq!(participants_after.len(), 1);
+    assert_eq!(participants_after.get(0).unwrap(), user2);
+
+    // Admin reactivates user1
+    client.reactivate_user(&admin, &user1);
+    assert_eq!(client.get_user_status(&user1), UserStatus::Active);
+    let participants_reactivated = client.get_participants(&quest_id);
+    assert_eq!(participants_reactivated.len(), 2);
+}

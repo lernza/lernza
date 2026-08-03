@@ -27,6 +27,7 @@ vi.mock("@/lib/contracts/quest", () => ({
   questClient: {
     listPublicQuests: vi.fn(),
     getEnrollees: vi.fn(),
+    getParticipants: vi.fn(),
   },
 }))
 
@@ -99,7 +100,7 @@ describe("Leaderboard", () => {
   it("quest row links to the quest detail page", async () => {
     render(<Leaderboard />)
 
-    fireEvent.click(screen.getByRole("button", { name: /view active quests/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /view active quests/i }))
 
     await act(async () => {
       await Promise.resolve()
@@ -123,7 +124,7 @@ describe("fetchTopEarners tie-breaking", () => {
     ])
     // Enrollee order is not sorted by address on purpose, to prove the
     // ranking doesn't just fall out of Set insertion order.
-    mockQuestClient.getEnrollees.mockResolvedValue(["GBBB", "GAAA", "GCCC"])
+    mockQuestClient.getParticipants.mockResolvedValue(["GBBB", "GAAA", "GCCC"])
     // All three have identical earnings, so this is a full tie.
     mockRewardsClient.getUserEarnings.mockResolvedValue(100n)
 
@@ -149,7 +150,7 @@ describe("fetchMostActiveQuests tie-breaking", () => {
       { id: 10, name: "Quest A" },
       { id: 20, name: "Quest B" },
     ] as unknown as Awaited<ReturnType<typeof questClient.listPublicQuests>>)
-    mockQuestClient.getEnrollees.mockResolvedValue(["G1", "G2"]) // same count for all quests
+    mockQuestClient.getParticipants.mockResolvedValue(["G1", "G2"]) // same count for all quests
 
     const runs = await Promise.all([
       fetchMostActiveQuests(),

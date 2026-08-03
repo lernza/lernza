@@ -1,11 +1,11 @@
 #![no_std]
 
-use common::{extend_instance_ttl, extend_persistent_ttl, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, extend_persistent_ttl};
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
 };
 use stellar_access::ownable::{self as ownable, Ownable};
-use stellar_macros::{default_impl, only_owner};
+use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base, NonFungibleToken};
 
 #[contracttype]
@@ -38,18 +38,18 @@ impl common::IsDataKey for DataKey {}
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     NotOwner = 10,
     AlreadyIssued = 20,
     InvalidQuest = 5,
     AlreadyRevoked = 6,
     MetadataBaseNotSet = 7,
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 // BUMP and THRESHOLD now come from common
@@ -299,19 +299,69 @@ impl CertificateContract {
     }
 }
 
-#[default_impl]
 #[contractimpl]
 impl NonFungibleToken for CertificateContract {
     type ContractType = Base;
+    fn balance(_env: &Env, _owner: Address) -> u32 {
+        unimplemented!()
+    }
+    fn owner_of(_env: &Env, _token_id: u32) -> Address {
+        unimplemented!()
+    }
+    fn transfer(_env: &Env, _from: Address, _to: Address, _token_id: u32) {
+        unimplemented!()
+    }
+    fn transfer_from(_env: &Env, _spender: Address, _from: Address, _to: Address, _token_id: u32) {
+        unimplemented!()
+    }
+    fn approve(_env: &Env, _owner: Address, _spender: Address, _token_id: u32, _ttl: u32) {
+        unimplemented!()
+    }
+    fn approve_for_all(_env: &Env, _owner: Address, _operator: Address, _ttl: u32) {
+        unimplemented!()
+    }
+    fn get_approved(_env: &Env, _token_id: u32) -> Option<Address> {
+        unimplemented!()
+    }
+    fn is_approved_for_all(_env: &Env, _owner: Address, _operator: Address) -> bool {
+        unimplemented!()
+    }
+    fn name(_env: &Env) -> String {
+        unimplemented!()
+    }
+    fn symbol(_env: &Env) -> String {
+        unimplemented!()
+    }
+    fn token_uri(_env: &Env, _token_id: u32) -> String {
+        unimplemented!()
+    }
 }
 
-#[default_impl]
 #[contractimpl]
-impl NonFungibleBurnable for CertificateContract {}
+impl NonFungibleBurnable for CertificateContract {
+    fn burn(_env: &Env, _from: Address, _token_id: u32) {
+        unimplemented!()
+    }
+    fn burn_from(_env: &Env, _spender: Address, _from: Address, _token_id: u32) {
+        unimplemented!()
+    }
+}
 
-#[default_impl]
 #[contractimpl]
-impl Ownable for CertificateContract {}
+impl Ownable for CertificateContract {
+    fn get_owner(_env: &Env) -> Option<Address> {
+        unimplemented!()
+    }
+    fn transfer_ownership(_env: &Env, _new_owner: Address, _ttl: u32) {
+        unimplemented!()
+    }
+    fn accept_ownership(_env: &Env) {
+        unimplemented!()
+    }
+    fn renounce_ownership(_env: &Env) {
+        unimplemented!()
+    }
+}
 
 #[cfg(test)]
 mod test;

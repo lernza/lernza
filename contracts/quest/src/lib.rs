@@ -99,10 +99,10 @@ fn is_blank_ascii(s: &String) -> bool {
     if len == 0 {
         return true;
     }
-    if len > MAX_QUEST_DESCRIPTION_LEN as usize {
+    if len > common::MAX_QUEST_DESCRIPTION_LEN as usize {
         return false;
     }
-    let mut buf = [0u8; MAX_QUEST_DESCRIPTION_LEN as usize];
+    let mut buf = [0u8; common::MAX_QUEST_DESCRIPTION_LEN as usize];
     s.copy_into_slice(&mut buf[..len]);
     for &b in buf[..len].iter() {
         if !matches!(b, b' ' | b'\n' | b'\r' | b'\t') {
@@ -1104,11 +1104,20 @@ impl QuestContract {
     }
 
     /// Get all public quests within a category.
+    ///
+    /// If the category index entry has expired (TTL lapsed) while child quests
+    /// still exist, rebuild the index from `PublicQuests` so quests are not
+    /// left undiscoverable / "orphaned" from category queries (#1328).
     pub fn get_quests_by_category(env: Env, category: String) -> Vec<QuestInfo> {
+        let category_key = DataKey::PublicCategoryQuests(category.clone());
+        if !env.storage().persistent().has(&category_key) {
+            Self::rebuild_category_index(&env, &category);
+        }
+
         let category_ids: Vec<u32> = env
             .storage()
             .persistent()
-            .get(&DataKey::PublicCategoryQuests(category.clone()))
+            .get(&category_key)
             .unwrap_or(Vec::new(&env));
         let mut matches = Vec::new(&env);
 
@@ -1120,7 +1129,6 @@ impl QuestContract {
             }
         }
 
-        let category_key = DataKey::PublicCategoryQuests(category);
         if env.storage().persistent().has(&category_key) {
             common::extend_persistent_ttl(&env, &category_key);
         }
@@ -1343,6 +1351,57 @@ impl QuestContract {
         common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
         common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+
+        // Cascade TTL to discovery indexes so category/public indexes cannot
+        // expire while an active public quest still lives (#1328).
+        if let Ok(quest) = Self::load_quest(env, quest_id) {
+            if quest.visibility == Visibility::Public {
+                Self::bump_discovery_indexes(env, &quest.category, quest_id);
+            }
+        }
+    }
+
+    /// Extend (or recreate) the public + category indexes that reference a quest.
+    fn bump_discovery_indexes(env: &Env, category: &String, quest_id: u32) {
+        let public_key = DataKey::PublicQuests;
+        if env.storage().persistent().has(&public_key) {
+            common::extend_persistent_ttl(env, &public_key);
+        }
+
+        let category_key = DataKey::PublicCategoryQuests(category.clone());
+        if env.storage().persistent().has(&category_key) {
+            common::extend_persistent_ttl(env, &category_key);
+        } else {
+            // Index expired — re-attach this quest so it is not orphaned.
+            Self::add_id_to_index(env, category_key, quest_id);
+        }
+    }
+
+    /// Rebuild `PublicCategoryQuests(category)` from the public quest list.
+    /// Called when the category index is missing after TTL expiry.
+    fn rebuild_category_index(env: &Env, category: &String) {
+        let public_ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::PublicQuests)
+            .unwrap_or(Vec::new(env));
+        let mut matching = Vec::new(env);
+
+        for i in 0..public_ids.len() {
+            if let Some(id) = public_ids.get(i) {
+                if let Ok(quest) = Self::load_quest(env, id) {
+                    if quest.visibility == Visibility::Public && quest.category == *category {
+                        matching.push_back(id);
+                    }
+                }
+            }
+        }
+
+        if !matching.is_empty() {
+            let category_key = DataKey::PublicCategoryQuests(category.clone());
+            env.storage().persistent().set(&category_key, &matching);
+            common::extend_persistent_ttl(env, &category_key);
+        }
     }
 }
 

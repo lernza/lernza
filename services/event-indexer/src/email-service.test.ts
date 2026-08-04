@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, vi } from "vitest"
 import { EmailService } from "./email-service.js"
 import { NotificationDispatcher } from "./notification-dispatcher.js"

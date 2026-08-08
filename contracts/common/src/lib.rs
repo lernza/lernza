@@ -232,11 +232,17 @@ pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool
 
 /// Helper: emit a canonical quest_created event
 /// Topics: (quest_created,)
-/// Data: (quest_id, owner, name)
-pub fn emit_quest_created(env: &Env, quest_id: u32, owner: &Address, name: &String) {
+/// Data: (quest_id, owner, name, created_at)
+pub fn emit_quest_created(
+    env: &Env,
+    quest_id: u32,
+    owner: &Address,
+    name: &String,
+    created_at: u64,
+) {
     env.events().publish(
         (soroban_sdk::Symbol::new(&env, "quest_created"),),
-        (quest_id, owner.clone(), name.clone()),
+        (quest_id, owner.clone(), name.clone(), created_at),
     );
 }
 

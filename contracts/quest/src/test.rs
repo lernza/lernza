@@ -78,6 +78,7 @@ fn create_quest_with_category_and_tags(
 #[test]
 fn test_create_quest() {
     let (env, client, owner, token) = setup();
+    let ts = env.ledger().timestamp();
     let id = create_quest_helper(&env, &client, &owner, &token);
     assert_eq!(id, 0);
     assert_eq!(client.get_quest_count(), 1);
@@ -85,6 +86,7 @@ fn test_create_quest() {
     assert_eq!(quest.owner, owner);
     assert_eq!(quest.name, String::from_str(&env, "My Quest"));
     assert_eq!(quest.token_addr, token);
+    assert_eq!(quest.created_at, ts);
 }
 
 #[test]
@@ -911,9 +913,11 @@ fn test_place_leave_hold_rejects_non_enrollee() {
 #[test]
 fn test_new_quest_is_active_by_default() {
     let (env, client, owner, token) = setup();
+    let ts = env.ledger().timestamp();
     create_quest_helper(&env, &client, &owner, &token);
     let quest = client.get_quest(&0);
     assert_eq!(quest.status, QuestStatus::Active);
+    assert_eq!(quest.created_at, ts);
 }
 
 #[test]

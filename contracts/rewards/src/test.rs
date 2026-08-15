@@ -4,7 +4,6 @@ use certificate::{CertificateContract, CertificateContractClient};
 use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
-use testutils::setup_rewards;
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -2097,7 +2096,7 @@ fn test_get_refund_window_archived_after_grace() {
 #[test]
 fn test_get_refund_window_invalid_quest() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -2139,7 +2138,7 @@ fn test_default_refund_grace_period() {
 #[test]
 fn test_set_refund_grace_period() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -2191,7 +2190,7 @@ fn test_refund_with_custom_grace_period() {
         token_addr,
         quest_client,
         _quest_id,
-        milestone_client,
+        _milestone_client,
         _milestone_id,
         _certificate_client,
         _certificate_id,
@@ -2240,7 +2239,7 @@ fn test_refund_with_custom_grace_period() {
 #[test]
 fn test_pause_blocks_grace_period_updates() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -2360,6 +2359,7 @@ fn test_refund_expired_pool_success_without_archiving() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Creator funds the pool but the quest is never completed or archived.
@@ -2415,6 +2415,7 @@ fn test_refund_expired_pool_no_deadline() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2452,6 +2453,7 @@ fn test_refund_expired_pool_grace_period_enforced() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2495,6 +2497,7 @@ fn test_refund_expired_pool_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2531,6 +2534,7 @@ fn test_refund_expired_pool_not_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2575,6 +2579,7 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2635,6 +2640,7 @@ fn test_refund_expired_pool_paused() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 

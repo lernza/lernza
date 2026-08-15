@@ -18,28 +18,19 @@ allow = [
     "Zlib",
 ]
 
-# Skip license checks for dev dependencies
-[licenses.dev-dependencies]
-unlicensed = "deny"
-
 # Security advisories - this is the main focus for issue #759
 [advisories]
 version = 2
 # Vulnerability database source
-db-url = "https://github.com/rustsec/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
 # Ignore advisories for optional/development-only crates
 ignore = [
     # Add advisory IDs to ignore here when explicitly reviewed and accepted
     # Format: "RUSTSEC-0000-0000"
 ]
 
-# Deny known vulnerabilities (fail the build on CVEs)
-[vulns]
-version = 2
-
 # Banned dependencies - fail if these are used
 [bans]
-version = 2
 deny = [
     { name = "std::os::raw", version = "*" },
 ]
@@ -50,14 +41,10 @@ allow = [
     { name = "stellar-xdr" },
 ]
 
-# Skip bans for dev dependencies
-[bans.dev-dependencies]
-deny = []
-
 # Sources configuration
 [sources]
-version = 2
-unknown-git-registry = "deny"
+unknown-registry = "deny"
+unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/stellar/rs-soroban-sdk",

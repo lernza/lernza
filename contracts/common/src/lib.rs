@@ -78,6 +78,15 @@ pub enum QuestStatus {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum UserStatus {
+    Active = 0,
+    Suspended = 1,
+    Inactive = 2,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
@@ -152,8 +161,7 @@ pub fn is_contract_address(addr: &Address) -> bool {
         return false;
     }
 
-    for i in 1..56 {
-        let c = buf[i];
+    for &c in &buf[1..] {
         let valid = c.is_ascii_uppercase() || (b'2'..=b'7').contains(&c);
         if !valid {
             return false;
@@ -174,7 +182,7 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
 /// Basic URL format checker used by contract metadata validation.
 /// Lightweight acceptance of http/https and rejects whitespace.
 pub fn is_valid_url(s: &String) -> bool {
-    if s.len() == 0 || s.len() > 2048 {
+    if s.is_empty() || s.len() > 2048 {
         return false;
     }
     let mut buf = [0u8; 2048];
@@ -204,11 +212,11 @@ pub fn is_valid_url(s: &String) -> bool {
 /// Data: (caller_contract, target_contract, method_symbol, params)
 pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_call"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             params.clone(),
         ),
     );
@@ -219,11 +227,11 @@ pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String
 /// Data: (caller_contract, target_contract, method_symbol, success, result)
 pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_return"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             success,
             result.clone(),
         ),
@@ -235,7 +243,7 @@ pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool
 /// Data: (quest_id, owner, name)
 pub fn emit_quest_created(env: &Env, quest_id: u32, owner: &Address, name: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "quest_created"),),
+        (soroban_sdk::Symbol::new(env, "quest_created"),),
         (quest_id, owner.clone(), name.clone()),
     );
 }
@@ -245,7 +253,7 @@ pub fn emit_quest_created(env: &Env, quest_id: u32, owner: &Address, name: &Stri
 /// Data: (quest_id, funder, amount)
 pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i128) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_funded"),),
+        (soroban_sdk::Symbol::new(env, "reward_funded"),),
         (quest_id, funder.clone(), amount),
     );
 }
@@ -261,7 +269,7 @@ pub fn emit_reward_distributed(
     amount: i128,
 ) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
+        (soroban_sdk::Symbol::new(env, "reward_distributed"),),
         (quest_id, milestone_id, enrollee.clone(), amount),
     );
 }

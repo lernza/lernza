@@ -164,6 +164,50 @@ Emitted when an admin revokes a creator's verified status via `revoke_creator_ve
 
 ---
 
+### `quest_migrated`
+
+Emitted when an administrator migrates a batch of quests to a new data schema version via `migrate_quests`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("quest_migrated"),)` | |
+| `quest_id` | `u32` | ID of the migrated quest. |
+| `schema_version` | `u32` | Target data schema version written for the quest. |
+
+**Data tuple:** `(quest_id, schema_version)`
+
+---
+
+### `user_suspended`
+
+Emitted when an admin suspends a user address via `suspend_user`. Suspended users are excluded from `get_participants` leaderboard results.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("user_suspended"),)` | |
+| `user` | `Address` | Suspended user address. |
+| `admin` | `Address` | Admin who issued the suspension. |
+| `timestamp` | `u64` | Ledger timestamp. |
+
+**Data tuple:** `(user, admin, timestamp)`
+
+---
+
+### `user_reactivated`
+
+Emitted when an admin reactivates a suspended user address via `reactivate_user`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("user_reactivated"),)` | |
+| `user` | `Address` | Reactivated user address. |
+| `admin` | `Address` | Admin who issued the reactivation. |
+| `timestamp` | `u64` | Ledger timestamp. |
+
+**Data tuple:** `(user, admin, timestamp)`
+
+---
+
 ## Common Events
 
 These events are emitted by the common library (e.g. `contracts/common/src/lib.rs`) and can appear in the event stream of any contract that uses cross-contract calls.

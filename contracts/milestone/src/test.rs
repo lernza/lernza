@@ -1,5 +1,7 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, Address, Env, String, Vec};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events, testutils::Ledger, Address, Env, String, Vec,
+};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -7,7 +9,6 @@ extern crate quest;
 use certificate::CertificateContract;
 use common::Visibility;
 use quest::{QuestContract, QuestContractClient};
-use testutils::setup_milestone;
 
 fn setup() -> (
     Env,
@@ -372,11 +373,11 @@ fn test_get_distribution_mode_and_flat_reward_after_set() {
 fn test_percentage_mode_rounding_to_nearest() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
-    create_ms(&env, &client, &owner, q_id, "Task", 101);
-
     // Set Percentage mode to 75%
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Percentage(75), &0);
+
+    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
+    create_ms(&env, &client, &owner, q_id, "Task", 101);
 
     let enrollee = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -386,8 +387,8 @@ fn test_percentage_mode_rounding_to_nearest() {
 
     // Now test exact case: 100 * 75% = 75
     let q2 = create_quest(&env, &quest_client, &owner);
-    create_ms(&env, &client, &owner, q2, "Task2", 100);
     client.set_distribution_mode(&owner, &q2, &DistributionMode::Percentage(75), &0);
+    create_ms(&env, &client, &owner, q2, "Task2", 100);
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q2, &e2);
     assert_eq!(client.verify_completion(&owner, &q2, &0, &e2), 75);
@@ -652,7 +653,10 @@ fn test_same_distribution_mode_can_be_reapplied_after_milestones_exist() {
     create_ms(&env, &client, &owner, q_id, "Task", 100);
 
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
-    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(
+        client.get_distribution_mode(&q_id),
+        DistributionMode::Custom
+    );
 }
 
 #[test]
@@ -947,6 +951,7 @@ fn test_approve_completion_multiple_approvals() {
 #[test]
 fn test_peer_review_respects_sequential_unlocks() {
     let (env, client, quest_client, owner) = setup();
+    env.ledger().set_timestamp(12345);
     let q_id = create_quest(&env, &quest_client, &owner);
     create_ms(&env, &client, &owner, q_id, "Task 1", 50);
     client.create_milestone(
@@ -965,11 +970,12 @@ fn test_peer_review_respects_sequential_unlocks() {
     quest_client.add_enrollee(&q_id, &enrollee);
     quest_client.add_enrollee(&q_id, &peer);
 
-    client.submit_for_review(&enrollee, &q_id, &1);
-    let blocked = client.try_approve_completion(&peer, &q_id, &1, &enrollee);
-    assert_eq!(blocked, Err(Ok(Error::MilestoneNotUnlocked)));
+    // Submit for review - this should fail since Task 1 is not completed for enrollee
+    let blocked_submit = client.try_submit_for_review(&enrollee, &q_id, &1);
+    assert_eq!(blocked_submit, Err(Ok(Error::MilestoneNotUnlocked)));
 
     client.verify_completion(&owner, &q_id, &0, &enrollee);
+    client.submit_for_review(&enrollee, &q_id, &1);
     let approved = client.approve_completion(&peer, &q_id, &1, &enrollee);
     assert_eq!(approved, Some(100));
 }
@@ -1731,7 +1737,7 @@ fn test_set_distribution_mode_emits_event() {
     create_ms(&env, &client, &owner, q_id, "M1", 100);
     let after = env.events().all();
     assert!(
-        after.len() > 0,
+        !after.is_empty(),
         "set_distribution_mode should publish a distribution_mode_set event"
     );
 }
@@ -1745,8 +1751,9 @@ fn test_verify_completion_past_deadline_rejected() {
     let enrollee = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &enrollee);
 
-    // Set deadline in past
+    // Set deadline in past (relative to mock timestamp)
     quest_client.set_deadline(&q_id, &999);
+    env.ledger().set_timestamp(1000);
 
     let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
     assert_eq!(res, Err(Ok(Error::DeadlineExpired)));

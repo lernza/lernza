@@ -1,8 +1,7 @@
 use proptest::prelude::*;
-use rewards::{RewardsContract, RewardsContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, Env,
+    Address,
 };
 use testutils::setup_rewards;
 
@@ -109,10 +108,12 @@ proptest! {
             match operation {
                 RewardOperation::Fund { amount } => {
                     // Only fund if amount is reasonable and we haven't exceeded limits
-                    if amount > 0 && amount <= 10_000 && total_funded + amount <= 100_000 {
-                        if client.try_fund_quest(&owner, &q_id, &amount).is_ok() {
-                            total_funded += amount;
-                        }
+                    if amount > 0
+                        && amount <= 10_000
+                        && total_funded + amount <= 100_000
+                        && client.try_fund_quest(&owner, &q_id, &amount).is_ok()
+                    {
+                        total_funded += amount;
                     }
                 }
                 RewardOperation::Distribute { milestone_id, enrollee_idx, amount } => {
@@ -121,30 +122,36 @@ proptest! {
                         let enrollee = &enrollees[enrollee_idx as usize];
                         let pool_balance = client.get_pool_balance(&q_id);
 
-                        if amount > 0 && amount <= pool_balance && amount <= 1_000 {
-                            // Mark milestone as completed first
-                            if milestone_client.try_verify_completion(&owner, &q_id, &milestone_id, enrollee).is_ok() {
-                                // Try to distribute reward
-                                if client.try_distribute_reward(&owner, &q_id, &milestone_id, enrollee, &amount).is_ok() {
-                                    total_distributed += amount;
-                                }
-                            }
+                        if amount > 0
+                            && amount <= pool_balance
+                            && amount <= 1_000
+                            && milestone_client
+                                .try_verify_completion(&owner, &q_id, &milestone_id, enrollee)
+                                .is_ok()
+                            && client
+                                .try_distribute_reward(&owner, &q_id, &milestone_id, enrollee, &amount)
+                                .is_ok()
+                        {
+                            total_distributed += amount;
                         }
                     }
                 }
                 RewardOperation::Refund { amount } => {
-                    // Only refund if quest is archived and grace period has passed
-                    quest_client.archive_quest(&q_id);
+                    // Only refund if quest is archived and grace period has passed.
+                    // Archive once; ignore QuestArchived if a previous Refund already archived it.
+                    let _ = quest_client.try_archive_quest(&q_id);
 
                     // Fast-forward time past grace period
                     let grace_period = client.get_refund_grace_period();
                     env.ledger().set_timestamp(env.ledger().timestamp() + grace_period + 1);
 
                     let pool_balance = client.get_pool_balance(&q_id);
-                    if amount > 0 && amount <= pool_balance && amount <= 5_000 {
-                        if client.try_refund_pool(&owner, &q_id, &amount).is_ok() {
-                            total_refunded += amount;
-                        }
+                    if amount > 0
+                        && amount <= pool_balance
+                        && amount <= 5_000
+                        && client.try_refund_pool(&owner, &q_id, &amount).is_ok()
+                    {
+                        total_refunded += amount;
                     }
                 }
             }

@@ -5,11 +5,7 @@ use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 use rewards::{RewardsContract, RewardsContractClient};
-use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    token::{StellarAssetClient, TokenClient},
-    Address, Env, String, Vec,
-};
+use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
 /// Shared test setup for quest contract
 pub fn setup_quest() -> (Env, QuestContractClient<'static>, Address, Address) {

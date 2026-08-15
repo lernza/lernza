@@ -82,6 +82,13 @@ export class QuestClient {
     return result || []
   }
 
+  async getParticipants(questId: number): Promise<string[]> {
+    const result = await this.invokeRead("get_participants", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    return result || []
+  }
+
   async isEnrollee(questId: number, user: string): Promise<boolean> {
     const result = await this.invokeRead("is_enrollee", [
       nativeToScVal(questId, { type: "u32" }),

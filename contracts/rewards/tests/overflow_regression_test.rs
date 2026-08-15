@@ -46,6 +46,7 @@ fn test_insufficient_pool_rejects_large_distribution() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     QuestContractClient::new(&env, &quest_id).add_enrollee(&0u32, &enrollee);
 

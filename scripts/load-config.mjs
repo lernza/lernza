@@ -26,34 +26,44 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_DIR = join(__dirname, "..", "config");
 
 function loadYaml(path) {
-  // Simple YAML parser for the subset of YAML we use (no nested arrays)
+  // Simple YAML parser for the subset of YAML we use (two levels, no arrays).
+  // Indentation must be matched against the raw line — trimming first would
+  // strip the leading whitespace that distinguishes top-level from nested keys.
   const content = readFileSync(path, "utf8");
   const lines = content.split("\n");
   const result = {};
   let currentKey = null;
 
+  const cleanValue = (raw) => {
+    let val = raw.trim();
+    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    if (val === "" || val === "''") val = "";
+    if (val === "true") return true;
+    if (val === "false") return false;
+    if (val !== "" && !isNaN(Number(val))) return Number(val);
+    return val;
+  };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
 
-    // Top-level key
-    const topMatch = trimmed.match(/^(\w+):$/);
+    // Top-level key (no leading whitespace), optionally with an inline value
+    const topMatch = line.match(/^(\w+):\s*(.*)$/);
     if (topMatch) {
       currentKey = topMatch[1];
-      result[currentKey] = {};
+      const val = cleanValue(topMatch[2]);
+      result[currentKey] = val === "" ? {} : val;
       continue;
     }
 
-    // Nested key:value
-    const nestedMatch = trimmed.match(/^  (\w+):\s*(.*)/);
+    // Nested key:value (two-space indented)
+    const nestedMatch = line.match(/^  (\w+):\s*(.*)$/);
     if (nestedMatch && currentKey) {
-      let val = nestedMatch[2].trim();
-      if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-      if (val === "" || val === "''") val = "";
-      if (val === "true") val = true;
-      if (val === "false") val = false;
-      if (!isNaN(Number(val)) && val !== "") val = Number(val);
-      result[currentKey][nestedMatch[1]] = val;
+      if (typeof result[currentKey] !== "object" || result[currentKey] === null) {
+        result[currentKey] = {};
+      }
+      result[currentKey][nestedMatch[1]] = cleanValue(nestedMatch[2]);
     }
   }
 
@@ -80,17 +90,26 @@ function getEnvironment() {
   return "development";
 }
 
-function flattenForEnv(config, prefix = "") {
-  const entries = [];
-  for (const [key, value] of Object.entries(config)) {
-    const envKey = prefix ? `${prefix}${key.toUpperCase()}` : key.toUpperCase();
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      entries.push(...flattenForEnv(value, `${envKey}_`));
-    } else {
-      entries.push([envKey, String(value)]);
-    }
-  }
-  return entries;
+// Map config paths to the exact VITE_* names the frontend consumes.
+// Key names differ intentionally (e.g. stellar.rpc_url -> VITE_SOROBAN_RPC_URL).
+const VITE_KEYS = [
+  ["stellar.rpc_url", "VITE_SOROBAN_RPC_URL"],
+  ["stellar.network_passphrase", "VITE_SOROBAN_NETWORK_PASSPHRASE"],
+  ["stellar.horizon_url", "VITE_HORIZON_URL"],
+  ["contracts.quest", "VITE_QUEST_CONTRACT_ID"],
+  ["contracts.milestone", "VITE_MILESTONE_CONTRACT_ID"],
+  ["contracts.rewards", "VITE_REWARDS_CONTRACT_ID"],
+  ["contracts.rewards_token", "VITE_REWARDS_TOKEN_CONTRACT_ID"],
+  ["contracts.usdc_token", "VITE_USDC_TOKEN_ADDRESS"],
+  ["rpc_rate_limits.capacity", "VITE_RPC_READ_RATE_LIMIT_CAPACITY"],
+  ["rpc_rate_limits.refill_per_second", "VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND"],
+  ["sentry.dsn", "VITE_SENTRY_DSN"],
+];
+
+function getConfigPath(config, path) {
+  return path
+    .split(".")
+    .reduce((acc, key) => (acc && typeof acc === "object" ? acc[key] : undefined), config);
 }
 
 function main() {
@@ -110,12 +129,8 @@ function main() {
     return;
   }
 
-  // Flatten and output as VITE_* env vars for frontend
-  const flat = flattenForEnv(config);
-  const envLines = flat.map(([key, value]) => {
-    const viteKey = `VITE_${key}`;
-    return `${viteKey}=${value}`;
-  });
+  // Output the VITE_* env vars the frontend consumes
+  const envLines = VITE_KEYS.map(([path, key]) => `${key}=${getConfigPath(config, path) ?? ""}`);
 
   // Add derived vars
   envLines.push(`VITE_ENVIRONMENT=${env}`);

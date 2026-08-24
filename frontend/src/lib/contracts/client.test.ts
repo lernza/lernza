@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import {
-  TransactionBuilder,
-  Account,
-  Transaction,
-  Operation,
-  Asset,
-} from "@stellar/stellar-sdk/minimal"
+import { TransactionBuilder, Account, Transaction, Operation, Asset } from "@stellar/stellar-sdk"
 
 const TEST_SOURCE = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
 

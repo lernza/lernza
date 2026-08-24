@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v4
 
       - name: Install stellar-cli
         run: |
@@ -52,7 +52,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -92,7 +92,7 @@ jobs:
           done
 
       - name: Upload WASM artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v4
         with:
           name: contract-wasm-${{ github.sha }}
           path: target/wasm32v1-none/release/*.wasm
@@ -117,7 +117,7 @@ jobs:
           cat contract-metadata.txt
 
       - name: Upload metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v4
         with:
           name: contract-metadata-${{ github.sha }}
           path: contract-metadata.txt
@@ -129,7 +129,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v4
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
@@ -147,7 +147,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Download WASM artifacts
-        uses: actions/download-artifact@7e997abb5e2e1e20a1aebdab18bf48e00c1e5a0c # v7.0.0
+        uses: actions/download-artifact@v4
         with:
           name: contract-wasm-${{ github.sha }}
           path: ./wasm
@@ -231,7 +231,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v4
 
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
@@ -246,7 +246,7 @@ jobs:
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0a8954ff6cb1f1a94b0dab2f2b8cbb8f27558ba6 # v7.0.0
+        uses: codecov/codecov-action@v4
         with:
           files: lcov.info
           flags: contracts
@@ -260,10 +260,10 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@v4
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@7e997abb5e2e1e20a1aebdab18bf48e00c1e5a0c # v7.0.0
+        uses: actions/download-artifact@v4
         with:
           name: contract-wasm-${{ github.sha }}
           path: ./wasm

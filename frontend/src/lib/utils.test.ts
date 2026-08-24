@@ -4,6 +4,7 @@ import {
   shortenAddress,
   formatTokens,
   formatDeadlineLabel,
+  getSecondsRemaining,
   isExpiredDeadline,
   isExpiringSoon,
 } from "./utils"
@@ -72,20 +73,46 @@ describe("formatTokens", () => {
 
 describe("deadline helpers", () => {
   const nowMs = new Date("2026-03-27T12:00:00Z").getTime()
+  const nowSeconds = Math.floor(nowMs / 1000)
 
   it("marks expired deadlines correctly", () => {
-    expect(isExpiredDeadline(Math.floor(nowMs / 1000) - 1, nowMs)).toBe(true)
-    expect(isExpiredDeadline(Math.floor(nowMs / 1000) + 60, nowMs)).toBe(false)
+    expect(isExpiredDeadline(nowSeconds - 1, nowMs)).toBe(true)
+    expect(isExpiredDeadline(nowSeconds + 60, nowMs)).toBe(false)
+  })
+
+  it("computes whole seconds remaining", () => {
+    expect(getSecondsRemaining(nowSeconds + 90, nowMs)).toBe(90)
+    expect(getSecondsRemaining(nowSeconds - 1, nowMs)).toBe(0)
+  })
+
+  it("treats a deadline exactly at the current second as expired", () => {
+    expect(isExpiredDeadline(nowSeconds, nowMs)).toBe(true)
+    expect(getSecondsRemaining(nowSeconds, nowMs)).toBe(0)
+  })
+
+  it("handles fractional milliseconds without precision loss", () => {
+    const deadline = 1000 // 1000 seconds since epoch
+
+    // 1000.5 seconds since epoch — deadline is behind the current second
+    expect(isExpiredDeadline(deadline, 1_000_500)).toBe(true)
+    expect(getSecondsRemaining(deadline, 1_000_500)).toBe(0)
+
+    // 1000.999 seconds since epoch — still expired, no float drift
+    expect(isExpiredDeadline(deadline, 1_000_999)).toBe(true)
+
+    // 999.999 seconds since epoch — deadline is 1 whole second ahead
+    expect(isExpiredDeadline(deadline, 999_999)).toBe(false)
+    expect(getSecondsRemaining(deadline, 999_999)).toBe(1)
   })
 
   it("detects when a deadline is within 24 hours", () => {
-    expect(isExpiringSoon(Math.floor(nowMs / 1000) + 60 * 60, nowMs)).toBe(true)
-    expect(isExpiringSoon(Math.floor(nowMs / 1000) + 3 * 24 * 60 * 60, nowMs)).toBe(false)
+    expect(isExpiringSoon(nowSeconds + 60 * 60, nowMs)).toBe(true)
+    expect(isExpiringSoon(nowSeconds + 3 * 24 * 60 * 60, nowMs)).toBe(false)
   })
 
   it("formats relative deadline labels", () => {
     expect(formatDeadlineLabel(0, nowMs)).toBe("No deadline")
-    expect(formatDeadlineLabel(Math.floor(nowMs / 1000) - 60, nowMs)).toBe("Expired")
-    expect(formatDeadlineLabel(Math.floor(nowMs / 1000) + 2 * 60 * 60, nowMs)).toBe("Expires in 2h")
+    expect(formatDeadlineLabel(nowSeconds - 60, nowMs)).toBe("Expired")
+    expect(formatDeadlineLabel(nowSeconds + 2 * 60 * 60, nowMs)).toBe("Expires in 2h")
   })
 })

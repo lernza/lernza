@@ -5,6 +5,9 @@ use soroban_sdk::{
     String, Symbol, Vec,
 };
 
+const MAX_PEER_REVIEW_APPROVALS: u32 = 100;
+const MAX_COMPETITIVE_WINNERS: u32 = 1_000;
+
 // Quest contract error type (must match the quest contract)
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
@@ -486,6 +489,12 @@ impl MilestoneContract {
         Self::require_not_paused(&env)?;
         Self::require_quest_owner(&env, quest_id, &owner)?;
 
+        if let VerificationMode::PeerReview(required_approvals) = &mode {
+            if *required_approvals == 0 || *required_approvals > MAX_PEER_REVIEW_APPROVALS {
+                return Err(Error::InvalidInput);
+            }
+        }
+
         let mode_key = DataKey::VerificationMode(quest_id);
         env.storage().persistent().set(&mode_key, &mode);
         env.storage()
@@ -524,11 +533,27 @@ impl MilestoneContract {
             return Err(Error::InvalidAmount);
         }
 
-        if matches!(mode, DistributionMode::Competitive(max_winners) if max_winners == 0) {
-            return Err(Error::InvalidInput);
+        if let DistributionMode::Competitive(max_winners) = &mode {
+            if *max_winners == 0 || *max_winners > MAX_COMPETITIVE_WINNERS {
+                return Err(Error::InvalidInput);
+            }
         }
 
         if matches!(mode, DistributionMode::Percentage(p) if p == 0 || p > 100) {
+            return Err(Error::InvalidInput);
+        }
+
+        // Prevent reward-type changes once milestones exist. Reapplying the
+        // same mode is treated as a no-op and remains allowed.
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let current_mode: DistributionMode = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom);
+        if env.storage().persistent().get(&count_key).unwrap_or(0u32) > 0
+            && current_mode != mode
+        {
             return Err(Error::InvalidInput);
         }
 
@@ -1200,8 +1225,19 @@ impl MilestoneContract {
             .get(&DataKey::EnrolleeEarnings(quest_id, enrollee.clone()))
             .unwrap_or(0);
 
+        if offset >= total_milestones {
+            return Ok(EnrolleeProgress {
+                quest_id,
+                enrollee,
+                completions,
+                total_milestones,
+                total_earned,
+                completion_details: Vec::new(&env),
+            });
+        }
+
         let mut completion_details = Vec::new(&env);
-        let end = (offset + limit).min(total_milestones);
+        let end = offset.saturating_add(limit).min(total_milestones);
         for i in offset..end {
             if env
                 .storage()

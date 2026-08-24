@@ -120,6 +120,7 @@ pub fn create_quest(env: &Env, quest_client: &QuestContractClient, owner: &Addre
         &Address::generate(env),
         &Visibility::Public,
         &None,
+        &None,
     )
 }
 
@@ -138,6 +139,7 @@ pub fn create_quest_helper(
         &Vec::<String>::new(env),
         token,
         &Visibility::Public,
+        &None,
         &None,
     )
 }

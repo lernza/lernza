@@ -56,6 +56,7 @@ proptest! {
             &fake_token,
             &Visibility::Public,
             &None,
+            &None,
         );
 
         // Enroll a learner so verify_completion can succeed

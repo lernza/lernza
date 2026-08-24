@@ -62,6 +62,12 @@ describe("formatTokens", () => {
     expect(formatTokens(10_000_000_000_000)).toBe("1.0M TOKEN")
     expect(formatTokens(25_000_000_000_000)).toBe("2.5M TOKEN")
   })
+
+  it("returns error string for negative amounts", () => {
+    expect(formatTokens(-100)).toBe("ERROR: Negative TOKEN")
+    expect(formatTokens(BigInt(-100))).toBe("ERROR: Negative TOKEN")
+    expect(formatTokens(-1000000, 7, "USDC")).toBe("ERROR: Negative USDC")
+  })
 })
 
 describe("deadline helpers", () => {

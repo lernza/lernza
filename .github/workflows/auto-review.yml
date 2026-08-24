@@ -81,6 +81,10 @@ jobs:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping comment due to missing token"
+            exit 0
+          fi
           gh pr comment "$PR_NUM" --body "Hey! I don't see any code changes in this PR yet. If you still need to push your commits, go ahead and they'll show up here automatically. I'll take another look once they land."
 
       - name: AI review (Groq gpt-oss-120b)
@@ -222,6 +226,11 @@ jobs:
           DECISION: ${{ steps.review.outputs.decision }}
           BODY: ${{ steps.review.outputs.body }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping approval/comment due to missing token"
+            exit 0
+          fi
+
           PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
           IS_SELF="false"
           [ "$PR_AUTHOR" = "$PAT_USER" ] && IS_SELF="true"

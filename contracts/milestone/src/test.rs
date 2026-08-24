@@ -394,6 +394,34 @@ fn test_percentage_mode_rounding_to_nearest() {
 }
 
 #[test]
+fn test_verify_completion_with_score_pays_partial_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    assert_eq!(
+        client.verify_completion_with_score(&owner, &q_id, &0, &enrollee, &80),
+        80
+    );
+    assert_eq!(client.get_enrollee_earnings(&q_id, &enrollee), 80);
+}
+
+#[test]
+fn test_verify_completion_with_score_rejects_scores_above_100() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_completion_with_score(&owner, &q_id, &0, &enrollee, &101);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
 fn test_custom_mode_uses_per_milestone_amounts() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

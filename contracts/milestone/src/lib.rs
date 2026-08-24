@@ -618,8 +618,25 @@ impl MilestoneContract {
         milestone_id: u32,
         enrollee: Address,
     ) -> Result<i128, Error> {
+        Self::verify_completion_with_score(env, owner, quest_id, milestone_id, enrollee, 100)
+    }
+
+    /// Verify an enrollee's completion with a score from 0 to 100.
+    /// The score is applied to the reward selected by the quest distribution mode.
+    pub fn verify_completion_with_score(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+        score: u32,
+    ) -> Result<i128, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
+
+        if score > 100 {
+            return Err(Error::InvalidInput);
+        }
 
         // Validate owner via cross-contract call
         let quest_contract_addr: Address = env
@@ -750,6 +767,13 @@ impl MilestoneContract {
                 }
             }
         };
+
+        let reward = reward
+            .checked_mul(score as i128)
+            .ok_or(Error::Overflow)?
+            .checked_add(50)
+            .ok_or(Error::Overflow)?
+            / 100;
 
         // Store completion timestamp
         let time_key = DataKey::CompletionTime(quest_id, milestone_id, enrollee.clone());

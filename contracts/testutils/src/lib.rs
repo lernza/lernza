@@ -94,6 +94,9 @@ pub fn setup_rewards() -> (
     let client = RewardsContractClient::new(&env, &contract_id);
     client.initialize(&admin, &token_addr, &quest_id, &milestone_id);
 
+    // Link rewards contract back to milestone contract for pool verification
+    milestone_client.set_rewards_contract(&admin, &contract_id);
+
     (
         env,
         client,

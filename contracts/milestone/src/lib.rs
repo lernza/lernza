@@ -28,6 +28,12 @@ pub trait QuestContractTrait {
     fn get_enrollees(env: Env, quest_id: u32) -> Vec<Address>;
 }
 
+// Rewards contract interface for cross-contract calls
+#[contractclient(name = "RewardsClient")]
+pub trait RewardsContractTrait {
+    fn get_pool_balance(env: Env, quest_id: u32) -> i128;
+}
+
 // Visibility, QuestStatus, and QuestInfo moved to common.
 
 // Milestone contract: define milestones per quest, track completions.
@@ -46,6 +52,10 @@ pub enum DataKey {
     QuestContract,
     // Certificate contract address for minting completion certificates
     CertificateContract,
+    // Rewards contract address for pool verification
+    RewardsContract,
+    // Total promised reward for a quest
+    TotalPromisedReward(u32),
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Explicit milestone count per quest (O(1) lookup, survives gaps from deletes)
@@ -164,7 +174,7 @@ pub enum Error {
     /// Invalid input provided (shared code 3).
     InvalidInput = common::ERR_INVALID_INPUT as u32,
     AlreadyCompleted = 4,
-    Reserved5 = 5, // reserved for stable ABI; do not reuse
+    InsufficientPool = 5,
     InvalidAmount = 6,
     OwnerMismatch = 7,
     NotInitialized = 8,
@@ -277,6 +287,20 @@ impl MilestoneContract {
         Ok(())
     }
 
+    /// Set the rewards contract address for pool verification. Admin only.
+    pub fn set_rewards_contract(
+        env: Env,
+        admin: Address,
+        rewards_contract: Address,
+    ) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::RewardsContract, &rewards_contract);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
     /// Returns true when the contract is paused.
     pub fn is_paused(env: Env) -> bool {
         let paused = env
@@ -342,6 +366,25 @@ impl MilestoneContract {
             requires_previous,
         };
 
+        // Check against rewards contract pool if configured
+        if let Some(rewards_contract_addr) = env.storage().instance().get::<_, Address>(&DataKey::RewardsContract) {
+            let rewards_client = RewardsClient::new(&env, &rewards_contract_addr);
+            let pool_balance = rewards_client.get_pool_balance(&quest_id);
+            
+            let promised_key = DataKey::TotalPromisedReward(quest_id);
+            let current_promised: i128 = env.storage().persistent().get(&promised_key).unwrap_or(0);
+            let new_promised = current_promised
+                .checked_add(reward_amount)
+                .ok_or(Error::Overflow)?;
+            
+            if new_promised > pool_balance {
+                return Err(Error::InsufficientPool);
+            }
+            
+            env.storage().persistent().set(&promised_key, &new_promised);
+            Self::bump_ms(&env, &promised_key);
+        }
+
         let ms_key = DataKey::Milestone(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
         env.storage().persistent().set(&next_key, &(id + 1));
@@ -402,8 +445,29 @@ impl MilestoneContract {
         }
 
         // Step 1: Validate all inputs before any state changes to ensure atomicity
+        let mut total_batch_reward: i128 = 0;
         for ms in milestones.iter() {
             Self::validate_ms_input(&ms.title, &ms.description, ms.reward_amount)?;
+            total_batch_reward = total_batch_reward.checked_add(ms.reward_amount).ok_or(Error::Overflow)?;
+        }
+
+        // Check against rewards contract pool if configured
+        if let Some(rewards_contract_addr) = env.storage().instance().get::<_, Address>(&DataKey::RewardsContract) {
+            let rewards_client = RewardsClient::new(&env, &rewards_contract_addr);
+            let pool_balance = rewards_client.get_pool_balance(&quest_id);
+            
+            let promised_key = DataKey::TotalPromisedReward(quest_id);
+            let current_promised: i128 = env.storage().persistent().get(&promised_key).unwrap_or(0);
+            let new_promised = current_promised
+                .checked_add(total_batch_reward)
+                .ok_or(Error::Overflow)?;
+            
+            if new_promised > pool_balance {
+                return Err(Error::InsufficientPool);
+            }
+            
+            env.storage().persistent().set(&promised_key, &new_promised);
+            Self::bump_ms(&env, &promised_key);
         }
 
         // Step 2: Create milestones

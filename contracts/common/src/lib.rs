@@ -78,6 +78,16 @@ pub enum QuestStatus {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum EnrolleeStatus {
+    Active = 0,
+    Suspended = 1,
+    Banned = 2,
+    Inactive = 3,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
@@ -95,6 +105,15 @@ pub struct QuestInfo {
     pub max_enrollees: Option<u32>,
     pub verified: bool,
     pub version: u32,
+    pub prerequisite_quest_ids: Vec<u32>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Enrollee {
+    pub address: Address,
+    pub status: EnrolleeStatus,
+    pub enrolled_at: u64,
 }
 
 /// A snapshot of quest fields at a specific version, stored for history.

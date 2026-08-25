@@ -1,22 +1,26 @@
-import { useState, type KeyboardEvent } from "react"
+import { useState, useEffect, type KeyboardEvent } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowRight, FileText, Plus, X } from "lucide-react"
+import { ArrowRight, FileText, LayoutTemplate, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
+import { TemplatePicker } from "./template-picker"
+import type { QuestTemplate } from "./quest-templates"
 
 export function Step1Form() {
-  const { step1Data, setStep1Data, goToNext } = useQuestCreation()
+  const { step1Data, setStep1Data, goToNext, applyTemplate, appliedTemplateId } = useQuestCreation()
   const [tagInput, setTagInput] = useState("")
   const [tagError, setTagError] = useState<string | null>(null)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isValid },
   } = useForm<Step1Values>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +33,22 @@ export function Step1Form() {
     },
     mode: "onChange",
   })
+
+  // When a template is applied the context updates step1Data; sync the form.
+  useEffect(() => {
+    reset({
+      name: step1Data.name || "",
+      description: step1Data.description || "",
+      category: step1Data.category || "",
+      tags: step1Data.tags || [],
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedTemplateId])
+
+  const handleApplyTemplate = (template: QuestTemplate) => {
+    applyTemplate(template)
+    setIsPickerOpen(false)
+  }
 
   const nameValue = watch("name", "")
   const descValue = watch("description", "")
@@ -82,11 +102,27 @@ export function Step1Form() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
         <div className="bg-accent border-border border-b px-6 py-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="text-sm font-semibold tracking-wider uppercase">
-              Step 1 — Quest Basics
-            </span>
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span className="text-sm font-semibold tracking-wider uppercase">
+                Step 1 — Quest Basics
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPickerOpen(true)}
+              aria-label="Open template picker"
+              className={cn(
+                "border-border neo-press flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold transition-colors",
+                appliedTemplateId
+                  ? "bg-success/20 border-success/40 hover:bg-success/30"
+                  : "bg-background hover:bg-secondary"
+              )}
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              {appliedTemplateId ? "Template applied ✓" : "Use a Template"}
+            </button>
           </div>
         </div>
         <div className="border-border bg-background space-y-5 border border-t-0 p-6 shadow-md">
@@ -103,7 +139,7 @@ export function Step1Form() {
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.name && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.name && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={64}
             />
@@ -134,7 +170,7 @@ export function Step1Form() {
               placeholder="Describe what learners will accomplish..."
               className={cn(
                 "border-border bg-background w-full resize-none border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.description && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.description && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={2000}
             />
@@ -164,7 +200,7 @@ export function Step1Form() {
               placeholder="e.g. Programming, Web3, Design"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.category && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.category && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={32}
             />
@@ -253,6 +289,12 @@ export function Step1Form() {
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
+
+      <TemplatePicker
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        onApply={handleApplyTemplate}
+      />
     </form>
   )
 }

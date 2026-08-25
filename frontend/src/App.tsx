@@ -25,6 +25,7 @@ const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ defau
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
+import { useQuestEventStream } from "@/hooks/use-quest-events"
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,7 @@ function App() {
   const { toasts, addToast, removeToast } = useToast()
   const onboarding = useOnboarding()
   const { connected } = useWallet()
+  useQuestEventStream(connected)
 
   // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
   useEffect(() => {

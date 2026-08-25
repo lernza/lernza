@@ -38,8 +38,10 @@ pub enum DataKey {
     MilestoneContractAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
-    // Token balance allocated to a quest
+    // Token balance allocated to a quest (legacy - single token)
     QuestPool(u32),
+    // Per-token balance for a quest - supports multiple token types
+    QuestPoolPerToken(u32, Address), // (quest_id, token_addr)
     // Per-user total earnings
     UserEarnings(Address),
     // Global stats

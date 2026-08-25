@@ -645,7 +645,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
 
               {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
 
-              <div className="relative grid gap-5">
+              <div className="relative grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-1">
                 {visibleQuests.map((ws, i) => {
                   const stats = questStats[ws.id] || {
                     enrolleeCount: 0,

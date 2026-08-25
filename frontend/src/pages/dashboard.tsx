@@ -12,6 +12,7 @@ import {
   Search,
   X,
   BookOpen,
+  SlidersHorizontal,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -39,8 +40,11 @@ import { RecentActivity } from "./dashboard/recent-activity"
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
 const DASHBOARD_QUEST_PAGE_SIZE = 12
+const DASHBOARD_LOAD_MORE_SIZE = 12
 const TRENDING_QUEST_LIMIT = 2
 const RECENT_ACTIVITY_LIMIT = 5
+
+type QuestDiscoveryStatus = "all" | "active" | "upcoming" | "completed"
 
 interface DashboardProps {
   onSelectQuest?: (id: number) => void
@@ -60,6 +64,10 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   const [sortBy, setSortBy] = useState<
     "newest" | "ending-soon" | "most-enrolled" | "highest-reward"
   >("newest")
+  const [statusFilter, setStatusFilter] = useState<QuestDiscoveryStatus>("all")
+  const [rewardMin, setRewardMin] = useState<string>("")
+  const [rewardMax, setRewardMax] = useState<string>("")
+  const [displayCount, setDisplayCount] = useState(DASHBOARD_QUEST_PAGE_SIZE)
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
@@ -204,20 +212,48 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     new Set(filteredQuests.map(q => q.category).filter((c): c is string => !!c))
   ).sort()
 
+  // Derive quest status from on-chain state
+  function deriveQuestStatus(q: {
+    status: number
+    deadline: number
+    archivedAt?: number
+  }): QuestDiscoveryStatus {
+    if (q.status === 1 || q.status === 2) return "completed" // Archived or Cancelled
+    if (q.deadline > 0 && q.deadline < nowSeconds) return "completed"
+    if (q.deadline > 0 && q.deadline > nowSeconds) return "upcoming"
+    return "active"
+  }
+
+  const statusFilteredQuests =
+    statusFilter === "all"
+      ? presetFilteredQuests
+      : presetFilteredQuests.filter(q => deriveQuestStatus(q) === statusFilter)
+
   const categoryFilteredQuests =
     category === "all"
-      ? presetFilteredQuests
-      : presetFilteredQuests.filter(q => q.category === category)
+      ? statusFilteredQuests
+      : statusFilteredQuests.filter(q => q.category === category)
+
+  // Reward range filter
+  const rewardMinNum = rewardMin !== "" ? Number(rewardMin) : 0
+  const rewardMaxNum = rewardMax !== "" ? Number(rewardMax) : Infinity
+  const rewardFilteredQuests = categoryFilteredQuests.filter(q => {
+    const stats = questStats[q.id]
+    const pool = stats?.poolBalance ?? 0
+    if (rewardMin !== "" && pool < rewardMinNum) return false
+    if (rewardMax !== "" && pool > rewardMaxNum) return false
+    return true
+  })
 
   const searchQuery = search.trim().toLowerCase()
   const searchedQuests = searchQuery
-    ? categoryFilteredQuests.filter(q => {
+    ? rewardFilteredQuests.filter(q => {
         const haystack = [q.name, q.description, q.category, ...(q.tags ?? [])]
           .join(" ")
           .toLowerCase()
         return haystack.includes(searchQuery)
       })
-    : categoryFilteredQuests
+    : rewardFilteredQuests
 
   const sortedQuests = [...searchedQuests].sort((a, b) => {
     const statsA = questStats[a.id]
@@ -239,7 +275,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     }
   })
 
-  const visibleQuests = sortedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE)
+  const visibleQuests = sortedQuests.slice(0, displayCount)
 
   const ownedCount = ownedQuests.length
   const enrolledCount = enrolledQuests.length
@@ -512,6 +548,70 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
                 </select>
               </div>
 
+              {/* Status filter chips */}
+              <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Status filter">
+                {(
+                  [
+                    { value: "all", label: "All status" },
+                    { value: "active", label: "Active" },
+                    { value: "upcoming", label: "Upcoming" },
+                    { value: "completed", label: "Completed" },
+                  ] as const
+                ).map(s => (
+                  <button
+                    key={s.value}
+                    onClick={() => setStatusFilter(s.value)}
+                    aria-pressed={statusFilter === s.value}
+                    className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
+                      statusFilter === s.value
+                        ? "bg-accent"
+                        : "bg-background hover:bg-secondary hover:shadow-md"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Reward range filter */}
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <SlidersHorizontal className="text-muted-foreground h-3.5 w-3.5" />
+                  <span className="text-muted-foreground text-xs font-bold uppercase">Reward range:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={rewardMin}
+                    onChange={e => setRewardMin(e.target.value)}
+                    placeholder="Min USDC"
+                    aria-label="Minimum reward amount"
+                    min="0"
+                    className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"
+                  />
+                  <span className="text-muted-foreground text-xs">-</span>
+                  <input
+                    type="number"
+                    value={rewardMax}
+                    onChange={e => setRewardMax(e.target.value)}
+                    placeholder="Max USDC"
+                    aria-label="Maximum reward amount"
+                    min="0"
+                    className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"
+                  />
+                  {(rewardMin !== "" || rewardMax !== "") && (
+                    <button
+                      type="button"
+                      onClick={() => { setRewardMin(""); setRewardMax("") }}
+                      aria-label="Clear reward range"
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Preset Filter Chips */}
               <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Preset filters">
                 {(
@@ -618,6 +718,11 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
                               <Coins className="h-3 w-3" />
                               {formatTokens(stats.poolBalance)} USDC
                             </Badge>
+                            {ws.category && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {ws.category}
+                              </Badge>
+                            )}
                           </div>
 
                           {totalMilestones > 0 && (
@@ -652,9 +757,15 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
               </div>
 
               {sortedQuests.length > visibleQuests.length && !isLoading && !loadError && (
-                <p className="text-muted-foreground mt-4 text-xs font-bold">
-                  Showing the first {visibleQuests.length} of {sortedQuests.length} quests.
-                </p>
+                <div className="mt-5 text-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDisplayCount(prev => prev + DASHBOARD_LOAD_MORE_SIZE)}
+                    className="shimmer-on-hover"
+                  >
+                    Load more ({visibleQuests.length} of {sortedQuests.length})
+                  </Button>
+                </div>
               )}
 
               {sortedQuests.length === 0 && !isLoading && !loadError && (

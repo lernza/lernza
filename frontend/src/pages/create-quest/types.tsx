@@ -82,7 +82,7 @@ export const step2Schema = z.object({
 export type Step2Values = z.infer<typeof step2Schema>
 
 export type FormStep = 1 | 2 | 3
-export type TxPhase = "idle" | "funding" | "funded" | "creating" | "done"
+export type TxPhase = "idle" | "funding" | "funded" | "creating" | "created" | "done"
 
 // Helper components
 export function FieldError({ message, id }: { message?: string; id?: string }) {

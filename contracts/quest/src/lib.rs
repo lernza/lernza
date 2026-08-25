@@ -1,7 +1,7 @@
 #![no_std]
 use common::{
     extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, Visibility,
-    BUMP, THRESHOLD,
+    EnrolleeStatus, Enrollee, BUMP, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -45,6 +45,8 @@ pub enum DataKey {
     /// Schema version recorded after an administrator migrates a quest.
     /// Appended so existing DataKey encodings remain stable across upgrades.
     QuestSchemaVersion(u32),
+    /// Enrollee status tracking. Key: (quest_id, enrollee_address). Value: EnrolleeStatus.
+    EnrolleeStatus(u32, Address),
 }
 
 // QuestInfo moved to common.
@@ -764,6 +766,9 @@ impl QuestContract {
         if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
+        }
         let key = DataKey::InviteCommitment(quest_id, commitment.clone());
         env.storage().persistent().set(&key, &true);
         common::extend_persistent_ttl(&env, &key);
@@ -794,8 +799,22 @@ impl QuestContract {
         Ok(())
     }
 
-    /// Check whether an invite commitment is registered and not yet consumed.
+    /// Check whether an invite commitment is registered, not yet consumed,
+    /// and still redeemable (the quest is neither closed nor past its
+    /// deadline). A commitment that would be rejected by
+    /// `join_quest_with_invite` for any of these reasons reports as invalid
+    /// here too, so callers never see a stale invite reported as valid.
     pub fn is_invite_valid(env: Env, quest_id: u32, commitment: BytesN<32>) -> bool {
+        let quest = match Self::load_quest(&env, quest_id) {
+            Ok(q) => q,
+            Err(_) => return false,
+        };
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return false;
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return false;
+        }
         let registered = env
             .storage()
             .persistent()
@@ -1036,6 +1055,59 @@ impl QuestContract {
         Ok(enrollees.contains(&user))
     }
 
+    /// Get active participants for a quest, excluding suspended, banned, and inactive users.
+    /// Returns only enrollees with Active status.
+    pub fn get_active_participants(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut active = Vec::new(&env);
+
+        for enrollee in enrollees.iter() {
+            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee);
+            let status: EnrolleeStatus = env
+                .storage()
+                .persistent()
+                .get(&status_key)
+                .unwrap_or(EnrolleeStatus::Active);
+
+            if status == EnrolleeStatus::Active {
+                active.push_back(enrollee);
+            }
+        }
+        Self::bump(&env, quest_id);
+        Ok(active)
+    }
+
+    /// Set the status of an enrollee. Owner only.
+    pub fn set_enrollee_status(env: Env, quest_id: u32, enrollee: Address, status: EnrolleeStatus) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        if !enrollees.contains(&enrollee) {
+            return Err(Error::NotEnrolled);
+        }
+
+        let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
+        env.storage().persistent().set(&status_key, &status);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the status of an enrollee. Defaults to Active if not set.
+    pub fn get_enrollee_status(env: Env, quest_id: u32, enrollee: Address) -> Result<EnrolleeStatus, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let status_key = DataKey::EnrolleeStatus(quest_id, enrollee);
+        let status: EnrolleeStatus = env
+            .storage()
+            .persistent()
+            .get(&status_key)
+            .unwrap_or(EnrolleeStatus::Active);
+        Self::bump(&env, quest_id);
+        Ok(status)
+    }
+
     /// Update or clear the deadline for a quest. Owner only.
     /// Pass 0 to remove the deadline.
     pub fn set_deadline(env: Env, quest_id: u32, deadline: u64) -> Result<(), Error> {
@@ -1057,6 +1129,53 @@ impl QuestContract {
             return Ok(false);
         }
         Ok(env.ledger().timestamp() > quest.deadline)
+    }
+
+    /// Estimate the rent (in stroops) `create_quest` will need to keep the
+    /// resulting `QuestInfo` entry alive for one TTL cycle (~30 days), based
+    /// on the sizes of the variable-length fields the caller intends to
+    /// submit. This is a planning aid only — see `docs/GAS_COSTS.md` for the
+    /// full storage cost model and its accuracy caveats. Always confirm the
+    /// exact fee with `simulateTransaction` before signing.
+    pub fn estimate_quest_creation_rent(
+        _env: Env,
+        name_len: u32,
+        description_len: u32,
+        category_len: u32,
+        tag_count: u32,
+    ) -> i128 {
+        // Fixed overhead accounts for the non-string QuestInfo fields
+        // (addresses, numeric fields, enums, and struct/XDR framing).
+        const FIXED_OVERHEAD_BYTES: u32 = 256;
+        const AVG_TAG_BYTES: u32 = MAX_TAG_LEN;
+
+        let entry_size = FIXED_OVERHEAD_BYTES
+            + name_len
+            + description_len
+            + category_len
+            + (tag_count.min(MAX_TAGS) * AVG_TAG_BYTES);
+
+        common::estimate_persistent_rent(entry_size)
+    }
+
+    /// Explicitly refresh the TTL for a quest, its enrollee list, and its
+    /// version history. Owner only.
+    ///
+    /// Quest data is normally kept alive as a side effect of other mutating
+    /// calls (see `bump`), but a quest that receives no updates for a long
+    /// stretch can approach expiry. This lets an owner top up the TTL
+    /// directly — e.g. from a scheduled job — without making an unrelated
+    /// state change.
+    pub fn extend_quest_ttl(env: Env, quest_id: u32, owner: Address) -> Result<(), Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        owner.require_auth();
+        Self::bump(&env, quest_id);
+        env.events()
+            .publish((Symbol::new(&env, "quest_ttl_extended"),), quest_id);
+        Ok(())
     }
 
     /// Get total quest count.
@@ -1187,6 +1306,52 @@ impl QuestContract {
     pub fn get_enrollment_cap(env: Env, quest_id: u32) -> Option<u32> {
         let quest = Self::load_quest(&env, quest_id).ok()?;
         quest.max_enrollees
+    }
+
+    /// Set prerequisites for a quest. Owner only.
+    /// Pass an empty vector to remove all prerequisites.
+    pub fn set_prerequisites(env: Env, quest_id: u32, prerequisite_ids: Vec<u32>) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        quest.prerequisite_quest_ids = prerequisite_ids;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get prerequisites for a quest.
+    pub fn get_prerequisites(env: Env, quest_id: u32) -> Result<Vec<u32>, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        Self::bump(&env, quest_id);
+        Ok(quest.prerequisite_quest_ids)
+    }
+
+    /// Check if a user has completed all prerequisites for a quest.
+    pub fn has_completed_prerequisites(env: Env, user: Address, quest_id: u32) -> Result<bool, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+
+        if quest.prerequisite_quest_ids.len() == 0 {
+            return Ok(true);
+        }
+
+        for prerequisite_id in quest.prerequisite_quest_ids.iter() {
+            let prerequisite = Self::load_quest(&env, prerequisite_id)?;
+            if prerequisite.status != QuestStatus::Active {
+                continue;
+            }
+
+            let enrollees = Self::load_enrollees(&env, prerequisite_id);
+            if !enrollees.contains(&user) {
+                return Ok(false);
+            }
+        }
+
+        Self::bump(&env, quest_id);
+        Ok(true)
     }
 
     // --- internals ---

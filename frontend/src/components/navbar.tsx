@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { key: "landing", label: "Home" },
   { key: "dashboard", label: "Dashboard" },
   { key: "leaderboard", label: "Leaderboard" },
+  { key: "history", label: "History" },
   { key: "profile", label: "Profile" },
 ] as const
 

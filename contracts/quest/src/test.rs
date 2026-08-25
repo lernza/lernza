@@ -1813,6 +1813,56 @@ fn test_invite_past_deadline_rejected() {
 }
 
 #[test]
+fn test_is_invite_valid_false_after_deadline() {
+    // Issue #1326 — is_invite_valid must not report a stale invite as valid
+    // once the quest deadline has passed, even though the commitment itself
+    // is still registered and unused.
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"secret";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+    assert!(client.is_invite_valid(&quest_id, &commitment));
+
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&quest_id, &999);
+
+    assert!(!client.is_invite_valid(&quest_id, &commitment));
+}
+
+#[test]
+fn test_register_invite_past_deadline_rejected() {
+    // Issue #1326 — an owner cannot register new invites for a quest whose
+    // deadline has already passed.
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    env.ledger().set_timestamp(1000);
+    client.set_deadline(&quest_id, &999);
+
+    let commitment = sha256_commitment(&env, b"secret");
+    let result = client.try_register_invite(&owner, &quest_id, &commitment);
+    assert_eq!(result, Err(Ok(Error::DeadlineExpired)));
+}
+
+#[test]
+fn test_is_invite_valid_false_for_archived_quest() {
+    // Issue #1326 — closing a quest (archive) must also invalidate its
+    // outstanding invites from the query surface.
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
+
+    let preimage = b"secret";
+    let commitment = sha256_commitment(&env, preimage);
+    client.register_invite(&owner, &quest_id, &commitment);
+    assert!(client.is_invite_valid(&quest_id, &commitment));
+
+    client.archive_quest(&quest_id);
+    assert!(!client.is_invite_valid(&quest_id, &commitment));
+}
+
+#[test]
 fn test_invite_respects_enrollment_cap() {
     let (env, client, owner, token) = setup();
     // Cap of 1 enrollee.
@@ -2021,4 +2071,42 @@ fn test_signature_and_preimage_validation_rejects_forgery() {
         &Bytes::from_slice(&env, authentic_preimage),
     );
     assert!(client.is_enrollee(&quest_id, &victim));
+}
+
+// --- Storage cost estimation & TTL management — issue #1416 ---
+
+#[test]
+fn test_estimate_quest_creation_rent_scales_with_input_size() {
+    let (env, client, _owner, _token) = setup();
+
+    let small = client.estimate_quest_creation_rent(&4, &10, &4, &0);
+    let large = client.estimate_quest_creation_rent(&64, &2000, &32, &5);
+
+    assert!(small > 0);
+    assert!(large > small);
+}
+
+#[test]
+fn test_estimate_quest_creation_rent_caps_tag_count() {
+    // Tags beyond MAX_TAGS (5) must not inflate the estimate further, since
+    // create_quest itself rejects more than MAX_TAGS tags.
+    let (env, client, _owner, _token) = setup();
+
+    let at_cap = client.estimate_quest_creation_rent(&10, &10, &10, &5);
+    let above_cap = client.estimate_quest_creation_rent(&10, &10, &10, &50);
+    assert_eq!(at_cap, above_cap);
+}
+
+#[test]
+fn test_extend_quest_ttl_owner_only() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
+
+    // Non-owner cannot extend TTL.
+    let impostor = Address::generate(&env);
+    let result = client.try_extend_quest_ttl(&quest_id, &impostor);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Owner can extend TTL successfully.
+    client.extend_quest_ttl(&quest_id, &owner);
 }

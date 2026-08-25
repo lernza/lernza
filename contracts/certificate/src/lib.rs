@@ -256,7 +256,11 @@ impl CertificateContract {
 
     #[only_owner]
     pub fn set_metadata_base(env: Env, uri: String) -> Result<(), Error> {
+        if !common::is_valid_url(&uri) {
+            return Err(Error::InvalidInput);
+        }
         env.storage().instance().set(&DataKey::MetadataBase, &uri);
+        extend_instance_ttl(&env);
         env.events()
             .publish((Symbol::new(&env, "metadata_base_updated"),), uri);
         Ok(())

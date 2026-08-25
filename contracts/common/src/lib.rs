@@ -78,6 +78,16 @@ pub enum QuestStatus {
 }
 
 #[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum EnrolleeStatus {
+    Active = 0,
+    Suspended = 1,
+    Banned = 2,
+    Inactive = 3,
+}
+
+#[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct QuestInfo {
     pub id: u32,
@@ -95,6 +105,15 @@ pub struct QuestInfo {
     pub max_enrollees: Option<u32>,
     pub verified: bool,
     pub version: u32,
+    pub prerequisite_quest_ids: Vec<u32>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Enrollee {
+    pub address: Address,
+    pub status: EnrolleeStatus,
+    pub enrolled_at: u64,
 }
 
 /// A snapshot of quest fields at a specific version, stored for history.
@@ -172,7 +191,8 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
 }
 
 /// Basic URL format checker used by contract metadata validation.
-/// Lightweight acceptance of http/https and rejects whitespace.
+/// Lightweight acceptance of http/https/ipfs schemes and rejects whitespace
+/// and empty strings.
 pub fn is_valid_url(s: &String) -> bool {
     if s.len() == 0 || s.len() > 2048 {
         return false;
@@ -190,10 +210,14 @@ pub fn is_valid_url(s: &String) -> bool {
     }
     let prefix_http = b"http://";
     let prefix_https = b"https://";
+    let prefix_ipfs = b"ipfs://";
     if len >= 7 && &buf[..7] == prefix_http {
         return true;
     }
     if len >= 8 && &buf[..8] == prefix_https {
+        return true;
+    }
+    if len >= 7 && &buf[..7] == prefix_ipfs {
         return true;
     }
     false
@@ -289,3 +313,25 @@ pub fn get_persistent<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk:
 ) -> Option<T> {
     env.storage().persistent().get(key)
 }
+
+/// Planning-only heuristic for rent-cost estimates: stroops charged per
+/// 1,024 bytes of persistent-entry payload for a single `BUMP` (~30 day) TTL
+/// extension window. This mirrors the order of magnitude of Soroban's
+/// published write-fee / rent schedule but is **not** read from the network,
+/// so callers must still confirm exact costs via `simulateTransaction`
+/// before submitting a transaction. See `docs/GAS_COSTS.md` for the full
+/// storage cost model this constant supports.
+pub const RENT_STROOPS_PER_KB_PER_BUMP: i128 = 150;
+
+/// Estimate the rent (in stroops) needed to keep a persistent entry of
+/// `entry_size_bytes` alive for one `BUMP` TTL-extension cycle.
+///
+/// This is a rough, contract-side planning aid so frontends can show users
+/// an approximate storage cost *before* they sign a transaction — it is not
+/// a substitute for simulating the actual transaction.
+pub fn estimate_persistent_rent(entry_size_bytes: u32) -> i128 {
+    let bytes = entry_size_bytes as i128;
+    // Ceil-divide so partial kilobytes still round up to a whole unit of rent.
+    ((bytes * RENT_STROOPS_PER_KB_PER_BUMP) + 1023) / 1024
+}
+

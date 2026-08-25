@@ -1,6 +1,6 @@
 import { Clock, Plus, Target, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import type { ActivityEvent } from "@/lib/mock-data"
+import type { ActivityEvent } from "@/lib/shared-types"
 
 interface RecentActivityProps {
   activities: ActivityEvent[]

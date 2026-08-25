@@ -21,10 +21,12 @@ const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default:
 const QuestView = lazy(() => import("@/pages/quest").then((m) => ({ default: m.QuestView })))
 const CreateQuest = lazy(() => import("@/pages/create-quest").then((m) => ({ default: m.CreateQuest })))
 const Leaderboard = lazy(() => import("@/pages/leaderboard").then((m) => ({ default: m.Leaderboard })))
+const History = lazy(() => import("@/pages/history").then((m) => ({ default: m.History })))
 const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
+import { useQuestEventStream } from "@/hooks/use-quest-events"
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ const VALID_PAGES = [
   "create-quest",
   "creator-dashboard",
   "leaderboard",
+  "history",
   "terms",
   "privacy",
 ] as const
@@ -77,6 +80,7 @@ function pathToPage(pathname: string): {
     return { page: "creator-dashboard", questId: null, creatorAddress: null }
   }
   if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null }
+  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null }
   if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null }
   if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null }
 
@@ -111,6 +115,7 @@ function App() {
   const { toasts, addToast, removeToast } = useToast()
   const onboarding = useOnboarding()
   const { connected } = useWallet()
+  useQuestEventStream(connected)
 
   // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
   useEffect(() => {
@@ -188,6 +193,12 @@ function App() {
         return (
           <Suspense fallback={<PageSkeleton />}>
             <Leaderboard />
+          </Suspense>
+        )
+      case "history":
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <History />
           </Suspense>
         )
       case "creator":

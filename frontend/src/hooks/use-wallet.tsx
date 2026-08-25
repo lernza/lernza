@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react"
 import freighter, { WatchWalletChanges } from "@stellar/freighter-api"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
+import { pushToast } from "@/lib/notifications"
 
 const DISCONNECTED_KEY = "lernza_wallet_disconnected"
 const FREIGHTER_INSTALL_URL = "https://www.freighter.app/"
@@ -375,20 +376,27 @@ function useWalletState(): WalletContextValue {
 
       if (error || !address) {
         // Wallet locked or access revoked from inside the extension.
-        setState(s =>
-          s.connected
-            ? {
-                ...s,
-                address: null,
-                connected: false,
-                network: null,
-                networkName: null,
-                networkPassphrase: null,
-                isSupportedNetwork: true,
-                wrongNetwork: false,
-              }
-            : s
-        )
+        setState(s => {
+          if (s.connected) {
+            // Notify user of unexpected disconnect
+            pushToast({
+              message: "Wallet disconnected. Reconnect to continue using on-chain features.",
+              type: "warning",
+              duration: 6000,
+            })
+            return {
+              ...s,
+              address: null,
+              connected: false,
+              network: null,
+              networkName: null,
+              networkPassphrase: null,
+              isSupportedNetwork: true,
+              wrongNetwork: false,
+            }
+          }
+          return s
+        })
         return
       }
 

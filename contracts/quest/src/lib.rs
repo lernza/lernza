@@ -760,6 +760,9 @@ impl QuestContract {
         if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
+        }
         let key = DataKey::InviteCommitment(quest_id, commitment.clone());
         env.storage().persistent().set(&key, &true);
         common::extend_persistent_ttl(&env, &key);
@@ -790,8 +793,22 @@ impl QuestContract {
         Ok(())
     }
 
-    /// Check whether an invite commitment is registered and not yet consumed.
+    /// Check whether an invite commitment is registered, not yet consumed,
+    /// and still redeemable (the quest is neither closed nor past its
+    /// deadline). A commitment that would be rejected by
+    /// `join_quest_with_invite` for any of these reasons reports as invalid
+    /// here too, so callers never see a stale invite reported as valid.
     pub fn is_invite_valid(env: Env, quest_id: u32, commitment: BytesN<32>) -> bool {
+        let quest = match Self::load_quest(&env, quest_id) {
+            Ok(q) => q,
+            Err(_) => return false,
+        };
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return false;
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return false;
+        }
         let registered = env
             .storage()
             .persistent()
@@ -1106,6 +1123,53 @@ impl QuestContract {
             return Ok(false);
         }
         Ok(env.ledger().timestamp() > quest.deadline)
+    }
+
+    /// Estimate the rent (in stroops) `create_quest` will need to keep the
+    /// resulting `QuestInfo` entry alive for one TTL cycle (~30 days), based
+    /// on the sizes of the variable-length fields the caller intends to
+    /// submit. This is a planning aid only — see `docs/GAS_COSTS.md` for the
+    /// full storage cost model and its accuracy caveats. Always confirm the
+    /// exact fee with `simulateTransaction` before signing.
+    pub fn estimate_quest_creation_rent(
+        _env: Env,
+        name_len: u32,
+        description_len: u32,
+        category_len: u32,
+        tag_count: u32,
+    ) -> i128 {
+        // Fixed overhead accounts for the non-string QuestInfo fields
+        // (addresses, numeric fields, enums, and struct/XDR framing).
+        const FIXED_OVERHEAD_BYTES: u32 = 256;
+        const AVG_TAG_BYTES: u32 = MAX_TAG_LEN;
+
+        let entry_size = FIXED_OVERHEAD_BYTES
+            + name_len
+            + description_len
+            + category_len
+            + (tag_count.min(MAX_TAGS) * AVG_TAG_BYTES);
+
+        common::estimate_persistent_rent(entry_size)
+    }
+
+    /// Explicitly refresh the TTL for a quest, its enrollee list, and its
+    /// version history. Owner only.
+    ///
+    /// Quest data is normally kept alive as a side effect of other mutating
+    /// calls (see `bump`), but a quest that receives no updates for a long
+    /// stretch can approach expiry. This lets an owner top up the TTL
+    /// directly — e.g. from a scheduled job — without making an unrelated
+    /// state change.
+    pub fn extend_quest_ttl(env: Env, quest_id: u32, owner: Address) -> Result<(), Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        owner.require_auth();
+        Self::bump(&env, quest_id);
+        env.events()
+            .publish((Symbol::new(&env, "quest_ttl_extended"),), quest_id);
+        Ok(())
     }
 
     /// Get total quest count.

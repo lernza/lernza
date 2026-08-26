@@ -652,7 +652,10 @@ fn test_same_distribution_mode_can_be_reapplied_after_milestones_exist() {
     create_ms(&env, &client, &owner, q_id, "Task", 100);
 
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Custom, &0);
-    assert_eq!(client.get_distribution_mode(&q_id), DistributionMode::Custom);
+    assert_eq!(
+        client.get_distribution_mode(&q_id),
+        DistributionMode::Custom
+    );
 }
 
 #[test]

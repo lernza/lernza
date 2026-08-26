@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -30,6 +30,7 @@ export function Step2Form() {
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isValid },
   } = useForm<Step2Values>({
     resolver: zodResolver(step2Schema),
@@ -44,13 +45,19 @@ export function Step2Form() {
 
   const handleBatchImport = (imported: ParsedMilestone[], mode: "append" | "replace") => {
     if (mode === "replace") {
-      replace(imported)
+      replace(imported.map(item => ({ ...item, prerequisiteIds: [] })))
     } else {
-      append(imported)
+      append(imported.map(item => ({ ...item, prerequisiteIds: [] })))
     }
   }
 
   const milestones = watch("milestones")
+  useEffect(() => {
+    const subscription = watch(value => setStep2Data({
+      milestones: (value.milestones ?? []).map(milestone => ({ ...milestone, prerequisiteIds: milestone.prerequisiteIds ?? [] })),
+    }))
+    return () => subscription.unsubscribe()
+  }, [setStep2Data, watch])
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
     return sum + (isNaN(n) ? 0 : n)
@@ -90,6 +97,7 @@ export function Step2Form() {
             {fields.map((field, index) => {
               const titleVal = milestones?.[index]?.title || ""
               const descVal = milestones?.[index]?.description || ""
+              const prerequisiteIds = milestones?.[index]?.prerequisiteIds || []
 
               return (
                 <div key={field.id} className="space-y-4 p-5">
@@ -247,6 +255,23 @@ export function Step2Form() {
                       message={errors.milestones?.[index]?.rewardAmount?.message}
                     />
                   </div>
+
+                  <div>
+                    <FormLabel>Prerequisites</FormLabel>
+                    <p className="text-muted-foreground mb-2 text-xs">Require the immediately preceding milestone to be verified before this work unlocks.</p>
+                    <div className="flex flex-wrap gap-2">
+                      {fields.slice(Math.max(index - 1, 0), index).map((_, offset) => {
+                        const prerequisiteIndex = index - 1 + offset
+                        return <label key={prerequisiteIndex} className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold">
+                          <input type="checkbox" checked={prerequisiteIds.includes(prerequisiteIndex)} onChange={() => {
+                            const next = prerequisiteIds.includes(prerequisiteIndex) ? [] : [prerequisiteIndex]
+                            setValue(`milestones.${index}.prerequisiteIds`, next, { shouldDirty: true, shouldValidate: true })
+                          }} /> Step {prerequisiteIndex + 1}
+                        </label>
+                      })}
+                      {index === 0 && <span className="text-muted-foreground text-xs">First milestone is immediately available.</span>}
+                    </div>
+                  </div>
                 </div>
               )
             })}
@@ -256,7 +281,7 @@ export function Step2Form() {
           <div className="border-border border-t p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => append({ title: "", description: "", rewardAmount: 0 })}
+              onClick={() => append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })}
               className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border border-dashed py-3 text-sm font-semibold transition-colors"
             >
               <Plus className="h-4 w-4" />

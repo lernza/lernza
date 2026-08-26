@@ -197,7 +197,8 @@ export class QuestClient {
     tags: string[],
     tokenAddr: string,
     visibility: Visibility,
-    maxEnrollees?: number
+    maxEnrollees?: number,
+    deadline?: number
   ) {
     return safeContractCall(async () => {
       const tx = await this.buildTx(owner, "create_quest", [
@@ -211,6 +212,7 @@ export class QuestClient {
         maxEnrollees !== undefined
           ? nativeToScVal(maxEnrollees, { type: "u32" })
           : nativeToScVal(null),
+        deadline !== undefined ? nativeToScVal(deadline, { type: "u64" }) : nativeToScVal(null),
       ])
       return signAndSubmit(tx)
     })

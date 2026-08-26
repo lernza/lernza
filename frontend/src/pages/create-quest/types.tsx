@@ -71,6 +71,7 @@ export const milestoneSchema = z.object({
     .number({ message: "Reward amount is required" })
     .positive("Reward must be greater than 0")
     .max(MAX_REWARD_AMOUNT, `Reward max ${formatTokens(MAX_REWARD_AMOUNT)} tokens`),
+  prerequisiteIds: z.array(z.number().int().nonnegative()).default([]),
 })
 
 export const step2Schema = z.object({

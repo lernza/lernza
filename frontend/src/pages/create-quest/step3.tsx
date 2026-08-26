@@ -67,7 +67,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
         step1Data.category,
         step1Data.tags || [],
         tokenAddr,
-        Visibility.Public
+        Visibility.Unlisted
       )
 
       if (result.status === "FAILED") {
@@ -101,7 +101,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
           m.title,
           m.description,
           rewardAmount,
-          i > 0 // requiresPrevious for all except the first milestone
+          m.prerequisiteIds.length > 0
         )
       }
 
@@ -119,6 +119,20 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
 
   const handleFinalize = () => {
     onComplete()
+  }
+
+  const handlePublish = async () => {
+    if (!address || createdQuestId === null) return
+    setTxPhase("creating")
+    setTxError(null)
+    try {
+      const result = await questClient.updateQuest(address, createdQuestId, undefined, undefined, undefined, undefined, Visibility.Public)
+      if (result.status === "FAILED") throw new Error(result.error || "Publishing failed")
+      setTxPhase("done")
+    } catch (err: unknown) {
+      setTxError(err instanceof Error ? err.message : "Publishing failed")
+      setTxPhase("funded")
+    }
   }
 
   const isBusy = txPhase === "creating" || txPhase === "funding"
@@ -178,6 +192,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                     <div>
                       <p className="text-sm font-semibold">{m.title}</p>
                       <p className="text-muted-foreground mt-0.5 text-xs">{m.description}</p>
+                      {m.prerequisiteIds.length > 0 && <p className="text-muted-foreground mt-1 text-xs font-semibold">Requires: {m.prerequisiteIds.map(id => `Step ${id + 1}`).join(", ")}</p>}
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
@@ -233,7 +248,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               ) : txPhase === "created" || txPhase === "funded" || txPhase === "done" ? (
                 <>
                   <Check className="h-4 w-4" />
-                  Quest created
+                  Quest saved as private setup
                 </>
               ) : (
                 <>
@@ -275,16 +290,18 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               )}
             </Button>
 
-            {/* Finalize button */}
+            {/* Publish button */}
             {txPhase === "funded" && (
               <Button
-                onClick={handleFinalize}
+                onClick={handlePublish}
                 className="shimmer-on-hover w-full"
               >
                 <Sparkles className="h-4 w-4" />
-                Finalize & Return to Dashboard
+                Publish Quest
               </Button>
             )}
+
+            {txPhase === "done" && <Button onClick={handleFinalize} className="shimmer-on-hover w-full"><Check className="h-4 w-4" />Return to Dashboard</Button>}
 
             {txPhase === "idle" && !txError && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
@@ -298,9 +315,10 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             )}
             {txPhase === "funded" && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Pool funded! Your quest is live with on-chain rewards.
+                Pool funded. Publish when you are ready to make the quest discoverable.
               </p>
             )}
+            {txPhase === "done" && <p className="text-muted-foreground mt-2 text-center text-xs font-bold">Quest published with a funded reward pool.</p>}
           </div>
         </div>
       </div>

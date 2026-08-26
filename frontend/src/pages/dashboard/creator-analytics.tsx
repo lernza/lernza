@@ -1,4 +1,4 @@
-import { Users, TrendingUp, Award, DollarSign } from "lucide-react"
+import { Users, TrendingUp, Award, DollarSign, ClipboardCheck, CircleAlert } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
@@ -9,6 +9,9 @@ interface CreatorAnalyticsProps {
     name: string
     enrolleeCount: number
     completionCount: number
+    pendingReviews: number
+    stalledLearners: number
+    milestoneCount: number
     poolBalance: bigint
     totalDistributed: bigint
   }>
@@ -19,6 +22,8 @@ export function CreatorAnalytics({ quests }: CreatorAnalyticsProps) {
   const totalCompletions = quests.reduce((sum, q) => sum + q.completionCount, 0)
   const totalDistributed = quests.reduce((sum, q) => sum + q.totalDistributed, 0n)
   const totalPoolBalance = quests.reduce((sum, q) => sum + q.poolBalance, 0n)
+  const pendingReviews = quests.reduce((sum, q) => sum + q.pendingReviews, 0)
+  const stalledLearners = quests.reduce((sum, q) => sum + q.stalledLearners, 0)
 
   const avgCompletionRate =
     totalEnrollees > 0 ? ((totalCompletions / totalEnrollees) * 100).toFixed(1) : "0"
@@ -26,7 +31,7 @@ export function CreatorAnalytics({ quests }: CreatorAnalyticsProps) {
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card className="animate-fade-in-up stagger-1">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -82,6 +87,12 @@ export function CreatorAnalytics({ quests }: CreatorAnalyticsProps) {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-6"><div className="flex items-center gap-3"><div className="bg-secondary border-border flex h-10 w-10 items-center justify-center border"><ClipboardCheck className="h-5 w-5" /></div><div><p className="text-muted-foreground text-xs font-bold uppercase">To review</p><p className="text-2xl font-semibold">{pendingReviews}</p></div></div></CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6"><div className="flex items-center gap-3"><div className="bg-secondary border-border flex h-10 w-10 items-center justify-center border"><CircleAlert className="h-5 w-5" /></div><div><p className="text-muted-foreground text-xs font-bold uppercase">Stalled learners</p><p className="text-2xl font-semibold">{stalledLearners}</p></div></div></CardContent>
+        </Card>
       </div>
 
       {/* Quest List */}
@@ -109,8 +120,10 @@ export function CreatorAnalytics({ quests }: CreatorAnalyticsProps) {
                         </Badge>
                         <Badge variant="secondary" className="text-xs">
                           <Award className="mr-1 h-3 w-3" />
-                          {quest.completionCount} completed
+                          {quest.completionCount}/{quest.enrolleeCount * quest.milestoneCount} verified
                         </Badge>
+                        <Badge variant={quest.pendingReviews ? "default" : "secondary"} className="text-xs"><ClipboardCheck className="mr-1 h-3 w-3" />{quest.pendingReviews} remaining</Badge>
+                        {quest.stalledLearners > 0 && <Badge variant="destructive" className="text-xs"><CircleAlert className="mr-1 h-3 w-3" />{quest.stalledLearners} stalled</Badge>}
                         <Badge
                           variant={Number(completionRate) >= 50 ? "default" : "secondary"}
                           className="text-xs"

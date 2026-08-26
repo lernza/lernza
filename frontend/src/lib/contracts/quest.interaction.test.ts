@@ -158,6 +158,7 @@ describe("QuestClient contract interactions (#1216)", () => {
           TOKEN,
           0,
           25,
+          null,
         ],
       })
       expect(mocks.prepareTransaction).toHaveBeenCalledTimes(1)
@@ -172,6 +173,7 @@ describe("QuestClient contract interactions (#1216)", () => {
       expect(method).toBe("create_quest")
       expect(args[6]).toBe(1) // Visibility.Private
       expect(args[7]).toBeNull()
+      expect(args[8]).toBeNull()
     })
 
     it("updateQuest sends null for every omitted optional field", async () => {

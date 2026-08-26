@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react"
+import { useEffect, useState, type KeyboardEvent } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { ArrowRight, FileText, Plus, X } from "lucide-react"
@@ -34,6 +34,14 @@ export function Step1Form() {
   const descValue = watch("description", "")
   const categoryValue = watch("category", "")
   const tagsValue = watch("tags", [])
+
+  // Keep incomplete input in the creation context so "Save draft" works before a step is valid.
+  useEffect(() => {
+    const subscription = watch(value => setStep1Data({
+      name: value.name ?? "", description: value.description ?? "", category: value.category ?? "", tags: value.tags ?? [],
+    }))
+    return () => subscription.unsubscribe()
+  }, [setStep1Data, watch])
 
   const handleAddTag = () => {
     setTagError(null)

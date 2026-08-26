@@ -1057,7 +1057,7 @@ impl QuestContract {
         let mut active = Vec::new(&env);
 
         for enrollee in enrollees.iter() {
-            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee);
+            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
             let status: EnrolleeStatus = env
                 .storage()
                 .persistent()
@@ -1070,6 +1070,32 @@ impl QuestContract {
         }
         Self::bump(&env, quest_id);
         Ok(active)
+    }
+
+    /// Get the count of active participants in a quest.
+    /// Returns the number of enrollees with Active status (the default).
+    /// More efficient than `get_active_participants().len()` when only the
+    /// count is needed (e.g. analytics dashboards, badge displays).
+    pub fn get_active_participant_count(env: Env, quest_id: u32) -> Result<u32, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut count = 0u32;
+
+        for enrollee in enrollees.iter() {
+            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
+            let status: EnrolleeStatus = env
+                .storage()
+                .persistent()
+                .get(&status_key)
+                .unwrap_or(EnrolleeStatus::Active);
+
+            if status == EnrolleeStatus::Active {
+                count += 1;
+            }
+        }
+
+        Self::bump(&env, quest_id);
+        Ok(count)
     }
 
     /// Set the status of an enrollee. Owner only.

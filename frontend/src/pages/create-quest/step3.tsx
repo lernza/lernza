@@ -12,8 +12,12 @@ import { useWallet } from "@/hooks/use-wallet"
 import { questClient, Visibility } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { milestoneClient } from "@/lib/contracts/milestone"
-import { env } from "@/lib/env"
 import { invalidateQuestQueries, invalidateFundingQueries } from "@/lib/query-invalidation"
+import {
+  getConfiguredRewardToken,
+  getVerifiedRewardToken,
+  REWARD_TOKEN_ALLOWLIST_VERSION,
+} from "@/lib/reward-tokens"
 
 interface Step3ReviewProps {
   onComplete: () => void
@@ -32,7 +36,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
     0
   )
 
-  const tokenAddr = env.VITE_REWARDS_TOKEN_CONTRACT_ID || env.VITE_USDC_TOKEN_ADDRESS || ""
+  const rewardToken = getConfiguredRewardToken()
 
   const handleFund = async () => {
     if (!address) return
@@ -43,8 +47,8 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
       if (!createdQuestId && createdQuestId !== 0) {
         throw new Error("Quest must be created before funding. Create the quest first.")
       }
-      // Fund the reward pool — amount is in whole tokens, multiply by 10^6 for USDC decimals
-      const amount = BigInt(totalReward) * BigInt(1_000_000)
+      const verifiedToken = await getVerifiedRewardToken()
+      const amount = BigInt(totalReward) * BigInt(10 ** verifiedToken.decimals)
       const result = await rewardsClient.fundQuest(address, createdQuestId, amount)
       if (result.status === "FAILED") {
         throw new Error(result.error || "Funding failed")
@@ -64,13 +68,14 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
     setTxError(null)
 
     try {
+      const verifiedToken = await getVerifiedRewardToken()
       const result = await questClient.createQuest(
         address,
         step1Data.name,
         step1Data.description,
         step1Data.category,
         step1Data.tags || [],
-        tokenAddr,
+        verifiedToken.contractId,
         Visibility.Unlisted
       )
 
@@ -87,10 +92,10 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
           questId = Number(native)
         } catch {
           // Fallback: try to get quest count
-          questId = await questClient.getQuestCount() - 1
+          questId = (await questClient.getQuestCount()) - 1
         }
       } else {
-        questId = await questClient.getQuestCount() - 1
+        questId = (await questClient.getQuestCount()) - 1
       }
 
       setCreatedQuestId(questId)
@@ -131,7 +136,15 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
     setTxPhase("creating")
     setTxError(null)
     try {
-      const result = await questClient.updateQuest(address, createdQuestId, undefined, undefined, undefined, undefined, Visibility.Public)
+      const result = await questClient.updateQuest(
+        address,
+        createdQuestId,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        Visibility.Public
+      )
       if (result.status === "FAILED") throw new Error(result.error || "Publishing failed")
       setTxPhase("done")
     } catch (err: unknown) {
@@ -171,7 +184,10 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-muted-foreground text-xs font-bold uppercase">Tags:</span>
                 {step1Data.tags.map((t, idx) => (
-                  <span key={idx} className="bg-accent border-border border px-2 py-0.5 text-xs font-semibold">
+                  <span
+                    key={idx}
+                    className="bg-accent border-border border px-2 py-0.5 text-xs font-semibold"
+                  >
                     #{t}
                   </span>
                 ))}
@@ -197,7 +213,11 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                     <div>
                       <p className="text-sm font-semibold">{m.title}</p>
                       <p className="text-muted-foreground mt-0.5 text-xs">{m.description}</p>
-                      {m.prerequisiteIds.length > 0 && <p className="text-muted-foreground mt-1 text-xs font-semibold">Requires: {m.prerequisiteIds.map(id => `Step ${id + 1}`).join(", ")}</p>}
+                      {m.prerequisiteIds.length > 0 && (
+                        <p className="text-muted-foreground mt-1 text-xs font-semibold">
+                          Requires: {m.prerequisiteIds.map(id => `Step ${id + 1}`).join(", ")}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <Badge variant="default" className="flex-shrink-0 tabular-nums">
@@ -216,12 +236,33 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             <div className="bg-accent border-border mb-4 flex items-center justify-between border p-4 shadow-md">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                <span className="font-semibold">Total USDC needed</span>
+                <span className="font-semibold">
+                  Total {rewardToken?.symbol ?? "reward tokens"} needed
+                </span>
               </div>
               <span className="text-xl font-semibold tabular-nums">
-                {formatTokens(totalReward)} USDC
+                {formatTokens(totalReward)} {rewardToken?.symbol ?? "tokens"}
               </span>
             </div>
+
+            <p className="text-muted-foreground mb-4 text-xs">
+              {rewardToken ? (
+                <>
+                  Verified {rewardToken.name} ({rewardToken.decimals} decimals). Allowlist v
+                  {REWARD_TOKEN_ALLOWLIST_VERSION}.{" "}
+                  <a
+                    className="underline"
+                    href={rewardToken.explorerUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    View contract
+                  </a>
+                </>
+              ) : (
+                "No approved reward token is configured for this network. Unsupported tokens cannot be used."
+              )}
+            </p>
 
             {txError && (
               <div className="border-destructive bg-destructive/10 mb-4 flex items-start gap-2 border p-3">
@@ -267,11 +308,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             <Button
               onClick={handleFund}
               disabled={txPhase !== "created" || isBusy}
-              variant={
-                txPhase === "funded" || txPhase === "done"
-                  ? "secondary"
-                  : "default"
-              }
+              variant={txPhase === "funded" || txPhase === "done" ? "secondary" : "default"}
               className={cn(
                 "shimmer-on-hover mb-3 w-full",
                 (txPhase === "funded" || txPhase === "done") && "border-success"
@@ -290,23 +327,25 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               ) : (
                 <>
                   <Coins className="h-4 w-4" />
-                  Fund Reward Pool ({formatTokens(totalReward)} USDC)
+                  Fund Reward Pool ({formatTokens(totalReward)} {rewardToken?.symbol ?? "tokens"})
                 </>
               )}
             </Button>
 
             {/* Publish button */}
             {txPhase === "funded" && (
-              <Button
-                onClick={handlePublish}
-                className="shimmer-on-hover w-full"
-              >
+              <Button onClick={handlePublish} className="shimmer-on-hover w-full">
                 <Sparkles className="h-4 w-4" />
                 Publish Quest
               </Button>
             )}
 
-            {txPhase === "done" && <Button onClick={handleFinalize} className="shimmer-on-hover w-full"><Check className="h-4 w-4" />Return to Dashboard</Button>}
+            {txPhase === "done" && (
+              <Button onClick={handleFinalize} className="shimmer-on-hover w-full">
+                <Check className="h-4 w-4" />
+                Return to Dashboard
+              </Button>
+            )}
 
             {txPhase === "idle" && !txError && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
@@ -323,18 +362,17 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                 Pool funded. Publish when you are ready to make the quest discoverable.
               </p>
             )}
-            {txPhase === "done" && <p className="text-muted-foreground mt-2 text-center text-xs font-bold">Quest published with a funded reward pool.</p>}
+            {txPhase === "done" && (
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
+                Quest published with a funded reward pool.
+              </p>
+            )}
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={goToBack}
-          disabled={isBusy}
-        >
+        <Button type="button" variant="outline" onClick={goToBack} disabled={isBusy}>
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>

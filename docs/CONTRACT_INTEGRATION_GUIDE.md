@@ -1,3 +1,12 @@
+## Reward token allowlist
+
+The frontend uses a versioned, network-specific allowlist in
+`frontend/src/lib/reward-tokens.ts`. Quest creation and funding require the configured contract
+address to be present in the active network's allowlist and verify its on-chain symbol, name, and
+decimals before constructing a transaction. Testnet assets are never reused for production; a
+mainnet asset must be explicitly reviewed and added to the production allowlist with its Stellar
+Expert explorer URL.
+
 # Lernza Contributor Smart Contract Integration Guide
 
 This guide provides contributor-facing documentation for integrating with Lernza's Soroban smart contracts on the Stellar network. It covers contract methods, authorization requirements, storage architectures, event schemas, frontend interaction patterns, and local testing workflows.

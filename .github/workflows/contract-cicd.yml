@@ -152,13 +152,23 @@ jobs:
           name: contract-wasm-${{ github.sha }}
           path: ./wasm
 
+      - name: Fetch baseline sizes
+        run: |
+          # Fetch baseline from main branch, fallback to empty JSON if not found
+          HTTP_STATUS=$(curl -s -o baseline.json -w "%{http_code}" -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/docs/wasm-baseline.json")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "{}" > baseline.json
+          fi
+
       - name: Generate size report
         id: report
         run: |
           echo "# 📦 Smart Contract Size Report" > report.md
           echo "" >> report.md
-          echo "| Contract | Size | Budget | Status |" >> report.md
-          echo "|----------|------|--------|--------|" >> report.md
+          echo "| Contract | Size | Diff | Budget | Status |" >> report.md
+          echo "|----------|------|------|--------|--------|" >> report.md
 
           declare -A BUDGETS=(
             ["certificate.wasm"]=$((100 * 1024))
@@ -175,6 +185,26 @@ jobs:
             BUDGET=${BUDGETS[$NAME]:-$((256 * 1024))}
             BUDGET_KB=$(echo "scale=2; $BUDGET / 1024" | bc)
             
+            # Extract baseline size from JSON (requires jq)
+            BASELINE=$(jq -r ".\"$NAME\" // 0" baseline.json)
+            
+            DIFF_STR="-"
+            ALERT=""
+            if [ "$BASELINE" != "0" ] && [ "$BASELINE" != "null" ]; then
+              DIFF=$((SIZE - BASELINE))
+              DIFF_KB=$(echo "scale=2; $DIFF / 1024" | bc)
+              if [ "$DIFF" -gt 0 ]; then
+                DIFF_STR="+$DIFF_KB KB 📈"
+                if [ "$DIFF" -gt 5120 ]; then # 5KB threshold
+                  ALERT="⚠️ "
+                fi
+              elif [ "$DIFF" -lt 0 ]; then
+                DIFF_STR="$DIFF_KB KB 📉"
+              else
+                DIFF_STR="0 KB"
+              fi
+            fi
+
             if [ "$SIZE" -gt "$BUDGET" ]; then
               STATUS="🔴 Over budget"
             else
@@ -182,7 +212,7 @@ jobs:
               STATUS="🟢 ${PERCENT}%"
             fi
             
-            echo "| \`$NAME\` | ${SIZE_KB} KB | ${BUDGET_KB} KB | $STATUS |" >> report.md
+            echo "| \`$NAME\` | ${SIZE_KB} KB | $DIFF_STR | ${BUDGET_KB} KB | $ALERT$STATUS |" >> report.md
           done
 
           echo "" >> report.md

@@ -22,9 +22,10 @@ import { useContractData } from "@/hooks/use-async-data"
 import { useUserRole } from "@/hooks/use-user-role"
 import { formatTokens } from "@/lib/utils"
 import { rewardsClient } from "@/lib/contracts/rewards"
-import { questClient } from "@/lib/contracts/quest"
 import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
 import { navigateToPath } from "@/lib/navigation"
+import { useOnboarding } from "@/hooks/use-onboarding"
+import { NotificationPreferencesCard } from "@/components/notification-preferences"
 
 type ProfileTab = "overview" | "activity"
 
@@ -90,6 +91,7 @@ export function Profile() {
   const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
   const [capReached, setCapReached] = useState(false)
   const { role, isLoading: roleLoading } = useUserRole()
+  const onboarding = useOnboarding()
 
   // Use the new async hook for earnings data
   const {
@@ -892,6 +894,48 @@ export function Profile() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Settings Section */}
+      <div className="mt-12">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Settings & Preferences</h2>
+            <p className="text-muted-foreground mt-1 text-sm font-bold">Manage your notifications and application experience.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {/* Notification Preferences */}
+          <div className="animate-fade-in-up">
+            <NotificationPreferencesCard />
+          </div>
+
+          {/* App Experience Settings */}
+          <Card className="animate-fade-in-up stagger-1 border-border shadow-md">
+            <CardContent className="p-6">
+              <h3 className="mb-4 text-lg font-semibold">Application Experience</h3>
+              <div className="space-y-6">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="font-semibold text-sm">Interactive Tutorials</h4>
+                    <p className="text-muted-foreground text-xs mt-1">
+                      Need a refresher? You can replay the introductory tours at any time.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2 mt-2 sm:mt-0">
+                    <Button variant="outline" size="sm" onClick={() => onboarding.open(0)}>
+                      Replay Learner Tour
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => onboarding.open(5)}>
+                      Replay Creator Tour
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )

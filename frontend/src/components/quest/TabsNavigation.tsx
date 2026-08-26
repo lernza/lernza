@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils"
 
 interface TabsNavigationProps {
-  activeTab: "milestones" | "enrollees"
-  onTabChange: (tab: "milestones" | "enrollees") => void
+  activeTab: "milestones" | "enrollees" | "timeline"
+  onTabChange: (tab: "milestones" | "enrollees" | "timeline") => void
   milestonesCount: number
   enrolleesCount: number
 }
@@ -24,6 +24,11 @@ export function TabsNavigation({
       label: "Enrollees",
       count: enrolleesCount,
     },
+    {
+      id: "timeline" as const,
+      label: "Timeline",
+      count: undefined,
+    }
   ]
 
   return (
@@ -43,7 +48,7 @@ export function TabsNavigation({
           )}
         >
           {tab.label}
-          <span className="ml-2 font-mono text-xs">({tab.count})</span>
+          {tab.count !== undefined && <span className="ml-2 font-mono text-xs">({tab.count})</span>}
         </button>
       ))}
     </div>

@@ -261,16 +261,10 @@ function App() {
             <OnboardingTutorial
               isOpen={onboarding.isOpen}
               currentStep={onboarding.currentStep}
-              step={onboarding.step}
-              totalSteps={onboarding.totalSteps}
-              isFirstStep={onboarding.isFirstStep}
-              isLastStep={onboarding.isLastStep}
               onNext={onboarding.next}
               onBack={onboarding.back}
-              onSkip={onboarding.skip}
-              onComplete={onboarding.complete}
               onClose={onboarding.close}
-              onJumpTo={onboarding.open}
+              onComplete={onboarding.complete}
             />
           </div>
         </ErrorBoundary>

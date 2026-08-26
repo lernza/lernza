@@ -31,6 +31,7 @@ import { rewardsClient } from "@/lib/contracts/rewards"
 import { useQuestStatsMap } from "@/hooks/use-quest-stats"
 import { formatTokens } from "@/lib/utils"
 import { navigateToPath } from "@/lib/navigation"
+import { useOnboarding } from "@/hooks/use-onboarding"
 
 // Sub-components
 import { PersonalProgress } from "./dashboard/personal-progress"
@@ -69,6 +70,8 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   const [rewardMax, setRewardMax] = useState<string>("")
   const [displayCount, setDisplayCount] = useState(DASHBOARD_QUEST_PAGE_SIZE)
   const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
+  
+  const onboarding = useOnboarding()
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
@@ -408,6 +411,31 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      {/* Getting Started Banner for new users */}
+      {!onboarding?.completed && (
+        <div className="bg-primary text-primary-foreground mb-8 flex flex-col sm:flex-row items-center justify-between p-6 shadow-lg">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Sparkles className="h-5 w-5" /> Let's get you started!
+            </h2>
+            <p className="mt-1 text-primary-foreground/80">
+              New to Lernza? Take our quick interactive tour to learn how to earn or create quests.
+            </p>
+          </div>
+          <div className="mt-4 sm:mt-0 flex gap-3">
+            <Button variant="secondary" onClick={() => onboarding?.open?.(0)} className="font-bold">
+              Learner Tour
+            </Button>
+            <Button variant="outline" onClick={() => onboarding?.open?.(5)} className="bg-transparent border-primary-foreground hover:bg-primary-foreground/10 text-primary-foreground">
+              Creator Tour
+            </Button>
+            <Button variant="ghost" onClick={() => onboarding?.complete?.()} className="hover:bg-primary-foreground/10 text-primary-foreground" aria-label="Dismiss banner">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Welcome banner */}
       <div className="bg-accent border-border animate-fade-in-up relative mb-8 overflow-hidden border p-6 shadow-lg sm:p-8">
         <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-30" />
@@ -430,6 +458,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
             variant="secondary"
             onClick={goToCreateQuest}
             className="shimmer-on-hover group flex-shrink-0"
+            data-onboarding="nav-create-quest"
           >
             <Plus className="h-4 w-4" />
             Create quest
@@ -665,6 +694,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
                       type="button"
                       onClick={() => goToQuest(ws.id)}
                       aria-label={`Open quest ${ws.name}`}
+                      data-onboarding={i === 0 ? "quest-card" : undefined}
                       className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
                     >
                       <Card>

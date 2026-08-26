@@ -9,8 +9,8 @@ import { StatsPanel } from "@/components/quest/StatsPanel"
 import { ProgressPanel } from "@/components/quest/ProgressPanel"
 import { TabsNavigation } from "@/components/quest/TabsNavigation"
 import { MilestonesSection } from "@/components/quest/MilestonesSection"
-import { EnrolleesSection } from "@/components/quest/EnrolleesSection"
 import { BatchClaimResultDialog } from "@/components/quest/BatchClaimResultDialog"
+import { TimelineSection } from "@/components/quest/TimelineSection"
 import { batchClaimRewards } from "@/lib/contracts/batch-claims"
 import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
@@ -22,7 +22,7 @@ interface QuestViewProps {
   onBack: () => void
 }
 
-type Tab = "milestones" | "enrollees"
+type Tab = "milestones" | "enrollees" | "timeline"
 
 export function QuestView({ questId, onBack }: QuestViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("milestones")
@@ -349,6 +349,12 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
             onClaimRewards={handleClaimRewards}
             isClaiming={isClaiming}
           />
+        </SectionErrorBoundary>
+      )}
+
+      {activeTab === "timeline" && (
+        <SectionErrorBoundary label="Timeline">
+          <TimelineSection questId={questId} />
         </SectionErrorBoundary>
       )}
 

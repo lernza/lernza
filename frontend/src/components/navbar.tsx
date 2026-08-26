@@ -91,6 +91,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               <li key={item.key}>
                 <button
                   onClick={() => handleNavigate(item.key)}
+                  data-onboarding={`nav-${item.key}`}
                   className={cn(
                     "animated-underline cursor-pointer border px-4 py-2 text-sm font-bold transition-all",
                     activePage === item.key
@@ -143,7 +144,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               </Button>
             </>
           ) : (
-            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
+            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover" data-onboarding="connect-wallet">
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>

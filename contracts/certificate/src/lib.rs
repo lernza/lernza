@@ -6,7 +6,7 @@ use soroban_sdk::{
 };
 use stellar_access::ownable::{self as ownable, Ownable};
 use stellar_macros::{default_impl, only_owner};
-use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base, NonFungibleToken};
+use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base};
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +27,7 @@ pub enum DataKey {
     UserCertificates(Address),
     MetadataBase,
     RevokedCertificate(u32),
+    MilestoneContract,
     Paused,
 }
 
@@ -48,6 +49,8 @@ pub enum Error {
     InvalidQuest = 5,
     AlreadyRevoked = 6,
     MetadataBaseNotSet = 7,
+    MilestoneContractNotSet = 8,
+    NotCompleted = 9,
     /// Contract is administratively paused (shared code 400).
     Paused = common::ERR_PAUSED as u32,
 }
@@ -303,10 +306,64 @@ impl CertificateContract {
     }
 }
 
-#[default_impl]
-#[contractimpl]
-impl NonFungibleToken for CertificateContract {
-    type ContractType = Base;
+    #[only_owner]
+    pub fn set_milestone_contract(env: Env, milestone_contract: Address) -> Result<(), Error> {
+        env.storage().instance().set(&DataKey::MilestoneContract, &milestone_contract);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    pub fn get_milestone_contract(env: Env) -> Result<Address, Error> {
+        env.storage().instance().get(&DataKey::MilestoneContract).ok_or(Error::MilestoneContractNotSet)
+    }
+
+    pub fn verify_and_issue(
+        env: Env,
+        quest_id: u32,
+        quest_name: String,
+        quest_category: String,
+        recipient: Address,
+    ) -> Result<u32, Error> {
+        Self::require_not_paused(&env)?;
+        let milestone_contract = Self::get_milestone_contract(env.clone())?;
+
+        // Cross-contract call to check completions
+        let total_milestones: u32 = env.invoke_contract(
+            &milestone_contract,
+            &Symbol::new(&env, "get_milestone_count"),
+            soroban_sdk::vec![&env, quest_id.into_val(&env)],
+        );
+
+        let completions: u32 = env.invoke_contract(
+            &milestone_contract,
+            &Symbol::new(&env, "get_enrollee_completions"),
+            soroban_sdk::vec![&env, quest_id.into_val(&env), recipient.into_val(&env)],
+        );
+
+        if total_milestones == 0 || completions < total_milestones {
+            return Err(Error::NotCompleted);
+        }
+
+        // Mint using the contract's own address as the issuer
+        Self::mint_certificate(env.clone(), quest_id, quest_name, quest_category, recipient, env.current_contract_address())
+    }
+
+    // SBT specific: Expose balance_of and owner_of, but NOT transfer
+    pub fn balance_of(env: Env, id: Address) -> i128 {
+        Base::balance(&env, &id)
+    }
+
+    pub fn owner_of(env: Env, token_id: u32) -> Option<Address> {
+        Some(Base::owner_of(&env, token_id))
+    }
+
+    pub fn name(env: Env) -> String {
+        Base::name(&env)
+    }
+
+    pub fn symbol(env: Env) -> String {
+        Base::symbol(&env)
+    }
 }
 
 #[default_impl]

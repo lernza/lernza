@@ -81,7 +81,7 @@ function matchTopic(event: rpc.Api.EventResponse, topicSymbol: string): boolean 
   })
 }
 
-interface ParsedEvent {
+export interface ParsedEvent {
   type: EventTopicKey
   questId: number
   milestoneId?: number
@@ -91,7 +91,7 @@ interface ParsedEvent {
   txHash: string
 }
 
-function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
+export function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
   const valVec = event.value.vec()
   const vals = valVec ?? []
 
@@ -189,9 +189,49 @@ function formatAmount(amount: bigint): string {
   return `${whole.toLocaleString()} USDC`
 }
 
-function shortenAddress(addr: string): string {
+export function shortenAddress(addr: string): string {
   if (!addr || addr.length < 12) return addr
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+}
+
+export async function fetchQuestHistory(questId: number): Promise<ParsedEvent[]> {
+  const contractIds = [
+    env.VITE_QUEST_CONTRACT_ID,
+    env.VITE_MILESTONE_CONTRACT_ID,
+    env.VITE_REWARDS_CONTRACT_ID,
+  ].filter(Boolean)
+
+  if (contractIds.length === 0) return []
+
+  const topicFilters: rpc.Api.EventFilter[] = [
+    { topics: [[topicHex("milestone_completed")]], contractIds },
+    { topics: [[topicHex("reward_distributed")]], contractIds },
+    { topics: [[topicHex("reward_funded")]], contractIds },
+    { topics: [[topicHex("enrollee_added")]], contractIds },
+    { topics: [[topicHex("quest_archived")]], contractIds },
+    { topics: [[topicHex("quest_cancelled")]], contractIds },
+    { topics: [[topicHex("peer_approved")]], contractIds },
+    { topics: [[topicHex("certificate_minted")]], contractIds },
+  ]
+
+  try {
+    // Note: for production, you would handle pagination here if > 10000 events.
+    const response = await server.getEvents({
+      filters: topicFilters,
+      startLedger: 0,
+      limit: 10000,
+    })
+
+    const parsed = response.events
+      .map(parseEvent)
+      .filter((e): e is ParsedEvent => e !== null && e.questId === questId)
+
+    // Sort chronologically (oldest to newest by ledger, we can use txHash as secondary)
+    return parsed.sort((a, b) => a.ledger - b.ledger)
+  } catch (err) {
+    console.error("Failed to fetch quest history:", err)
+    return []
+  }
 }
 
 export function useQuestEventStream(enabled: boolean) {

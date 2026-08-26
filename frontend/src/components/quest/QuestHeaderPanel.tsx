@@ -54,7 +54,7 @@ export function QuestHeaderPanel({
             <Plus className="h-4 w-4" />
             Add Milestone
           </Button>
-          <Button size="sm" onClick={onAddEnrollee} className="gap-2">
+          <Button size="sm" onClick={onAddEnrollee} className="gap-2" data-onboarding="quest-enroll">
             <Plus className="h-4 w-4" />
             Add Enrollee
           </Button>

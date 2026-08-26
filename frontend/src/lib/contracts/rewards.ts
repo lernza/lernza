@@ -12,7 +12,7 @@ import {
 } from "@stellar/stellar-sdk"
 import {
   server,
-  signAndSubmit,
+  signAndSubmitTracked,
   NETWORK_PASSPHRASE,
   RPC_TIMEOUT_MS,
   withTimeout,
@@ -96,7 +96,7 @@ export class RewardsClient {
   async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {
     return safeContractCall(async () => {
       const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Initialize Rewards Pool", handlers)
     })
   }
 
@@ -112,7 +112,7 @@ export class RewardsClient {
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(amount, { type: "i128" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Fund Quest", handlers)
     })
   }
 
@@ -132,7 +132,7 @@ export class RewardsClient {
         new Address(enrollee).toScVal(),
         nativeToScVal(amount, { type: "i128" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Distribute Reward", handlers)
     })
   }
 
@@ -148,7 +148,7 @@ export class RewardsClient {
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(amount, { type: "i128" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Refund Pool", handlers)
     })
   }
 

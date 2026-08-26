@@ -13,7 +13,7 @@ import type { xdr } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
 import {
   server,
-  signAndSubmit,
+  signAndSubmitTracked,
   NETWORK_PASSPHRASE,
   RPC_TIMEOUT_MS,
   withTimeout,
@@ -180,7 +180,7 @@ export class QuestClient {
         new Address(admin).toScVal(),
         new Address(creator).toScVal(),
       ])
-      return signAndSubmit(tx)
+      return signAndSubmitTracked(tx, "Verify Creator")
     })
   }
 
@@ -214,7 +214,7 @@ export class QuestClient {
           : nativeToScVal(null),
         deadline !== undefined ? nativeToScVal(deadline, { type: "u64" }) : nativeToScVal(null),
       ])
-      return signAndSubmit(tx)
+      return signAndSubmitTracked(tx, "Create Quest")
     })
   }
 
@@ -246,7 +246,7 @@ export class QuestClient {
           ? nativeToScVal(maxEnrollees, { type: "u32" })
           : nativeToScVal(null),
       ])
-      return signAndSubmit(tx)
+      return signAndSubmitTracked(tx, "Update Quest")
     })
   }
 
@@ -261,7 +261,7 @@ export class QuestClient {
       const tx = await this.buildTx(owner, "archive_quest", [
         nativeToScVal(questId, { type: "u32" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Archive Quest", handlers)
     })
   }
 
@@ -309,7 +309,7 @@ export class QuestClient {
         nativeToScVal(questId, { type: "u32" }),
         new Address(enrollee).toScVal(),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Add Enrollee", handlers)
     })
   }
 
@@ -327,7 +327,7 @@ export class QuestClient {
         nativeToScVal(questId, { type: "u32" }),
         new Address(enrollee).toScVal(),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Remove Enrollee", handlers)
     })
   }
 
@@ -341,7 +341,7 @@ export class QuestClient {
         new Address(enrollee).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Leave Quest", handlers)
     })
   }
 
@@ -354,7 +354,7 @@ export class QuestClient {
         new Address(enrollee).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
       ])
-      return signAndSubmit(tx, handlers)
+      return signAndSubmitTracked(tx, "Join Quest", handlers)
     })
   }
 
@@ -367,7 +367,7 @@ export class QuestClient {
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(visibility, { type: "u32" }),
       ])
-      return signAndSubmit(tx)
+      return signAndSubmitTracked(tx, "Update Visibility")
     })
   }
 
@@ -381,7 +381,7 @@ export class QuestClient {
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(deadline, { type: "u64" }),
       ])
-      return signAndSubmit(tx)
+      return signAndSubmitTracked(tx, "Update Deadline")
     })
   }
 

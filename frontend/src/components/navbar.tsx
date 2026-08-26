@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useColorScheme } from "@/hooks/use-color-scheme"
 import { cn } from "@/lib/utils"
+import { NetworkMismatchBanner } from "@/components/error-states"
 
 const NAV_ITEMS = [
   { key: "landing", label: "Home" },
@@ -63,7 +64,7 @@ function ThemeToggle() {
 }
 
 export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps) {
-  const { connected, shortAddress, connect, disconnect, loading } = useWallet()
+  const { connected, shortAddress, connect, disconnect, loading, wrongNetwork } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleNavigate = (page: string) => {
@@ -73,6 +74,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
 
   return (
     <header className="border-border bg-background sticky top-0 z-50 border-b transition-colors duration-300">
+      <NetworkMismatchBanner />
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button

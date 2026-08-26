@@ -100,6 +100,8 @@ const freighterApi = freighter as unknown as FreighterApi
 type WalletContextValue = WalletState & {
   installUrl: string
   connect: () => Promise<void>
+  retryConnect: () => Promise<void>
+  resetWalletError: () => void
   /** Re-checks wallet permission and the active account before protected use. */
   verifySession: () => Promise<boolean>
   disconnect: () => void
@@ -445,18 +447,29 @@ function useWalletState(): WalletContextValue {
     return () => watcher.stop()
   }, [])
 
+  const resetWalletError = useCallback(() => {
+    setState(s => ({ ...s, error: null }))
+  }, [])
+
+  const retryConnect = useCallback(async () => {
+    resetWalletError()
+    await connect()
+  }, [connect, resetWalletError])
+
   return useMemo(
     () => ({
       ...state,
       installUrl: FREIGHTER_INSTALL_URL,
       connect,
+      retryConnect,
+      resetWalletError,
       verifySession,
       disconnect,
       shortAddress: state.address
         ? `${state.address.slice(0, 4)}...${state.address.slice(-4)}`
         : null,
     }),
-    [connect, disconnect, state, verifySession]
+    [connect, disconnect, resetWalletError, retryConnect, state, verifySession]
   )
 }
 

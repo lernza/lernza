@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { QuestCreationProvider, useQuestCreation } from "./context"
 import { StepIndicator } from "./types"
+import { TemplateSelector } from "./template-selector"
 
 const Step1Form = lazy(() => import("./step1").then(m => ({ default: m.Step1Form })))
 const Step2Form = lazy(() => import("./step2").then(m => ({ default: m.Step2Form })))
@@ -18,7 +19,7 @@ interface CreateQuestProps {
 }
 
 function CreateQuestContent({ onBack }: CreateQuestProps) {
-  const { currentStep } = useQuestCreation()
+  const { currentStep, selectedTemplateId, applyTemplate, templateVersion } = useQuestCreation()
 
   return (
     <div className="relative mx-auto max-w-2xl px-4 py-8 sm:px-6">
@@ -43,6 +44,10 @@ function CreateQuestContent({ onBack }: CreateQuestProps) {
         </p>
       </div>
 
+      {currentStep === 1 && (
+        <TemplateSelector selectedTemplateId={selectedTemplateId} onSelect={applyTemplate} />
+      )}
+
       {/* Step indicator */}
       <div className="animate-fade-in-up stagger-1 relative">
         <StepIndicator current={currentStep} />
@@ -51,9 +56,11 @@ function CreateQuestContent({ onBack }: CreateQuestProps) {
       {/* Step content */}
       <div className="animate-fade-in-up stagger-2 relative">
         <Suspense fallback={<StepFallback />}>
-          {currentStep === 1 && <Step1Form />}
-          {currentStep === 2 && <Step2Form />}
-          {currentStep === 3 && <Step3Review onComplete={onBack} />}
+          {currentStep === 1 && <Step1Form key={`step-1-${templateVersion}`} />}
+          {currentStep === 2 && <Step2Form key={`step-2-${templateVersion}`} />}
+          {currentStep === 3 && (
+            <Step3Review key={`step-3-${templateVersion}`} onComplete={onBack} />
+          )}
         </Suspense>
       </div>
     </div>

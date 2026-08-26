@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode, useCallback } from "react"
 import type { Step1Values, Step2Values, FormStep } from "./types"
+import { QUEST_TEMPLATES, type TemplateId } from "./templates"
 
 interface QuestCreationContextType {
   step1Data: Step1Values
@@ -10,6 +11,9 @@ interface QuestCreationContextType {
   goToNext: () => void
   goToBack: () => void
   setCurrentStep: (step: FormStep) => void
+  selectedTemplateId: TemplateId | null
+  applyTemplate: (templateId: TemplateId) => void
+  templateVersion: number
 }
 
 const QuestCreationContext = createContext<QuestCreationContextType | undefined>(undefined)
@@ -25,6 +29,19 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     milestones: [{ title: "", description: "", rewardAmount: 0 }],
   })
   const [currentStep, setCurrentStep] = useState<FormStep>(1)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<TemplateId | null>(null)
+  const [templateVersion, setTemplateVersion] = useState(0)
+
+  const applyTemplate = useCallback((templateId: TemplateId) => {
+    const template = QUEST_TEMPLATES.find(item => item.id === templateId)
+    if (!template) return
+    setStep1Data({ ...template.basics, tags: [...template.basics.tags] })
+    setStep2Data({ milestones: template.milestones.map(milestone => ({ ...milestone })) })
+    setSelectedTemplateId(template.id)
+    setCurrentStep(1)
+    setTemplateVersion(version => version + 1)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
 
   const goToNext = useCallback(() => {
     setCurrentStep(prev => (prev + 1) as FormStep)
@@ -45,6 +62,9 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     goToNext,
     goToBack,
     setCurrentStep,
+    selectedTemplateId,
+    applyTemplate,
+    templateVersion,
   }
 
   return <QuestCreationContext.Provider value={value}>{children}</QuestCreationContext.Provider>

@@ -19,6 +19,14 @@ const TOPICS = {
   quest_cancelled: "71756573745f63616e63656c6c6564",
   peer_approved: "706565725f617070726f766564",
   certificate_minted: "63657274696669636174655f6d696e746564",
+  quest_created: "71756573745f63726561746564",
+  quest_updated: "71756573745f75706461746564",
+  creator_verified: "637265746f725f76657273696f6e",
+  creator_verification_revoked: "637265746f725f7665727369636174696f6e5f7265766f6b",
+  admin_transferred: "61646d696e5f7472616e73666572696564",
+  quest_ttl_extended: "71756573745f74746c5f657874656e646564",
+  distribution_mode_set: "64697374697472696275745f6d6f64657273",
+  reward_refunded: "7265776172645f726566756e646564",
 } as const
 
 type EventTopicKey = keyof typeof TOPICS
@@ -170,6 +178,78 @@ function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
       txHash: event.txHash,
     }
   }
+  if (matchTopic(event, "quest_created")) {
+    return {
+      type: "quest_created",
+      questId: decodeScValU32(vals[0]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "quest_updated")) {
+    return {
+      type: "quest_updated",
+      questId: decodeScValU32(vals[0]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "creator_verified")) {
+    return {
+      type: "creator_verified",
+      questId: decodeScValU32(vals[0]),
+      admin: decodeScValAddress(vals[1]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "creator_verification_revoked")) {
+    return {
+      type: "creator_verification_revoked",
+      creator: decodeScValAddress(vals[0]),
+      admin: decodeScValAddress(vals[1]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "admin_transferred")) {
+    return {
+      type: "admin_transferred",
+      previousAdmin: decodeScValAddress(vals[0]),
+      newAdmin: decodeScValAddress(vals[1]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "quest_ttl_extended")) {
+    return {
+      type: "quest_ttl_extended",
+      questId: decodeScValU32(vals[0]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "distribution_mode_set")) {
+    return {
+      type: "distribution_mode_set",
+      questId: decodeScValU32(vals[0]),
+      mode: decodeScValU32(vals[1]),
+      flatReward: decodeScValI128(vals[2]),
+      actor: decodeScValAddress(vals[3]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
+  if (matchTopic(event, "reward_refunded")) {
+    return {
+      type: "reward_refunded",
+      questId: decodeScValU32(vals[0]),
+      authority: decodeScValAddress(vals[1]),
+      amount: decodeScValI128(vals[2]),
+      ledger: event.ledger,
+      txHash: event.txHash,
+    }
+  }
 
   return null
 }
@@ -182,6 +262,10 @@ function invalidateQuestQueries(parsed: ParsedEvent) {
   void queryClient.invalidateQueries({ queryKey: ["milestoneCount", questId] })
   void queryClient.invalidateQueries({ queryKey: ["rewardPool", questId] })
   void queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+
+  if (parsed.type === "creator_verified" || parsed.type === "creator_verification_revoked") {
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] })
+  }
 }
 
 function formatAmount(amount: bigint): string {
@@ -261,6 +345,70 @@ export function useQuestEventStream(enabled: boolean) {
               message: `A completion certificate was minted for ${shortenAddress(parsed.enrollee ?? "")}.`,
               type: "success",
               category: "milestone",
+            })
+            break
+          case "quest_created":
+            addToast({
+              title: "Quest Created",
+              message: `New quest #${parsed.questId} has been created.`,
+              type: "success",
+              category: "quest_status",
+            })
+            break
+          case "quest_updated":
+            addToast({
+              title: "Quest Updated",
+              message: `Quest #${parsed.questId} has been updated.`,
+              type: "info",
+              category: "quest_status",
+            })
+            break
+          case "creator_verified":
+            addToast({
+              title: "Creator Verified",
+              message: `Creator verified for quest #${parsed.questId}.`,
+              type: "success",
+              category: "quest_status",
+            })
+            break
+          case "creator_verification_revoked":
+            addToast({
+              title: "Creator Verification Revoked",
+              message: `Creator verification revoked for quest #${parsed.questId}.`,
+              type: "warning",
+              category: "quest_status",
+            })
+            break
+          case "admin_transferred":
+            addToast({
+              title: "Admin Transferred",
+              message: `Contract admin transferred.`,
+              type: "info",
+              category: "system",
+            })
+            break
+          case "quest_ttl_extended":
+            addToast({
+              title: "TTL Extended",
+              message: `Quest #${parsed.questId} TTL has been extended.`,
+              type: "info",
+              category: "system",
+            })
+            break
+          case "distribution_mode_set":
+            addToast({
+              title: "Distribution Mode Changed",
+              message: `Distribution mode updated for quest #${parsed.questId}.`,
+              type: "warning",
+              category: "quest_status",
+            })
+            break
+          case "reward_refunded":
+            addToast({
+              title: "Reward Refunded",
+              message: `Reward refunded for quest #${parsed.questId}.`,
+              type: "success",
+              category: "rewards",
             })
             break
         }

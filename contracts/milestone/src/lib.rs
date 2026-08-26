@@ -290,6 +290,7 @@ impl MilestoneContract {
 
     /// Create a milestone for a quest. Owner auth required.
     /// Validates ownership via cross-contract call to quest contract.
+    /// Also validates that the quest has not expired (deadline check).
     pub fn create_milestone(
         env: Env,
         owner: Address,
@@ -321,6 +322,10 @@ impl MilestoneContract {
         }
         if quest_info.status != common::QuestStatus::Active {
             return Err(Error::OwnerMismatch);
+        }
+        // Enforce quest deadline — milestone creation rejected if deadline has passed
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
         }
 
         let next_key = DataKey::NextMilestoneId(quest_id);

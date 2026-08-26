@@ -5,11 +5,11 @@ import { formatTokens } from "@/lib/utils"
 import { env } from "@/lib/env"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import type { QuestInfo } from "@/lib/contracts/quest"
-import type { Quest } from "@/lib/mock-data"
+// Quest type removed — component now accepts only QuestInfo[]
 import type { QuestStatSummary } from "@/hooks/use-quest-stats"
 
 interface TrendingQuestsProps {
-  quests: QuestInfo[] | Quest[]
+  quests: QuestInfo[]
   statsByQuest?: Record<number, Pick<QuestStatSummary, "enrolleeCount" | "poolBalance">>
   onSelectQuest: (id: number) => void
 }
@@ -33,8 +33,8 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
       <div className="space-y-4">
         {quests.map(quest => {
           const stats = statsByQuest?.[quest.id] ?? {
-            enrolleeCount: ("enrolleeCount" in quest ? quest.enrolleeCount : 0) ?? 0,
-            poolBalance: ("poolBalance" in quest ? quest.poolBalance : 0) ?? 0,
+            enrolleeCount: 0,
+            poolBalance: 0,
           }
 
           return (

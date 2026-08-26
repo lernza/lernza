@@ -148,6 +148,55 @@ fn test_get_metadata_base_not_set_returns_error() {
     assert_eq!(result, Err(Ok(Error::MetadataBaseNotSet)));
 }
 
+#[test]
+fn test_set_metadata_base_rejects_empty_string() {
+    // Issue #1273 — empty URI must be rejected.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "");
+    let result = client.try_set_metadata_base(&uri);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_set_metadata_base_rejects_malformed_uri() {
+    // Issue #1273 — arbitrary non-URI strings must be rejected.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "not-a-valid-uri");
+    let result = client.try_set_metadata_base(&uri);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_set_metadata_base_rejects_whitespace() {
+    // Issue #1273 — URIs containing whitespace must be rejected.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "https://lernza.io/ certs");
+    let result = client.try_set_metadata_base(&uri);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_set_metadata_base_accepts_ipfs_uri() {
+    // Issue #1273 — ipfs:// URIs remain a valid metadata base scheme.
+    let (env, client, _owner) = setup();
+    let uri = String::from_str(&env, "ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/");
+    client.set_metadata_base(&uri);
+    assert_eq!(client.get_metadata_base(), uri);
+}
+
+#[test]
+fn test_set_metadata_base_rejected_uri_does_not_overwrite_stored_value() {
+    // Issue #1273 — a rejected update must leave the previously stored URI intact.
+    let (env, client, _owner) = setup();
+    let good_uri = String::from_str(&env, "https://lernza.io/certificates/");
+    client.set_metadata_base(&good_uri);
+
+    let bad_uri = String::from_str(&env, "garbage");
+    let result = client.try_set_metadata_base(&bad_uri);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+    assert_eq!(client.get_metadata_base(), good_uri);
+}
+
 // --- Additional edge-case coverage — issue #1184 ---
 
 #[test]

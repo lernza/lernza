@@ -1,12 +1,17 @@
 import { useState } from "react"
 import { z } from "zod"
-import { ArrowLeft, Check, Loader2, Coins, Sparkles } from "lucide-react"
+import { ArrowLeft, Check, Loader2, Coins, Sparkles, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens, cn } from "@/lib/utils"
 import { track } from "@/lib/analytics"
 import { milestoneSchema, type TxPhase } from "./types"
 import { useQuestCreation } from "./context"
+import { useWallet } from "@/hooks/use-wallet"
+import { questClient, Visibility } from "@/lib/contracts/quest"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { milestoneClient } from "@/lib/contracts/milestone"
+import { env } from "@/lib/env"
 
 interface Step3ReviewProps {
   onComplete: () => void
@@ -14,31 +19,109 @@ interface Step3ReviewProps {
 
 export function Step3Review({ onComplete }: Step3ReviewProps) {
   const { step1Data, step2Data, goToBack } = useQuestCreation()
+  const { address } = useWallet()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
+  const [txError, setTxError] = useState<string | null>(null)
+  const [createdQuestId, setCreatedQuestId] = useState<number | null>(null)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
     0
   )
 
+  const tokenAddr = env.VITE_REWARDS_TOKEN_CONTRACT_ID || env.VITE_USDC_TOKEN_ADDRESS || ""
+
   const handleFund = async () => {
+    if (!address) return
     setTxPhase("funding")
-    // Simulate funding transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("funded")
+    setTxError(null)
+
+    try {
+      if (!createdQuestId && createdQuestId !== 0) {
+        throw new Error("Quest must be created before funding. Create the quest first.")
+      }
+      // Fund the reward pool — amount is in whole tokens, multiply by 10^6 for USDC decimals
+      const amount = BigInt(totalReward) * BigInt(1_000_000)
+      const result = await rewardsClient.fundQuest(address, createdQuestId, amount)
+      if (result.status === "FAILED") {
+        throw new Error(result.error || "Funding failed")
+      }
+      setTxPhase("funded")
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Funding failed"
+      setTxError(message)
+      setTxPhase("idle")
+    }
   }
 
   const handleCreate = async () => {
+    if (!address) return
     setTxPhase("creating")
-    // Simulate quest creation transaction via Freighter
-    await new Promise(r => setTimeout(r, 2000))
-    setTxPhase("done")
-    track("quest_created", {
-      milestone_count: step2Data.milestones.length,
-      total_reward: totalReward,
-    })
+    setTxError(null)
+
+    try {
+      const result = await questClient.createQuest(
+        address,
+        step1Data.name,
+        step1Data.description,
+        step1Data.category,
+        step1Data.tags || [],
+        tokenAddr,
+        Visibility.Public
+      )
+
+      if (result.status === "FAILED") {
+        throw new Error(result.error || "Quest creation failed")
+      }
+
+      // Parse quest ID from the return value if available
+      let questId = 0
+      if (result.resultXdr) {
+        try {
+          const { scValToNative, xdr } = await import("@stellar/stellar-sdk")
+          const native = scValToNative(xdr.ScVal.fromXDR(result.resultXdr, "base64"))
+          questId = Number(native)
+        } catch {
+          // Fallback: try to get quest count
+          questId = await questClient.getQuestCount() - 1
+        }
+      } else {
+        questId = await questClient.getQuestCount() - 1
+      }
+
+      setCreatedQuestId(questId)
+
+      // Create milestones on-chain
+      for (let i = 0; i < step2Data.milestones.length; i++) {
+        const m = step2Data.milestones[i]
+        const rewardAmount = BigInt(m.rewardAmount) * BigInt(1_000_000)
+        await milestoneClient.createMilestone(
+          address,
+          questId,
+          m.title,
+          m.description,
+          rewardAmount,
+          i > 0 // requiresPrevious for all except the first milestone
+        )
+      }
+
+      setTxPhase("created")
+      track("quest_created", {
+        milestone_count: step2Data.milestones.length,
+        total_reward: totalReward,
+      })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Quest creation failed"
+      setTxError(message)
+      setTxPhase("idle")
+    }
+  }
+
+  const handleFinalize = () => {
     onComplete()
   }
+
+  const isBusy = txPhase === "creating" || txPhase === "funding"
 
   return (
     <div className="space-y-6">
@@ -120,19 +203,58 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               </span>
             </div>
 
-            {/* Fund button */}
+            {txError && (
+              <div className="border-destructive bg-destructive/10 mb-4 flex items-start gap-2 border p-3">
+                <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
+                <p className="text-destructive text-sm">{txError}</p>
+              </div>
+            )}
+
+            {/* Create quest button */}
             <Button
-              onClick={handleFund}
-              disabled={txPhase !== "idle"}
+              onClick={handleCreate}
+              disabled={txPhase !== "idle" || isBusy}
               variant={
-                txPhase === "funded" || txPhase === "creating" || txPhase === "done"
+                txPhase === "created" || txPhase === "funded" || txPhase === "done"
                   ? "secondary"
                   : "default"
               }
               className={cn(
                 "shimmer-on-hover mb-3 w-full",
-                (txPhase === "funded" || txPhase === "creating" || txPhase === "done") &&
+                (txPhase === "created" || txPhase === "funded" || txPhase === "done") &&
                   "border-success"
+              )}
+            >
+              {txPhase === "creating" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
+                </>
+              ) : txPhase === "created" || txPhase === "funded" || txPhase === "done" ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Quest created
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  Create Quest on-chain
+                </>
+              )}
+            </Button>
+
+            {/* Fund button */}
+            <Button
+              onClick={handleFund}
+              disabled={txPhase !== "created" || isBusy}
+              variant={
+                txPhase === "funded" || txPhase === "done"
+                  ? "secondary"
+                  : "default"
+              }
+              className={cn(
+                "shimmer-on-hover mb-3 w-full",
+                (txPhase === "funded" || txPhase === "done") && "border-success"
               )}
             >
               {txPhase === "funding" ? (
@@ -140,7 +262,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Funding reward pool...
                 </>
-              ) : txPhase === "funded" || txPhase === "creating" || txPhase === "done" ? (
+              ) : txPhase === "funded" || txPhase === "done" ? (
                 <>
                   <Check className="h-4 w-4" />
                   Reward pool funded
@@ -153,33 +275,30 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               )}
             </Button>
 
-            {/* Create button */}
-            <Button
-              onClick={handleCreate}
-              disabled={txPhase !== "funded"}
-              className="shimmer-on-hover w-full"
-            >
-              {txPhase === "creating" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating quest on-chain...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" />
-                  Confirm & Create Quest
-                </>
-              )}
-            </Button>
+            {/* Finalize button */}
+            {txPhase === "funded" && (
+              <Button
+                onClick={handleFinalize}
+                className="shimmer-on-hover w-full"
+              >
+                <Sparkles className="h-4 w-4" />
+                Finalize & Return to Dashboard
+              </Button>
+            )}
 
-            {txPhase === "idle" && (
+            {txPhase === "idle" && !txError && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Fund the pool first, then confirm to create the quest on Stellar.
+                First create the quest on-chain, then fund the reward pool.
+              </p>
+            )}
+            {txPhase === "created" && (
+              <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
+                Quest created! Fund the pool to activate rewards.
               </p>
             )}
             {txPhase === "funded" && (
               <p className="text-muted-foreground mt-2 text-center text-xs font-bold">
-                Pool funded! Sign the creation transaction to go live.
+                Pool funded! Your quest is live with on-chain rewards.
               </p>
             )}
           </div>
@@ -191,7 +310,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
           type="button"
           variant="outline"
           onClick={goToBack}
-          disabled={txPhase === "funding" || txPhase === "creating"}
+          disabled={isBusy}
         >
           <ArrowLeft className="h-4 w-4" />
           Back

@@ -1,28 +1,14 @@
 /** Soroban contract client for Lernza quests (create, enroll, complete, verify). */
-import { isDev, env } from "@/lib/env"
-import {
-  Address,
-  Contract,
-  nativeToScVal,
-  scValToNative,
-  TransactionBuilder,
-  Keypair,
-  Account,
-} from "@stellar/stellar-sdk"
+import { isDev } from "@/lib/env"
+import { Address, Contract, nativeToScVal } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
-import {
-  server,
-  signAndSubmitTracked,
-  NETWORK_PASSPHRASE,
-  RPC_TIMEOUT_MS,
-  withTimeout,
-  withRpcReadThrottle,
-} from "./client"
+import { signAndSubmitTracked, simulateContractRead, prepareContractTransaction } from "./client"
 import { safeContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
+import { contractAddresses } from "./config"
 
-const CONTRACT_ID = env.VITE_QUEST_CONTRACT_ID
+const CONTRACT_ID = contractAddresses.quest
 
 // Re-export so consumers can import the canonical contract types from either
 // `@/lib/contracts/quest` or `@/lib/contract-types`. Keeping both import paths
@@ -408,25 +394,7 @@ export class QuestClient {
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
     return withContractLogging("quest", method, {}, async () => {
-      const randomKP = Keypair.random()
-      const account = new Account(randomKP.publicKey(), "0")
-
-      const tx = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call(method, ...args))
-        .setTimeout(30)
-        .build()
-
-      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
-        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
-      )
-
-      if (response && "result" in response && response.result) {
-        return scValToNative(response.result.retval)
-      }
-      return null
+      return simulateContractRead(this.getContract(), { method, args })
     }).catch((e: unknown) => {
       if (isDev) {
         console.error(`Read error ${method}:`, e)
@@ -436,25 +404,7 @@ export class QuestClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await withTimeout(
-      server.getAccount(source),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: getAccount"
-    )
-
-    const tx = new TransactionBuilder(account, {
-      fee: "10000",
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(this.getContract().call(method, ...args))
-      .setTimeout(30)
-      .build()
-
-    return await withTimeout(
-      server.prepareTransaction(tx),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: prepareTransaction"
-    )
+    return prepareContractTransaction(this.getContract(), source, { method, args })
   }
 }
 

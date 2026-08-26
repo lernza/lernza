@@ -1,7 +1,14 @@
 /** Core Soroban RPC client — connection, signing, submission, and rate limiting. */
 import { isDev } from "@/lib/env"
 import * as rpc from "@stellar/stellar-sdk/rpc"
-import { Transaction } from "@stellar/stellar-sdk"
+import {
+  Account,
+  Keypair,
+  scValToNative,
+  Transaction,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk"
+import type { xdr } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails, getAddress } from "@stellar/freighter-api"
 import { env } from "../env"
 import { pushToast } from "../notifications"
@@ -15,6 +22,62 @@ import {
   removePendingTransaction,
   type PendingTransaction,
 } from "../pending-transactions"
+import type { Contract } from "@stellar/stellar-sdk"
+
+export type ContractMethodArgs = readonly xdr.ScVal[]
+
+export interface TypedContractCall<Method extends string = string> {
+  method: Method
+  args: ContractMethodArgs
+}
+
+export async function simulateContractRead<Method extends string>(
+  contract: Contract,
+  call: TypedContractCall<Method>
+): Promise<ReturnType<typeof scValToNative> | null> {
+  const randomKP = Keypair.random()
+  const account = new Account(randomKP.publicKey(), "0")
+  const tx = new TransactionBuilder(account, {
+    fee: "10000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(call.method, ...call.args))
+    .setTimeout(30)
+    .build()
+
+  const response = await withRpcReadThrottle(`loading ${call.method.replace(/_/g, " ")}`, () =>
+    withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${call.method}`)
+  )
+
+  return response && "result" in response && response.result
+    ? scValToNative(response.result.retval)
+    : null
+}
+
+export async function prepareContractTransaction<Method extends string>(
+  contract: Contract,
+  source: string,
+  call: TypedContractCall<Method>
+) {
+  const account = await withTimeout(
+    server.getAccount(source),
+    RPC_TIMEOUT_MS,
+    "RPC timeout: getAccount"
+  )
+  const tx = new TransactionBuilder(account, {
+    fee: "10000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(call.method, ...call.args))
+    .setTimeout(30)
+    .build()
+
+  return withTimeout(
+    server.prepareTransaction(tx),
+    RPC_TIMEOUT_MS,
+    "RPC timeout: prepareTransaction"
+  )
+}
 
 export const SOROBAN_RPC_URL = env.VITE_SOROBAN_RPC_URL
 export const NETWORK_PASSPHRASE = env.VITE_SOROBAN_NETWORK_PASSPHRASE
@@ -572,7 +635,7 @@ export async function reconcilePendingTransactions(): Promise<void> {
   if (pending.length === 0) return
 
   await Promise.all(
-    pending.map(async (tx) => {
+    pending.map(async tx => {
       try {
         const response = await server.getTransaction(tx.txHash)
         const status = normalizeRpcStatus(response.status)

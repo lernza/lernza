@@ -4,32 +4,29 @@ import { xdr } from "@stellar/stellar-sdk"
 import { server, withRpcReadThrottle, withTimeout, RPC_TIMEOUT_MS } from "@/lib/contracts/client"
 import { queryClient } from "@/lib/query-client"
 import { useNotifications } from "@/contexts/notification-context"
-import { env } from "@/lib/env"
+import { contractAddresses } from "@/lib/contracts/config"
 
 /**
  * Known Soroban contract event topics emitted by the lernza contracts.
  * Topics are 4-byte hex-encoded symbols per the Stellar contract event spec.
  */
-const TOPICS = {
-  milestone_completed: "6d696c6573746f6e655f636f6d706c65746564",
-  reward_distributed: "7265776172645f6469737472696275746564",
-  reward_funded: "7265776172645f66756e646564",
-  enrollee_added: "656e726f6c6c65655f6164646564",
-  quest_archived: "71756573745f6172636869766564",
-  quest_cancelled: "71756573745f63616e63656c6c6564",
-  peer_approved: "706565725f617070726f766564",
-  certificate_minted: "63657274696669636174655f6d696e746564",
-  quest_created: "71756573745f63726561746564",
-  quest_updated: "71756573745f75706461746564",
-  creator_verified: "637265746f725f76657273696f6e",
-  creator_verification_revoked: "637265746f725f7665727369636174696f6e5f7265766f6b",
-  admin_transferred: "61646d696e5f7472616e73666572696564",
-  quest_ttl_extended: "71756573745f74746c5f657874656e646564",
-  distribution_mode_set: "64697374697472696275745f6d6f64657273",
-  reward_refunded: "7265776172645f726566756e646564",
-} as const
-
-type EventTopicKey = keyof typeof TOPICS
+type EventTopicKey =
+  | "milestone_completed"
+  | "reward_distributed"
+  | "reward_funded"
+  | "enrollee_added"
+  | "quest_archived"
+  | "quest_cancelled"
+  | "peer_approved"
+  | "certificate_minted"
+  | "quest_created"
+  | "quest_updated"
+  | "creator_verified"
+  | "creator_verification_revoked"
+  | "admin_transferred"
+  | "quest_ttl_extended"
+  | "distribution_mode_set"
+  | "reward_refunded"
 
 const POLL_INTERVAL_MS = 10_000
 
@@ -280,9 +277,9 @@ export function shortenAddress(addr: string): string {
 
 export async function fetchQuestHistory(questId: number): Promise<ParsedEvent[]> {
   const contractIds = [
-    env.VITE_QUEST_CONTRACT_ID,
-    env.VITE_MILESTONE_CONTRACT_ID,
-    env.VITE_REWARDS_CONTRACT_ID,
+    contractAddresses.quest,
+    contractAddresses.milestone,
+    contractAddresses.rewards,
   ].filter(Boolean)
 
   if (contractIds.length === 0) return []
@@ -323,12 +320,8 @@ export function useQuestEventStream(enabled: boolean) {
   const lastLedgerRef = useRef<number | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
-  const {
-    notifyMilestoneCompletion,
-    notifyRewardDistribution,
-    notifyQuestStatusChange,
-    addToast,
-  } = useNotifications()
+  const { notifyMilestoneCompletion, notifyRewardDistribution, notifyQuestStatusChange, addToast } =
+    useNotifications()
 
   const processEvents = useCallback(
     async (events: rpc.Api.EventResponse[]) => {
@@ -461,9 +454,9 @@ export function useQuestEventStream(enabled: boolean) {
     if (!mountedRef.current) return
 
     const contractIds = [
-      env.VITE_QUEST_CONTRACT_ID,
-      env.VITE_MILESTONE_CONTRACT_ID,
-      env.VITE_REWARDS_CONTRACT_ID,
+      contractAddresses.quest,
+      contractAddresses.milestone,
+      contractAddresses.rewards,
     ].filter(Boolean)
 
     const topicFilters: rpc.Api.EventFilter[] = [

@@ -1,27 +1,17 @@
 /** Soroban contract client for quest milestones (create, verify completion, claim rewards). */
-import { isDev, env } from "@/lib/env"
-import {
-  Address,
-  Contract,
-  nativeToScVal,
-  scValToNative,
-  xdr,
-  TransactionBuilder,
-  Keypair,
-  Account,
-} from "@stellar/stellar-sdk"
+import { isDev } from "@/lib/env"
+import { Address, Contract, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
 import {
-  server,
   signAndSubmitTracked,
-  NETWORK_PASSPHRASE,
-  RPC_TIMEOUT_MS,
-  withTimeout,
-  withRpcReadThrottle,
+  signAndSubmit,
+  simulateContractRead,
+  prepareContractTransaction,
 } from "./client"
 import { withContractLogging } from "./logger"
+import { contractAddresses } from "./config"
 
-const CONTRACT_ID = env.VITE_MILESTONE_CONTRACT_ID
+const CONTRACT_ID = contractAddresses.milestone
 
 const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
   1: "Milestone not found.",
@@ -162,7 +152,9 @@ export class MilestoneClient {
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious),
     ])
-    return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
+    return this.normalizeTransactionResult(
+      await signAndSubmitTracked(tx, "Create Milestone", handlers)
+    )
   }
 
   async verifyCompletion(
@@ -178,7 +170,9 @@ export class MilestoneClient {
       nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])
-    const result = this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Verify Milestone Completion", handlers))
+    const result = this.normalizeTransactionResult(
+      await signAndSubmitTracked(tx, "Verify Milestone Completion", handlers)
+    )
     return {
       ...result,
       rewardAmount: this.parseNumericResult(result.resultXdr),
@@ -332,25 +326,7 @@ export class MilestoneClient {
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
     return withContractLogging("milestone", method, {}, async () => {
-      const randomKP = Keypair.random()
-      const account = new Account(randomKP.publicKey(), "0")
-
-      const tx = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call(method, ...args))
-        .setTimeout(30)
-        .build()
-
-      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
-        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
-      )
-
-      if (response && "result" in response && response.result) {
-        return scValToNative(response.result.retval)
-      }
-      return null
+      return simulateContractRead(this.getContract(), { method, args })
     }).catch((e: unknown) => {
       if (isDev) {
         console.error(`Read error ${method}:`, e)
@@ -360,25 +336,7 @@ export class MilestoneClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await withTimeout(
-      server.getAccount(source),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: getAccount"
-    )
-
-    const tx = new TransactionBuilder(account, {
-      fee: "10000",
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(this.getContract().call(method, ...args))
-      .setTimeout(30)
-      .build()
-
-    return await withTimeout(
-      server.prepareTransaction(tx),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: prepareTransaction"
-    )
+    return prepareContractTransaction(this.getContract(), source, { method, args })
   }
 }
 

@@ -1,22 +1,27 @@
 import { useState, type KeyboardEvent } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowRight, FileText, Plus, X } from "lucide-react"
+import { ArrowRight, FileText, LayoutTemplate, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
+import { TemplatePicker } from "./template-picker"
+import { templateToStep1, templateToMilestones, type QuestTemplate } from "./quest-templates"
 
 export function Step1Form() {
-  const { step1Data, setStep1Data, goToNext } = useQuestCreation()
+  const { step1Data, setStep1Data, setStep2Data, goToNext } = useQuestCreation()
   const [tagInput, setTagInput] = useState("")
   const [tagError, setTagError] = useState<string | null>(null)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [appliedTemplate, setAppliedTemplate] = useState<QuestTemplate | null>(null)
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isValid },
   } = useForm<Step1Values>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,6 +34,18 @@ export function Step1Form() {
     },
     mode: "onChange",
   })
+
+  const handleApplyTemplate = (template: QuestTemplate) => {
+    const s1 = templateToStep1(template)
+    const milestones = templateToMilestones(template)
+    // Pre-fill the react-hook-form state so the inputs show values immediately
+    reset(s1)
+    // Persist to context so step2 and step3 can access the data
+    setStep1Data(s1)
+    setStep2Data({ milestones })
+    setAppliedTemplate(template)
+    setIsPickerOpen(false)
+  }
 
   const nameValue = watch("name", "")
   const descValue = watch("description", "")
@@ -82,12 +99,43 @@ export function Step1Form() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
         <div className="bg-accent border-border border-b px-6 py-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="text-sm font-semibold tracking-wider uppercase">
-              Step 1 — Quest Basics
-            </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span className="text-sm font-semibold tracking-wider uppercase">
+                Step 1 — Quest Basics
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPickerOpen(true)}
+              className="border-border bg-background hover:bg-secondary neo-press flex cursor-pointer items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold transition-colors"
+              data-testid="open-template-picker"
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              Load a Template
+            </button>
           </div>
+          {/* Applied template badge */}
+          {appliedTemplate && (
+            <div
+              className="mt-3 flex items-center justify-between gap-2 rounded-sm border border-blue-300 bg-blue-50 px-3 py-2 text-xs text-blue-800"
+              data-testid="applied-template-badge"
+            >
+              <div className="flex items-center gap-1.5 font-semibold">
+                <LayoutTemplate className="h-3.5 w-3.5 shrink-0" />
+                Template applied: {appliedTemplate.name}
+              </div>
+              <button
+                type="button"
+                onClick={() => setAppliedTemplate(null)}
+                aria-label="Dismiss template badge"
+                className="shrink-0 cursor-pointer opacity-60 transition-opacity hover:opacity-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
         </div>
         <div className="border-border bg-background space-y-5 border border-t-0 p-6 shadow-md">
           {/* Name */}
@@ -103,7 +151,7 @@ export function Step1Form() {
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.name && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.name && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={64}
             />
@@ -134,7 +182,7 @@ export function Step1Form() {
               placeholder="Describe what learners will accomplish..."
               className={cn(
                 "border-border bg-background w-full resize-none border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.description && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.description && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={2000}
             />
@@ -164,7 +212,7 @@ export function Step1Form() {
               placeholder="e.g. Programming, Web3, Design"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.category && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.category && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={32}
             />
@@ -253,6 +301,12 @@ export function Step1Form() {
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
+
+      <TemplatePicker
+        isOpen={isPickerOpen}
+        onClose={() => setIsPickerOpen(false)}
+        onApply={handleApplyTemplate}
+      />
     </form>
   )
 }

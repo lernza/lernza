@@ -8,6 +8,12 @@ import { pushToast } from "../notifications"
 import { logContractCall } from "./logger"
 import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
 import { RpcHealthManager, parseRpcUrls } from "./rpc-health"
+import {
+  addPendingTransaction,
+  getPendingTransactions,
+  removePendingTransaction,
+  type PendingTransaction,
+} from "../pending-transactions"
 
 export const SOROBAN_RPC_URL = env.VITE_SOROBAN_RPC_URL
 export const NETWORK_PASSPHRASE = env.VITE_SOROBAN_NETWORK_PASSPHRASE
@@ -495,4 +501,89 @@ export async function signAndSubmit(
       error: message,
     }
   }
+}
+
+/**
+ * Wraps signAndSubmit with pending-transaction persistence (issue #1478).
+ * Persists {txHash, label, submittedAt} to localStorage as soon as the
+ * transaction is submitted, and removes it once resolved — except when the
+ * result is still PendingLedger, since that's exactly the "confirmation
+ * outcome unknown" case reconcilePendingTransactions() resolves on next
+ * load. Never persists signed XDR, keys, or wallet secrets.
+ */
+export async function signAndSubmitTracked(
+  tx: Transaction,
+  label: string,
+  handlers: TransactionLifecycleHandlers = {}
+): Promise<TransactionResult> {
+  const result = await signAndSubmit(tx, {
+    ...handlers,
+    onSubmitted: (txHash: string) => {
+      addPendingTransaction({ txHash, label, submittedAt: Date.now() })
+      handlers.onSubmitted?.(txHash)
+    },
+  })
+
+  if (result.txHash && result.status !== TransactionStatus.PendingLedger) {
+    removePendingTransaction(result.txHash)
+  }
+
+  return result
+}
+
+// If a pending transaction is still NOT_FOUND on the RPC after this long,
+// treat it as expired/dropped rather than leaving it pending indefinitely.
+const PENDING_TRANSACTION_EXPIRY_MS = 10 * 60 * 1000
+
+/**
+ * Reconciles persisted pending transactions against ledger status (issue
+ * #1478). Intended to run once when the app loads: for each transaction
+ * still recorded from a prior session/reload, checks its current status and
+ * surfaces a distinct success/failure/expiry toast, clearing resolved
+ * entries. Genuinely still-pending, recently-submitted transactions are left
+ * for the next reconciliation rather than reported as expired prematurely.
+ */
+export async function reconcilePendingTransactions(): Promise<void> {
+  const pending: PendingTransaction[] = getPendingTransactions()
+  if (pending.length === 0) return
+
+  await Promise.all(
+    pending.map(async (tx) => {
+      try {
+        const response = await server.getTransaction(tx.txHash)
+        const status = normalizeRpcStatus(response.status)
+
+        if (status === TransactionStatus.Success) {
+          pushToast({
+            message: `${tx.label}: transaction confirmed successfully.`,
+            type: "success",
+            duration: 5000,
+          })
+          removePendingTransaction(tx.txHash)
+        } else if (status === TransactionStatus.Failed) {
+          pushToast({
+            message: `${tx.label}: transaction failed on-chain.`,
+            type: "error",
+            duration: 6000,
+          })
+          removePendingTransaction(tx.txHash)
+        } else if (status === "not_found") {
+          if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
+            pushToast({
+              message: `${tx.label}: transaction expired before confirmation. Please try again.`,
+              type: "warning",
+              duration: 6000,
+            })
+            removePendingTransaction(tx.txHash)
+          }
+          // Otherwise still genuinely in flight — leave it for the next reconciliation.
+        }
+      } catch (error) {
+        // RPC unreachable while checking — leave the record for a future attempt.
+        if (isDev) {
+          console.warn(`Failed to reconcile pending transaction ${tx.txHash}:`, error)
+        }
+      }
+    })
+  )
 }

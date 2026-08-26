@@ -85,6 +85,9 @@ pub enum DataKey {
     TotalReservedReward(u32),
     // Milestone feedback history per learner submission
     MilestoneFeedbackHistory(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Verification state: who verified a completion and when.
+    // Key: (quest_id, milestone_id, enrollee). Value: VerificationRecord.
+    VerifiedBy(u32, u32, Address),
 }
 
 #[contracttype]
@@ -139,6 +142,15 @@ pub struct CompletionInfo {
     pub milestone_id: u32,
     pub enrollee: Address,
     pub completed_at: u64,
+}
+
+/// Records who verified a completion and when. Stored under `VerifiedBy` keys
+/// so audits can trace every reward-triggering verification back to its authorizer.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct VerificationRecord {
+    pub verified_by: Address,
+    pub verified_at: u64,
 }
 
 #[contracttype]
@@ -483,6 +495,25 @@ impl MilestoneContract {
         Ok(ids)
     }
 
+    /// Estimate the rent (in stroops) needed to store a batch of milestones.
+    /// This is a planning aid — always confirm the exact fee with
+    /// `simulateTransaction` before signing.
+    pub fn estimate_batch_rent(
+        _env: Env,
+        milestone_count: u32,
+        avg_title_len: u32,
+        avg_description_len: u32,
+    ) -> i128 {
+        // Fixed overhead per MilestoneInfo entry (id, quest_id, reward_amount,
+        // requires_previous, and struct/XDR framing).
+        const FIXED_OVERHEAD_BYTES: u32 = 128;
+
+        let per_milestone_size = FIXED_OVERHEAD_BYTES + avg_title_len + avg_description_len;
+        let total_size = per_milestone_size * milestone_count.min(MAX_BATCH_SIZE);
+
+        common::estimate_persistent_rent(total_size)
+    }
+
     fn validate_ms_input(
         title: &String,
         description: &String,
@@ -662,6 +693,10 @@ impl MilestoneContract {
         if quest_info.owner != owner {
             return Err(Error::Unauthorized);
         }
+        // Prevent the owner from verifying their own completion (self-verification guard).
+        if owner == enrollee {
+            return Err(Error::InvalidApprover);
+        }
         if quest_info.status != common::QuestStatus::Active {
             return Err(Error::Unauthorized);
         }
@@ -796,6 +831,15 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&time_key, THRESHOLD, BUMP);
 
+        // Record verification state for audit trail
+        let verify_key = DataKey::VerifiedBy(quest_id, milestone_id, enrollee.clone());
+        let verification = VerificationRecord {
+            verified_by: owner.clone(),
+            verified_at: env.ledger().timestamp(),
+        };
+        env.storage().persistent().set(&verify_key, &verification);
+        common::extend_persistent_ttl(&env, &verify_key);
+
         // Increment enrollee's completion count for this quest
         let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
         env.storage()
@@ -825,6 +869,18 @@ impl MilestoneContract {
         );
 
         Ok(reward)
+    }
+
+    /// Get the verification record for a completed milestone.
+    /// Returns None if the milestone has not been verified for this enrollee.
+    pub fn get_verification_record(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> Option<VerificationRecord> {
+        let key = DataKey::VerifiedBy(quest_id, milestone_id, enrollee);
+        env.storage().persistent().get(&key)
     }
 
     /// Submit a milestone completion for peer review.

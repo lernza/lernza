@@ -2359,3 +2359,322 @@ fn test_get_active_participant_count_nonexistent_quest() {
     let r = client.try_get_active_participant_count(&999);
     assert_eq!(r, Err(Ok(Error::NotFound)));
 }
+
+// ── Ownership transfer tests (#1471) ────────────────────────────────────────
+
+#[test]
+fn test_initiate_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, nominee);
+}
+
+#[test]
+fn test_initiate_transfer_replaces_existing() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee1 = Address::generate(&env);
+    let nominee2 = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee1);
+    client.initiate_transfer(&quest_id, &nominee2);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, nominee2);
+}
+
+#[test]
+fn test_initiate_transfer_rejects_self_nomination() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_initiate_transfer(&quest_id, &owner);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_initiate_transfer_rejects_archived_quest() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.archive_quest(&quest_id);
+
+    let r = client.try_initiate_transfer(&quest_id, &nominee);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_accept_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    // Accept must be called by the nominee
+    let r = client.try_accept_transfer(&quest_id, &nominee);
+    assert!(r.is_ok());
+
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.owner, nominee);
+
+    // Pending transfer should be cleared
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+#[test]
+fn test_accept_transfer_rejects_non_nominee() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+    let stranger = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    let r = client.try_accept_transfer(&quest_id, &stranger);
+    assert_eq!(r, Err(Ok(Error::NotTransferNominee)));
+}
+
+#[test]
+fn test_accept_transfer_rejects_no_pending() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_accept_transfer(&quest_id, &owner);
+    assert_eq!(r, Err(Ok(Error::NoPendingTransfer)));
+}
+
+#[test]
+fn test_cancel_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+    client.cancel_transfer(&quest_id);
+
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+#[test]
+fn test_cancel_transfer_rejects_no_pending() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_cancel_transfer(&quest_id);
+    assert_eq!(r, Err(Ok(Error::NoPendingTransfer)));
+}
+
+#[test]
+fn test_get_pending_transfer_none() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+// ── Waitlist tests (#1472) ──────────────────────────────────────────────────
+
+fn create_quest_with_cap(
+    env: &Env,
+    client: &QuestContractClient,
+    owner: &Address,
+    token: &Address,
+    max: u32,
+) -> u32 {
+    client.create_quest(
+        owner,
+        &String::from_str(env, "Capped Quest"),
+        &String::from_str(env, "Description"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
+        token,
+        &Visibility::Public,
+        &Some(max),
+        &None,
+    )
+}
+
+#[test]
+fn test_join_quest_waitlist_when_full() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 2);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    // Quest is full — e3 should be waitlisted, not rejected
+    client.join_quest(&e3, &quest_id);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+
+    let waitlist = client.get_waitlist(&quest_id).unwrap();
+    assert_eq!(waitlist.len(), 1);
+    assert_eq!(waitlist.get(0).unwrap(), e3);
+}
+
+#[test]
+fn test_join_quest_waitlist_fifo_order() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+    client.join_quest(&e3, &quest_id);
+
+    let waitlist = client.get_waitlist(&quest_id).unwrap();
+    assert_eq!(waitlist.get(0).unwrap(), e2);
+    assert_eq!(waitlist.get(1).unwrap(), e3);
+}
+
+#[test]
+fn test_join_quest_rejects_duplicate_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    // e2 tries to join waitlist again
+    let r = client.try_join_quest(&e2, &quest_id);
+    assert_eq!(r, Err(Ok(Error::AlreadyEnrolled)));
+}
+
+#[test]
+fn test_promote_from_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    let promoted = client.promote_from_waitlist(&quest_id).unwrap();
+    assert_eq!(promoted, Some(e2));
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e1));
+    assert!(enrollees.contains(&e2));
+
+    let waitlist = client.get_waitlist(&quest_id).unwrap();
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_promote_from_waitlist_empty() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let result = client.promote_from_waitlist(&quest_id).unwrap();
+    assert_eq!(result, None);
+}
+
+#[test]
+fn test_remove_from_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    client.remove_from_waitlist(&quest_id, &e2);
+
+    let waitlist = client.get_waitlist(&quest_id).unwrap();
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_remove_from_waitlist_not_found() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let stranger = Address::generate(&env);
+
+    let r = client.try_remove_from_waitlist(&quest_id, &stranger);
+    assert_eq!(r, Err(Ok(Error::NotFound)));
+}
+
+#[test]
+fn test_get_waitlist_length() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    assert_eq!(client.get_waitlist_length(&quest_id).unwrap(), 0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    assert_eq!(client.get_waitlist_length(&quest_id).unwrap(), 2);
+}
+
+#[test]
+fn test_auto_promote_on_remove_enrollee() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 2);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+    client.join_quest(&e3, &quest_id);
+
+    // e3 is on the waitlist
+    assert_eq!(client.get_waitlist_length(&quest_id).unwrap(), 1);
+
+    // Remove e1 — e3 should be auto-promoted
+    client.remove_enrollee(&quest_id, &e1);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e2));
+    assert!(enrollees.contains(&e3));
+
+    let waitlist = client.get_waitlist(&quest_id).unwrap();
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_owner_force_add_bypasses_cap() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+
+    // Owner force-adds e2 even though quest is full
+    client.add_enrollee(&quest_id, &e2);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e1));
+    assert!(enrollees.contains(&e2));
+}

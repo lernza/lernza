@@ -52,6 +52,10 @@ pub enum DataKey {
     QuestSchemaVersion(u32),
     /// Enrollee status tracking. Key: (quest_id, enrollee_address). Value: EnrolleeStatus.
     EnrolleeStatus(u32, Address),
+    /// Pending ownership transfer request. Key: quest_id. Value: PendingTransfer.
+    PendingTransfer(u32),
+    /// Waitlist for a quest when enrollment is full. Key: quest_id. Value: Vec<Address> (FIFO).
+    Waitlist(u32),
 }
 
 // QuestInfo moved to common.
@@ -88,6 +92,12 @@ pub enum Error {
     InviteAlreadyUsed = 16,
     /// Quest has been cancelled.
     QuestCancelled = 17,
+    /// No pending ownership transfer exists for this quest.
+    NoPendingTransfer = 18,
+    /// The caller is not the nominated new owner for this transfer.
+    NotTransferNominee = 19,
+    /// The caller is not the current owner or the nominated new owner.
+    NotTransferParty = 20,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
     Paused = 400,
@@ -115,6 +125,15 @@ const MAX_TAG_LEN: u32 = 32;
 const QUEST_DATA_SCHEMA_VERSION: u32 = 1;
 /// Bound migration work so an administrator cannot exceed transaction limits.
 const MAX_MIGRATION_BATCH: u32 = 25;
+
+/// A two-step ownership transfer request. The current owner nominates a new
+/// owner, and the nominee must explicitly accept before ownership changes.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingTransfer {
+    pub nominee: Address,
+    pub initiated_at: u64,
+}
 
 fn is_blank_ascii(s: &String) -> bool {
     let len = s.len() as usize;
@@ -648,6 +667,10 @@ impl QuestContract {
     }
 
     /// Add an enrollee to a quest. Owner only.
+    ///
+    /// When the quest has an enrollment cap and is full, the owner can still
+    /// force-add an enrollee (bypassing the cap). Self-enrollment via
+    /// `join_quest` will instead add to the waitlist.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
@@ -662,12 +685,8 @@ impl QuestContract {
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
-        // Check enrollment cap from quest record
-        if let Some(max) = quest.max_enrollees {
-            if enrollees.len() >= max {
-                return Err(Error::QuestFull);
-            }
-        }
+        // Owner can force-add even when full (bypasses cap).
+        // For self-enrollment, see join_quest which waitlists when full.
 
         // Check not already enrolled
         if enrollees.contains(&enrollee) {
@@ -702,6 +721,9 @@ impl QuestContract {
     }
 
     /// Allow a learner to enroll themselves in a public quest.
+    ///
+    /// When the quest has an enrollment cap and is full, the learner is
+    /// automatically added to the waitlist (FIFO) instead of being rejected.
     pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
@@ -719,14 +741,31 @@ impl QuestContract {
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
-        if let Some(max) = quest.max_enrollees {
-            if enrollees.len() >= max {
-                return Err(Error::QuestFull);
-            }
-        }
-
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
+        }
+
+        // If the quest has a cap and is full, add to the waitlist instead.
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
+                let waitlist = Self::load_waitlist(&env, quest_id);
+                if waitlist.contains(&enrollee) {
+                    return Err(Error::AlreadyEnrolled);
+                }
+                let mut new_waitlist = waitlist;
+                new_waitlist.push_back(enrollee.clone());
+                let key = DataKey::Waitlist(quest_id);
+                env.storage().persistent().set(&key, &new_waitlist);
+                common::extend_persistent_ttl(&env, &key);
+
+                env.events().publish(
+                    (Symbol::new(&env, "waitlist_joined"),),
+                    (quest_id, enrollee, env.ledger().timestamp()),
+                );
+
+                Self::bump(&env, quest_id);
+                return Ok(());
+            }
         }
 
         let mut new_enrollees = enrollees;
@@ -1445,6 +1484,261 @@ impl QuestContract {
         Ok(())
     }
 
+    // ── Ownership transfer ────────────────────────────────────────────────
+
+    /// Initiate a two-step ownership transfer. Only the current owner can call.
+    /// The quest must be Active. A pending transfer replaces any existing one.
+    pub fn initiate_transfer(
+        env: Env,
+        quest_id: u32,
+        nominee: Address,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status != QuestStatus::Active {
+            return Err(Error::InvalidInput);
+        }
+        if nominee == quest.owner {
+            return Err(Error::InvalidInput);
+        }
+
+        let transfer = PendingTransfer {
+            nominee: nominee.clone(),
+            initiated_at: env.ledger().timestamp(),
+        };
+        let key = DataKey::PendingTransfer(quest_id);
+        env.storage().persistent().set(&key, &transfer);
+        common::extend_persistent_ttl(&env, &key);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transfer_initiated"),),
+            (quest_id, quest.owner, nominee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Accept a pending ownership transfer. Only the nominated address can call.
+    /// Transfers ownership and clears the pending request.
+    pub fn accept_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let nominee = env.invoker();
+        let transfer_key = DataKey::PendingTransfer(quest_id);
+        let transfer: PendingTransfer = env
+            .storage()
+            .persistent()
+            .get(&transfer_key)
+            .ok_or(Error::NoPendingTransfer)?;
+
+        if transfer.nominee != nominee {
+            return Err(Error::NotTransferNominee);
+        }
+
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        if quest.status != QuestStatus::Active {
+            return Err(Error::InvalidInput);
+        }
+
+        let old_owner = quest.owner.clone();
+        quest.owner = nominee.clone();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+        env.storage().persistent().remove(&transfer_key);
+
+        // Update OwnerQuests indices
+        Self::remove_id_from_index(&env, DataKey::OwnerQuests(old_owner.clone()), quest_id);
+        Self::add_id_to_index(&env, DataKey::OwnerQuests(nominee.clone()), quest_id);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transferred"),),
+            (quest_id, old_owner, nominee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Cancel a pending ownership transfer. Only the current owner can call.
+    pub fn cancel_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let transfer_key = DataKey::PendingTransfer(quest_id);
+        if !env.storage().persistent().has(&transfer_key) {
+            return Err(Error::NoPendingTransfer);
+        }
+
+        env.storage().persistent().remove(&transfer_key);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transfer_cancelled"),),
+            (quest_id, quest.owner, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the pending ownership transfer for a quest, if any.
+    pub fn get_pending_transfer(
+        env: Env,
+        quest_id: u32,
+    ) -> Result<Option<PendingTransfer>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let key = DataKey::PendingTransfer(quest_id);
+        let transfer: Option<PendingTransfer> = env.storage().persistent().get(&key);
+        Self::bump(&env, quest_id);
+        Ok(transfer)
+    }
+
+    // ── Waitlist ──────────────────────────────────────────────────────────
+
+    /// Join the waitlist for a quest that is full. FIFO ordering.
+    /// The quest must have max_enrollees set and be full.
+    pub fn join_waitlist(
+        env: Env,
+        enrollee: Address,
+        quest_id: u32,
+    ) -> Result<(), Error> {
+        enrollee.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return Err(Error::EnrollmentClosed);
+        }
+        if quest.visibility == Visibility::Private || quest.visibility == Visibility::InviteOnly {
+            return Err(Error::InviteOnly);
+        }
+
+        let max = quest.max_enrollees.ok_or(Error::InvalidInput)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        if enrollees.len() < max {
+            return Err(Error::InvalidInput); // quest is not full
+        }
+        if enrollees.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        if waitlist.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        let mut new_waitlist = waitlist;
+        new_waitlist.push_back(enrollee.clone());
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &new_waitlist);
+        common::extend_persistent_ttl(&env, &key);
+
+        env.events().publish(
+            (Symbol::new(&env, "waitlist_joined"),),
+            (quest_id, enrollee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Promote the next person from the waitlist to enrollee. Owner only.
+    /// Returns the promoted address, or None if the waitlist is empty.
+    pub fn promote_from_waitlist(
+        env: Env,
+        quest_id: u32,
+    ) -> Result<Option<Address>, Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return Err(Error::EnrollmentClosed);
+        }
+
+        let mut waitlist = Self::load_waitlist(&env, quest_id);
+        if waitlist.is_empty() {
+            return Ok(None);
+        }
+
+        // Pop first (FIFO)
+        let promoted = waitlist.get(0).ok_or(Error::NotFound)?;
+        waitlist.remove(0);
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &waitlist);
+        common::extend_persistent_ttl(&env, &key);
+
+        // Enroll the promoted person
+        let mut enrollees = Self::load_enrollees(&env, quest_id);
+        enrollees.push_back(promoted.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Enrollees(quest_id), &enrollees);
+        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(promoted.clone()), quest_id);
+
+        env.events().publish(
+            (Symbol::new(&env, "waitlist_promoted"),),
+            (quest_id, promoted.clone(), env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(Some(promoted))
+    }
+
+    /// Remove a person from the waitlist. Owner only.
+    pub fn remove_from_waitlist(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let mut waitlist = Self::load_waitlist(&env, quest_id);
+        let mut found = false;
+        let mut new_list = Vec::new(&env);
+
+        for i in 0..waitlist.len() {
+            let addr = waitlist.get(i).unwrap();
+            if addr == enrollee {
+                found = true;
+            } else {
+                new_list.push_back(addr);
+            }
+        }
+
+        if !found {
+            return Err(Error::NotFound);
+        }
+
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &new_list);
+        common::extend_persistent_ttl(&env, &key);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the waitlist for a quest.
+    pub fn get_waitlist(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        Self::bump(&env, quest_id);
+        Ok(waitlist)
+    }
+
+    /// Get the waitlist length for a quest.
+    pub fn get_waitlist_length(env: Env, quest_id: u32) -> Result<u32, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        Self::bump(&env, quest_id);
+        Ok(waitlist.len())
+    }
+
     /// Get prerequisites for a quest.
     pub fn get_prerequisites(env: Env, quest_id: u32) -> Result<Vec<u32>, Error> {
         let quest = Self::load_quest(&env, quest_id)?;
@@ -1519,6 +1813,13 @@ impl QuestContract {
             .unwrap_or(Vec::new(env))
     }
 
+    fn load_waitlist(env: &Env, id: u32) -> Vec<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Waitlist(id))
+            .unwrap_or(Vec::new(env))
+    }
+
     fn internal_set_visibility(
         env: &Env,
         quest_id: u32,
@@ -1581,9 +1882,33 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_list);
-        if found {
-            Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+        Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+
+        // Auto-promote from waitlist if the quest has a cap and there are waitlisted people.
+        let quest = Self::load_quest(env, quest_id)?;
+        if quest.max_enrollees.is_some() {
+            let mut waitlist = Self::load_waitlist(env, quest_id);
+            if !waitlist.is_empty() {
+                let promoted = waitlist.get(0).ok_or(Error::NotFound)?;
+                waitlist.remove(0);
+                let wl_key = DataKey::Waitlist(quest_id);
+                env.storage().persistent().set(&wl_key, &waitlist);
+                common::extend_persistent_ttl(env, &wl_key);
+
+                let mut current_enrollees = Self::load_enrollees(env, quest_id);
+                current_enrollees.push_back(promoted.clone());
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::Enrollees(quest_id), &current_enrollees);
+                Self::add_id_to_index(env, DataKey::EnrolleeQuests(promoted.clone()), quest_id);
+
+                env.events().publish(
+                    (Symbol::new(env, "waitlist_promoted"),),
+                    (quest_id, promoted, env.ledger().timestamp()),
+                );
+            }
         }
+
         Ok(())
     }
 
@@ -1662,6 +1987,20 @@ impl QuestContract {
         }
         if env.storage().persistent().has(&DataKey::QuestVersionHistory(quest_id)) {
             common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Waitlist(quest_id))
+        {
+            common::extend_persistent_ttl(env, &DataKey::Waitlist(quest_id));
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::PendingTransfer(quest_id))
+        {
+            common::extend_persistent_ttl(env, &DataKey::PendingTransfer(quest_id));
         }
     }
 }

@@ -1767,3 +1767,171 @@ fn test_verify_completion_cancelled_quest_rejected() {
     let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
     assert_eq!(res, Err(Ok(Error::Unauthorized)));
 }
+
+// --- Security audit tests — issue #1428 ---
+
+#[test]
+fn test_pause_rejects_milestone_creation() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    client.pause(&owner);
+
+    let r = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+        &false,
+    );
+    assert_eq!(r, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_pause_rejects_verification() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.pause(&owner);
+
+    let r = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
+    assert_eq!(r, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_pause_rejects_review_submission() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // Set peer review mode
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+
+    client.pause(&owner);
+
+    let r = client.try_submit_for_review(&enrollee, &q_id, &ms_id);
+    assert_eq!(r, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_non_owner_cannot_create_milestone() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let stranger = Address::generate(&env);
+
+    // mock_all_auths is on, but ownership check fails
+    let r = client.try_create_milestone(
+        &stranger,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+        &false,
+    );
+    assert_eq!(r, Err(Ok(Error::OwnerMismatch)));
+}
+
+#[test]
+fn test_milestone_reward_bounds() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Zero reward rejected
+    let r = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &0,
+        &false,
+    );
+    assert_eq!(r, Err(Ok(Error::InvalidAmount)));
+
+    // Negative reward rejected
+    let r = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &(-100),
+        &false,
+    );
+    assert_eq!(r, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_batch_size_limit() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    for i in 0..21 {
+        milestones.push_back(MilestoneInput {
+            title: String::from_str(&env, "M"),
+            description: String::from_str(&env, "D"),
+            reward_amount: 100,
+            requires_previous: false,
+        });
+    }
+
+    let r = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(r, Err(Ok(Error::BatchTooLarge)));
+}
+
+#[test]
+fn test_self_approval_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Enrollee tries to approve their own submission
+    let r = client.try_approve_completion(&enrollee, &q_id, &ms_id, &enrollee);
+    assert_eq!(r, Err(Ok(Error::InvalidApprover)));
+}
+
+#[test]
+fn test_duplicate_approval_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "M1", 100);
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    client.approve_completion(&peer, &q_id, &ms_id, &enrollee);
+
+    // Peer tries to approve again
+    let r = client.try_approve_completion(&peer, &q_id, &ms_id, &enrollee);
+    assert_eq!(r, Err(Ok(Error::AlreadyApproved)));
+}
+
+#[test]
+fn test_title_too_long_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let long_title = String::from_bytes(&env, &vec![b'a'; 129]);
+    let r = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &long_title,
+        &String::from_str(&env, "Desc"),
+        &100,
+        &false,
+    );
+    assert_eq!(r, Err(Ok(Error::TitleTooLong)));
+}

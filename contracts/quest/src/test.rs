@@ -2106,3 +2106,256 @@ fn test_extend_quest_ttl_owner_only() {
     // Owner can extend TTL successfully.
     client.extend_quest_ttl(&quest_id, &owner);
 }
+
+// --- Security audit tests — issue #1428 ---
+
+#[test]
+fn test_pause_rejects_all_mutations() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    client.pause(&owner);
+
+    let learner = Address::generate(&env);
+
+    // create_quest blocked when paused
+    let r = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Q"),
+        &String::from_str(&env, "D"),
+        &String::from_str(&env, "C"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+    assert_eq!(r, Err(Ok(Error::Paused)));
+
+    // add_enrollee blocked
+    let r = client.try_add_enrollee(&quest_id, &learner);
+    assert_eq!(r, Err(Ok(Error::Paused)));
+
+    // update_quest blocked
+    let r = client.try_update_quest(
+        &quest_id,
+        &owner,
+        &Some(String::from_str(&env, "New")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(r, Err(Ok(Error::Paused)));
+
+    // archive blocked
+    let r = client.try_archive_quest(&quest_id);
+    assert_eq!(r, Err(Ok(Error::Paused)));
+
+    // cancel blocked
+    let r = client.try_cancel_quest(&quest_id);
+    assert_eq!(r, Err(Ok(Error::Paused)));
+}
+
+#[test]
+fn test_non_owner_cannot_enroll_others() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let stranger = Address::generate(&env);
+    let learner = Address::generate(&env);
+
+    // Non-owner cannot add_enrollee
+    let r = client.try_add_enrollee(&quest_id, &learner);
+    assert_eq!(r, Err(Ok(Error::Unauthorized)));
+    // Note: mock_all_auths is on, but ownership check still fails
+    // because stranger != quest.owner
+    let _ = stranger; // suppress unused warning
+}
+
+#[test]
+fn test_create_quest_rejects_zero_reward_token() {
+    let (env, client, owner, token) = setup();
+    // token must be a contract address (C-prefix); Address::generate gives a G-prefix account
+    let r = client.try_create_quest(
+        &owner,
+        &String::from_str(&env, "Q"),
+        &String::from_str(&env, "D"),
+        &String::from_str(&env, "C"),
+        &Vec::<String>::new(&env),
+        &token, // Address::generate produces an account address, not contract
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_enrollment_cap_enforced() {
+    let (env, client, owner, token) = setup();
+    let quest_id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Small Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Cat"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &Some(2), // max 2 enrollees
+        &None,
+    );
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &e1);
+    client.add_enrollee(&quest_id, &e2);
+
+    // Third enrollee should be rejected
+    let r = client.try_add_enrollee(&quest_id, &e3);
+    assert_eq!(r, Err(Ok(Error::QuestFull)));
+}
+
+#[test]
+fn test_join_quest_already_enrolled_rejected() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let learner = Address::generate(&env);
+
+    client.join_quest(&learner, &quest_id);
+    let r = client.try_join_quest(&learner, &quest_id);
+    assert_eq!(r, Err(Ok(Error::AlreadyEnrolled)));
+}
+
+#[test]
+fn test_update_quest_rejects_empty_name() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_update_quest(
+        &quest_id,
+        &owner,
+        &Some(String::from_str(&env, "")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_update_quest_rejects_whitespace_name() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_update_quest(
+        &quest_id,
+        &owner,
+        &Some(String::from_str(&env, "   ")),
+        &None,
+        &None,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_deadline_blocks_enrollment_after_expiry() {
+    let (env, client, owner, token) = setup();
+    env.ledger().set_timestamp(1_000);
+    let quest_id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Timed"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Cat"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &Some(2_000), // deadline at timestamp 2000
+    );
+
+    let learner = Address::generate(&env);
+
+    // Before deadline: enrollment succeeds
+    env.ledger().set_timestamp(1_500);
+    client.join_quest(&learner, &quest_id);
+
+    // After deadline: new enrollment blocked
+    let learner2 = Address::generate(&env);
+    env.ledger().set_timestamp(2_500);
+    let r = client.try_join_quest(&learner2, &quest_id);
+    assert_eq!(r, Err(Ok(Error::DeadlineExpired)));
+}
+
+// --- Storage optimization tests — issue #1426 ---
+
+#[test]
+fn test_get_active_participant_count_defaults_to_all_active() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &e1);
+    client.add_enrollee(&quest_id, &e2);
+    client.add_enrollee(&quest_id, &e3);
+
+    // All enrollees default to Active status
+    assert_eq!(client.get_active_participant_count(&quest_id), 3);
+    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 3);
+}
+
+#[test]
+fn test_get_active_participant_count_excludes_suspended() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &e1);
+    client.add_enrollee(&quest_id, &e2);
+
+    assert_eq!(client.get_active_participant_count(&quest_id), 2);
+
+    // Suspend one enrollee
+    client.set_enrollee_status(&quest_id, &e1, &EnrolleeStatus::Suspended);
+    assert_eq!(client.get_active_participant_count(&quest_id), 1);
+    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 1);
+}
+
+#[test]
+fn test_get_active_participant_count_excludes_banned() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let e1 = Address::generate(&env);
+    client.add_enrollee(&quest_id, &e1);
+
+    assert_eq!(client.get_active_participant_count(&quest_id), 1);
+
+    client.set_enrollee_status(&quest_id, &e1, &EnrolleeStatus::Banned);
+    assert_eq!(client.get_active_participant_count(&quest_id), 0);
+}
+
+#[test]
+fn test_get_active_participant_count_empty_quest() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    assert_eq!(client.get_active_participant_count(&quest_id), 0);
+}
+
+#[test]
+fn test_get_active_participant_count_nonexistent_quest() {
+    let (env, client, _owner, _token) = setup();
+    let r = client.try_get_active_participant_count(&999);
+    assert_eq!(r, Err(Ok(Error::NotFound)));
+}

@@ -24,6 +24,7 @@ const Leaderboard = lazy(() => import("@/pages/leaderboard").then((m) => ({ defa
 const History = lazy(() => import("@/pages/history").then((m) => ({ default: m.History })))
 const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
+const AnalyticsPage = lazy(() => import("@/pages/analytics").then((m) => ({ default: m.Analytics })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
@@ -38,6 +39,7 @@ const VALID_PAGES = [
   "creator-dashboard",
   "leaderboard",
   "history",
+  "analytics",
   "terms",
   "privacy",
 ] as const
@@ -81,6 +83,7 @@ function pathToPage(pathname: string): {
   }
   if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null }
   if (clean === "/history") return { page: "history", questId: null, creatorAddress: null }
+  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null }
   if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null }
   if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null }
 
@@ -199,6 +202,12 @@ function App() {
         return (
           <Suspense fallback={<PageSkeleton />}>
             <History />
+          </Suspense>
+        )
+      case "analytics":
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <AnalyticsPage />
           </Suspense>
         )
       case "creator":

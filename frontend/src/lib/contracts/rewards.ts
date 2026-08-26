@@ -68,6 +68,20 @@ export class RewardsClient {
     return result ? BigInt(result) : 0n
   }
 
+  async getPlatformStats(): Promise<{ totalFundedQuests: number; totalFunded: bigint; totalDistributed: bigint }> {
+    const result = await this.invokeRead("get_platform_stats", [])
+    if (!result) return { totalFundedQuests: 0, totalFunded: 0n, totalDistributed: 0n }
+    const native = scValToNative(result)
+    if (Array.isArray(native) && native.length === 3) {
+      return {
+        totalFundedQuests: Number(native[0]),
+        totalFunded: BigInt(native[1]),
+        totalDistributed: BigInt(native[2]),
+      }
+    }
+    return { totalFundedQuests: 0, totalFunded: 0n, totalDistributed: 0n }
+  }
+
   async getQuestAuthority(questId: number): Promise<string | null> {
     const result = await this.invokeRead("get_quest_authority", [
       nativeToScVal(questId, { type: "u32" }),

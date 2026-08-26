@@ -1,248 +1,359 @@
 import React from "react"
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
-import { step1Schema, step2Schema } from "./types"
 import {
   QUEST_TEMPLATES,
-  TEMPLATES_BY_CATEGORY,
-  CATEGORY_META,
-  getTemplateById,
+  TEMPLATE_CATEGORIES,
+  CATEGORY_LABELS,
+  templateToStep1,
+  templateToMilestones,
+  templateTotalReward,
   type TemplateCategory,
 } from "./quest-templates"
 import { TemplatePicker } from "./template-picker"
 
-// ─── Template data integrity ──────────────────────────────────────────────────
+// ─── quest-templates data tests ──────────────────────────────────────────────
 
-describe("Quest templates — data integrity", () => {
-  it("has exactly 9 templates", () => {
-    expect(QUEST_TEMPLATES).toHaveLength(9)
-  })
-
-  it("has 3 templates per category", () => {
-    const cats: TemplateCategory[] = ["course", "bootcamp", "challenge"]
-    for (const cat of cats) {
-      expect(TEMPLATES_BY_CATEGORY[cat]).toHaveLength(3)
+describe("QUEST_TEMPLATES data integrity", () => {
+  it("contains at least one template per category", () => {
+    for (const cat of TEMPLATE_CATEGORIES) {
+      const matches = QUEST_TEMPLATES.filter(t => t.category === cat)
+      expect(matches.length).toBeGreaterThan(0)
     }
   })
 
-  it("all template ids are unique", () => {
+  it("every template has a unique id", () => {
     const ids = QUEST_TEMPLATES.map(t => t.id)
-    expect(new Set(ids).size).toBe(ids.length)
+    const unique = new Set(ids)
+    expect(unique.size).toBe(ids.length)
   })
 
-  it("all templates belong to a valid category", () => {
-    const validCategories: TemplateCategory[] = ["course", "bootcamp", "challenge"]
+  it("every template has at least one milestone", () => {
     for (const t of QUEST_TEMPLATES) {
-      expect(validCategories).toContain(t.category)
+      expect(t.milestones.length).toBeGreaterThan(0)
     }
   })
 
-  it("all templates have non-empty name, tagline, icon, and duration", () => {
+  it("all milestone rewardAmounts are positive numbers", () => {
     for (const t of QUEST_TEMPLATES) {
-      expect(t.name.trim().length).toBeGreaterThan(0)
-      expect(t.tagline.trim().length).toBeGreaterThan(0)
-      expect(t.icon.trim().length).toBeGreaterThan(0)
-      expect(t.duration.trim().length).toBeGreaterThan(0)
-    }
-  })
-
-  it("getTemplateById returns the right template", () => {
-    const first = QUEST_TEMPLATES[0]
-    expect(getTemplateById(first.id)).toEqual(first)
-  })
-
-  it("getTemplateById returns undefined for unknown id", () => {
-    expect(getTemplateById("does-not-exist")).toBeUndefined()
-  })
-
-  it("CATEGORY_META has entries for all three categories", () => {
-    const cats: TemplateCategory[] = ["course", "bootcamp", "challenge"]
-    for (const cat of cats) {
-      const meta = CATEGORY_META[cat]
-      expect(meta.label.trim().length).toBeGreaterThan(0)
-      expect(meta.description.trim().length).toBeGreaterThan(0)
-      expect(meta.icon.trim().length).toBeGreaterThan(0)
-    }
-  })
-})
-
-// ─── Schema compliance ────────────────────────────────────────────────────────
-
-describe("Quest templates — step1 schema compliance", () => {
-  it.each(QUEST_TEMPLATES)("$name: step1 data passes the step1 schema", template => {
-    const result = step1Schema.safeParse(template.step1)
-    expect(result.success).toBe(true)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: name ≤ 64 chars and non-blank", template => {
-    expect(template.step1.name.length).toBeLessThanOrEqual(64)
-    expect(template.step1.name.trim().length).toBeGreaterThan(0)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: description ≤ 2000 chars and non-blank", template => {
-    expect(template.step1.description.length).toBeLessThanOrEqual(2000)
-    expect(template.step1.description.trim().length).toBeGreaterThan(0)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: category ≤ 32 chars and non-blank", template => {
-    expect(template.step1.category.length).toBeLessThanOrEqual(32)
-    expect(template.step1.category.trim().length).toBeGreaterThan(0)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: tags count ≤ 5, each ≤ 32 chars", template => {
-    expect(template.step1.tags.length).toBeLessThanOrEqual(5)
-    for (const tag of template.step1.tags) {
-      expect(tag.length).toBeLessThanOrEqual(32)
-      expect(tag.trim().length).toBeGreaterThan(0)
-    }
-  })
-})
-
-describe("Quest templates — step2 schema compliance", () => {
-  it.each(QUEST_TEMPLATES)("$name: step2 data passes the step2 schema", template => {
-    const result = step2Schema.safeParse(template.step2)
-    expect(result.success).toBe(true)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: has at least 1 milestone, at most 50", template => {
-    const count = template.step2.milestones.length
-    expect(count).toBeGreaterThanOrEqual(1)
-    expect(count).toBeLessThanOrEqual(50)
-  })
-
-  it.each(QUEST_TEMPLATES)("$name: all milestone titles ≤ 128 chars and non-blank", template => {
-    for (const m of template.step2.milestones) {
-      expect(m.title.length).toBeLessThanOrEqual(128)
-      expect(m.title.trim().length).toBeGreaterThan(0)
-    }
-  })
-
-  it.each(QUEST_TEMPLATES)(
-    "$name: all milestone descriptions ≤ 1000 chars and non-blank",
-    template => {
-      for (const m of template.step2.milestones) {
-        expect(m.description.length).toBeLessThanOrEqual(1000)
-        expect(m.description.trim().length).toBeGreaterThan(0)
+      for (const m of t.milestones) {
+        expect(typeof m.rewardAmount).toBe("number")
+        expect(m.rewardAmount).toBeGreaterThan(0)
       }
     }
-  )
+  })
 
-  it.each(QUEST_TEMPLATES)("$name: all reward amounts are positive numbers", template => {
-    for (const m of template.step2.milestones) {
-      expect(m.rewardAmount).toBeGreaterThan(0)
-      expect(Number.isFinite(m.rewardAmount)).toBe(true)
+  it("templateTotalReward returns correct sum", () => {
+    const t = QUEST_TEMPLATES[0]
+    const expected = t.milestones.reduce((s, m) => s + m.rewardAmount, 0)
+    expect(templateTotalReward(t)).toBe(expected)
+  })
+
+  it("templateTotalReward is 0 for empty milestones", () => {
+    const fake = { ...QUEST_TEMPLATES[0], milestones: [] }
+    expect(templateTotalReward(fake)).toBe(0)
+  })
+
+  it("catalogue contains the course-smart-contracts template", () => {
+    expect(QUEST_TEMPLATES.find(t => t.id === "course-smart-contracts")).toBeDefined()
+  })
+
+  it("catalogue contains the bootcamp-ai-ml template", () => {
+    expect(QUEST_TEMPLATES.find(t => t.id === "bootcamp-ai-ml")).toBeDefined()
+  })
+
+  it("catalogue contains the challenge-security template", () => {
+    expect(QUEST_TEMPLATES.find(t => t.id === "challenge-security")).toBeDefined()
+  })
+
+  it("has at least 3 templates in each category", () => {
+    for (const cat of TEMPLATE_CATEGORIES) {
+      const matches = QUEST_TEMPLATES.filter(t => t.category === cat)
+      expect(matches.length).toBeGreaterThanOrEqual(3)
     }
   })
 })
 
-// ─── TemplatePicker component ─────────────────────────────────────────────────
-
-describe("TemplatePicker component", () => {
-  const onClose = vi.fn()
-  const onApply = vi.fn()
-
-  beforeEach(() => {
-    onClose.mockClear()
-    onApply.mockClear()
+describe("templateToStep1()", () => {
+  it("maps template fields to Step1Values correctly", () => {
+    const t = QUEST_TEMPLATES[0]
+    const s1 = templateToStep1(t)
+    expect(s1.name).toBe(t.name)
+    expect(s1.description).toBe(t.description)
+    expect(s1.category).toBe(t.categoryLabel)
+    expect(s1.tags).toEqual(t.tags)
   })
 
-  it("does not render when isOpen is false", () => {
-    const { container } = render(
-      <TemplatePicker isOpen={false} onClose={onClose} onApply={onApply} />
-    )
-    expect(container.firstChild).toBeNull()
+  it("returns a deep copy of tags (not the same reference)", () => {
+    const t = QUEST_TEMPLATES[0]
+    const s1 = templateToStep1(t)
+    expect(s1.tags).not.toBe(t.tags)
+  })
+})
+
+describe("templateToMilestones()", () => {
+  it("returns same number of milestones as template", () => {
+    const t = QUEST_TEMPLATES[0]
+    const ms = templateToMilestones(t)
+    expect(ms.length).toBe(t.milestones.length)
   })
 
-  it("renders the modal when isOpen is true", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
+  it("returns deep copies (not same references)", () => {
+    const t = QUEST_TEMPLATES[0]
+    const ms = templateToMilestones(t)
+    expect(ms[0]).not.toBe(t.milestones[0])
+    expect(ms[0].title).toBe(t.milestones[0].title)
+  })
+})
+
+describe("CATEGORY_LABELS", () => {
+  it("has a label for every category", () => {
+    for (const cat of TEMPLATE_CATEGORIES) {
+      expect(CATEGORY_LABELS[cat]).toBeTruthy()
+    }
+  })
+})
+
+// ─── TemplatePicker component tests ──────────────────────────────────────────
+
+const noop = () => {}
+
+describe("TemplatePicker", () => {
+  it("renders nothing when isOpen is false", () => {
+    render(<TemplatePicker isOpen={false} onClose={noop} onApply={noop} />)
+    expect(screen.queryByRole("dialog")).toBeNull()
+  })
+
+  it("renders the dialog when isOpen is true", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
     expect(screen.getByRole("dialog")).toBeDefined()
-    expect(screen.getByText("Choose a Quest Template")).toBeDefined()
+    expect(screen.getByText("Choose a Template")).toBeDefined()
   })
 
-  it("renders three category tabs", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    expect(screen.getByRole("tab", { name: /courses/i })).toBeDefined()
-    expect(screen.getByRole("tab", { name: /bootcamps/i })).toBeDefined()
-    expect(screen.getByRole("tab", { name: /challenges/i })).toBeDefined()
-  })
+  it("renders 'All' and one button per category in the filter row", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
 
-  it("shows courses tab selected by default", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    const coursesTab = screen.getByRole("tab", { name: /courses/i })
-    expect(coursesTab.getAttribute("aria-selected")).toBe("true")
-  })
+    // 'All' filter button
+    expect(screen.getByRole("button", { name: /^All/i })).toBeDefined()
 
-  it("shows course template names in the list", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    for (const t of TEMPLATES_BY_CATEGORY.course) {
-      // Template name appears in both the card list and the desktop preview panel
-      expect(screen.getAllByText(t.name).length).toBeGreaterThanOrEqual(1)
+    // One button per category
+    for (const cat of TEMPLATE_CATEGORIES) {
+      const label = CATEGORY_LABELS[cat as TemplateCategory]
+      expect(screen.getByRole("button", { name: new RegExp(label, "i") })).toBeDefined()
     }
   })
 
-  it("switches to bootcamp category when tab is clicked", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    const bootcampTab = screen.getByRole("tab", { name: /bootcamps/i })
-    fireEvent.click(bootcampTab)
-
-    // Bootcamp template names should now be visible
-    for (const t of TEMPLATES_BY_CATEGORY.bootcamp) {
-      expect(screen.getAllByText(t.name).length).toBeGreaterThanOrEqual(1)
-    }
-    // Course template names should NOT be visible
-    for (const t of TEMPLATES_BY_CATEGORY.course) {
-      expect(screen.queryByText(t.name)).toBeNull()
-    }
+  it("shows all templates when 'All' filter is active (default)", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+    const cards = screen.getAllByTestId("template-card")
+    expect(cards.length).toBe(QUEST_TEMPLATES.length)
   })
 
-  it("switches to challenge category when tab is clicked", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    const challengeTab = screen.getByRole("tab", { name: /challenges/i })
-    fireEvent.click(challengeTab)
-    for (const t of TEMPLATES_BY_CATEGORY.challenge) {
-      expect(screen.getAllByText(t.name).length).toBeGreaterThanOrEqual(1)
-    }
+  it("filters to only course templates when Course is clicked", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+
+    const courseBtn = screen.getByRole("button", { name: /^Course/i })
+    fireEvent.click(courseBtn)
+
+    const courseCount = QUEST_TEMPLATES.filter(t => t.category === "course").length
+    const cards = screen.getAllByTestId("template-card")
+    expect(cards.length).toBe(courseCount)
   })
 
-  it("calls onClose when the close button is clicked", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
+  it("filters to only bootcamp templates when Bootcamp is clicked", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+
+    const btn = screen.getByRole("button", { name: /^Bootcamp/i })
+    fireEvent.click(btn)
+
+    const count = QUEST_TEMPLATES.filter(t => t.category === "bootcamp").length
+    const cards = screen.getAllByTestId("template-card")
+    expect(cards.length).toBe(count)
+  })
+
+  it("filters to only skill challenge templates when Skill Challenge is clicked", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+
+    const btn = screen.getByRole("button", { name: /^Skill Challenge/i })
+    fireEvent.click(btn)
+
+    const count = QUEST_TEMPLATES.filter(t => t.category === "skill-challenge").length
+    const cards = screen.getAllByTestId("template-card")
+    expect(cards.length).toBe(count)
+  })
+
+  it("calls onClose when the close (×) button is clicked", () => {
+    const onClose = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={noop} />)
+
     const closeBtn = screen.getByRole("button", { name: /close template picker/i })
     fireEvent.click(closeBtn)
-    expect(onClose).toHaveBeenCalledTimes(1)
+
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it("calls onClose when Escape is pressed", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    fireEvent.keyDown(window, { key: "Escape" })
-    expect(onClose).toHaveBeenCalledTimes(1)
+  it("calls onClose when the Cancel button in the footer is clicked", () => {
+    const onClose = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={noop} />)
+
+    const cancelBtn = screen.getByRole("button", { name: /^Cancel$/i })
+    fireEvent.click(cancelBtn)
+
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it("calls onApply with the selected template when the CTA is clicked", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    // At least one "Apply Template" button is rendered on desktop layout
-    const applyBtns = screen.getAllByText(/apply template/i)
-    fireEvent.click(applyBtns[0])
-    expect(onApply).toHaveBeenCalledTimes(1)
-    // The first argument should be a valid QuestTemplate
-    const applied = onApply.mock.calls[0][0]
-    expect(applied).toHaveProperty("id")
-    expect(applied).toHaveProperty("step1")
-    expect(applied).toHaveProperty("step2")
+  it("calls onApply with the correct template when 'Use Template' is clicked", () => {
+    const onApply = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={onApply} />)
+
+    const firstTemplate = QUEST_TEMPLATES[0]
+    const applyBtn = screen.getByTestId(`apply-template-${firstTemplate.id}`)
+    fireEvent.click(applyBtn)
+
+    expect(onApply).toHaveBeenCalledOnce()
+    expect(onApply).toHaveBeenCalledWith(firstTemplate)
   })
 
-  it("marks the clicked template card as selected (aria-pressed)", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    const secondTemplate = TEMPLATES_BY_CATEGORY.course[1]
-    const card = screen.getByRole("button", { name: new RegExp(secondTemplate.name, "i") })
+  it("calls onClose when clicking the backdrop", () => {
+    const onClose = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={noop} />)
+
+    // The backdrop is the first child — find via aria-hidden
+    const backdrop = document.querySelector('[aria-hidden="true"]')
+    expect(backdrop).not.toBeNull()
+    fireEvent.click(backdrop!)
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it("shows preview panel when a template card is clicked", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+
+    const firstTemplate = QUEST_TEMPLATES[0]
+    const card = screen.getAllByTestId("template-card")[0]
     fireEvent.click(card)
-    expect(card.getAttribute("aria-pressed")).toBe("true")
+
+    // Preview panel should now be visible (on desktop it's hidden via CSS,
+    // but in jsdom all elements render — check for the data-testid)
+    expect(screen.getByTestId("template-preview-panel")).toBeDefined()
+    // The preview panel should show the first milestone
+    expect(screen.getByText(firstTemplate.milestones[0].title)).toBeDefined()
   })
 
-  it("has correct role attributes for accessibility", () => {
-    render(<TemplatePicker isOpen={true} onClose={onClose} onApply={onApply} />)
-    expect(screen.getByRole("dialog")).toBeDefined()
-    expect(screen.getByRole("tablist")).toBeDefined()
-    const tabs = screen.getAllByRole("tab")
-    expect(tabs.length).toBe(3)
+  it("toggles off the preview panel when the same card is clicked again", () => {
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={noop} />)
+
+    const card = screen.getAllByTestId("template-card")[0]
+    // Click once to open
+    fireEvent.click(card)
+    expect(screen.getByTestId("template-preview-panel")).toBeDefined()
+
+    // Click again to close
+    fireEvent.click(card)
+    expect(screen.queryByTestId("template-preview-panel")).toBeNull()
+  })
+
+  it("calls onApply when the preview panel 'Use This Template' button is clicked", () => {
+    const onApply = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={onApply} />)
+
+    const firstTemplate = QUEST_TEMPLATES[0]
+    // Open preview
+    fireEvent.click(screen.getAllByTestId("template-card")[0])
+
+    const previewApplyBtn = screen.getByTestId(`preview-apply-template-${firstTemplate.id}`)
+    fireEvent.click(previewApplyBtn)
+
+    expect(onApply).toHaveBeenCalledOnce()
+    expect(onApply).toHaveBeenCalledWith(firstTemplate)
+  })
+})
+
+// ─── Integration: apply flow through the picker ───────────────────────────────
+
+describe("Template apply flow integration", () => {
+  it("onApply receives a template whose step1 values pass schema validation", () => {
+    const onApply = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={onApply} />)
+
+    const firstTemplate = QUEST_TEMPLATES[0]
+    fireEvent.click(screen.getByTestId(`apply-template-${firstTemplate.id}`))
+
+    expect(onApply).toHaveBeenCalledOnce()
+    const applied: typeof firstTemplate = onApply.mock.calls[0][0]
+
+    // Verify templateToStep1 output is usable
+    const s1 = templateToStep1(applied)
+    expect(s1.name.length).toBeGreaterThan(0)
+    expect(s1.name.length).toBeLessThanOrEqual(64)
+    expect(s1.description.length).toBeGreaterThan(0)
+    expect(s1.description.length).toBeLessThanOrEqual(2000)
+    expect(s1.category.length).toBeGreaterThan(0)
+    expect(s1.category.length).toBeLessThanOrEqual(32)
+    expect(Array.isArray(s1.tags)).toBe(true)
+    expect(s1.tags.length).toBeLessThanOrEqual(5)
+  })
+
+  it("onApply receives a template whose milestones all pass schema validation", () => {
+    const onApply = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={onApply} />)
+
+    const firstTemplate = QUEST_TEMPLATES[0]
+    fireEvent.click(screen.getByTestId(`apply-template-${firstTemplate.id}`))
+
+    const applied: typeof firstTemplate = onApply.mock.calls[0][0]
+    const milestones = templateToMilestones(applied)
+
+    expect(milestones.length).toBeGreaterThan(0)
+    for (const m of milestones) {
+      expect(m.title.length).toBeGreaterThan(0)
+      expect(m.title.length).toBeLessThanOrEqual(128)
+      expect(m.description.length).toBeGreaterThan(0)
+      expect(m.description.length).toBeLessThanOrEqual(1000)
+      expect(m.rewardAmount).toBeGreaterThan(0)
+    }
+  })
+
+  it("all 12 templates pass step1 and milestone schema bounds", () => {
+    // Verify every template in the catalogue is form-safe without rendering anything
+    for (const template of QUEST_TEMPLATES) {
+      const s1 = templateToStep1(template)
+      expect(s1.name.trim().length, `${template.id} name empty`).toBeGreaterThan(0)
+      expect(s1.name.length, `${template.id} name too long`).toBeLessThanOrEqual(64)
+      expect(s1.description.trim().length, `${template.id} desc empty`).toBeGreaterThan(0)
+      expect(s1.description.length, `${template.id} desc too long`).toBeLessThanOrEqual(2000)
+      expect(s1.category.trim().length, `${template.id} category empty`).toBeGreaterThan(0)
+      expect(s1.category.length, `${template.id} category too long`).toBeLessThanOrEqual(32)
+      expect(s1.tags.length, `${template.id} too many tags`).toBeLessThanOrEqual(5)
+
+      for (const m of templateToMilestones(template)) {
+        expect(m.title.trim().length, `${template.id} milestone title empty`).toBeGreaterThan(0)
+        expect(m.title.length, `${template.id} milestone title too long`).toBeLessThanOrEqual(128)
+        expect(m.description.trim().length, `${template.id} milestone desc empty`).toBeGreaterThan(
+          0
+        )
+        expect(m.description.length, `${template.id} milestone desc too long`).toBeLessThanOrEqual(
+          1000
+        )
+        expect(m.rewardAmount, `${template.id} reward <= 0`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it("applying a different template deselects the previous one in the picker", () => {
+    const onApply = vi.fn()
+    render(<TemplatePicker isOpen={true} onClose={noop} onApply={onApply} />)
+
+    const cards = screen.getAllByTestId("template-card")
+    const second = QUEST_TEMPLATES[1]
+
+    // Click first card to preview it
+    fireEvent.click(cards[0])
+    expect(screen.getByTestId("template-preview-panel")).toBeDefined()
+
+    // Now apply the second template directly via its apply button
+    fireEvent.click(screen.getByTestId(`apply-template-${second.id}`))
+    expect(onApply).toHaveBeenCalledWith(second)
+    expect(onApply).toHaveBeenCalledTimes(1)
   })
 })

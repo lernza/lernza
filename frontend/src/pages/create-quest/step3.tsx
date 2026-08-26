@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { ArrowLeft, Check, Loader2, Coins, Sparkles, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ import { questClient, Visibility } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { env } from "@/lib/env"
+import { invalidateQuestQueries, invalidateFundingQueries } from "@/lib/query-invalidation"
 
 interface Step3ReviewProps {
   onComplete: () => void
@@ -20,6 +22,7 @@ interface Step3ReviewProps {
 export function Step3Review({ onComplete }: Step3ReviewProps) {
   const { step1Data, step2Data, goToBack } = useQuestCreation()
   const { address } = useWallet()
+  const queryClient = useQueryClient()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
   const [txError, setTxError] = useState<string | null>(null)
   const [createdQuestId, setCreatedQuestId] = useState<number | null>(null)
@@ -46,6 +49,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
       if (result.status === "FAILED") {
         throw new Error(result.error || "Funding failed")
       }
+      await invalidateFundingQueries(queryClient, createdQuestId)
       setTxPhase("funded")
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Funding failed"
@@ -105,6 +109,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
         )
       }
 
+      await invalidateQuestQueries(queryClient, questId)
       setTxPhase("created")
       track("quest_created", {
         milestone_count: step2Data.milestones.length,

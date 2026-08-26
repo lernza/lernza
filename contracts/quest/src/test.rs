@@ -2310,7 +2310,7 @@ fn test_get_active_participant_count_defaults_to_all_active() {
 
     // All enrollees default to Active status
     assert_eq!(client.get_active_participant_count(&quest_id), 3);
-    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 3);
+    assert_eq!(client.get_active_participants(&quest_id).len(), 3);
 }
 
 #[test]
@@ -2329,7 +2329,7 @@ fn test_get_active_participant_count_excludes_suspended() {
     // Suspend one enrollee
     client.set_enrollee_status(&quest_id, &e1, &EnrolleeStatus::Suspended);
     assert_eq!(client.get_active_participant_count(&quest_id), 1);
-    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 1);
+    assert_eq!(client.get_active_participants(&quest_id).len(), 1);
 }
 
 #[test]

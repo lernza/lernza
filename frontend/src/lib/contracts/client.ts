@@ -8,6 +8,7 @@ import { pushToast } from "../notifications"
 import { logContractCall } from "./logger"
 import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
 import { RpcHealthManager, parseRpcUrls } from "./rpc-health"
+import { idempotencyManager } from "./idempotency"
 
 export const SOROBAN_RPC_URL = env.VITE_SOROBAN_RPC_URL
 export const NETWORK_PASSPHRASE = env.VITE_SOROBAN_NETWORK_PASSPHRASE
@@ -158,7 +159,7 @@ function normalizeRpcStatus(status: string): string {
 }
 
 export interface TransactionResult {
-  status: TransactionStatus
+  status: TransactionStatus | "SUCCESS" | "FAILED" | "PENDING_LEDGER"
   txHash: string
   resultXdr?: string
   error?: string
@@ -300,11 +301,34 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
   return response
 }
 
+export interface SignAndSubmitOptions {
+  idempotencyKey?: string
+  bypassIdempotency?: boolean
+  ttlMs?: number
+}
+
 /**
- * Signs and submits a transaction using Freighter
- * Validates transaction timebounds before submission
+ * Signs and submits a transaction using Freighter with idempotency safeguards.
+ * Validates transaction timebounds before submission and prevents duplicate submissions.
  */
 export async function signAndSubmit(
+  tx: Transaction,
+  handlers: TransactionLifecycleHandlers = {},
+  options?: SignAndSubmitOptions
+): Promise<TransactionResult> {
+  if (options?.bypassIdempotency) {
+    return executeSignAndSubmit(tx, handlers)
+  }
+
+  const key = idempotencyManager.deriveIdempotencyKey(tx, options?.idempotencyKey)
+  return idempotencyManager.executeIdempotent(
+    key,
+    () => executeSignAndSubmit(tx, handlers),
+    options?.ttlMs
+  )
+}
+
+async function executeSignAndSubmit(
   tx: Transaction,
   handlers: TransactionLifecycleHandlers = {}
 ): Promise<TransactionResult> {

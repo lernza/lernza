@@ -41,6 +41,15 @@ export interface MilestoneInfo {
   requiresPrevious: boolean
 }
 
+export type FeedbackAction = "Approve" | "Reject" | "RequestChanges"
+
+export interface MilestoneFeedback {
+  reviewer: string
+  action: FeedbackAction
+  comment: string
+  createdAt: number
+}
+
 export interface VerifyCompletionResult extends TransactionResult {
   rewardAmount?: bigint
 }
@@ -174,6 +183,117 @@ export class MilestoneClient {
       ...result,
       rewardAmount: this.parseNumericResult(result.resultXdr),
     }
+  }
+
+  async verifyCompletionWithFeedback(
+    owner: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    feedback: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<VerifyCompletionResult> {
+    const tx = await this.buildTx(owner, "verify_completion_with_feedback", [
+      new Address(owner).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(feedback, { type: "string" }),
+    ])
+    const result = this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+    return {
+      ...result,
+      rewardAmount: this.parseNumericResult(result.resultXdr),
+    }
+  }
+
+  async rejectCompletionWithFeedback(
+    reviewer: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    feedback: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult> {
+    const tx = await this.buildTx(reviewer, "reject_completion_with_feedback", [
+      new Address(reviewer).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(feedback, { type: "string" }),
+    ])
+    return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+  }
+
+  async requestChangesWithFeedback(
+    reviewer: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    feedback: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult> {
+    const tx = await this.buildTx(reviewer, "request_changes_with_feedback", [
+      new Address(reviewer).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(feedback, { type: "string" }),
+    ])
+    return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+  }
+
+  async approveCompletionWithFeedback(
+    peer: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    feedback: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<VerifyCompletionResult> {
+    const tx = await this.buildTx(peer, "approve_completion_with_feedback", [
+      new Address(peer).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(feedback, { type: "string" }),
+    ])
+    const result = this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+    return {
+      ...result,
+      rewardAmount: this.parseNumericResult(result.resultXdr),
+    }
+  }
+
+  async getMilestoneFeedbackHistory(
+    questId: number,
+    milestoneId: number,
+    enrollee: string
+  ): Promise<MilestoneFeedback[]> {
+    const result = await this.invokeRead("get_milestone_feedback_history", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+    ])
+    if (!Array.isArray(result)) return []
+    return result.map(raw => {
+      const rec = raw as Record<string, unknown>
+      const actionRaw = rec.action as Record<string, unknown> | string | number
+      let action: FeedbackAction = "Approve"
+      if (typeof actionRaw === "string") {
+        action = actionRaw as FeedbackAction
+      } else if (typeof actionRaw === "number") {
+        action = actionRaw === 1 ? "Reject" : actionRaw === 2 ? "RequestChanges" : "Approve"
+      } else if (actionRaw && typeof actionRaw === "object") {
+        action = Object.keys(actionRaw)[0] as FeedbackAction
+      }
+      return {
+        reviewer: String(rec.reviewer),
+        action,
+        comment: String(rec.comment),
+        createdAt: Number(rec.created_at || 0),
+      }
+    })
   }
 
   private normalizeTransactionResult(result: TransactionResult): TransactionResult {

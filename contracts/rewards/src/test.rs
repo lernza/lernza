@@ -2360,6 +2360,7 @@ fn test_refund_expired_pool_success_without_archiving() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Creator funds the pool but the quest is never completed or archived.
@@ -2415,6 +2416,7 @@ fn test_refund_expired_pool_no_deadline() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2452,6 +2454,7 @@ fn test_refund_expired_pool_grace_period_enforced() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2495,6 +2498,7 @@ fn test_refund_expired_pool_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2531,6 +2535,7 @@ fn test_refund_expired_pool_not_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2575,6 +2580,7 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2635,6 +2641,7 @@ fn test_refund_expired_pool_paused() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2719,6 +2726,7 @@ fn test_distribute_rejects_zero_amount() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);
 
@@ -2753,6 +2761,7 @@ fn test_distribute_rejects_self_payment() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);
@@ -2902,6 +2911,7 @@ fn test_pool_cannot_go_negative() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);

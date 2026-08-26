@@ -108,21 +108,6 @@ pub struct CategoryInfo {
     pub expires_at: u64,
 }
 
-/// Metadata about a public category, including when its on-chain listing will
-/// expire. Frontends use `expires_at` to warn users before a category (and the
-/// quests listed under it) silently disappears due to TTL expiry.
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct CategoryInfo {
-    pub category: String,
-    pub quest_count: u32,
-    /// Remaining persistent-TTL entries (ledgers) before the category listing expires.
-    pub ttl_remaining: u32,
-    /// Approximate absolute expiry timestamp (ledger seconds). Derived from
-    /// `ttl_remaining` using the ~5s/ledger assumption documented in ADR-005.
-    pub expires_at: u64,
-}
-
 // TTL constants and address validation moved to common.
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
@@ -1669,9 +1654,15 @@ impl QuestContract {
 
     fn bump(env: &Env, quest_id: u32) {
         extend_instance_ttl(env);
-        common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
-        common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        if env.storage().persistent().has(&DataKey::Quest(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
+        }
+        if env.storage().persistent().has(&DataKey::Enrollees(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
+        }
+        if env.storage().persistent().has(&DataKey::QuestVersionHistory(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        }
     }
 }
 

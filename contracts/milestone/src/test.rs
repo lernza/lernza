@@ -1,5 +1,7 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, Address, Env, String, Vec};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events, testutils::Ledger as _, Address, Env, String, Vec,
+};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -372,11 +374,12 @@ fn test_get_distribution_mode_and_flat_reward_after_set() {
 fn test_percentage_mode_rounding_to_nearest() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
-    create_ms(&env, &client, &owner, q_id, "Task", 101);
 
     // Set Percentage mode to 75%
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Percentage(75), &0);
+
+    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
+    create_ms(&env, &client, &owner, q_id, "Task", 101);
 
     let enrollee = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -386,8 +389,8 @@ fn test_percentage_mode_rounding_to_nearest() {
 
     // Now test exact case: 100 * 75% = 75
     let q2 = create_quest(&env, &quest_client, &owner);
-    create_ms(&env, &client, &owner, q2, "Task2", 100);
     client.set_distribution_mode(&owner, &q2, &DistributionMode::Percentage(75), &0);
+    create_ms(&env, &client, &owner, q2, "Task2", 100);
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q2, &e2);
     assert_eq!(client.verify_completion(&owner, &q2, &0, &e2), 75);
@@ -1033,11 +1036,11 @@ fn test_peer_review_respects_sequential_unlocks() {
     quest_client.add_enrollee(&q_id, &enrollee);
     quest_client.add_enrollee(&q_id, &peer);
 
-    client.submit_for_review(&enrollee, &q_id, &1);
-    let blocked = client.try_approve_completion(&peer, &q_id, &1, &enrollee);
+    let blocked = client.try_submit_for_review(&enrollee, &q_id, &1);
     assert_eq!(blocked, Err(Ok(Error::MilestoneNotUnlocked)));
 
     client.verify_completion(&owner, &q_id, &0, &enrollee);
+    client.submit_for_review(&enrollee, &q_id, &1);
     let approved = client.approve_completion(&peer, &q_id, &1, &enrollee);
     assert_eq!(approved, Some(100));
 }
@@ -1814,7 +1817,8 @@ fn test_verify_completion_past_deadline_rejected() {
     quest_client.add_enrollee(&q_id, &enrollee);
 
     // Set deadline in past
-    quest_client.set_deadline(&q_id, &999);
+    env.ledger().set_timestamp(1_000);
+    quest_client.set_deadline(&q_id, &500);
 
     let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
     assert_eq!(res, Err(Ok(Error::DeadlineExpired)));
@@ -1992,7 +1996,7 @@ fn test_title_too_long_rejected() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
 
-    let long_title = String::from_bytes(&env, &vec![b'a'; 129]);
+    let long_title = String::from_bytes(&env, &[b'a'; 129]);
     let r = client.try_create_milestone(
         &owner,
         &q_id,
@@ -2003,3 +2007,130 @@ fn test_title_too_long_rejected() {
     );
     assert_eq!(r, Err(Ok(Error::TitleTooLong)));
 }
+
+#[test]
+fn test_verify_completion_with_feedback() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Milestone 1"),
+        &String::from_str(&env, "Description 1"),
+        &150,
+        &false,
+    );
+
+    let feedback_comment = String::from_str(&env, "Outstanding solution! Clean architecture.");
+    let reward = client.verify_completion_with_feedback(
+        &owner,
+        &q_id,
+        &ms_id,
+        &enrollee,
+        &feedback_comment,
+    );
+    assert_eq!(reward, 150);
+
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 1);
+    let item = history.get(0).unwrap();
+    assert_eq!(item.reviewer, owner);
+    assert_eq!(item.action, FeedbackAction::Approve);
+    assert_eq!(item.comment, feedback_comment);
+}
+
+#[test]
+fn test_reject_completion_with_feedback() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Peer Review Milestone"),
+        &String::from_str(&env, "Description"),
+        &200,
+        &false,
+    );
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    let reject_feedback = String::from_str(&env, "Proof link is broken. Please submit working code.");
+    client.reject_completion_with_feedback(
+        &owner,
+        &q_id,
+        &ms_id,
+        &enrollee,
+        &reject_feedback,
+    );
+
+    // Reserved reward should be restored / decreased
+    assert_eq!(client.get_total_reserved_reward(&q_id), 0);
+
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 1);
+    let item = history.get(0).unwrap();
+    assert_eq!(item.reviewer, owner);
+    assert_eq!(item.action, FeedbackAction::Reject);
+    assert_eq!(item.comment, reject_feedback);
+}
+
+#[test]
+fn test_request_changes_and_resubmit_flow() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Interactive Milestone"),
+        &String::from_str(&env, "Description"),
+        &300,
+        &false,
+    );
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Peer requests changes
+    let change_feedback = String::from_str(&env, "Please add tests for edge cases.");
+    client.request_changes_with_feedback(
+        &peer,
+        &q_id,
+        &ms_id,
+        &enrollee,
+        &change_feedback,
+    );
+
+    // Enrollee addresses changes and resubmits
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Peer approves completion with feedback
+    let approve_feedback = String::from_str(&env, "Tests look comprehensive now! Approved.");
+    let reward = client.approve_completion_with_feedback(
+        &peer,
+        &q_id,
+        &ms_id,
+        &enrollee,
+        &approve_feedback,
+    );
+    assert_eq!(reward, Some(300));
+    assert!(client.is_completed(&q_id, &ms_id, &enrollee));
+
+    // Full history preserved across cycle
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 2);
+    assert_eq!(history.get(0).unwrap().action, FeedbackAction::RequestChanges);
+    assert_eq!(history.get(0).unwrap().comment, change_feedback);
+    assert_eq!(history.get(1).unwrap().action, FeedbackAction::Approve);
+    assert_eq!(history.get(1).unwrap().comment, approve_feedback);
+}
+

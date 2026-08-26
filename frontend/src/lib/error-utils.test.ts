@@ -19,15 +19,25 @@ describe("safeContractCall", () => {
     )
   })
 
-  it("wraps Error(Contract, #N) codes with a human-readable code prefix", async () => {
+  it("maps a recognized Error(Contract, #N) code to its plain-language message (Issue #1480)", async () => {
+    // #4 is QUEST_CONTRACT_ERRORS' "Invalid reward amount." -- see contract-errors.ts.
     const err = new Error("transaction simulation failed: Error(Contract, #4)")
-    await expect(safeContractCall(() => Promise.reject(err))).rejects.toThrow(/contract error #4/i)
+    await expect(safeContractCall(() => Promise.reject(err))).rejects.toThrow(
+      /invalid reward amount/i
+    )
   })
 
-  it("preserves the original message after the contract error prefix", async () => {
-    const err = new Error("Error(Contract, #7) the quest is full")
+  it("maps a different recognized code to its own distinct plain-language message", async () => {
+    const err = new Error("Error(Contract, #7)")
     const rejected = safeContractCall(() => Promise.reject(err))
-    await expect(rejected).rejects.toThrow(/the quest is full/i)
+    await expect(rejected).rejects.toThrow(/quest is already full/i)
+  })
+
+  it("falls back to a generic prefix for an unrecognized contract error code", async () => {
+    const err = new Error("Error(Contract, #99999)")
+    await expect(safeContractCall(() => Promise.reject(err))).rejects.toThrow(
+      /contract call failed/i
+    )
   })
 
   it("wraps network-related messages with a network error prefix", async () => {

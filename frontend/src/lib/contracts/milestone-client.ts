@@ -13,7 +13,7 @@ import {
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
 import {
   server,
-  signAndSubmit,
+  signAndSubmitTracked,
   NETWORK_PASSPHRASE,
   RPC_TIMEOUT_MS,
   withTimeout,
@@ -162,7 +162,7 @@ export class MilestoneClient {
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious),
     ])
-    return this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+    return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
   }
 
   async verifyCompletion(
@@ -178,7 +178,7 @@ export class MilestoneClient {
       nativeToScVal(milestoneId, { type: "u32" }),
       new Address(enrollee).toScVal(),
     ])
-    const result = this.normalizeTransactionResult(await signAndSubmit(tx, handlers))
+    const result = this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Verify Milestone Completion", handlers))
     return {
       ...result,
       rewardAmount: this.parseNumericResult(result.resultXdr),

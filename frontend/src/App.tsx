@@ -15,6 +15,7 @@ import { NotificationProvider } from "@/contexts/notification-context"
 import { useWallet } from "@/hooks/use-wallet"
 import { OnboardingTutorial } from "@/components/onboarding-tutorial"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import { reconcilePendingTransactions } from "@/lib/contracts/client"
 
 // Code-split heavy pages — they load on first visit to that route.
 const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })))
@@ -133,6 +134,12 @@ function App() {
     const onPopState = () => setState(pathToPage(window.location.pathname))
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
+  }, [])
+
+  // Issue #1478: resolve any wallet transactions that were still awaiting
+  // confirmation when the page was last closed or reloaded.
+  useEffect(() => {
+    void reconcilePendingTransactions()
   }, [])
 
   const handleNavigate = useCallback((p: string) => {

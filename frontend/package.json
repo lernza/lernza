@@ -14,6 +14,7 @@
     "check-env:mainnet": "node scripts/check-env.mjs --mode mainnet",
     "dev": "vite",
     "validate:assets": "node scripts/validate-public-assets.mjs",
+    "check:bundle-budget": "node scripts/check-bundle-budget.mjs",
     "prebuild": "node scripts/check-env.mjs && node scripts/validate-public-assets.mjs",
     "build": "tsc -b && vite build",
     "build:analyze": "vite build --config vite.config.ts",

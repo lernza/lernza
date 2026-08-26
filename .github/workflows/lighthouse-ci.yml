@@ -49,11 +49,25 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           max_timeout: 300
 
+      - name: Build key-route URL list
+        id: routes
+        run: |
+          BASE="${{ steps.vercel.outputs.url }}"
+          # Mirrors the key routes checked in lighthouserc.json's collect.url
+          # for the static-dist run, so both jobs cover the same set of pages.
+          ROUTES=("/" "/dashboard" "/create-quest" "/creator-dashboard" "/leaderboard" "/quest/1")
+          {
+            echo "urls<<EOF"
+            for route in "${ROUTES[@]}"; do
+              echo "${BASE}${route}"
+            done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Run Lighthouse CI against Vercel preview
         uses: treosh/lighthouse-ci-action@v12
         with:
-          urls: |
-            ${{ steps.vercel.outputs.url }}
+          urls: ${{ steps.routes.outputs.urls }}
           uploadArtifacts: true
           temporaryPublicStorage: true
           configPath: ./frontend/lighthouserc.json
@@ -88,17 +102,17 @@ jobs:
         with:
           script: |
             const body = `## 🚦 Lighthouse CI Report
-            
-            Performance budgets have been checked against the Vercel preview deployment.
-            
-            **Acceptance Criteria:**
-            - ✅ Total bundle size < 500KB
+
+            Performance budgets have been checked against the Vercel preview deployment across key routes (/, /dashboard, /create-quest, /creator-dashboard, /leaderboard, /quest/1).
+
+            **Acceptance Criteria (see frontend/budget.json and frontend/lighthouserc.json):**
+            - ✅ Total bundle size < 500KB, script < 200KB, stylesheet < 60KB, image < 100KB, font < 50KB
             - ✅ LCP (Largest Contentful Paint) < 2.5s
             - ✅ CLS (Cumulative Layout Shift) < 0.1
             - ✅ No regressions > 10%
-            
+
             View detailed report in the Lighthouse CI temporary public storage (link in job artifacts).
-            
+
             _Dashboard chunk regressions like 1.2MB would be caught by this check._`;
 
             const { data: comments } = await github.rest.issues.listComments({

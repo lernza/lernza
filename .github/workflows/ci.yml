@@ -150,22 +150,19 @@ jobs:
       - name: Type-check & build
         run: pnpm run build
 
-      - name: Analyze bundle size
+      - name: Check bundle budget
         id: bundle
-        run: |
-          cd dist
-          TOTAL_SIZE=$(du -sh . | cut -f1)
-          ASSETS_SIZE=$(du -sh assets | cut -f1)
-          echo "total_size=$TOTAL_SIZE" >> $GITHUB_OUTPUT
-          echo "assets_size=$ASSETS_SIZE" >> $GITHUB_OUTPUT
+        run: pnpm run check:bundle-budget
 
       - name: Comment bundle size
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
-            const { total_size, assets_size } = process.env;
-            const body = `## 📦 Bundle Size Report\n\n| Metric | Size |\n|--------|------|\n| Total dist | ${total_size} |\n| Assets | ${assets_size} |\n\n_This helps track frontend bundle size changes._`;
+            const { total_kb, script_kb, passed } = process.env;
+            const status = passed === 'true' ? '✅ Within budget' : '❌ Budget exceeded';
+            const budgetUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/blob/${context.payload.pull_request.head.sha}/frontend/budget.json`;
+            const body = `## 📦 Bundle Size Report\n\n${status} — see [\`frontend/budget.json\`](${budgetUrl}) for the enforced limits.\n\n| Metric | Size |\n|--------|------|\n| Total dist | ${total_kb} KB |\n| Script (JS) | ${script_kb} KB |\n\n_Enforced by \`pnpm run check:bundle-budget\`; the job fails when a budget is exceeded._`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -197,8 +194,9 @@ jobs:
               console.log("Failed to post bundle size comment.", error.message);
             }
         env:
-          total_size: ${{ steps.bundle.outputs.total_size }}
-          assets_size: ${{ steps.bundle.outputs.assets_size }}
+          total_kb: ${{ steps.bundle.outputs.total_kb }}
+          script_kb: ${{ steps.bundle.outputs.script_kb }}
+          passed: ${{ steps.bundle.outputs.passed }}
 
   # ── Contracts: fmt + clippy + test + build WASM ──────────────────
   # Matrix covers Linux and macOS to catch platform-specific divergence.

@@ -39,6 +39,7 @@ export interface MilestoneInfo {
   description: string
   rewardAmount: bigint
   requiresPrevious: boolean
+  prerequisiteIds: number[]
 }
 
 export type FeedbackAction = "Approve" | "Reject" | "RequestChanges"
@@ -102,7 +103,7 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
       nativeToScVal(milestoneId, { type: "u32" }),
     ])
-    return result ? this.parseMilestoneInfo(result) : null
+    return result ? this.withPrerequisites(this.parseMilestoneInfo(result), questId) : null
   }
 
   async listMilestones(questId: number): Promise<MilestoneInfo[]> {
@@ -110,7 +111,7 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
     ])
     if (!Array.isArray(result)) return []
-    return result.map(raw => this.parseMilestoneInfo(raw))
+    return Promise.all(result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId)))
   }
 
   async getMilestones(questId: number): Promise<MilestoneInfo[]> {
@@ -118,7 +119,7 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
     ])
     if (!Array.isArray(result)) return []
-    return result.map(raw => this.parseMilestoneInfo(raw))
+    return Promise.all(result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId)))
   }
 
   async getMilestoneCount(questId: number): Promise<number> {
@@ -126,6 +127,14 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
     ])
     return result ? Number(result) : 0
+  }
+
+  async getMilestonePrerequisites(questId: number, milestoneId: number): Promise<number[]> {
+    const result = await this.invokeRead("get_milestone_prerequisites", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+    ])
+    return Array.isArray(result) ? result.map(Number) : []
   }
 
   async isCompleted(questId: number, milestoneId: number, user: string): Promise<boolean> {
@@ -161,6 +170,26 @@ export class MilestoneClient {
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious),
+    ])
+    return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
+  }
+
+  async createMilestoneWithPrerequisites(
+    owner: string,
+    questId: number,
+    title: string,
+    description: string,
+    rewardAmount: bigint,
+    prerequisiteIds: number[],
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult> {
+    const tx = await this.buildTx(owner, "create_milestone_with_prerequisites", [
+      new Address(owner).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(title, { type: "string" }),
+      nativeToScVal(description, { type: "string" }),
+      nativeToScVal(rewardAmount, { type: "i128" }),
+      xdr.ScVal.scvVec(prerequisiteIds.map(id => nativeToScVal(id, { type: "u32" }))),
     ])
     return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
   }
@@ -316,7 +345,15 @@ export class MilestoneClient {
       description: String(record.description),
       rewardAmount: toBigInt(record.reward_amount),
       requiresPrevious: Boolean(record.requires_previous),
+      prerequisiteIds: Array.isArray(record.prerequisite_ids)
+        ? record.prerequisite_ids.map(Number)
+        : [],
     }
+  }
+
+  private async withPrerequisites(milestone: MilestoneInfo, questId: number): Promise<MilestoneInfo> {
+    const prerequisiteIds = await this.getMilestonePrerequisites(questId, milestone.id)
+    return { ...milestone, prerequisiteIds }
   }
 
   private parseNumericResult(resultXdr?: string): bigint | undefined {

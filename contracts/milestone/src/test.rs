@@ -246,6 +246,37 @@ fn test_verify_completion_requires_previous() {
 }
 
 #[test]
+fn test_branching_prerequisites_require_all_dependencies() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let first = create_ms(&env, &client, &owner, q_id, "First", 50);
+    let second = create_ms(&env, &client, &owner, q_id, "Second", 50);
+    let branch = client.create_milestone_with_prerequisites(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Branch"),
+        &String::from_str(&env, "Requires both branches"),
+        &100,
+        &soroban_sdk::vec![&env, first, second],
+    );
+    assert_eq!(client.get_milestone_prerequisites(&q_id, &branch), soroban_sdk::vec![&env, first, second]);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &first, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &second, &enrollee);
+    assert_eq!(client.verify_completion(&owner, &q_id, &branch, &enrollee), 100);
+}
+
+#[test]
 fn test_verify_multiple_completions() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

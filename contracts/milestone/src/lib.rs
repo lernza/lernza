@@ -57,6 +57,8 @@ pub enum DataKey {
     MilestoneCount(u32),
     // Milestone data
     Milestone(u32, u32), // (quest_id, milestone_id)
+    // Prerequisite milestone IDs
+    Prerequisites(u32, u32), // (quest_id, milestone_id)
     // Completion flag
     Completed(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Count of completions per enrollee per quest
@@ -222,6 +224,7 @@ pub enum Error {
     CertificateMintFailed = 20,
     /// Submission or verification is rejected because the quest deadline has passed.
     DeadlineExpired = 21,
+    CircularDependency = 22,
     /// Contract is administratively paused (shared code 400).
     Paused = 400,
 }
@@ -385,8 +388,15 @@ impl MilestoneContract {
             requires_previous,
         };
 
+        let mut prerequisites = Vec::new(&env);
+        if requires_previous && id > 0 {
+            prerequisites.push_back(id - 1);
+        }
+
         let ms_key = DataKey::Milestone(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
+        let prerequisite_key = DataKey::Prerequisites(quest_id, id);
+        env.storage().persistent().set(&prerequisite_key, &prerequisites);
         env.storage().persistent().set(&next_key, &(id + 1));
 
         // Increment explicit milestone count
@@ -406,7 +416,86 @@ impl MilestoneContract {
         );
 
         Self::bump_ms(&env, &ms_key);
+        Self::bump_ms(&env, &prerequisite_key);
         Self::bump_ms(&env, &next_key);
+        extend_instance_ttl(&env);
+        Ok(id)
+    }
+
+    /// Create a milestone with zero or more prerequisite milestones.
+    /// Prerequisites must already exist in this quest, preventing cycles.
+    pub fn create_milestone_with_prerequisites(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        title: String,
+        description: String,
+        reward_amount: i128,
+        prerequisites: Vec<u32>,
+    ) -> Result<u32, Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        Self::validate_ms_input(&title, &description, reward_amount)?;
+
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        if quest_info.owner != owner || quest_info.status != common::QuestStatus::Active {
+            return Err(Error::OwnerMismatch);
+        }
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
+        }
+
+        let next_key = DataKey::NextMilestoneId(quest_id);
+        let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+        if id >= MAX_MILESTONES || prerequisites.len() > id {
+            return Err(Error::InvalidInput);
+        }
+        for prerequisite_id in prerequisites.iter() {
+            if *prerequisite_id >= id
+                || prerequisites.iter().filter(|candidate| **candidate == *prerequisite_id).count() > 1
+            {
+                return Err(Error::InvalidInput);
+            }
+            if env
+                .storage()
+                .persistent()
+                .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, *prerequisite_id))
+                .is_none()
+            {
+                return Err(Error::NotFound);
+            }
+        }
+
+        let milestone = MilestoneInfo {
+            id,
+            quest_id,
+            title,
+            description,
+            reward_amount,
+            requires_previous: !prerequisites.is_empty(),
+        };
+        let ms_key = DataKey::Milestone(quest_id, id);
+        let prerequisite_key = DataKey::Prerequisites(quest_id, id);
+        env.storage().persistent().set(&ms_key, &milestone);
+        env.storage().persistent().set(&prerequisite_key, &prerequisites);
+        env.storage().persistent().set(&next_key, &(id + 1));
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        env.storage().persistent().set(&count_key, &(current_count + 1));
+        Self::bump_ms(&env, &count_key);
+        Self::bump_ms(&env, &ms_key);
+        Self::bump_ms(&env, &prerequisite_key);
+        Self::bump_ms(&env, &next_key);
+        env.events().publish(
+            (Symbol::new(&env, "milestone_created"),),
+            (id, quest_id, milestone.reward_amount),
+        );
         extend_instance_ttl(&env);
         Ok(id)
     }
@@ -1361,6 +1450,30 @@ impl MilestoneContract {
             .ok_or(Error::NotFound)
     }
 
+    /// Get the prerequisite milestone IDs for a milestone.
+    /// Legacy milestones are represented as a single preceding prerequisite.
+    pub fn get_milestone_prerequisites(env: Env, quest_id: u32, milestone_id: u32) -> Vec<u32> {
+        if let Some(prerequisites) = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Prerequisites(quest_id, milestone_id))
+        {
+            return prerequisites;
+        }
+
+        let milestone: Option<MilestoneInfo> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Milestone(quest_id, milestone_id));
+        let mut prerequisites = Vec::new(&env);
+        if let Some(milestone) = milestone {
+            if milestone.requires_previous && milestone_id > 0 {
+                prerequisites.push_back(milestone_id - 1);
+            }
+        }
+        prerequisites
+    }
+
     /// Get all milestones for a quest.
     pub fn get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
         let count: u32 = env
@@ -1651,16 +1764,18 @@ impl MilestoneContract {
         enrollee: &Address,
         milestone: &MilestoneInfo,
     ) -> Result<(), Error> {
-        if !milestone.requires_previous || milestone_id == 0 {
+        let prerequisites = Self::get_milestone_prerequisites(env.clone(), quest_id, milestone_id);
+        if prerequisites.is_empty() && (!milestone.requires_previous || milestone_id == 0) {
             return Ok(());
         }
 
-        let previous_key = DataKey::Completed(quest_id, milestone_id - 1, enrollee.clone());
-        if env.storage().persistent().has(&previous_key) {
-            Ok(())
-        } else {
-            Err(Error::MilestoneNotUnlocked)
+        for prerequisite_id in prerequisites.iter() {
+            let prerequisite_key = DataKey::Completed(quest_id, *prerequisite_id, enrollee.clone());
+            if !env.storage().persistent().has(&prerequisite_key) {
+                return Err(Error::MilestoneNotUnlocked);
+            }
         }
+        Ok(())
     }
 
     /// Attempt the quest-completion certificate mint if the supplied

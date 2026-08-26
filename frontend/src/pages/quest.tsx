@@ -285,6 +285,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     title: m.title,
     description: m.description,
     rewardAmount: Number(m.rewardAmount),
+    prerequisiteIds: m.prerequisiteIds,
   }))
 
   return (

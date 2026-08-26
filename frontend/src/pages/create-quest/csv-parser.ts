@@ -85,7 +85,7 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
     const title = cols[titleIdx] || ""
     const description = cols[descIdx] || ""
     const rewardStr = cols[rewardIdx] || ""
-    const rewardAmount = parseFloat(rewardStr.replace(/[^0-9.]/g, ""))
+    const rewardAmount = parseFloat(rewardStr.replace(/[$,]/g, "").trim())
 
     const rawObj = {
       title,
@@ -96,7 +96,11 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
     const valResult = milestoneSchema.safeParse(rawObj)
 
     if (valResult.success) {
-      milestones.push(valResult.data)
+      milestones.push({
+        title: valResult.data.title,
+        description: valResult.data.description,
+        rewardAmount: valResult.data.rewardAmount,
+      })
     } else {
       valResult.error.issues.forEach(issue => {
         errors.push({

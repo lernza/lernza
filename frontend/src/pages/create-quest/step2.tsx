@@ -258,13 +258,14 @@ export function Step2Form() {
 
                   <div>
                     <FormLabel>Prerequisites</FormLabel>
-                    <p className="text-muted-foreground mb-2 text-xs">Require the immediately preceding milestone to be verified before this work unlocks.</p>
+                    <p className="text-muted-foreground mb-2 text-xs">Select any earlier milestones that must be completed before this work unlocks.</p>
                     <div className="flex flex-wrap gap-2">
-                      {fields.slice(Math.max(index - 1, 0), index).map((_, offset) => {
-                        const prerequisiteIndex = index - 1 + offset
+                      {fields.slice(0, index).map((_, prerequisiteIndex) => {
                         return <label key={prerequisiteIndex} className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold">
                           <input type="checkbox" checked={prerequisiteIds.includes(prerequisiteIndex)} onChange={() => {
-                            const next = prerequisiteIds.includes(prerequisiteIndex) ? [] : [prerequisiteIndex]
+                            const next = prerequisiteIds.includes(prerequisiteIndex)
+                              ? prerequisiteIds.filter(id => id !== prerequisiteIndex)
+                              : [...prerequisiteIds, prerequisiteIndex]
                             setValue(`milestones.${index}.prerequisiteIds`, next, { shouldDirty: true, shouldValidate: true })
                           }} /> Step {prerequisiteIndex + 1}
                         </label>

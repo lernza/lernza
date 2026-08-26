@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode, useCallback } from "react"
 import type { Step1Values, Step2Values, FormStep } from "./types"
-import type { QuestTemplate } from "./quest-templates"
+import { templateToStep1, templateToMilestones, type QuestTemplate } from "./quest-templates"
 
 interface QuestCreationContextType {
   step1Data: Step1Values
@@ -13,6 +13,11 @@ interface QuestCreationContextType {
   setCurrentStep: (step: FormStep) => void
   /** ID of the template that was last applied, or null if none. */
   appliedTemplateId: string | null
+  /**
+   * Alias for appliedTemplateId — kept for backwards compatibility with the
+   * legacy templates.test.tsx that destructures `selectedTemplateId`.
+   */
+  selectedTemplateId: string | null
   /**
    * Apply a template: populate step1 and step2 data, record the template id,
    * and navigate to step 1 so the user can review and edit.
@@ -46,14 +51,14 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const applyTemplate = useCallback((template: QuestTemplate) => {
-    setStep1Data(template.step1)
-    setStep2Data(template.step2)
+    setStep1Data(templateToStep1(template))
+    setStep2Data({ milestones: templateToMilestones(template) })
     setAppliedTemplateId(template.id)
     setCurrentStep(1)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
-  const value = {
+  const value: QuestCreationContextType = {
     step1Data,
     setStep1Data,
     step2Data,
@@ -63,6 +68,8 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     goToBack,
     setCurrentStep,
     appliedTemplateId,
+    // selectedTemplateId is the same value — legacy alias
+    selectedTemplateId: appliedTemplateId,
     applyTemplate,
   }
 

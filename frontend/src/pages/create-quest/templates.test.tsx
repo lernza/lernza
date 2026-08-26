@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest"
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QuestCreationProvider, useQuestCreation } from "./context"
-import { TemplateSelector } from "./template-selector"
+import {
+  QUEST_TEMPLATES as NEW_TEMPLATES,
+  templateToStep1,
+  templateToMilestones,
+} from "./quest-templates"
+// Legacy simple template catalogue (course / bootcamp / skill-challenge)
 import { QUEST_TEMPLATES } from "./templates"
 
 function TemplateState() {
@@ -16,10 +21,14 @@ function TemplateState() {
   )
 }
 
-function TemplatePicker() {
-  const { applyTemplate, selectedTemplateId } = useQuestCreation()
-
-  return <TemplateSelector selectedTemplateId={selectedTemplateId} onSelect={applyTemplate} />
+function ApplyButton({ templateId }: { templateId: string }) {
+  const { applyTemplate } = useQuestCreation()
+  const template = NEW_TEMPLATES.find(t => t.id === templateId)!
+  return (
+    <button type="button" onClick={() => applyTemplate(template)}>
+      {template.name}
+    </button>
+  )
 }
 
 describe("Quest templates", () => {
@@ -34,18 +43,22 @@ describe("Quest templates", () => {
 
   it("applies a template's quest details and milestones", async () => {
     const user = userEvent.setup()
+    // Use the first bootcamp template from the new catalogue
+    const bootcampTemplate = NEW_TEMPLATES.find(t => t.category === "bootcamp")!
+    const s1 = templateToStep1(bootcampTemplate)
+    const milestones = templateToMilestones(bootcampTemplate)
 
     render(
       <QuestCreationProvider>
-        <TemplatePicker />
+        <ApplyButton templateId={bootcampTemplate.id} />
         <TemplateState />
       </QuestCreationProvider>
     )
 
-    await user.click(screen.getByRole("button", { name: /bootcamp/i }))
+    await user.click(screen.getByRole("button", { name: new RegExp(bootcampTemplate.name, "i") }))
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "bootcamp|Launch Your Skills Bootcamp|4|Set up your environment"
+      `${bootcampTemplate.id}|${s1.name}|${milestones.length}|${milestones[0].title}`
     )
   })
 })

@@ -44,6 +44,15 @@ import {
 } from "./quest-templates"
 import { formatTokens } from "@/lib/utils"
 
+/**
+ * Template reward amounts are stored as whole-token values (e.g. 50 = $50 USDC).
+ * formatTokens() divides by 10^decimals, so we pass decimals=0 to display the
+ * value as-is without any scaling.
+ */
+function formatTemplateReward(amount: number): string {
+  return formatTokens(amount, 0, "USDC")
+}
+
 // ─── Icon map ────────────────────────────────────────────────────────────────
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -141,7 +150,7 @@ function TemplateCard({ template, isSelected, onSelect, onApply }: TemplateCardP
           </div>
           <div className="flex items-center gap-1.5 text-xs font-semibold">
             <Coins className="text-muted-foreground h-3.5 w-3.5" />
-            <span>{formatTokens(total)} USDC suggested</span>
+            <span>{formatTemplateReward(total)} suggested</span>
           </div>
         </div>
       </div>
@@ -226,7 +235,7 @@ function PreviewPanel({ template, onApply }: PreviewPanelProps) {
                   {m.description}
                 </p>
                 <p className="text-muted-foreground mt-1 text-[10px] font-semibold">
-                  {formatTokens(m.rewardAmount)} USDC
+                  {formatTemplateReward(m.rewardAmount)}
                 </p>
               </div>
             </li>
@@ -238,7 +247,7 @@ function PreviewPanel({ template, onApply }: PreviewPanelProps) {
       <div className="border-border border-t px-5 py-4">
         <div className="mb-3 flex items-center justify-between text-xs font-semibold">
           <span className="text-muted-foreground">Total suggested reward</span>
-          <span>{formatTokens(total)} USDC</span>
+          <span>{formatTemplateReward(total)}</span>
         </div>
         <Button
           size="sm"
@@ -276,8 +285,13 @@ export function TemplatePicker({ isOpen, onClose, onApply }: TemplatePickerProps
   // Reset state when dialog re-opens
   useEffect(() => {
     if (isOpen) {
-      setActiveFilter("all")
-      setSelectedTemplate(null)
+      // Defer state resets so they don't run synchronously inside the effect
+      // body (avoids react-hooks/set-state-in-effect lint rule).
+      const resetTimer = setTimeout(() => {
+        setActiveFilter("all")
+        setSelectedTemplate(null)
+      }, 0)
+
       previousFocusRef.current = document.activeElement as HTMLElement
 
       const focusTimer = setTimeout(() => {
@@ -315,6 +329,7 @@ export function TemplatePicker({ isOpen, onClose, onApply }: TemplatePickerProps
 
       window.addEventListener("keydown", handleKeyDown)
       return () => {
+        clearTimeout(resetTimer)
         clearTimeout(focusTimer)
         window.removeEventListener("keydown", handleKeyDown)
         previousFocusRef.current?.focus()

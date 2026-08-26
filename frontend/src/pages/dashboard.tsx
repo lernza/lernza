@@ -63,6 +63,8 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   >("none")
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("all")
+  const [creatorFilter, setCreatorFilter] = useState("all")
+  const [rewardTokenFilter, setRewardTokenFilter] = useState("all")
   const [sortBy, setSortBy] = useState<
     "newest" | "ending-soon" | "most-enrolled" | "highest-reward"
   >("newest")
@@ -279,6 +281,8 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   const availableCategories = Array.from(
     new Set(filteredQuests.map(q => q.category).filter((c): c is string => !!c))
   ).sort()
+  const availableCreators = Array.from(new Set(filteredQuests.map(q => q.owner))).sort()
+  const availableRewardTokens = Array.from(new Set(filteredQuests.map(q => q.tokenAddr))).sort()
 
   // Derive quest status from on-chain state
   function deriveQuestStatus(q: {
@@ -302,10 +306,20 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
       ? statusFilteredQuests
       : statusFilteredQuests.filter(q => q.category === category)
 
+  const creatorFilteredQuests =
+    creatorFilter === "all"
+      ? categoryFilteredQuests
+      : categoryFilteredQuests.filter(q => q.owner === creatorFilter)
+
+  const tokenFilteredQuests =
+    rewardTokenFilter === "all"
+      ? creatorFilteredQuests
+      : creatorFilteredQuests.filter(q => q.tokenAddr === rewardTokenFilter)
+
   // Reward range filter
   const rewardMinNum = rewardMin !== "" ? Number(rewardMin) : 0
   const rewardMaxNum = rewardMax !== "" ? Number(rewardMax) : Infinity
-  const rewardFilteredQuests = categoryFilteredQuests.filter(q => {
+  const rewardFilteredQuests = tokenFilteredQuests.filter(q => {
     const stats = questStats[q.id]
     const pool = stats?.poolBalance ?? 0
     if (rewardMin !== "" && pool < rewardMinNum) return false
@@ -634,6 +648,36 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
                   {availableCategories.map(c => (
                     <option key={c} value={c}>
                       {c}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={creatorFilter}
+                  onChange={e => setCreatorFilter(e.target.value)}
+                  aria-label="Filter by creator"
+                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
+                >
+                  <option value="all">All creators</option>
+                  {availableCreators.map(creator => (
+                    <option key={creator} value={creator}>
+                      {creator === address
+                        ? "You"
+                        : `${creator.slice(0, 6)}...${creator.slice(-4)}`}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={rewardTokenFilter}
+                  onChange={e => setRewardTokenFilter(e.target.value)}
+                  aria-label="Filter by reward token"
+                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
+                >
+                  <option value="all">All tokens</option>
+                  {availableRewardTokens.map(token => (
+                    <option key={token} value={token}>
+                      {`${token.slice(0, 6)}...${token.slice(-4)}`}
                     </option>
                   ))}
                 </select>

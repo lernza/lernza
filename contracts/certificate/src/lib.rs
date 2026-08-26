@@ -1,12 +1,13 @@
 #![no_std]
 
-use common::{extend_instance_ttl, extend_persistent_ttl, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, extend_persistent_ttl};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, String,
+    Symbol, Vec,
 };
 use stellar_access::ownable::{self as ownable, Ownable};
-use stellar_macros::{default_impl, only_owner};
-use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base};
+use stellar_macros::only_owner;
+use stellar_tokens::non_fungible::Base;
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -39,11 +40,11 @@ impl common::IsDataKey for DataKey {}
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     NotOwner = 10,
     AlreadyIssued = 20,
     InvalidQuest = 5,
@@ -52,7 +53,7 @@ pub enum Error {
     MilestoneContractNotSet = 8,
     NotCompleted = 9,
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 // BUMP and THRESHOLD now come from common
@@ -304,17 +305,21 @@ impl CertificateContract {
         }
         Ok(())
     }
-}
 
     #[only_owner]
     pub fn set_milestone_contract(env: Env, milestone_contract: Address) -> Result<(), Error> {
-        env.storage().instance().set(&DataKey::MilestoneContract, &milestone_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::MilestoneContract, &milestone_contract);
         extend_instance_ttl(&env);
         Ok(())
     }
 
     pub fn get_milestone_contract(env: Env) -> Result<Address, Error> {
-        env.storage().instance().get(&DataKey::MilestoneContract).ok_or(Error::MilestoneContractNotSet)
+        env.storage()
+            .instance()
+            .get(&DataKey::MilestoneContract)
+            .ok_or(Error::MilestoneContractNotSet)
     }
 
     pub fn verify_and_issue(
@@ -345,12 +350,19 @@ impl CertificateContract {
         }
 
         // Mint using the contract's own address as the issuer
-        Self::mint_certificate(env.clone(), quest_id, quest_name, quest_category, recipient, env.current_contract_address())
+        Self::mint_certificate(
+            env.clone(),
+            quest_id,
+            quest_name,
+            quest_category,
+            recipient,
+            env.current_contract_address(),
+        )
     }
 
     // SBT specific: Expose balance_of and owner_of, but NOT transfer
     pub fn balance_of(env: Env, id: Address) -> i128 {
-        Base::balance(&env, &id)
+        Base::balance(&env, &id).into()
     }
 
     pub fn owner_of(env: Env, token_id: u32) -> Option<Address> {
@@ -365,14 +377,6 @@ impl CertificateContract {
         Base::symbol(&env)
     }
 }
-
-#[default_impl]
-#[contractimpl]
-impl NonFungibleBurnable for CertificateContract {}
-
-#[default_impl]
-#[contractimpl]
-impl Ownable for CertificateContract {}
 
 #[cfg(test)]
 mod test;

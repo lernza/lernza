@@ -1,7 +1,7 @@
 #![no_std]
 use common::{
-    extend_instance_ttl, is_contract_address, Enrollee, EnrolleeStatus, QuestInfo, QuestStatus,
-    QuestVersion, Visibility, BUMP, THRESHOLD,
+    extend_instance_ttl, is_contract_address, EnrolleeStatus, QuestInfo, QuestStatus, QuestVersion,
+    Visibility, BUMP, MAX_QUEST_DESCRIPTION_LEN, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -56,11 +56,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     AlreadyEnrolled = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
@@ -85,7 +85,7 @@ pub enum Error {
     QuestCancelled = 17,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 /// Metadata about a public category, including when its on-chain listing will
@@ -401,6 +401,7 @@ impl QuestContract {
             max_enrollees,
             verified,
             version: 1,
+            prerequisite_quest_ids: Vec::new(&env),
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -707,7 +708,7 @@ impl QuestContract {
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
             return Err(Error::DeadlineExpired);
         }
-        if quest.visibility == Visibility::Private {
+        if quest.visibility == Visibility::Private || quest.visibility == Visibility::InviteOnly {
             return Err(Error::InviteOnly);
         }
 
@@ -1131,6 +1132,11 @@ impl QuestContract {
 
         let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
         env.storage().persistent().set(&status_key, &status);
+        common::extend_persistent_ttl(&env, &status_key);
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_status_changed"),),
+            (quest_id, enrollee, status, env.ledger().timestamp()),
+        );
         Self::bump(&env, quest_id);
         Ok(())
     }
@@ -1319,12 +1325,11 @@ impl QuestContract {
         // Soroban only exposes the remaining ledger count for a persistent
         // entry, so approximate the absolute expiry. At ~5s/ledger (ADR-005)
         // this is accurate to within the network's drift tolerance.
-        let ttl_remaining = env.storage().persistent().get_ttl(&key);
+        let ttl_remaining = BUMP;
         let approx_seconds_per_ledger: u64 = 5;
         let now = env.ledger().timestamp();
-        let expires_at = now.saturating_add(
-            (ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger),
-        );
+        let expires_at =
+            now.saturating_add((ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger));
 
         // Refresh the listing's TTL on read so a popular category does not
         // expire merely from being queried.

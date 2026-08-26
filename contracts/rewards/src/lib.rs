@@ -79,11 +79,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
@@ -101,7 +101,7 @@ pub enum Error {
     AlreadyInitialized = 99, // moved away from standard range
     NotInitialized = 100,    // moved away from standard range
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
     BatchTooLarge = 17,
 }
 
@@ -359,7 +359,8 @@ impl RewardsContract {
             .ok_or(Error::NotInitialized)?;
 
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
-        let quest_info = quest_client.try_get_quest(&quest_id)
+        let quest_info = quest_client
+            .try_get_quest(&quest_id)
             .map_err(|_| Error::QuestLookupFailed)?
             .map_err(|_| Error::QuestLookupFailed)?;
 
@@ -787,15 +788,13 @@ impl RewardsContract {
             // This cross-contract call is the core security check:
             // it ensures the claimant cannot claim rewards for milestones
             // they didn't complete.
-            let completed =
-                milestone_client.is_completed(&quest_id, &ms_id, &claimant);
+            let completed = milestone_client.is_completed(&quest_id, &ms_id, &claimant);
             if !completed {
                 return Err(Error::MilestoneNotCompleted);
             }
 
             // Verify this payout hasn't already been made (idempotency).
-            let payout_key =
-                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
             if env.storage().persistent().has(&payout_key) {
                 return Err(Error::AlreadyPaid);
             }
@@ -803,9 +802,7 @@ impl RewardsContract {
             // Resolve reward amount from the milestone contract.
             // A non-existent milestone returns NotFound (distinct from
             // RewardAmountMismatch which is reserved for amount mismatches).
-            let amount = match milestone_client
-                .try_get_milestone_reward(&quest_id, &ms_id)
-            {
+            let amount = match milestone_client.try_get_milestone_reward(&quest_id, &ms_id) {
                 Ok(Ok(a)) if a > 0 && a <= MAX_REWARD_AMOUNT => a,
                 Ok(Ok(_)) => return Err(Error::InvalidAmount),
                 Ok(Err(_)) | Err(_) => return Err(Error::NotFound),
@@ -832,8 +829,7 @@ impl RewardsContract {
             let amount = amounts.get(i).unwrap();
 
             // Record payout for idempotency BEFORE the token transfer.
-            let payout_key =
-                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
             env.storage().persistent().set(&payout_key, &amount);
             common::extend_persistent_ttl(&env, &payout_key);
 
@@ -843,20 +839,10 @@ impl RewardsContract {
                 .ok_or(Error::ArithmeticOverflow)?;
 
             // Transfer tokens to claimant.
-            token_client.transfer(
-                &env.current_contract_address(),
-                &claimant,
-                &amount,
-            );
+            token_client.transfer(&env.current_contract_address(), &claimant, &amount);
 
             // Emit reward distribution event.
-            common::emit_reward_distributed(
-                &env,
-                quest_id,
-                ms_id,
-                &claimant,
-                amount,
-            );
+            common::emit_reward_distributed(&env, quest_id, ms_id, &claimant, amount);
         }
 
         // Commit the final pool balance.
@@ -1221,11 +1207,7 @@ impl RewardsContract {
     /// Add a token to the supported-token whitelist. Admin only.
     /// Adding the first token enables enforcement for all subsequent
     /// `fund_quest_with_token` / `distribute_reward_with_token` calls.
-    pub fn add_supported_token(
-        env: Env,
-        admin: Address,
-        token: Address,
-    ) -> Result<(), Error> {
+    pub fn add_supported_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         admin.require_auth();
         let stored = Self::get_admin(env.clone())?;
         if stored != admin {
@@ -1239,7 +1221,9 @@ impl RewardsContract {
         if !list.contains(&token) {
             list.push_back(token);
         }
-        env.storage().instance().set(&DataKey::SupportedTokens, &list);
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
         env.storage()
             .instance()
             .set(&DataKey::SupportedTokensEnabled, &true);
@@ -1249,11 +1233,7 @@ impl RewardsContract {
 
     /// Remove a token from the supported-token whitelist. Admin only.
     /// When the last token is removed, enforcement is disabled (fail-open again).
-    pub fn remove_supported_token(
-        env: Env,
-        admin: Address,
-        token: Address,
-    ) -> Result<(), Error> {
+    pub fn remove_supported_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         admin.require_auth();
         let stored = Self::get_admin(env.clone())?;
         if stored != admin {
@@ -1274,7 +1254,9 @@ impl RewardsContract {
                 }
             }
         }
-        env.storage().instance().set(&DataKey::SupportedTokens, &list);
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
         if list.is_empty() {
             env.storage()
                 .instance()

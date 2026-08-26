@@ -66,6 +66,8 @@ pub fn error_info(code: u32) -> &'static str {
 pub enum Visibility {
     Public = 0,
     Private = 1,
+    Unlisted = 2,
+    InviteOnly = 3,
 }
 
 #[contracttype]
@@ -328,4 +330,3 @@ pub fn estimate_persistent_rent(entry_size_bytes: u32) -> i128 {
     // Ceil-divide so partial kilobytes still round up to a whole unit of rent.
     ((bytes * RENT_STROOPS_PER_KB_PER_BUMP) + 1023) / 1024
 }
-

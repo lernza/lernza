@@ -948,6 +948,71 @@ fn test_approve_completion_multiple_approvals() {
 }
 
 #[test]
+fn test_suspended_enrollee_pending_reviews_release_reserved_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms1 = create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let ms2 = create_ms(&env, &client, &owner, q_id, "Task 2", 150);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &ms1);
+    client.submit_for_review(&enrollee, &q_id, &ms2);
+    assert_eq!(client.get_total_reserved_reward(&q_id), 250);
+
+    client.approve_completion(&peer, &q_id, &ms1, &enrollee);
+
+    quest_client.set_enrollee_status(&q_id, &enrollee, &EnrolleeStatus::Suspended);
+    let released = client.handle_suspended_enrollee(&owner, &q_id, &enrollee);
+
+    assert_eq!(released, 250);
+    assert_eq!(client.get_total_reserved_reward(&q_id), 0);
+    assert_eq!(
+        client.try_approve_completion(&peer, &q_id, &ms1, &enrollee),
+        Err(Ok(Error::NotSubmitted))
+    );
+    assert_eq!(
+        client.try_submit_for_review(&enrollee, &q_id, &ms1),
+        Err(Ok(Error::NotEnrolled))
+    );
+}
+
+#[test]
+fn test_suspension_cleanup_preserves_completed_reserved_rewards() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let ms1 = create_ms(&env, &client, &owner, q_id, "Completed", 100);
+    let ms2 = create_ms(&env, &client, &owner, q_id, "Pending", 150);
+
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    client.submit_for_review(&enrollee, &q_id, &ms1);
+    assert_eq!(
+        client.approve_completion(&peer, &q_id, &ms1, &enrollee),
+        Some(100)
+    );
+    client.submit_for_review(&enrollee, &q_id, &ms2);
+    assert_eq!(client.get_total_reserved_reward(&q_id), 250);
+
+    quest_client.set_enrollee_status(&q_id, &enrollee, &EnrolleeStatus::Suspended);
+    let released = client.handle_suspended_enrollee(&owner, &q_id, &enrollee);
+
+    assert_eq!(released, 150);
+    assert_eq!(client.get_total_reserved_reward(&q_id), 100);
+    assert!(client.is_completed(&q_id, &ms1, &enrollee));
+}
+
+#[test]
 fn test_peer_review_respects_sequential_unlocks() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);

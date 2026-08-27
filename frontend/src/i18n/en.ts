@@ -1,0 +1,21 @@
+export const translations = {
+  "nav.home": "Home",
+  "nav.dashboard": "Dashboard",
+  "nav.leaderboard": "Leaderboard",
+  "nav.history": "History",
+  "nav.profile": "Profile",
+  "nav.connectWallet": "Connect Wallet",
+  "nav.connecting": "Connecting...",
+  "nav.disconnect": "Disconnect wallet",
+  "nav.tutorial": "Getting started guide",
+  "quest.reportQuest": "Report this quest",
+  "quest.reportTitle": "Report Quest",
+  "quest.reportSubmitted": "Report Submitted",
+  "quest.reportThankYou": "Thank you for reporting. Our moderation team will review it.",
+  "quest.reportDone": "Done",
+  "quest.reportCancel": "Cancel",
+  "quest.reportSubmit": "Submit Report",
+  "quest.reportSubmitting": "Submitting...",
+  "quest.reportDetailsPlaceholder":
+    "Provide any context that will help our moderation team...",
+} as const

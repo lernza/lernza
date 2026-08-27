@@ -334,6 +334,24 @@ jobs:
           path: target/wasm32v1-none/release/*.wasm
           retention-days: 14
 
+  # ── Contract API snapshot check ──────────────────────────────────
+  contract-api:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check contract API snapshot
+        run: |
+          bash scripts/check-contract-api.sh
+          if ! git diff --quiet contracts/api-snapshot.json; then
+            echo "ERROR: Contract API snapshot is stale."
+            echo "Run: bash scripts/check-contract-api.sh"
+            echo "Then commit the updated contracts/api-snapshot.json"
+            exit 1
+          fi
+
   # ── Event doc sync: verify EVENT_REFERENCE.md covers all symbols ──
   event-doc-sync:
     needs: changes

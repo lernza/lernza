@@ -12,6 +12,7 @@ import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { NotificationProvider } from "@/contexts/notification-context"
+import { I18nProvider } from "@/i18n"
 import { useWallet } from "@/hooks/use-wallet"
 import { OnboardingTutorial } from "@/components/onboarding-tutorial"
 import { useOnboarding } from "@/hooks/use-onboarding"
@@ -239,6 +240,7 @@ function App() {
   }
 
   return (
+    <I18nProvider>
     <NotificationProvider>
       <ErrorBoundaryProvider>
         <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
@@ -277,6 +279,7 @@ function App() {
         </ErrorBoundary>
       </ErrorBoundaryProvider>
     </NotificationProvider>
+    </I18nProvider>
   )
 }
 

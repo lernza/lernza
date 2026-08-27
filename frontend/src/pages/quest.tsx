@@ -11,6 +11,7 @@ import { TabsNavigation } from "@/components/quest/TabsNavigation"
 import { MilestonesSection } from "@/components/quest/MilestonesSection"
 import { BatchClaimResultDialog } from "@/components/quest/BatchClaimResultDialog"
 import { TimelineSection } from "@/components/quest/TimelineSection"
+import { ReportQuestDialog } from "@/components/report-quest-dialog"
 import { batchClaimRewards } from "@/lib/contracts/batch-claims"
 import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
@@ -41,6 +42,9 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const [claimSummary, setClaimSummary] = useState<BatchClaimSummary | null>(null)
   const [isClaimDialogOpen, setIsClaimDialogOpen] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
+
+  // Report state
+  const [isReportOpen, setIsReportOpen] = useState(false)
 
   // Fetch completion status for each enrollee x milestone combination
   const [completionMap, setCompletionMap] = useState<Record<string, boolean>>({})
@@ -359,6 +363,12 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         </SectionErrorBoundary>
       )}
 
+      <div className="mt-8 flex justify-center">
+        <Button variant="ghost" size="sm" onClick={() => setIsReportOpen(true)}>
+          Report this quest
+        </Button>
+      </div>
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <BatchClaimResultDialog
@@ -367,6 +377,13 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         onClose={handleCloseClaimDialog}
         onRetryFailed={handleRetryFailed}
         isRetrying={isRetrying}
+      />
+
+      <ReportQuestDialog
+        isOpen={isReportOpen}
+        questId={questId}
+        questName={quest.name}
+        onClose={() => setIsReportOpen(false)}
       />
     </div>
   )

@@ -27,11 +27,13 @@ unlicensed = "deny"
 version = 2
 # Vulnerability database source
 db-url = "https://github.com/rustsec/advisory-db"
-# Ignore advisories for optional/development-only crates
+# Ignore advisories for explicitly reviewed exceptions (requires Reason, Owner, and Review Date)
+# See docs/DEPENDENCY_POLICY.md for exception policy details.
 ignore = [
-    # Add advisory IDs to ignore here when explicitly reviewed and accepted
-    # Format: "RUSTSEC-0000-0000"
+    # Example format for accepted exceptions:
+    # # RUSTSEC-XXXX-YYYY: Reason description | Owner: @username | Review Date: YYYY-MM-DD
 ]
+
 
 # Deny known vulnerabilities (fail the build on CVEs)
 [vulns]

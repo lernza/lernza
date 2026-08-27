@@ -30,6 +30,9 @@ export interface MilestoneInfo {
   rewardAmount: bigint
   requiresPrevious: boolean
   prerequisiteIds: number[]
+  difficulty?: string
+  estimatedDuration?: number
+  prerequisitesKnowledge?: string
 }
 
 export type FeedbackAction = "Approve" | "Reject" | "RequestChanges"
@@ -119,6 +122,13 @@ export class MilestoneClient {
     return result ? Number(result) : 0
   }
 
+  async getTotalReservedReward(questId: number): Promise<bigint> {
+    const result = await this.invokeRead("get_total_reserved_reward", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    return result ? toBigInt(result) : 0n
+  }
+
   async getMilestonePrerequisites(questId: number, milestoneId: number): Promise<number[]> {
     const result = await this.invokeRead("get_milestone_prerequisites", [
       nativeToScVal(questId, { type: "u32" }),
@@ -151,6 +161,9 @@ export class MilestoneClient {
     description: string,
     rewardAmount: bigint,
     requiresPrevious = false,
+    difficulty?: string,
+    estimatedDuration?: number,
+    prerequisitesKnowledge?: string,
     handlers?: TransactionLifecycleHandlers
   ): Promise<TransactionResult> {
     const tx = await this.buildTx(owner, "create_milestone", [
@@ -160,6 +173,9 @@ export class MilestoneClient {
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(rewardAmount, { type: "i128" }),
       nativeToScVal(requiresPrevious),
+      nativeToScVal(difficulty || null),
+      nativeToScVal(estimatedDuration || null, { type: "u32" }),
+      nativeToScVal(prerequisitesKnowledge || null),
     ])
     return this.normalizeTransactionResult(
       await signAndSubmitTracked(tx, "Create Milestone", handlers)
@@ -173,6 +189,9 @@ export class MilestoneClient {
     description: string,
     rewardAmount: bigint,
     prerequisiteIds: number[],
+    difficulty?: string,
+    estimatedDuration?: number,
+    prerequisitesKnowledge?: string,
     handlers?: TransactionLifecycleHandlers
   ): Promise<TransactionResult> {
     const tx = await this.buildTx(owner, "create_milestone_with_prerequisites", [
@@ -182,6 +201,9 @@ export class MilestoneClient {
       nativeToScVal(description, { type: "string" }),
       nativeToScVal(rewardAmount, { type: "i128" }),
       xdr.ScVal.scvVec(prerequisiteIds.map(id => nativeToScVal(id, { type: "u32" }))),
+      nativeToScVal(difficulty || null),
+      nativeToScVal(estimatedDuration || null, { type: "u32" }),
+      nativeToScVal(prerequisitesKnowledge || null),
     ])
     return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
   }
@@ -339,6 +361,9 @@ export class MilestoneClient {
       description: String(record.description),
       rewardAmount: toBigInt(record.reward_amount),
       requiresPrevious: Boolean(record.requires_previous),
+      difficulty: record.difficulty ? String(record.difficulty) : undefined,
+      estimatedDuration: record.estimated_duration ? Number(record.estimated_duration) : undefined,
+      prerequisitesKnowledge: record.prerequisites_knowledge ? String(record.prerequisites_knowledge) : undefined,
       prerequisiteIds: Array.isArray(record.prerequisite_ids)
         ? record.prerequisite_ids.map(Number)
         : [],

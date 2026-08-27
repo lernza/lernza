@@ -135,6 +135,9 @@ pub struct MilestoneInfo {
     pub description: String,
     pub reward_amount: i128,
     pub requires_previous: bool,
+    pub difficulty: Option<String>,
+    pub estimated_duration: Option<u32>,
+    pub prerequisites_knowledge: Option<String>,
 }
 
 #[contracttype]
@@ -173,6 +176,9 @@ pub struct MilestoneInput {
     pub description: String,
     pub reward_amount: i128,
     pub requires_previous: bool,
+    pub difficulty: Option<String>,
+    pub estimated_duration: Option<u32>,
+    pub prerequisites_knowledge: Option<String>,
 }
 
 /// Snapshot of the distribution parameters recorded at submission time.
@@ -340,6 +346,9 @@ impl MilestoneContract {
         description: String,
         reward_amount: i128,
         requires_previous: bool,
+        difficulty: Option<String>,
+        estimated_duration: Option<u32>,
+        prerequisites_knowledge: Option<String>,
     ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
@@ -386,6 +395,9 @@ impl MilestoneContract {
             description,
             reward_amount,
             requires_previous,
+            difficulty,
+            estimated_duration,
+            prerequisites_knowledge,
         };
 
         let mut prerequisites = Vec::new(&env);
@@ -432,6 +444,9 @@ impl MilestoneContract {
         description: String,
         reward_amount: i128,
         prerequisites: Vec<u32>,
+        difficulty: Option<String>,
+        estimated_duration: Option<u32>,
+        prerequisites_knowledge: Option<String>,
     ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
@@ -479,6 +494,9 @@ impl MilestoneContract {
             description,
             reward_amount,
             requires_previous: !prerequisites.is_empty(),
+            difficulty,
+            estimated_duration,
+            prerequisites_knowledge,
         };
         let ms_key = DataKey::Milestone(quest_id, id);
         let prerequisite_key = DataKey::Prerequisites(quest_id, id);
@@ -555,6 +573,9 @@ impl MilestoneContract {
                 description: ms.description,
                 reward_amount: ms.reward_amount,
                 requires_previous: ms.requires_previous,
+                difficulty: ms.difficulty,
+                estimated_duration: ms.estimated_duration,
+                prerequisites_knowledge: ms.prerequisites_knowledge,
             };
 
             let ms_key = DataKey::Milestone(quest_id, id);

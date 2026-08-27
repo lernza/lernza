@@ -245,6 +245,10 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   }
 
   const goToCreateQuest = () => {
+    if (!connected) {
+      connect()
+      return
+    }
     if (onCreateQuest) {
       onCreateQuest()
       return
@@ -395,106 +399,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     { date: currentMonth, amount: Number(userEarnings) },
   ]
 
-  if (!connected) {
-    return (
-      <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
-        {/* Background elements */}
-        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
-        <div
-          className="bg-accent border-border animate-float absolute top-[10%] left-[8%] h-20 w-20 rotate-12 border opacity-[0.08] shadow-md"
-          style={{ animationDuration: "8s" }}
-        />
-        <div
-          className="bg-accent border-border animate-float absolute right-[6%] bottom-[15%] h-14 w-14 -rotate-6 border opacity-[0.1] shadow-md"
-          style={{ animationDuration: "6s", animationDelay: "1s" }}
-        />
-        <div
-          className="bg-success border-border animate-float absolute top-[60%] left-[5%] h-10 w-10 rotate-45 border opacity-[0.06] shadow-sm"
-          style={{ animationDuration: "7s", animationDelay: "2s" }}
-        />
-        <div
-          className="bg-accent border-border animate-float absolute top-[20%] right-[12%] h-8 w-8 -rotate-12 border opacity-[0.07]"
-          style={{ animationDuration: "9s", animationDelay: "0.5s" }}
-        />
 
-        <div className="relative mx-auto max-w-lg px-4">
-          {/* Card container */}
-          <div className="bg-background border-border animate-scale-in overflow-hidden border shadow-xl">
-            {/* Yellow header strip */}
-            <div className="bg-accent border-border flex items-center justify-between border-b px-6 py-3">
-              <span className="text-xs font-semibold tracking-wider uppercase">Dashboard</span>
-              <div className="flex items-center gap-1.5">
-                <div className="bg-destructive border-border h-2.5 w-2.5 border" />
-                <span className="text-xs font-bold">Not Connected</span>
-              </div>
-            </div>
-
-            <div className="p-8 text-center sm:p-10">
-              <div className="bg-accent border-border animate-fade-in-up mx-auto mb-6 flex h-20 w-20 items-center justify-center border shadow-md">
-                <Wallet className="h-8 w-8" />
-              </div>
-              <h2 className="animate-fade-in-up stagger-1 mb-3 text-2xl font-semibold sm:text-3xl">
-                Connect your wallet
-              </h2>
-              <p className="text-muted-foreground animate-fade-in-up stagger-2 mx-auto mb-8 max-w-sm">
-                Connect your Freighter wallet to view your quests, track your progress, and start
-                earning USDC.
-              </p>
-              <Button
-                size="lg"
-                onClick={connect}
-                disabled={walletConnecting}
-                className="shimmer-on-hover animate-fade-in-up stagger-3"
-              >
-                {walletConnecting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="h-4 w-4" />
-                    Connect Wallet
-                  </>
-                )}
-              </Button>
-
-              {error && (
-                <div
-                  role="alert"
-                  className="border-border bg-destructive/10 mb-6 border px-4 py-3 text-left text-sm font-semibold text-destructive"
-                >
-                  {error.message}
-                </div>
-              )}
-
-              {/* Mini feature list */}
-              <div className="border-border animate-fade-in-up stagger-4 mt-8 border-t pt-6">
-                <div className="flex flex-wrap justify-center gap-4">
-                  {[
-                    { icon: Target, text: "Track quests" },
-                    { icon: Coins, text: "Earn tokens" },
-                    { icon: Sparkles, text: "On-chain" },
-                  ].map(item => (
-                    <div key={item.text} className="flex items-center gap-2">
-                      <div className="bg-secondary border-border flex h-6 w-6 items-center justify-center border-[1.5px]">
-                        <item.icon className="h-3 w-3" />
-                      </div>
-                      <span className="text-muted-foreground text-xs font-bold">{item.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Decorative accent blocks */}
-          <div className="bg-accent border-border animate-fade-in-up stagger-5 absolute -top-4 -right-4 hidden h-10 w-10 rotate-12 border shadow-md sm:block" />
-          <div className="bg-success border-border animate-fade-in-up stagger-6 absolute -bottom-3 -left-3 hidden h-8 w-8 -rotate-6 border shadow-sm sm:block" />
-        </div>
-      </div>
-    )
-  }
 
   // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
@@ -531,15 +436,23 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
           <div>
             <div className="mb-2 flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
-              <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
+              <span className="text-sm font-bold tracking-wider uppercase">
+                {connected ? "Welcome back" : "Welcome to Lernza"}
+              </span>
             </div>
-            <PrefetchLink to={`/creator/${address}`}>
-              <h1 className="hover:text-background/80 text-3xl font-semibold transition-colors sm:text-4xl">
-                {shortAddress}
-              </h1>
-            </PrefetchLink>
+            {connected ? (
+              <PrefetchLink to={`/creator/${address}`}>
+                <h1 className="hover:text-background/80 text-3xl font-semibold transition-colors sm:text-4xl">
+                  {shortAddress}
+                </h1>
+              </PrefetchLink>
+            ) : (
+              <h1 className="text-3xl font-semibold sm:text-4xl">Discover Quests</h1>
+            )}
             <p className="mt-1 text-sm font-bold opacity-70">
-              You have {personalStats.questsEnrolled} active quests
+              {connected
+                ? `You have ${personalStats.questsEnrolled} active quests`
+                : "Explore on-chain educational paths"}
             </p>
           </div>
           <Button
@@ -572,46 +485,52 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
           {/* Personal Stats */}
-          <SectionErrorBoundary label="Personal stats">
-            <PersonalProgress stats={personalStats} />
-          </SectionErrorBoundary>
+          {connected && (
+            <>
+              <SectionErrorBoundary label="Personal stats">
+                <PersonalProgress stats={personalStats} />
+              </SectionErrorBoundary>
 
-          {/* Earnings Chart (Lazy Loaded) */}
-          <SectionErrorBoundary label="Earnings chart">
-            <Suspense
-              fallback={
-                <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
-              }
-            >
-              <EarningsChart data={earningsHistory} />
-            </Suspense>
-          </SectionErrorBoundary>
+              {/* Earnings Chart (Lazy Loaded) */}
+              <SectionErrorBoundary label="Earnings chart">
+                <Suspense
+                  fallback={
+                    <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
+                  }
+                >
+                  <EarningsChart data={earningsHistory} />
+                </Suspense>
+              </SectionErrorBoundary>
+            </>
+          )}
 
           {/* Your Quests Section */}
           <SectionErrorBoundary label="Your quests">
             <div>
               <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
-                  <LayoutDashboard className="h-5 w-5" /> Your Quests
+                  <LayoutDashboard className="h-5 w-5" /> {connected ? "Your Quests" : "Public Quests"}
                 </h2>
-                <div
-                  className="border-border flex gap-0 border shadow-md"
-                  role="group"
-                  aria-label="Quest filter"
-                >
-                  {(["all", "owned", "enrolled"] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      aria-pressed={filter === f}
-                      className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
-                        filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
-                      }`}
-                    >
-                      {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
-                    </button>
-                  ))}
-                </div>
+                {connected && (
+                  <div
+                    className="border-border flex gap-0 border shadow-md"
+                    role="group"
+                    aria-label="Quest filter"
+                  >
+                    {(["all", "owned", "enrolled"] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        aria-pressed={filter === f}
+                        className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
+                          filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
+                        }`}
+                      >
+                        {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Search, category filter, and sort */}

@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback } from "react"
 import { ToastContainer } from "@/components/toast"
 import { useToast } from "@/hooks/use-toast"
-import { useQuest, useMilestones, useEnrollees, useRewardPool } from "@/hooks/use-quest-data"
+import { useQuest, useMilestones, useEnrollees, useRewardPool, useTotalReservedReward } from "@/hooks/use-quest-data"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { QuestHeaderPanel } from "@/components/quest/QuestHeaderPanel"
 import { StatsPanel } from "@/components/quest/StatsPanel"
@@ -32,6 +32,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const { data: milestonesData, isLoading: milestonesLoading, error: milestonesError } = useMilestones(questId)
   const { data: enrolleesData, isLoading: enrolleesLoading, error: enrolleesError } = useEnrollees(questId)
   const { data: poolBalance = 0n } = useRewardPool(questId)
+  const { data: reservedReward = 0n } = useTotalReservedReward(questId)
 
   const milestones = milestonesData ?? []
   const enrolleeAddresses = enrolleesData ?? []
@@ -298,6 +299,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
           questName={quest.name}
           questDescription={quest.description}
           isComplete={isComplete}
+          isArchived={quest.status === "Archived"}
           onBack={onBack}
           onAddEnrollee={handleAddEnrollee}
           onAddMilestone={handleAddMilestone}
@@ -310,6 +312,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
           enrolleesCount={enrollees.length}
           milestonesCount={milestones.length}
           poolBalance={Number(poolBalance)}
+          reservedReward={Number(reservedReward)}
           totalReward={totalReward}
         />
 

@@ -186,6 +186,38 @@ export function useRewardPool(questId: number) {
   }
 }
 
+export function useTotalReservedReward(questId: number) {
+  const enabled = Number.isInteger(questId) && questId >= 0
+  const query = useQuery<bigint, Error>({
+    queryKey: [...queryKeys.milestones(questId), "reservedReward"],
+    queryFn: async () => {
+      if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
+      return milestoneClient.getTotalReservedReward(questId)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+
+  const errMsg = query.error
+    ? mapError(
+        query.error,
+        contractError(
+          "milestones",
+          "On-chain milestone data is unavailable until the milestone contract is configured."
+        )
+      )
+    : null
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: errMsg,
+    isEmpty: !query.data,
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
+  }
+}
+
 export function useQuestAuthority(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<string | null, Error>({

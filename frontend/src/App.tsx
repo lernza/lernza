@@ -45,7 +45,7 @@ const VALID_PAGES = [
   "privacy",
 ] as const
 type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "404"
-const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["dashboard", "profile", "create-quest", "creator-dashboard"])
+const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["profile", "create-quest", "creator-dashboard"])
 
 function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: () => void }) {
   const { verifySession } = useWallet()

@@ -87,6 +87,13 @@ See [docs/deploy-testnet.md](docs/deploy-testnet.md) for full deployment details
 - Use the existing storage patterns (Instance/Persistent/Temporary) and TTL strategy (`BUMP = 518,400`, `THRESHOLD = 120,960`) — see [ADR-005](docs/adr/005-storage-patterns-and-ttl-strategy.md)
 - Consider gas and resource costs for on-chain state mutations — see [docs/GAS_COSTS.md](docs/GAS_COSTS.md)
 
+### Architecture Decision Records (ADRs)
+
+All core protocol choices, contract boundaries, storage strategies, and authorization rules are documented as ADRs. 
+- Browse existing decisions in the [ADR Index](docs/adr/README.md).
+- Any pull request proposing material architectural changes **must** reference an existing ADR or include a new ADR using [docs/adr/template.md](docs/adr/template.md).
+
+
 ## Frontend (React/TypeScript)
 
 ```bash

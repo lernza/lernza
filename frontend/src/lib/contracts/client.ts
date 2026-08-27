@@ -1,5 +1,14 @@
+/** Core Soroban RPC client — connection, signing, submission, and rate limiting. */
+import { isDev } from "@/lib/env"
 import * as rpc from "@stellar/stellar-sdk/rpc"
-import { Transaction } from "@stellar/stellar-sdk"
+import {
+  Account,
+  Keypair,
+  scValToNative,
+  Transaction,
+  TransactionBuilder,
+} from "@stellar/stellar-sdk"
+import type { xdr } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails, getAddress } from "@stellar/freighter-api"
 import { env } from "../env"
 import { pushToast } from "../notifications"
@@ -8,11 +17,72 @@ import { trackTransaction, type HorizonTransactionMeta } from "./tx-tracker"
 import { RpcHealthManager, parseRpcUrls } from "./rpc-health"
 import { trackContractFailure } from "../analytics"
 import { classifyError, parseContractErrorCode } from "../contract-errors"
+import { idempotencyManager } from "./idempotency"
+import {
+  addPendingTransaction,
+  getPendingTransactions,
+  removePendingTransaction,
+  type PendingTransaction,
+} from "../pending-transactions"
+import type { Contract } from "@stellar/stellar-sdk"
 
-export const SOROBAN_RPC_URL =
-  import.meta.env.VITE_SOROBAN_RPC_URL || "https://soroban-testnet.stellar.org"
-export const NETWORK_PASSPHRASE =
-  import.meta.env.VITE_SOROBAN_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015"
+export type ContractMethodArgs = readonly xdr.ScVal[]
+
+export interface TypedContractCall<Method extends string = string> {
+  method: Method
+  args: ContractMethodArgs
+}
+
+export async function simulateContractRead<Method extends string>(
+  contract: Contract,
+  call: TypedContractCall<Method>
+): Promise<ReturnType<typeof scValToNative> | null> {
+  const randomKP = Keypair.random()
+  const account = new Account(randomKP.publicKey(), "0")
+  const tx = new TransactionBuilder(account, {
+    fee: "10000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(call.method, ...call.args))
+    .setTimeout(30)
+    .build()
+
+  const response = await withRpcReadThrottle(`loading ${call.method.replace(/_/g, " ")}`, () =>
+    withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${call.method}`)
+  )
+
+  return response && "result" in response && response.result
+    ? scValToNative(response.result.retval)
+    : null
+}
+
+export async function prepareContractTransaction<Method extends string>(
+  contract: Contract,
+  source: string,
+  call: TypedContractCall<Method>
+) {
+  const account = await withTimeout(
+    server.getAccount(source),
+    RPC_TIMEOUT_MS,
+    "RPC timeout: getAccount"
+  )
+  const tx = new TransactionBuilder(account, {
+    fee: "10000",
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call(call.method, ...call.args))
+    .setTimeout(30)
+    .build()
+
+  return withTimeout(
+    server.prepareTransaction(tx),
+    RPC_TIMEOUT_MS,
+    "RPC timeout: prepareTransaction"
+  )
+}
+
+export const SOROBAN_RPC_URL = env.VITE_SOROBAN_RPC_URL
+export const NETWORK_PASSPHRASE = env.VITE_SOROBAN_NETWORK_PASSPHRASE
 
 // Determine timeout based on network (testnet: 15s, mainnet: 8s)
 const isMainnet = SOROBAN_RPC_URL.includes("mainnet")
@@ -147,8 +217,20 @@ export async function withTimeout<T>(
   }
 }
 
+export enum TransactionStatus {
+  Signing = "signing",
+  Submitted = "submitted",
+  PendingLedger = "pending-ledger",
+  Success = "success",
+  Failed = "failed",
+}
+
+function normalizeRpcStatus(status: string): string {
+  return status.toLowerCase()
+}
+
 export interface TransactionResult {
-  status: "SUCCESS" | "FAILED" | "PENDING"
+  status: TransactionStatus | "SUCCESS" | "FAILED" | "PENDING_LEDGER"
   txHash: string
   resultXdr?: string
   error?: string
@@ -156,13 +238,22 @@ export interface TransactionResult {
 }
 
 export interface TransactionLifecycleHandlers {
+  /** Called when signing starts */
+  onSigning?: () => void
+  /** Called when the transaction has been signed and is ready for submission */
+  onSigned?: (signedTxXdr: string) => void
+  /** Called after the transaction is submitted to the network */
   onSubmitted?: (txHash: string) => void
-  /** Called for user-visible failures (e.g. network mismatch). Wire to a toast in the UI. */
+  /** Called when the transaction reaches the ledger (finality) */
+  onPendingLedger?: (txHash: string) => void
+  /** Called for user-visible failures (e.g. network mismatch, account change). Wire to a toast in the UI. */
   onError?: (message: string) => void
+  /** Called when the transaction succeeds on-chain */
+  onSuccess?: (txHash: string) => void
 }
 
 export const NETWORK_MISMATCH_MESSAGE =
-  "Freighter network changed after signing. Switch back to the app network before submitting."
+  "Transaction blocked: Freighter network changed. Switch Freighter back to the app network and try again."
 
 const MAX_SUBMIT_ATTEMPTS = 5
 const SUBMIT_BACKOFF_MS = 500
@@ -281,11 +372,34 @@ export async function pollTransaction(txHash: string): Promise<rpc.Api.GetTransa
   return response
 }
 
+export interface SignAndSubmitOptions {
+  idempotencyKey?: string
+  bypassIdempotency?: boolean
+  ttlMs?: number
+}
+
 /**
- * Signs and submits a transaction using Freighter
- * Validates transaction timebounds before submission
+ * Signs and submits a transaction using Freighter with idempotency safeguards.
+ * Validates transaction timebounds before submission and prevents duplicate submissions.
  */
 export async function signAndSubmit(
+  tx: Transaction,
+  handlers: TransactionLifecycleHandlers = {},
+  options?: SignAndSubmitOptions
+): Promise<TransactionResult> {
+  if (options?.bypassIdempotency) {
+    return executeSignAndSubmit(tx, handlers)
+  }
+
+  const key = idempotencyManager.deriveIdempotencyKey(tx, options?.idempotencyKey)
+  return idempotencyManager.executeIdempotent(
+    key,
+    () => executeSignAndSubmit(tx, handlers),
+    options?.ttlMs
+  )
+}
+
+async function executeSignAndSubmit(
   tx: Transaction,
   handlers: TransactionLifecycleHandlers = {}
 ): Promise<TransactionResult> {
@@ -335,33 +449,50 @@ export async function signAndSubmit(
 
       logTx("timebounds_check", "failed", { error: errorMsg })
       observeFailure("timebounds_check", errorMsg)
-      return { status: "FAILED", txHash: "", error: errorMsg }
+      return {
+        status: TransactionStatus.Failed,
+        txHash: "",
+        error: errorMsg,
+      }
     }
+
+    handlers.onSigning?.()
 
     const netBeforeSign = await getNetworkDetails()
     if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
-      const message = `Freighter is on the wrong network. Expected: ${getExpectedNetworkLabel()}.`
+      const message = `Transaction blocked: Freighter is on the wrong network. Expected ${getExpectedNetworkLabel()}. Switch Freighter to the app network and try again.`
       logTx("network_check", "failed", { error: message })
       observeFailure("network_check", message)
       handlers.onError?.(message)
-      return { status: "FAILED", txHash: "", error: message }
+      return {
+        status: TransactionStatus.Failed,
+        txHash: "",
+        error: message,
+      }
     }
 
-    const result = await signTransaction(tx.toXDR(), {
+    const signResult = await signTransaction(tx.toXDR(), {
       networkPassphrase: NETWORK_PASSPHRASE,
     })
 
-    if (typeof result === "object" && result !== null && "signedTxXdr" in result) {
-      const { signedTxXdr } = result
+    if (typeof signResult === "object" && signResult !== null && "signedTxXdr" in signResult) {
+      const { signedTxXdr } = signResult
+      handlers.onSigned?.(signedTxXdr)
+
       // Convert to Transaction Envelope XDR string for safety
       const signedTx = new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
 
       const netAfterSign = await getNetworkDetails()
       if (!freighterNetworkMatches(netAfterSign.networkPassphrase)) {
-        logTx("network_check_post_sign", "failed", { error: NETWORK_MISMATCH_MESSAGE })
-        observeFailure("network_check_post_sign", NETWORK_MISMATCH_MESSAGE)
-        handlers.onError?.(NETWORK_MISMATCH_MESSAGE)
-        return { status: "FAILED", txHash: "", error: NETWORK_MISMATCH_MESSAGE }
+        const message = NETWORK_MISMATCH_MESSAGE
+        logTx("network_check_post_sign", "failed", { error: message })
+        observeFailure("network_check_post_sign", message)
+        handlers.onError?.(message)
+        return {
+          status: TransactionStatus.Failed,
+          txHash: "",
+          error: message,
+        }
       }
 
       const { address: currentAddress } = await getAddress()
@@ -370,36 +501,46 @@ export async function signAndSubmit(
         logTx("account_check", "failed", { error: message })
         observeFailure("account_check", message)
         handlers.onError?.(message)
-        return { status: "FAILED", txHash: "", error: message }
+        return {
+          status: TransactionStatus.Failed,
+          txHash: "",
+          error: message,
+        }
       }
 
       const submitResponse = await submitTransactionWithRetry(signedTx)
 
-      // The sendTransaction status was wrongly check for SUCCESS previously.
-      // Accurate statuses: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
+      // Accurate statuses from submitTransactionWithRetry: PENDING | DUPLICATE | TRY_AGAIN_LATER | ERROR
       if (submitResponse.status === "PENDING") {
         handlers.onSubmitted?.(submitResponse.hash)
         logTx("submit", "success", { txHash: submitResponse.hash })
 
         const pollResponse = await pollTransaction(submitResponse.hash)
 
-        if (pollResponse.status === "SUCCESS") {
+        if (normalizeRpcStatus(pollResponse.status) === TransactionStatus.Success) {
           const successResp = pollResponse as rpc.Api.GetSuccessfulTransactionResponse
           const horizonMeta = await trackTransaction(submitResponse.hash)
           const txResult: TransactionResult = {
-            status: "SUCCESS",
+            status: TransactionStatus.Success,
             txHash: submitResponse.hash,
             resultXdr: successResp.returnValue?.toXDR("base64"),
             horizonMeta: horizonMeta ?? undefined,
           }
           logTx("confirmed", "success", { txHash: submitResponse.hash })
+          handlers.onSuccess?.(submitResponse.hash)
           return txResult
+        } else if (pollResponse.status === TransactionStatus.PendingLedger) {
+          handlers.onPendingLedger?.(submitResponse.hash)
+          return {
+            status: TransactionStatus.PendingLedger,
+            txHash: submitResponse.hash,
+          }
         } else {
           const pollError = "Transaction failed after submission"
           logTx("poll", "failed", { txHash: submitResponse.hash, error: pollError })
           observeFailure("poll", pollError, submitResponse.hash)
           return {
-            status: "FAILED",
+            status: TransactionStatus.Failed,
             txHash: submitResponse.hash,
             error: pollError,
           }
@@ -408,7 +549,11 @@ export async function signAndSubmit(
         const error = "This transaction is a duplicate. Please wait a moment or try again."
         logTx("submit", "failed", { txHash: submitResponse.hash, submitStatus: "DUPLICATE", error })
         observeFailure("submit_duplicate", error, submitResponse.hash)
-        return { status: "FAILED", txHash: submitResponse.hash, error }
+        return {
+          status: TransactionStatus.Failed,
+          txHash: submitResponse.hash,
+          error,
+        }
       } else if (submitResponse.status === "TRY_AGAIN_LATER") {
         const message = "Network is busy. Please try again later."
         logTx("submit", "failed", {
@@ -418,12 +563,20 @@ export async function signAndSubmit(
         })
         observeFailure("submit_try_again_later", message, submitResponse.hash)
         handlers.onError?.(message)
-        return { status: "FAILED", txHash: submitResponse.hash, error: message }
+        return {
+          status: TransactionStatus.Failed,
+          txHash: submitResponse.hash,
+          error: message,
+        }
       } else if (submitResponse.status === "ERROR") {
         const error = "Transaction error. Please contact support or check your inputs."
         logTx("submit", "failed", { txHash: submitResponse.hash, submitStatus: "ERROR", error })
         observeFailure("submit_error", error, submitResponse.hash)
-        return { status: "FAILED", txHash: submitResponse.hash, error }
+        return {
+          status: TransactionStatus.Failed,
+          txHash: submitResponse.hash,
+          error,
+        }
       } else {
         const error = `Submission failed: ${submitResponse.status}`
         logTx("submit", "failed", {
@@ -432,22 +585,118 @@ export async function signAndSubmit(
           error,
         })
         observeFailure("submit_unknown", error, submitResponse.hash)
-        return { status: "FAILED", txHash: submitResponse.hash, error }
+        return {
+          status: TransactionStatus.Failed,
+          txHash: submitResponse.hash,
+          error,
+        }
       }
     } else {
       const signingError = "Signing failed"
       logTx("sign", "failed", { error: signingError })
       observeFailure("sign", signingError)
-      return { status: "FAILED", txHash: "", error: signingError }
+      return {
+        status: TransactionStatus.Failed,
+        txHash: "",
+        error: signingError,
+      }
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error during signing/submission"
     logTx("sign_and_submit", "error", { error: message })
     observeFailure("sign_and_submit", message)
-    if (import.meta.env.DEV) {
+    if (isDev) {
       console.error("Transaction submission error:", err)
     }
-    return { status: "FAILED", txHash: "", error: message }
+    return {
+      status: TransactionStatus.Failed,
+      txHash: "",
+      error: message,
+    }
   }
 }
 
+/**
+ * Wraps signAndSubmit with pending-transaction persistence (issue #1478).
+ * Persists {txHash, label, submittedAt} to localStorage as soon as the
+ * transaction is submitted, and removes it once resolved — except when the
+ * result is still PendingLedger, since that's exactly the "confirmation
+ * outcome unknown" case reconcilePendingTransactions() resolves on next
+ * load. Never persists signed XDR, keys, or wallet secrets.
+ */
+export async function signAndSubmitTracked(
+  tx: Transaction,
+  label: string,
+  handlers: TransactionLifecycleHandlers = {}
+): Promise<TransactionResult> {
+  const result = await signAndSubmit(tx, {
+    ...handlers,
+    onSubmitted: (txHash: string) => {
+      addPendingTransaction({ txHash, label, submittedAt: Date.now() })
+      handlers.onSubmitted?.(txHash)
+    },
+  })
+
+  if (result.txHash && result.status !== TransactionStatus.PendingLedger) {
+    removePendingTransaction(result.txHash)
+  }
+
+  return result
+}
+
+// If a pending transaction is still NOT_FOUND on the RPC after this long,
+// treat it as expired/dropped rather than leaving it pending indefinitely.
+const PENDING_TRANSACTION_EXPIRY_MS = 10 * 60 * 1000
+
+/**
+ * Reconciles persisted pending transactions against ledger status (issue
+ * #1478). Intended to run once when the app loads: for each transaction
+ * still recorded from a prior session/reload, checks its current status and
+ * surfaces a distinct success/failure/expiry toast, clearing resolved
+ * entries. Genuinely still-pending, recently-submitted transactions are left
+ * for the next reconciliation rather than reported as expired prematurely.
+ */
+export async function reconcilePendingTransactions(): Promise<void> {
+  const pending: PendingTransaction[] = getPendingTransactions()
+  if (pending.length === 0) return
+
+  await Promise.all(
+    pending.map(async tx => {
+      try {
+        const response = await server.getTransaction(tx.txHash)
+        const status = normalizeRpcStatus(response.status)
+
+        if (status === TransactionStatus.Success) {
+          pushToast({
+            message: `${tx.label}: transaction confirmed successfully.`,
+            type: "success",
+            duration: 5000,
+          })
+          removePendingTransaction(tx.txHash)
+        } else if (status === TransactionStatus.Failed) {
+          pushToast({
+            message: `${tx.label}: transaction failed on-chain.`,
+            type: "error",
+            duration: 6000,
+          })
+          removePendingTransaction(tx.txHash)
+        } else if (status === "not_found") {
+          if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
+            pushToast({
+              message: `${tx.label}: transaction expired before confirmation. Please try again.`,
+              type: "warning",
+              duration: 6000,
+            })
+            removePendingTransaction(tx.txHash)
+          }
+          // Otherwise still genuinely in flight — leave it for the next reconciliation.
+        }
+      } catch (error) {
+        // RPC unreachable while checking — leave the record for a future attempt.
+        if (isDev) {
+          console.warn(`Failed to reconcile pending transaction ${tx.txHash}:`, error)
+        }
+      }
+    })
+  )
+}

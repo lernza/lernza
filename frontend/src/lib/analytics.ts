@@ -92,3 +92,24 @@ export function trackContractFailure(ctx: ContractFailureContext): void {
     data: payload,
   })
 }
+
+/**
+ * Analytics tracking helpers for user engagement & quest activities (Issue #1257).
+ */
+export const analytics = {
+  trackQuestEnroll(questId: string) {
+    track("quest_enroll", { questId, timestamp: Date.now() })
+  },
+  trackMilestoneSubmit(questId: string, milestoneId: string) {
+    track("milestone_submit", { questId, milestoneId, timestamp: Date.now() })
+  },
+  trackRewardClaim(questId: string, amount: string | number) {
+    track("reward_claim", { questId, amount, timestamp: Date.now() })
+  },
+  trackWalletConnect(walletAddress: string) {
+    track("wallet_connect", { walletAddress: walletAddress.slice(0, 6), timestamp: Date.now() })
+  },
+  trackPageNavigation(pageName: string) {
+    track("page_navigation", { page: pageName, timestamp: Date.now() })
+  },
+}

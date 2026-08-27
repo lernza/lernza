@@ -81,7 +81,7 @@ describe("useWallet - connect", () => {
     expect(result.current.installUrl).toBe("https://www.freighter.app/")
   })
 
-  it("suppresses error when user cancels connection", async () => {
+  it("surfaces a distinct user_rejected error when the user cancels connection", async () => {
     mockFreighter.requestAccess.mockRejectedValue(new Error("User rejected"))
 
     const { result } = renderWallet()
@@ -92,7 +92,8 @@ describe("useWallet - connect", () => {
 
     expect(result.current.connected).toBe(false)
     expect(result.current.address).toBeNull()
-    expect(result.current.error).toBeNull()
+    expect(result.current.error?.code).toBe("user_rejected")
+    expect(result.current.error?.message.toLowerCase()).toContain("rejected")
   })
 
   it("maps network failures to typed network_error", async () => {
@@ -126,6 +127,38 @@ describe("useWallet - disconnect", () => {
     expect(result.current.connected).toBe(false)
     expect(result.current.address).toBeNull()
     expect(localStorage.getItem(DISCONNECTED_KEY)).toBe("true")
+  })
+})
+
+describe("useWallet - session verification", () => {
+  it("rejects a stale connected state when wallet permission has been revoked", async () => {
+    mockFreighter.requestAccess.mockResolvedValue({ address: "GABC1234" })
+    const { result } = renderWallet()
+
+    await act(async () => {
+      await result.current.connect()
+    })
+    mockFreighter.getAddress.mockRejectedValue(new Error("Not authorized"))
+
+    await act(async () => {
+      await expect(result.current.verifySession()).resolves.toBe(false)
+    })
+
+    expect(result.current.connected).toBe(false)
+    expect(result.current.address).toBeNull()
+  })
+
+  it("refreshes the account from Freighter before accepting a protected session", async () => {
+    mockFreighter.getAddress.mockResolvedValue({ address: "GVERIFIED" })
+    const { result } = renderWallet()
+
+    await act(async () => {
+      await expect(result.current.verifySession()).resolves.toBe(true)
+    })
+
+    expect(mockFreighter.getAddress).toHaveBeenCalled()
+    expect(result.current.address).toBe("GVERIFIED")
+    expect(result.current.connected).toBe(true)
   })
 })
 

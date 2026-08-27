@@ -122,10 +122,10 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
     try {
       await navigator.clipboard.writeText(questUrl)
       setCopied(true)
-      onToast("Link copied to clipboard!", "success")
+      onToast("Copied to clipboard!", "success")
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      onToast("Failed to copy link", "error")
+      onToast("Unable to copy to clipboard. Please try again.", "error")
     }
   }
 
@@ -217,7 +217,7 @@ export function ShareButton({ questId, questName, onToast, compact = false }: Sh
         <button
           onClick={handleCopyLink}
           className="border-border bg-card neo-press hover:bg-accent flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center border-[1.5px] transition-colors"
-          aria-label="Copy URL"
+          aria-label="Copy quest URL to clipboard"
         >
           {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         </button>

@@ -72,6 +72,19 @@ Emitted when a quest is archived via `archive_quest`. Once archived, the quest n
 
 ---
 
+### `quest_cancelled`
+
+Emitted when a quest is cancelled. Once cancelled, the quest no longer accepts enrollments and pending milestones might be affected depending on the reward configuration.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("quest_cancelled"),)` | |
+| `quest_id` | `u32` | ID of the cancelled quest. |
+
+**Data tuple:** `(quest_id)`
+
+---
+
 ### `enrollee_added`
 
 Emitted when a learner is enrolled. The `join_mode` field distinguishes how they joined.
@@ -148,6 +161,43 @@ Emitted when an admin revokes a creator's verified status via `revoke_creator_ve
 | `timestamp` | `u64` | Ledger timestamp. |
 
 **Data tuple:** `(addr, revoked_by, timestamp)`
+
+---
+
+## Common Events
+
+These events are emitted by the common library (e.g. `contracts/common/src/lib.rs`) and can appear in the event stream of any contract that uses cross-contract calls.
+
+### `cross_contract_call`
+
+Emitted for outgoing cross-contract call attempts.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("cross_contract_call"),)` | |
+| `caller_contract` | `Address` | Address of the contract making the call. |
+| `target_contract` | `Address` | Address of the contract being called. |
+| `method_symbol` | `Symbol` | Method being invoked. |
+| `params` | `String` | Serialized or stringified parameters. |
+
+**Data tuple:** `(caller_contract, target_contract, method_symbol, params)`
+
+---
+
+### `cross_contract_return`
+
+Emitted for cross-contract call returns.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("cross_contract_return"),)` | |
+| `caller_contract` | `Address` | Address of the contract making the call. |
+| `target_contract` | `Address` | Address of the contract being called. |
+| `method_symbol` | `Symbol` | Method that was invoked. |
+| `success` | `bool` | Whether the call was successful. |
+| `result` | `String` | Serialized or stringified return value or error. |
+
+**Data tuple:** `(caller_contract, target_contract, method_symbol, success, result)`
 
 ---
 
@@ -375,6 +425,7 @@ Emitted when the certificate contract's pause state is toggled by the owner. Bot
 | Quest | `quest_created` | `create_quest` | New quest persisted |
 | Quest | `quest_updated` | `update_quest` | Quest metadata changed |
 | Quest | `quest_archived` | `archive_quest` | Quest status → Archived |
+| Quest | `quest_cancelled` | `cancel_quest` | Quest status → Cancelled |
 | Quest | `enrollee_added` | `add_enrollee`, `join_quest`, `join_quest_with_invite` | Learner enrolled |
 | Quest | `enrollee_removed` | `remove_enrollee` | Owner removes learner |
 | Quest | `admin_transferred` | `transfer_admin` | Admin address rotated |
@@ -395,6 +446,8 @@ Emitted when the certificate contract's pause state is toggled by the owner. Bot
 | Certificate | `metadata_base_updated` | `set_metadata_base` | Base URI changed |
 | Certificate | `paused` | `pause` | Contract paused |
 | Certificate | `unpaused` | `unpause` | Contract unpaused |
+| Common | `cross_contract_call` | `log_cross_call` | Emitted when a cross-contract call is initiated |
+| Common | `cross_contract_return` | `log_cross_return` | Emitted when a cross-contract call returns |
 
 ---
 

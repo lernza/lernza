@@ -29,7 +29,7 @@ interface ActiveQuestEntry {
 
 const PAGE_SIZE = 50
 
-async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
+export async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
   const enrolleeSets = await Promise.all(quests.map(q => questClient.getEnrollees(q.id)))
 
@@ -48,11 +48,17 @@ async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
   )
 
   return entries
-    .sort((a, b) => (b.totalEarned > a.totalEarned ? 1 : b.totalEarned < a.totalEarned ? -1 : 0))
+    .sort((a, b) => {
+      if (b.totalEarned > a.totalEarned) return 1
+      if (b.totalEarned < a.totalEarned) return -1
+      // Tie-breaker: deterministic ascending address order so ranking
+      // doesn't reshuffle between refreshes when earnings are equal.
+      return a.address.localeCompare(b.address)
+    })
     .map((e, i) => ({ ...e, rank: offset + i + 1 }))
 }
 
-async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEntry[]> {
+export async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEntry[]> {
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
   const withCounts = await Promise.all(
     quests.map(async q => {
@@ -62,7 +68,12 @@ async function fetchMostActiveQuests(offset: number = 0): Promise<ActiveQuestEnt
   )
 
   return withCounts
-    .sort((a, b) => b.enrolleeCount - a.enrolleeCount)
+    .sort((a, b) => {
+      if (b.enrolleeCount !== a.enrolleeCount) return b.enrolleeCount - a.enrolleeCount
+      // Tie-breaker: deterministic ascending id order so ranking
+      // doesn't reshuffle between refreshes when enrollee counts are equal.
+      return a.id - b.id
+    })
     .map((q, i) => ({ ...q, rank: offset + i + 1 }))
 }
 
@@ -232,8 +243,10 @@ export function Leaderboard() {
       />
 
       {/* Tabs */}
-      <div className="border-border mb-6 flex gap-0 border shadow-md">
+      <div role="tablist" className="border-border mb-6 flex gap-0 border shadow-md">
         <button
+          role="tab"
+          aria-selected={activeTab === "earners"}
           onClick={() => setActiveTab("earners")}
           className={cn(
             "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
@@ -244,6 +257,8 @@ export function Leaderboard() {
           View top earners
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === "quests"}
           onClick={() => setActiveTab("quests")}
           className={cn(
             "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",

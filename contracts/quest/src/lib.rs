@@ -1,7 +1,7 @@
 #![no_std]
 use common::{
-    extend_instance_ttl, is_contract_address, QuestInfo, QuestStatus, QuestVersion, Visibility,
-    BUMP, THRESHOLD,
+    extend_instance_ttl, is_contract_address, EnrolleeStatus, QuestInfo, QuestStatus, QuestVersion,
+    Visibility, BUMP, MAX_QUEST_DESCRIPTION_LEN, THRESHOLD,
 };
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Bytes, BytesN, Env, String,
@@ -24,6 +24,11 @@ pub enum DataKey {
     Enrollees(u32),
     PublicQuests,
     PublicCategoryQuests(String),
+    /// Absolute ledger (sequence number) at which a public category's listing
+    /// expires. Recorded whenever the category listing is (re)touched so the
+    /// `get_category` query can surface an accurate `expires_at` without a
+    /// runtime TTL read (unavailable in soroban-sdk 22).
+    CategoryExpiry(String),
     OwnerQuests(Address),
     EnrolleeQuests(Address),
     Admin,
@@ -42,6 +47,15 @@ pub enum DataKey {
     LeaveHold(u32, Address),
     /// Version history for a quest. Stores a Vec of QuestVersion snapshots.
     QuestVersionHistory(u32),
+    /// Schema version recorded after an administrator migrates a quest.
+    /// Appended so existing DataKey encodings remain stable across upgrades.
+    QuestSchemaVersion(u32),
+    /// Enrollee status tracking. Key: (quest_id, enrollee_address). Value: EnrolleeStatus.
+    EnrolleeStatus(u32, Address),
+    /// Pending ownership transfer request. Key: quest_id. Value: PendingTransfer.
+    PendingTransfer(u32),
+    /// Waitlist for a quest when enrollment is full. Key: quest_id. Value: Vec<Address> (FIFO).
+    Waitlist(u32),
 }
 
 // QuestInfo moved to common.
@@ -51,11 +65,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     AlreadyEnrolled = 4,
     Reserved5 = 5, // reserved for stable ABI; do not reuse
     NotEnrolled = 6,
@@ -76,16 +90,50 @@ pub enum Error {
     InvalidInvite = 15,
     /// The invite code has already been redeemed.
     InviteAlreadyUsed = 16,
+    /// Quest has been cancelled.
+    QuestCancelled = 17,
+    /// No pending ownership transfer exists for this quest.
+    NoPendingTransfer = 18,
+    /// The caller is not the nominated new owner for this transfer.
+    NotTransferNominee = 19,
+    /// The caller is not the current owner or the nominated new owner.
+    NotTransferParty = 20,
     /// Contract is administratively paused; all mutating calls are rejected.
     /// System band: code 400 is identical across all Lernza contracts.
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
+}
+
+/// Metadata about a public category, including when its on-chain listing will
+/// expire. Frontends use `expires_at` to warn users before a category (and the
+/// quests listed under it) silently disappears due to TTL expiry.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct CategoryInfo {
+    pub category: String,
+    pub quest_count: u32,
+    /// Remaining persistent-TTL entries (ledgers) before the category listing expires.
+    pub ttl_remaining: u32,
+    /// Approximate absolute expiry timestamp (ledger seconds). Derived from
+    /// `ttl_remaining` using the ~5s/ledger assumption documented in ADR-005.
+    pub expires_at: u64,
 }
 
 // TTL constants and address validation moved to common.
-pub const MAX_QUEST_NAME_LEN: u32 = 64;
-pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
 const MAX_TAGS: u32 = 5;
 const MAX_TAG_LEN: u32 = 32;
+/// Current on-chain layout of QuestInfo. Bump only alongside a migration.
+const QUEST_DATA_SCHEMA_VERSION: u32 = 1;
+/// Bound migration work so an administrator cannot exceed transaction limits.
+const MAX_MIGRATION_BATCH: u32 = 25;
+
+/// A two-step ownership transfer request. The current owner nominates a new
+/// owner, and the nominee must explicitly accept before ownership changes.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PendingTransfer {
+    pub nominee: Address,
+    pub initiated_at: u64,
+}
 
 fn is_blank_ascii(s: &String) -> bool {
     let len = s.len() as usize;
@@ -112,7 +160,7 @@ fn validate_name(name: &String) -> Result<(), Error> {
     if is_blank_ascii(name) {
         return Err(Error::InvalidInput);
     }
-    if name.len() > MAX_QUEST_NAME_LEN {
+    if name.len() > common::MAX_QUEST_NAME_LEN {
         return Err(Error::NameTooLong);
     }
     Ok(())
@@ -123,7 +171,7 @@ fn validate_description(description: &String) -> Result<(), Error> {
     if is_blank_ascii(description) {
         return Err(Error::InvalidInput);
     }
-    if description.len() > MAX_QUEST_DESCRIPTION_LEN {
+    if description.len() > common::MAX_QUEST_DESCRIPTION_LEN {
         return Err(Error::DescriptionTooLong);
     }
     Ok(())
@@ -139,6 +187,7 @@ pub struct QuestContract;
 impl QuestContract {
     /// Initialize the quest contract with an admin.
     pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(Error::Unauthorized);
         }
@@ -146,6 +195,74 @@ impl QuestContract {
         env.storage().instance().set(&DataKey::Paused, &false);
         extend_instance_ttl(&env);
         Ok(())
+    }
+
+    /// Returns the address that holds the contract-administrator role.
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(Error::NotFound)
+    }
+
+    /// Upgrade this contract's WASM. Only the stored administrator can invoke it.
+    pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
+    }
+
+    /// Mark a bounded set of quests as migrated to the current schema.
+    ///
+    /// The current v1 migration is a validated re-serialization pass. Future
+    /// schema revisions must update this function with their explicit
+    /// transformation before increasing `QUEST_DATA_SCHEMA_VERSION`.
+    pub fn migrate_quest_data(
+        env: Env,
+        admin: Address,
+        quest_ids: Vec<u32>,
+        target_schema_version: u32,
+    ) -> Result<(), Error> {
+        Self::require_admin(&env, &admin)?;
+        Self::require_not_paused(&env)?;
+        if quest_ids.len() == 0
+            || quest_ids.len() > MAX_MIGRATION_BATCH
+            || target_schema_version != QUEST_DATA_SCHEMA_VERSION
+        {
+            return Err(Error::InvalidInput);
+        }
+
+        // Validate all IDs before writing so an invalid batch has no effects.
+        for quest_id in quest_ids.iter() {
+            Self::load_quest(&env, quest_id)?;
+        }
+        for quest_id in quest_ids.iter() {
+            let quest = Self::load_quest(&env, quest_id)?;
+            let quest_key = DataKey::Quest(quest_id);
+            let version_key = DataKey::QuestSchemaVersion(quest_id);
+            env.storage().persistent().set(&quest_key, &quest);
+            env.storage()
+                .persistent()
+                .set(&version_key, &target_schema_version);
+            common::extend_persistent_ttl(&env, &quest_key);
+            common::extend_persistent_ttl(&env, &version_key);
+            env.events().publish(
+                (Symbol::new(&env, "quest_migrated"),),
+                (quest_id, target_schema_version),
+            );
+        }
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Returns the recorded schema version; legacy quests are version 1.
+    pub fn get_quest_schema_version(env: Env, quest_id: u32) -> Result<u32, Error> {
+        Self::load_quest(&env, quest_id)?;
+        Ok(env
+            .storage()
+            .persistent()
+            .get(&DataKey::QuestSchemaVersion(quest_id))
+            .unwrap_or(1))
     }
 
     /// Verify a creator address. Admin only.
@@ -270,6 +387,7 @@ impl QuestContract {
         token_addr: Address,
         visibility: Visibility,
         max_enrollees: Option<u32>,
+        deadline: Option<u64>,
     ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
@@ -282,6 +400,11 @@ impl QuestContract {
             return Err(Error::InvalidInput);
         }
         Self::validate_tags(&tags)?;
+
+        let deadline = deadline.unwrap_or(0);
+        if deadline != 0 && deadline <= env.ledger().timestamp() {
+            return Err(Error::InvalidInput);
+        }
 
         let id: u32 = env.storage().instance().get(&DataKey::NextId).unwrap_or(0);
         let verified = Self::is_creator_verified(env.clone(), owner.clone());
@@ -297,17 +420,22 @@ impl QuestContract {
             created_at: env.ledger().timestamp(),
             visibility,
             status: QuestStatus::Active,
-            deadline: 0,
+            deadline,
             archived_at: 0,
             max_enrollees,
             verified,
             version: 1,
+            prerequisite_quest_ids: Vec::new(&env),
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(id), &Vec::<Address>::new(&env));
+        env.storage().persistent().set(
+            &DataKey::QuestVersionHistory(id),
+            &Vec::<QuestVersion>::new(&env),
+        );
         env.storage().instance().set(&DataKey::NextId, &(id + 1));
         extend_instance_ttl(&env);
 
@@ -331,10 +459,14 @@ impl QuestContract {
         }
         // Emit quest creation event
         // Event topics: (quest_created,)
-        // Event data: (quest_id, owner, name)
-        env.events().publish(
-            (Symbol::new(&env, "quest_created"),),
-            (id, quest.owner.clone(), quest.name.clone()),
+        // Event data: (quest_id, owner, name, created_at)
+        // Emit quest creation event via shared helper for consistent schema
+        common::emit_quest_created(
+            &env,
+            id,
+            &quest.owner.clone(),
+            &quest.name.clone(),
+            quest.created_at,
         );
 
         Self::bump(&env, id);
@@ -364,6 +496,9 @@ impl QuestContract {
 
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
+        }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
         }
 
         // Input validation & update
@@ -470,6 +605,9 @@ impl QuestContract {
         if quest.status == QuestStatus::Archived {
             return Err(Error::QuestArchived);
         }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
 
         quest.status = QuestStatus::Archived;
         quest.archived_at = env.ledger().timestamp();
@@ -488,13 +626,67 @@ impl QuestContract {
         Ok(())
     }
 
+    /// Cancel an active quest. Owner only.
+    /// Cancelling a quest prevents any further updates, enrollments, or milestone verifications.
+    /// Cleans up state by removing the quest from public discovery indices.
+    pub fn cancel_quest(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+
+        quest.status = QuestStatus::Cancelled;
+        quest.archived_at = env.ledger().timestamp();
+
+        // Cleanup: remove from public discovery indices if public
+        if quest.visibility == Visibility::Public {
+            Self::remove_id_from_index(
+                &env,
+                DataKey::PublicCategoryQuests(quest.category.clone()),
+                quest_id,
+            );
+            let mut public_ids: Vec<u32> = env
+                .storage()
+                .persistent()
+                .get(&DataKey::PublicQuests)
+                .unwrap_or(Vec::new(&env));
+            if let Some(index) = public_ids.first_index_of(quest_id) {
+                public_ids.remove(index);
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::PublicQuests, &public_ids);
+            }
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+
+        // Emit quest cancelled event
+        env.events()
+            .publish((Symbol::new(&env, "quest_cancelled"),), quest_id);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
     /// Add an enrollee to a quest. Owner only.
+    ///
+    /// When the quest has an enrollment cap and is full, the owner can still
+    /// force-add an enrollee (bypassing the cap). Self-enrollment via
+    /// `join_quest` will instead add to the waitlist.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -503,12 +695,8 @@ impl QuestContract {
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
-        // Check enrollment cap from quest record
-        if let Some(max) = quest.max_enrollees {
-            if enrollees.len() >= max {
-                return Err(Error::QuestFull);
-            }
-        }
+        // Owner can force-add even when full (bypasses cap).
+        // For self-enrollment, see join_quest which waitlists when full.
 
         // Check not already enrolled
         if enrollees.contains(&enrollee) {
@@ -529,7 +717,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "owner");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -537,31 +731,51 @@ impl QuestContract {
     }
 
     /// Allow a learner to enroll themselves in a public quest.
+    ///
+    /// When the quest has an enrollment cap and is full, the learner is
+    /// automatically added to the waitlist (FIFO) instead of being rejected.
     pub fn join_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
             return Err(Error::DeadlineExpired);
         }
-        if quest.visibility == Visibility::Private {
+        if quest.visibility == Visibility::Private || quest.visibility == Visibility::InviteOnly {
             return Err(Error::InviteOnly);
         }
 
         let enrollees = Self::load_enrollees(&env, quest_id);
 
-        if let Some(max) = quest.max_enrollees {
-            if enrollees.len() >= max {
-                return Err(Error::QuestFull);
-            }
-        }
-
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
+        }
+
+        // If the quest has a cap and is full, add to the waitlist instead.
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
+                let waitlist = Self::load_waitlist(&env, quest_id);
+                if waitlist.contains(&enrollee) {
+                    return Err(Error::AlreadyEnrolled);
+                }
+                let mut new_waitlist = waitlist;
+                new_waitlist.push_back(enrollee.clone());
+                let key = DataKey::Waitlist(quest_id);
+                env.storage().persistent().set(&key, &new_waitlist);
+                common::extend_persistent_ttl(&env, &key);
+
+                env.events().publish(
+                    (Symbol::new(&env, "waitlist_joined"),),
+                    (quest_id, enrollee, env.ledger().timestamp()),
+                );
+
+                Self::bump(&env, quest_id);
+                return Ok(());
+            }
         }
 
         let mut new_enrollees = enrollees;
@@ -578,7 +792,13 @@ impl QuestContract {
         let join_mode = Symbol::new(&env, "self");
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp, join_mode),
+            (
+                quest_id,
+                enrollee.clone(),
+                quest.owner.clone(),
+                timestamp,
+                join_mode,
+            ),
         );
 
         Self::bump(&env, quest_id);
@@ -607,8 +827,11 @@ impl QuestContract {
         if quest.owner != owner {
             return Err(Error::Unauthorized);
         }
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return Err(Error::DeadlineExpired);
         }
         let key = DataKey::InviteCommitment(quest_id, commitment.clone());
         env.storage().persistent().set(&key, &true);
@@ -640,8 +863,22 @@ impl QuestContract {
         Ok(())
     }
 
-    /// Check whether an invite commitment is registered and not yet consumed.
+    /// Check whether an invite commitment is registered, not yet consumed,
+    /// and still redeemable (the quest is neither closed nor past its
+    /// deadline). A commitment that would be rejected by
+    /// `join_quest_with_invite` for any of these reasons reports as invalid
+    /// here too, so callers never see a stale invite reported as valid.
     pub fn is_invite_valid(env: Env, quest_id: u32, commitment: BytesN<32>) -> bool {
+        let quest = match Self::load_quest(&env, quest_id) {
+            Ok(q) => q,
+            Err(_) => return false,
+        };
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return false;
+        }
+        if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
+            return false;
+        }
         let registered = env
             .storage()
             .persistent()
@@ -674,7 +911,7 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
 
         let quest = Self::load_quest(&env, quest_id)?;
-        if quest.status == QuestStatus::Archived {
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
@@ -882,6 +1119,99 @@ impl QuestContract {
         Ok(enrollees.contains(&user))
     }
 
+    /// Get active participants for a quest, excluding suspended, banned, and inactive users.
+    /// Returns only enrollees with Active status.
+    pub fn get_active_participants(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut active = Vec::new(&env);
+
+        for enrollee in enrollees.iter() {
+            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
+            let status: EnrolleeStatus = env
+                .storage()
+                .persistent()
+                .get(&status_key)
+                .unwrap_or(EnrolleeStatus::Active);
+
+            if status == EnrolleeStatus::Active {
+                active.push_back(enrollee);
+            }
+        }
+        Self::bump(&env, quest_id);
+        Ok(active)
+    }
+
+    /// Get the count of active participants in a quest.
+    /// Returns the number of enrollees with Active status (the default).
+    /// More efficient than `get_active_participants().len()` when only the
+    /// count is needed (e.g. analytics dashboards, badge displays).
+    pub fn get_active_participant_count(env: Env, quest_id: u32) -> Result<u32, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        let mut count = 0u32;
+
+        for enrollee in enrollees.iter() {
+            let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
+            let status: EnrolleeStatus = env
+                .storage()
+                .persistent()
+                .get(&status_key)
+                .unwrap_or(EnrolleeStatus::Active);
+
+            if status == EnrolleeStatus::Active {
+                count += 1;
+            }
+        }
+
+        Self::bump(&env, quest_id);
+        Ok(count)
+    }
+
+    /// Set the status of an enrollee. Owner only.
+    pub fn set_enrollee_status(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+        status: EnrolleeStatus,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        if !enrollees.contains(&enrollee) {
+            return Err(Error::NotEnrolled);
+        }
+
+        let status_key = DataKey::EnrolleeStatus(quest_id, enrollee.clone());
+        env.storage().persistent().set(&status_key, &status);
+        common::extend_persistent_ttl(&env, &status_key);
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_status_changed"),),
+            (quest_id, enrollee, status, env.ledger().timestamp()),
+        );
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the status of an enrollee. Defaults to Active if not set.
+    pub fn get_enrollee_status(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+    ) -> Result<EnrolleeStatus, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let status_key = DataKey::EnrolleeStatus(quest_id, enrollee);
+        let status: EnrolleeStatus = env
+            .storage()
+            .persistent()
+            .get(&status_key)
+            .unwrap_or(EnrolleeStatus::Active);
+        Self::bump(&env, quest_id);
+        Ok(status)
+    }
+
     /// Update or clear the deadline for a quest. Owner only.
     /// Pass 0 to remove the deadline.
     pub fn set_deadline(env: Env, quest_id: u32, deadline: u64) -> Result<(), Error> {
@@ -903,6 +1233,53 @@ impl QuestContract {
             return Ok(false);
         }
         Ok(env.ledger().timestamp() > quest.deadline)
+    }
+
+    /// Estimate the rent (in stroops) `create_quest` will need to keep the
+    /// resulting `QuestInfo` entry alive for one TTL cycle (~30 days), based
+    /// on the sizes of the variable-length fields the caller intends to
+    /// submit. This is a planning aid only — see `docs/GAS_COSTS.md` for the
+    /// full storage cost model and its accuracy caveats. Always confirm the
+    /// exact fee with `simulateTransaction` before signing.
+    pub fn estimate_quest_creation_rent(
+        _env: Env,
+        name_len: u32,
+        description_len: u32,
+        category_len: u32,
+        tag_count: u32,
+    ) -> i128 {
+        // Fixed overhead accounts for the non-string QuestInfo fields
+        // (addresses, numeric fields, enums, and struct/XDR framing).
+        const FIXED_OVERHEAD_BYTES: u32 = 256;
+        const AVG_TAG_BYTES: u32 = MAX_TAG_LEN;
+
+        let entry_size = FIXED_OVERHEAD_BYTES
+            + name_len
+            + description_len
+            + category_len
+            + (tag_count.min(MAX_TAGS) * AVG_TAG_BYTES);
+
+        common::estimate_persistent_rent(entry_size)
+    }
+
+    /// Explicitly refresh the TTL for a quest, its enrollee list, and its
+    /// version history. Owner only.
+    ///
+    /// Quest data is normally kept alive as a side effect of other mutating
+    /// calls (see `bump`), but a quest that receives no updates for a long
+    /// stretch can approach expiry. This lets an owner top up the TTL
+    /// directly — e.g. from a scheduled job — without making an unrelated
+    /// state change.
+    pub fn extend_quest_ttl(env: Env, quest_id: u32, owner: Address) -> Result<(), Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        owner.require_auth();
+        Self::bump(&env, quest_id);
+        env.events()
+            .publish((Symbol::new(&env, "quest_ttl_extended"),), quest_id);
+        Ok(())
     }
 
     /// Get total quest count.
@@ -972,11 +1349,74 @@ impl QuestContract {
             }
         }
 
-        let category_key = DataKey::PublicCategoryQuests(category);
+        let category_key = DataKey::PublicCategoryQuests(category.clone());
         if env.storage().persistent().has(&category_key) {
             common::extend_persistent_ttl(&env, &category_key);
+            Self::record_category_expiry(&env, &category);
         }
         matches
+    }
+
+    /// Get metadata for a public category, including its TTL/expiry information.
+    ///
+    /// The category listing is stored as persistent data with a bounded TTL.
+    /// When that TTL elapses the listing (and the quests surfaced through it)
+    /// can vanish without warning. This query exposes `expires_at` (an absolute
+    /// ledger timestamp) and `ttl_remaining` (ledgers left) so the frontend can
+    /// show users that a category is about to disappear and suggest mitigation
+    /// (e.g. re-pinning or re-listing the quests).
+    pub fn get_category(env: Env, category: String) -> Result<CategoryInfo, Error> {
+        let key = DataKey::PublicCategoryQuests(category.clone());
+        let ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or(Vec::new(&env));
+
+        if ids.is_empty() {
+            return Err(Error::NotFound);
+        }
+
+        // The listing's expiry ledger is recorded whenever the category is
+        // (re)touched (see add/remove_id_to_index and
+        // get_public_quests_by_category). Fall back to "now + BUMP" for
+        // categories that were written before this field existed.
+        let expiry_ledger: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::CategoryExpiry(category.clone()))
+            .unwrap_or(env.ledger().sequence().saturating_add(common::BUMP));
+
+        let current_ledger = env.ledger().sequence();
+        let ttl_remaining = expiry_ledger.saturating_sub(current_ledger);
+
+        // Approximate the absolute expiry as a Unix timestamp. Soroban ledgers
+        // close roughly every ~5s (ADR-005); convert the remaining ledgers to
+        // seconds and add to the current ledger close time.
+        let approx_seconds_per_ledger: u64 = 5;
+        let current_ts = env.ledger().timestamp();
+        let expires_at = current_ts.saturating_add(
+            (ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger),
+        );
+        // Soroban only exposes the remaining ledger count for a persistent
+        // entry, so approximate the absolute expiry. At ~5s/ledger (ADR-005)
+        // this is accurate to within the network's drift tolerance.
+        let ttl_remaining = BUMP;
+        let approx_seconds_per_ledger: u64 = 5;
+        let now = env.ledger().timestamp();
+        let expires_at =
+            now.saturating_add((ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger));
+
+        // Refresh the listing's TTL on read so a popular category does not
+        // expire merely from being queried.
+        env.storage().persistent().extend_ttl(&key, THRESHOLD, BUMP);
+
+        Ok(CategoryInfo {
+            category,
+            quest_count: ids.len(),
+            ttl_remaining,
+            expires_at,
+        })
     }
 
     /// Get all quests owned by an address.
@@ -1035,6 +1475,315 @@ impl QuestContract {
         quest.max_enrollees
     }
 
+    /// Set prerequisites for a quest. Owner only.
+    /// Pass an empty vector to remove all prerequisites.
+    pub fn set_prerequisites(
+        env: Env,
+        quest_id: u32,
+        prerequisite_ids: Vec<u32>,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        quest.prerequisite_quest_ids = prerequisite_ids;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    // ── Ownership transfer ────────────────────────────────────────────────
+
+    /// Initiate a two-step ownership transfer. Only the current owner can call.
+    /// The quest must be Active. A pending transfer replaces any existing one.
+    pub fn initiate_transfer(
+        env: Env,
+        quest_id: u32,
+        nominee: Address,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status != QuestStatus::Active {
+            return Err(Error::InvalidInput);
+        }
+        if nominee == quest.owner {
+            return Err(Error::InvalidInput);
+        }
+
+        let transfer = PendingTransfer {
+            nominee: nominee.clone(),
+            initiated_at: env.ledger().timestamp(),
+        };
+        let key = DataKey::PendingTransfer(quest_id);
+        env.storage().persistent().set(&key, &transfer);
+        common::extend_persistent_ttl(&env, &key);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transfer_initiated"),),
+            (quest_id, quest.owner, nominee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Accept a pending ownership transfer. Only the nominated address can call.
+    /// Transfers ownership and clears the pending request.
+    pub fn accept_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let nominee = env.invoker();
+        let transfer_key = DataKey::PendingTransfer(quest_id);
+        let transfer: PendingTransfer = env
+            .storage()
+            .persistent()
+            .get(&transfer_key)
+            .ok_or(Error::NoPendingTransfer)?;
+
+        if transfer.nominee != nominee {
+            return Err(Error::NotTransferNominee);
+        }
+
+        let mut quest = Self::load_quest(&env, quest_id)?;
+        if quest.status != QuestStatus::Active {
+            return Err(Error::InvalidInput);
+        }
+
+        let old_owner = quest.owner.clone();
+        quest.owner = nominee.clone();
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &quest);
+        env.storage().persistent().remove(&transfer_key);
+
+        // Update OwnerQuests indices
+        Self::remove_id_from_index(&env, DataKey::OwnerQuests(old_owner.clone()), quest_id);
+        Self::add_id_to_index(&env, DataKey::OwnerQuests(nominee.clone()), quest_id);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transferred"),),
+            (quest_id, old_owner, nominee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Cancel a pending ownership transfer. Only the current owner can call.
+    pub fn cancel_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let transfer_key = DataKey::PendingTransfer(quest_id);
+        if !env.storage().persistent().has(&transfer_key) {
+            return Err(Error::NoPendingTransfer);
+        }
+
+        env.storage().persistent().remove(&transfer_key);
+
+        env.events().publish(
+            (Symbol::new(&env, "ownership_transfer_cancelled"),),
+            (quest_id, quest.owner, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the pending ownership transfer for a quest, if any.
+    pub fn get_pending_transfer(
+        env: Env,
+        quest_id: u32,
+    ) -> Result<Option<PendingTransfer>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let key = DataKey::PendingTransfer(quest_id);
+        let transfer: Option<PendingTransfer> = env.storage().persistent().get(&key);
+        Self::bump(&env, quest_id);
+        Ok(transfer)
+    }
+
+    // ── Waitlist ──────────────────────────────────────────────────────────
+
+    /// Join the waitlist for a quest that is full. FIFO ordering.
+    /// The quest must have max_enrollees set and be full.
+    pub fn join_waitlist(
+        env: Env,
+        enrollee: Address,
+        quest_id: u32,
+    ) -> Result<(), Error> {
+        enrollee.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return Err(Error::EnrollmentClosed);
+        }
+        if quest.visibility == Visibility::Private || quest.visibility == Visibility::InviteOnly {
+            return Err(Error::InviteOnly);
+        }
+
+        let max = quest.max_enrollees.ok_or(Error::InvalidInput)?;
+        let enrollees = Self::load_enrollees(&env, quest_id);
+        if enrollees.len() < max {
+            return Err(Error::InvalidInput); // quest is not full
+        }
+        if enrollees.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        if waitlist.contains(&enrollee) {
+            return Err(Error::AlreadyEnrolled);
+        }
+
+        let mut new_waitlist = waitlist;
+        new_waitlist.push_back(enrollee.clone());
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &new_waitlist);
+        common::extend_persistent_ttl(&env, &key);
+
+        env.events().publish(
+            (Symbol::new(&env, "waitlist_joined"),),
+            (quest_id, enrollee, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Promote the next person from the waitlist to enrollee. Owner only.
+    /// Returns the promoted address, or None if the waitlist is empty.
+    pub fn promote_from_waitlist(
+        env: Env,
+        quest_id: u32,
+    ) -> Result<Option<Address>, Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
+            return Err(Error::EnrollmentClosed);
+        }
+
+        let mut waitlist = Self::load_waitlist(&env, quest_id);
+        if waitlist.is_empty() {
+            return Ok(None);
+        }
+
+        // Pop first (FIFO)
+        let promoted = waitlist.get(0).ok_or(Error::NotFound)?;
+        waitlist.remove(0);
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &waitlist);
+        common::extend_persistent_ttl(&env, &key);
+
+        // Enroll the promoted person
+        let mut enrollees = Self::load_enrollees(&env, quest_id);
+        enrollees.push_back(promoted.clone());
+        env.storage()
+            .persistent()
+            .set(&DataKey::Enrollees(quest_id), &enrollees);
+        Self::add_id_to_index(&env, DataKey::EnrolleeQuests(promoted.clone()), quest_id);
+
+        env.events().publish(
+            (Symbol::new(&env, "waitlist_promoted"),),
+            (quest_id, promoted.clone(), env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(Some(promoted))
+    }
+
+    /// Remove a person from the waitlist. Owner only.
+    pub fn remove_from_waitlist(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+    ) -> Result<(), Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        let mut waitlist = Self::load_waitlist(&env, quest_id);
+        let mut found = false;
+        let mut new_list = Vec::new(&env);
+
+        for i in 0..waitlist.len() {
+            let addr = waitlist.get(i).unwrap();
+            if addr == enrollee {
+                found = true;
+            } else {
+                new_list.push_back(addr);
+            }
+        }
+
+        if !found {
+            return Err(Error::NotFound);
+        }
+
+        let key = DataKey::Waitlist(quest_id);
+        env.storage().persistent().set(&key, &new_list);
+        common::extend_persistent_ttl(&env, &key);
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Get the waitlist for a quest.
+    pub fn get_waitlist(env: Env, quest_id: u32) -> Result<Vec<Address>, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        Self::bump(&env, quest_id);
+        Ok(waitlist)
+    }
+
+    /// Get the waitlist length for a quest.
+    pub fn get_waitlist_length(env: Env, quest_id: u32) -> Result<u32, Error> {
+        Self::load_quest(&env, quest_id)?;
+        let waitlist = Self::load_waitlist(&env, quest_id);
+        Self::bump(&env, quest_id);
+        Ok(waitlist.len())
+    }
+
+    /// Get prerequisites for a quest.
+    pub fn get_prerequisites(env: Env, quest_id: u32) -> Result<Vec<u32>, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        Self::bump(&env, quest_id);
+        Ok(quest.prerequisite_quest_ids)
+    }
+
+    /// Check if a user has completed all prerequisites for a quest.
+    pub fn has_completed_prerequisites(
+        env: Env,
+        user: Address,
+        quest_id: u32,
+    ) -> Result<bool, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+
+        if quest.prerequisite_quest_ids.len() == 0 {
+            return Ok(true);
+        }
+
+        for prerequisite_id in quest.prerequisite_quest_ids.iter() {
+            let prerequisite = Self::load_quest(&env, prerequisite_id)?;
+            if prerequisite.status != QuestStatus::Active {
+                continue;
+            }
+
+            let enrollees = Self::load_enrollees(&env, prerequisite_id);
+            if !enrollees.contains(&user) {
+                return Ok(false);
+            }
+        }
+
+        Self::bump(&env, quest_id);
+        Ok(true)
+    }
+
     // --- internals ---
 
     fn load_quest(env: &Env, id: u32) -> Result<QuestInfo, Error> {
@@ -1071,6 +1820,13 @@ impl QuestContract {
         env.storage()
             .persistent()
             .get(&DataKey::Enrollees(id))
+            .unwrap_or(Vec::new(env))
+    }
+
+    fn load_waitlist(env: &Env, id: u32) -> Vec<Address> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Waitlist(id))
             .unwrap_or(Vec::new(env))
     }
 
@@ -1136,9 +1892,33 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_list);
-        if found {
-            Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+        Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+
+        // Auto-promote from waitlist if the quest has a cap and there are waitlisted people.
+        let quest = Self::load_quest(env, quest_id)?;
+        if quest.max_enrollees.is_some() {
+            let mut waitlist = Self::load_waitlist(env, quest_id);
+            if !waitlist.is_empty() {
+                let promoted = waitlist.get(0).ok_or(Error::NotFound)?;
+                waitlist.remove(0);
+                let wl_key = DataKey::Waitlist(quest_id);
+                env.storage().persistent().set(&wl_key, &waitlist);
+                common::extend_persistent_ttl(env, &wl_key);
+
+                let mut current_enrollees = Self::load_enrollees(env, quest_id);
+                current_enrollees.push_back(promoted.clone());
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::Enrollees(quest_id), &current_enrollees);
+                Self::add_id_to_index(env, DataKey::EnrolleeQuests(promoted.clone()), quest_id);
+
+                env.events().publish(
+                    (Symbol::new(env, "waitlist_promoted"),),
+                    (quest_id, promoted, env.ledger().timestamp()),
+                );
+            }
         }
+
         Ok(())
     }
 
@@ -1153,6 +1933,9 @@ impl QuestContract {
             env.storage().persistent().set(&key, &ids);
         }
         common::extend_persistent_ttl(env, &key);
+        if let DataKey::PublicCategoryQuests(c) = &key {
+            Self::record_category_expiry(env, c);
+        }
     }
 
     fn remove_id_from_index(env: &Env, key: DataKey, id: u32) {
@@ -1173,6 +1956,20 @@ impl QuestContract {
 
         env.storage().persistent().set(&key, &updated);
         common::extend_persistent_ttl(env, &key);
+        if let DataKey::PublicCategoryQuests(c) = &key {
+            Self::record_category_expiry(env, c);
+        }
+    }
+
+    /// Record the absolute ledger at which a public category's listing expires.
+    /// Mirrors the TTL bump performed by `extend_persistent_ttl` so that
+    /// `get_category` can surface an accurate `expires_at` (soroban-sdk 22 has
+    /// no runtime TTL read outside of testutils).
+    fn record_category_expiry(env: &Env, category: &String) {
+        let expiry = env.ledger().sequence().saturating_add(common::BUMP);
+        env.storage()
+            .persistent()
+            .set(&DataKey::CategoryExpiry(category.clone()), &expiry);
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {
@@ -1192,9 +1989,29 @@ impl QuestContract {
 
     fn bump(env: &Env, quest_id: u32) {
         extend_instance_ttl(env);
-        common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
-        common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        if env.storage().persistent().has(&DataKey::Quest(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
+        }
+        if env.storage().persistent().has(&DataKey::Enrollees(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
+        }
+        if env.storage().persistent().has(&DataKey::QuestVersionHistory(quest_id)) {
+            common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Waitlist(quest_id))
+        {
+            common::extend_persistent_ttl(env, &DataKey::Waitlist(quest_id));
+        }
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::PendingTransfer(quest_id))
+        {
+            common::extend_persistent_ttl(env, &DataKey::PendingTransfer(quest_id));
+        }
     }
 }
 

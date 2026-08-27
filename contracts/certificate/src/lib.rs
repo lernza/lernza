@@ -1,12 +1,13 @@
 #![no_std]
 
-use common::{extend_instance_ttl, extend_persistent_ttl, BUMP, THRESHOLD};
+use common::{extend_instance_ttl, extend_persistent_ttl};
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, Address, Env, String, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, String,
+    Symbol, Vec,
 };
 use stellar_access::ownable::{self as ownable, Ownable};
-use stellar_macros::{default_impl, only_owner};
-use stellar_tokens::non_fungible::{burnable::NonFungibleBurnable, Base, NonFungibleToken};
+use stellar_macros::only_owner;
+use stellar_tokens::non_fungible::Base;
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +28,7 @@ pub enum DataKey {
     UserCertificates(Address),
     MetadataBase,
     RevokedCertificate(u32),
+    MilestoneContract,
     Paused,
 }
 
@@ -38,18 +40,20 @@ impl common::IsDataKey for DataKey {}
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     NotOwner = 10,
     AlreadyIssued = 20,
     InvalidQuest = 5,
     AlreadyRevoked = 6,
     MetadataBaseNotSet = 7,
+    MilestoneContractNotSet = 8,
+    NotCompleted = 9,
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
 }
 
 // BUMP and THRESHOLD now come from common
@@ -69,6 +73,19 @@ impl CertificateContract {
         ownable::set_owner(&env, &owner);
         // before: env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         extend_instance_ttl(&env);
+    }
+
+    /// Returns the owner, which is this contract's administrator role.
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        ownable::get_owner(&env).ok_or(Error::NotOwner)
+    }
+
+    /// Upgrade this contract's WASM. The `only_owner` guard enforces the
+    /// administrator role before Soroban replaces the current code.
+    #[only_owner]
+    pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
+        env.deployer().update_current_contract_wasm(new_wasm_hash);
+        Ok(())
     }
 
     #[only_owner]
@@ -243,7 +260,11 @@ impl CertificateContract {
 
     #[only_owner]
     pub fn set_metadata_base(env: Env, uri: String) -> Result<(), Error> {
+        if !common::is_valid_url(&uri) {
+            return Err(Error::InvalidInput);
+        }
         env.storage().instance().set(&DataKey::MetadataBase, &uri);
+        extend_instance_ttl(&env);
         env.events()
             .publish((Symbol::new(&env, "metadata_base_updated"),), uri);
         Ok(())
@@ -284,21 +305,78 @@ impl CertificateContract {
         }
         Ok(())
     }
+
+    #[only_owner]
+    pub fn set_milestone_contract(env: Env, milestone_contract: Address) -> Result<(), Error> {
+        env.storage()
+            .instance()
+            .set(&DataKey::MilestoneContract, &milestone_contract);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    pub fn get_milestone_contract(env: Env) -> Result<Address, Error> {
+        env.storage()
+            .instance()
+            .get(&DataKey::MilestoneContract)
+            .ok_or(Error::MilestoneContractNotSet)
+    }
+
+    pub fn verify_and_issue(
+        env: Env,
+        quest_id: u32,
+        quest_name: String,
+        quest_category: String,
+        recipient: Address,
+    ) -> Result<u32, Error> {
+        Self::require_not_paused(&env)?;
+        let milestone_contract = Self::get_milestone_contract(env.clone())?;
+
+        // Cross-contract call to check completions
+        let total_milestones: u32 = env.invoke_contract(
+            &milestone_contract,
+            &Symbol::new(&env, "get_milestone_count"),
+            soroban_sdk::vec![&env, quest_id.into_val(&env)],
+        );
+
+        let completions: u32 = env.invoke_contract(
+            &milestone_contract,
+            &Symbol::new(&env, "get_enrollee_completions"),
+            soroban_sdk::vec![&env, quest_id.into_val(&env), recipient.into_val(&env)],
+        );
+
+        if total_milestones == 0 || completions < total_milestones {
+            return Err(Error::NotCompleted);
+        }
+
+        // Mint using the contract's own address as the issuer
+        Self::mint_certificate(
+            env.clone(),
+            quest_id,
+            quest_name,
+            quest_category,
+            recipient,
+            env.current_contract_address(),
+        )
+    }
+
+    // SBT specific: Expose balance_of and owner_of, but NOT transfer
+    pub fn balance_of(env: Env, id: Address) -> i128 {
+        Base::balance(&env, &id).into()
+    }
+
+    pub fn owner_of(env: Env, token_id: u32) -> Option<Address> {
+        Some(Base::owner_of(&env, token_id))
+    }
+
+    pub fn name(env: Env) -> String {
+        Base::name(&env)
+    }
+
+    pub fn symbol(env: Env) -> String {
+        Base::symbol(&env)
+    }
 }
-
-#[default_impl]
-#[contractimpl]
-impl NonFungibleToken for CertificateContract {
-    type ContractType = Base;
-}
-
-#[default_impl]
-#[contractimpl]
-impl NonFungibleBurnable for CertificateContract {}
-
-#[default_impl]
-#[contractimpl]
-impl Ownable for CertificateContract {}
 
 #[cfg(test)]
 mod test;

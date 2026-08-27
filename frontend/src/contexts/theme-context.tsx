@@ -12,7 +12,9 @@ function getInitialTheme(): Theme {
     // Ignore localStorage errors
   }
 
-  // Default to light; respect the user's explicit choice once they toggle.
+  // Respect system preference if no explicit user choice saved
+  if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark"
+
   return "light"
 }
 

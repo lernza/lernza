@@ -1,0 +1,101 @@
+# Implementation Plan
+
+- [ ] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Transaction Validation Vulnerabilities
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the bug exists
+  - **Scoped PBT Approach**: Test concrete replay and invalid state transition scenarios across all three transaction flows
+  - Test implementation details from Bug Condition in design:
+    - Replay `verify_completion` twice for same (quest_id, milestone_id, enrollee)
+    - Call `submit_for_review` for already-completed milestone
+    - Call `approve_completion` when no submission exists
+    - Duplicate peer approval from same peer
+    - Call `verify_completion` for unenrolled user
+    - Call `submit_for_review` while unenrolled
+    - Call `approve_completion` while unenrolled
+    - Skip prerequisite milestone validation
+  - The test assertions should match the Expected Behavior Properties from design:
+    - Replay attempts should return appropriate errors (AlreadyCompleted, AlreadySubmitted, AlreadyApproved)
+    - Invalid state transitions should return appropriate errors (NotSubmitted, NotEnrolled, MilestoneNotUnlocked)
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bug exists)
+  - Document counterexamples found to understand root cause
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Valid Transaction Processing
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for valid transaction flows:
+    - Legitimate first-time `verify_completion` calls mark milestones as completed
+    - Legitimate first-time `submit_for_review` calls create pending submissions
+    - Legitimate peer approvals from enrolled users are recorded correctly
+    - Reward calculations work correctly for all distribution modes (Custom, Flat, Competitive)
+    - Events are emitted correctly (milestone_completed, peer_approved)
+    - Certificate minting is attempted and rolls back on failure
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - Valid first-time verification preservation
+    - Valid submission flow preservation
+    - Valid approval flow preservation
+    - Reward calculation preservation across distribution modes
+    - Event emission preservation
+    - Certificate minting preservation
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
+
+- [ ] 3. Fix transaction validation vulnerabilities in milestone contract
+
+  - [ ] 3.1 Strengthen `verify_completion` validation
+    - Verify `Completed` storage key is checked BEFORE any state mutations (line ~850)
+    - Verify `is_enrolled` is called to validate current enrollment status (line ~705-707)
+    - Verify `ensure_previous_completed` is called to enforce milestone ordering
+    - Add check to prevent conflict with existing pending peer review submission
+    - _Bug_Condition: isBugCondition(input) where input.function_name = 'verify_completion' AND (missing idempotency check OR missing state transition validation OR missing prerequisite validation OR missing enrollment validation)_
+    - _Expected_Behavior: All replay attempts return Error::AlreadyCompleted; all operations on unenrolled users return Error::NotEnrolled; all prerequisite violations return Error::MilestoneNotUnlocked_
+    - _Preservation: Valid first-time verifications continue to mark milestones as completed and emit completion events_
+    - _Requirements: 1.1, 1.4, 2.1, 2.4, 2.5, 3.1, 3.5_
+
+  - [ ] 3.2 Strengthen `submit_for_review` validation
+    - Verify `Completed` storage key is checked to prevent submission of already-completed milestones (line ~766)
+    - Verify `PendingSubmission` storage key is checked to prevent duplicate submissions (line ~770-772)
+    - Verify `is_enrolled` is called at the correct point to validate current enrollment (line ~783-785)
+    - Verify `ensure_previous_completed` is called to validate prerequisites (line ~788)
+    - _Bug_Condition: isBugCondition(input) where input.function_name = 'submit_for_review' AND (missing idempotency check OR missing state transition validation OR missing prerequisite validation OR missing enrollment validation)_
+    - _Expected_Behavior: All replay attempts return Error::AlreadySubmitted; submissions for completed milestones return Error::AlreadyCompleted; operations on unenrolled users return Error::NotEnrolled_
+    - _Preservation: Valid submissions continue to store pending submissions and initialize approval counts_
+    - _Requirements: 1.1, 1.2, 1.4, 2.2, 2.4, 2.5, 3.2, 3.5, 3.7_
+
+  - [ ] 3.3 Strengthen `approve_completion` validation
+    - Verify `PendingSubmission` exists before processing approval (line ~857-859)
+    - Verify `Completed` storage key is checked in correct order (line ~848-850)
+    - Verify `PeerApproval` storage key prevents duplicate approvals (line ~866-869)
+    - Verify `is_enrolled` validates approving peer's current enrollment (line ~872-874)
+    - Verify `ensure_previous_completed` is called before auto-completion when threshold reached (line ~915)
+    - _Bug_Condition: isBugCondition(input) where input.function_name = 'approve_completion' AND (missing idempotency check OR missing state transition validation OR missing prerequisite validation OR missing enrollment validation)_
+    - _Expected_Behavior: Approvals without submission return Error::NotSubmitted; duplicate approvals return Error::AlreadyApproved; operations on unenrolled peers return Error::NotEnrolled_
+    - _Preservation: Valid approvals continue to auto-complete milestones and calculate rewards correctly_
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.3, 2.4, 2.5, 3.3, 3.6, 3.7_
+
+  - [ ] 3.4 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Transaction Validation Works Correctly
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - _Requirements: Expected Behavior Properties from design (2.1, 2.2, 2.3, 2.4, 2.5)_
+
+  - [ ] 3.5 Verify preservation tests still pass
+    - **Property 2: Preservation** - Valid Transaction Processing Unchanged
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix (no regressions)
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.

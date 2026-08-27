@@ -1,28 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
-
-async function mockWallet(page: Page) {
-  await page.addInitScript(() => {
-    const mockAddress = "GBMOCKADDRESS123STELLAR456WALLET789ABCDEFGH"
-    const stub = {
-      isConnected: () => Promise.resolve(true),
-      getAddress: () => Promise.resolve({ address: mockAddress }),
-      getNetwork: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      getNetworkDetails: () =>
-        Promise.resolve({
-          network: "TESTNET",
-          networkPassphrase: "Test SDF Network ; September 2015",
-        }),
-      requestAccess: () => Promise.resolve({ address: mockAddress }),
-      signTransaction: (xdr: string) => Promise.resolve({ signedTxXdr: xdr }),
-    }
-    Object.defineProperty(window, "freighter", { value: stub, writable: true })
-    Object.defineProperty(window, "freighterApi", { value: stub, writable: true })
-  })
-}
+import { test, expect } from "@playwright/test"
+import { mockWallet } from "./helpers/mock-wallet"
 
 test.describe("Milestone completion happy path", () => {
   test("create quest page is accessible and renders form", async ({ page }) => {

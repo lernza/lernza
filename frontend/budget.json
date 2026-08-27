@@ -12,6 +12,10 @@
             "budget": 200
           },
           {
+            "resourceType": "stylesheet",
+            "budget": 60
+          },
+          {
             "resourceType": "image",
             "budget": 100
           },

@@ -1,3 +1,4 @@
+/** Health-aware Soroban RPC endpoint manager with automatic failover. */
 import * as rpc from "@stellar/stellar-sdk/rpc"
 
 // `getHealth` exists on the runtime Server but isn't part of the SDK's public
@@ -56,7 +57,8 @@ export class RpcHealthManager {
    * Create a Soroban RPC server using the current healthy endpoint
    */
   getServer(): rpc.Server {
-    return new rpc.Server(this.getHealthyEndpoint())
+    const endpoint = this.getHealthyEndpoint()
+    return new rpc.Server(endpoint, { allowHttp: endpoint.startsWith("http://") })
   }
 
   /**

@@ -56,6 +56,7 @@ proptest! {
                         &fake_token,
                         &Visibility::Public,
                         &None,
+                        &None,
                     );
                     // Each new ID must be strictly greater than the previous
                     if let Some(prev) = prev_id {

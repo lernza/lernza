@@ -31,9 +31,9 @@ explicitly.
 > `Admin` address. This function is the only upgrade surface; upgrading via
 > other means is not supported.
 >
-> **Current state (2026-07):** No contract yet ships this entry point. Adding
-> it is a required step before any contract can be upgraded without full
-> redeployment. The runbook tracks this as a prerequisite.
+> **Current state (2026-07):** All four contracts expose an admin-gated
+> `upgrade` entry point. The quest contract additionally exposes a bounded,
+> admin-gated `migrate_quest_data` entry point for schema migration batches.
 
 ---
 

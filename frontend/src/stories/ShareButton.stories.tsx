@@ -1,13 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { ShareButton } from "@/components/share-button"
-import { fn } from "@storybook/test"
 
 const meta: Meta<typeof ShareButton> = {
   title: "Components/ShareButton",
   component: ShareButton,
   tags: ["autodocs"],
   args: {
-    onToast: fn(),
+    onToast: () => {},
   },
 }
 

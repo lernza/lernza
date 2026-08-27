@@ -33,7 +33,7 @@ Lernza contracts must expose an `upgrade` function before they can be upgraded
 without full redeployment:
 
 ```rust
-// Required in every upgradeable contract (not yet present — see note below)
+// Required in every upgradeable contract
 pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), Error> {
     admin.require_auth();
     Self::require_admin(&env, &admin)?;
@@ -42,11 +42,6 @@ pub fn upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<()
 }
 ```
 
-> **Current state:** No Lernza contract ships this entry point yet. If it is
-> absent, the only upgrade path is a full redeployment followed by
-> re-initialization and frontend reconfiguration. Complete the work to add
-> `upgrade` to a contract **before** scheduling an in-place upgrade.
->
 > Confirm which contracts have `upgrade` before proceeding:
 > ```bash
 > grep -r "fn upgrade" contracts/
@@ -285,6 +280,16 @@ stellar contract invoke \
   -- migrate_<entity> \
   --admin <ADMIN_ADDRESS> \
   --ids '[0, 1, 2, ...]'   # batch of IDs to migrate
+```
+
+For quest data migrations, use the checked batching utility after the WASM
+upgrade succeeds. Start with `--dry-run`, then submit the same command only
+after reviewing the constructed transaction:
+
+```bash
+./scripts/migrate-quest-data.sh \
+  --network testnet --source lernza-admin --contract-id <QUEST_CONTRACT_ID> \
+  --quest-ids 0,1,2 --schema-version 1 --dry-run
 ```
 
 For large state sets, run in batches to stay within the transaction fee budget.

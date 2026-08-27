@@ -1,4 +1,4 @@
-import { Users, Plus, Trash2 } from "lucide-react"
+import { Users, Plus, Trash2, Coins } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -24,6 +24,10 @@ interface EnrolleesSectionProps {
   milestones: Milestone[]
   completions: Completion[]
   onAddEnrollee: () => void
+  /** Called when user clicks "Claim Rewards" for a specific enrollee. */
+  onClaimRewards?: (enrollee: Enrollee, claimableMilestones: Milestone[]) => void
+  /** Whether batch claiming is currently in progress. */
+  isClaiming?: boolean
 }
 
 export function EnrolleesSection({
@@ -31,6 +35,8 @@ export function EnrolleesSection({
   milestones,
   completions,
   onAddEnrollee,
+  onClaimRewards,
+  isClaiming = false,
 }: EnrolleesSectionProps) {
   if (enrollees.length === 0) {
     return (
@@ -63,13 +69,13 @@ export function EnrolleesSection({
             {/* Enrollee info */}
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold">{enrollee.name || "Unnamed"}</h3>
-              <p className="text-muted-foreground mt-1 truncate text-sm font-mono">
+              <p className="text-muted-foreground mt-1 truncate font-mono text-sm">
                 {enrollee.address}
               </p>
               <div className="mt-3 flex items-center gap-2">
-                <div className="h-1 w-32 overflow-hidden rounded-full bg-muted">
+                <div className="bg-muted h-1 w-32 overflow-hidden rounded-full">
                   <div
-                    className="h-full bg-primary transition-all"
+                    className="bg-primary h-full transition-all"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -79,15 +85,32 @@ export function EnrolleesSection({
               </div>
             </div>
 
-            {/* Earned reward */}
+            {/* Earned reward & actions */}
             <div className="flex items-center gap-4 sm:justify-end">
-              {milestones.length > 0 && (
-                <Badge variant="secondary">
-                  {milestones
-                    .filter((_, i) => i < completedCount)
-                    .reduce((sum, m) => sum + m.rewardAmount, 0)}{" "}
-                  USDC earned
-                </Badge>
+              {milestones.length > 0 && completedCount > 0 && (
+                <>
+                  <Badge variant="secondary">
+                    {milestones
+                      .filter((_, i) => i < completedCount)
+                      .reduce((sum, m) => sum + m.rewardAmount, 0)}{" "}
+                    USDC earned
+                  </Badge>
+                  {onClaimRewards && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isClaiming}
+                      onClick={() => {
+                        const claimable = milestones.filter((_, i) => i < completedCount)
+                        onClaimRewards(enrollee, claimable)
+                      }}
+                      className="gap-1.5"
+                    >
+                      <Coins className="h-4 w-4" />
+                      Collect Rewards
+                    </Button>
+                  )}
+                </>
               )}
               <Button variant="ghost" size="sm">
                 <Trash2 className="h-4 w-4" />

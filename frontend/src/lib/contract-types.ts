@@ -19,6 +19,8 @@ export const MAX_REWARD_AMOUNT = 1_000_000_000
 export const Visibility = {
   Public: 0,
   Private: 1,
+  Unlisted: 2,
+  InviteOnly: 3,
 } as const
 export type Visibility = (typeof Visibility)[keyof typeof Visibility]
 
@@ -29,6 +31,7 @@ export type Visibility = (typeof Visibility)[keyof typeof Visibility]
 export const QuestStatus = {
   Active: 0,
   Archived: 1,
+  Cancelled: 2,
 } as const
 export type QuestStatus = (typeof QuestStatus)[keyof typeof QuestStatus]
 
@@ -56,6 +59,18 @@ export interface QuestInfo {
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
+}
+
+/**
+ * Metadata returned by the `get_category` contract query (issue #1348).
+ * `expiresAt` is an absolute ledger timestamp (seconds) at which the category
+ * listing's TTL expires and the category can vanish from discovery.
+ */
+export interface CategoryInfo {
+  category: string // String
+  questCount: number // u32
+  ttlRemaining: number // u32 (ledgers left)
+  expiresAt: number // u64 (absolute expiry timestamp)
 }
 
 // ─── Rewards Contract Types ──────────────────────────────────────────────────
@@ -102,3 +117,39 @@ export type UserEarnings = bigint
  * Uses bigint to match i128 from Rust contract.
  */
 export type TotalDistributed = bigint
+
+// ─── Recipient Status ────────────────────────────────────────────────────────
+
+/**
+ * Status of a transfer recipient, used to surface warnings in confirmation dialogs.
+ * "active" = no warnings; other values render an alert before the user confirms.
+ */
+export type RecipientStatus = "active" | "suspended" | "opt_out" | "inactive"
+
+// ─── Batch Claim Types ───────────────────────────────────────────────────────
+
+/**
+ * Per-milestone claim result for batch reward distribution.
+ * Tracks individual success/failure with error details for retryability.
+ */
+export interface MilestoneClaimResult {
+  milestoneId: number
+  milestoneTitle: string
+  status: "success" | "failed"
+  rewardAmount?: bigint
+  txHash?: string
+  error?: string
+}
+
+/**
+ * Summary of a batch claim operation.
+ * Includes all individual results plus aggregate counts.
+ */
+export interface BatchClaimSummary {
+  results: MilestoneClaimResult[]
+  successCount: number
+  failureCount: number
+  totalAmount: bigint
+  questId: number
+  enrollee: string
+}

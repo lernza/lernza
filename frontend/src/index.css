@@ -520,6 +520,13 @@ body {
   letter-spacing: -0.005em;
 }
 
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
 /* Editorial display type: serif headings with optical sizing. Opt in with
    `.font-display` on hero/section headings; UI labels stay sans. */
 .font-display {

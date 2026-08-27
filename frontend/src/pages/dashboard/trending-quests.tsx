@@ -2,20 +2,21 @@ import { Check, Sparkles, Users, Coins } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
+import { env } from "@/lib/env"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
 import type { QuestInfo } from "@/lib/contracts/quest"
-import type { Quest } from "@/lib/mock-data"
+// Quest type removed — component now accepts only QuestInfo[]
 import type { QuestStatSummary } from "@/hooks/use-quest-stats"
 
 interface TrendingQuestsProps {
-  quests: QuestInfo[] | Quest[]
+  quests: QuestInfo[]
   statsByQuest?: Record<number, Pick<QuestStatSummary, "enrolleeCount" | "poolBalance">>
   onSelectQuest: (id: number) => void
 }
 
 export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: TrendingQuestsProps) {
   const tokenAddress =
-    import.meta.env.VITE_REWARDS_TOKEN_CONTRACT_ID || import.meta.env.VITE_USDC_TOKEN_ADDRESS || ""
+    env.VITE_REWARDS_TOKEN_CONTRACT_ID || env.VITE_USDC_TOKEN_ADDRESS || ""
   const { metadata: tokenMetadata } = useTokenMetadata(tokenAddress)
 
   const formatRewardAmount = (amount: number) => {
@@ -32,8 +33,8 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
       <div className="space-y-4">
         {quests.map(quest => {
           const stats = statsByQuest?.[quest.id] ?? {
-            enrolleeCount: ("enrolleeCount" in quest ? quest.enrolleeCount : 0) ?? 0,
-            poolBalance: ("poolBalance" in quest ? quest.poolBalance : 0) ?? 0,
+            enrolleeCount: 0,
+            poolBalance: 0,
           }
 
           return (

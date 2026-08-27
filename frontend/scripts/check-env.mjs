@@ -104,9 +104,12 @@ if (!envFilePath || fileVars.size === 0) {
     console.log(`check-env: no env file found, generating from config/${envName}.yaml...`)
     const { execSync } = await import("node:child_process")
     try {
-      execSync(`node "${loadConfigPath}" ${envName} | grep VITE_ > "${path.join(frontendRoot, ".env.local")}"`, {
-        stdio: "inherit",
-      })
+      const output = execSync(`node "${loadConfigPath}" ${envName}`, { encoding: "utf8" })
+      const filtered = output
+        .split("\n")
+        .filter(line => line.startsWith("VITE_"))
+        .join("\n")
+      fs.writeFileSync(path.join(frontendRoot, ".env.local"), filtered, "utf8")
       envFilePath = path.join(frontendRoot, ".env.local")
       fileVars = parseDotenv(envFilePath)
       console.log(`check-env: generated .env.local from config/${envName}.yaml`)

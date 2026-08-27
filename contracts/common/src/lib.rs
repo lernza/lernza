@@ -24,6 +24,13 @@ pub const THRESHOLD: u32 = 120_960;
 /// Prevents overflow-adjacent abuse and unbounded storage costs.
 pub const MAX_REWARD_AMOUNT: i128 = 1_000_000_000_000_000; // 10^15
 
+/// Metadata validation bounds for quest fields
+pub const MIN_QUEST_NAME_LEN: u32 = 1;
+pub const MAX_QUEST_NAME_LEN: u32 = 64; // duplicate of quest crate; canonicalized here for shared use
+pub const MIN_QUEST_DESCRIPTION_LEN: u32 = 1;
+pub const MAX_QUEST_DESCRIPTION_LEN: u32 = 2000;
+
+// Shared error codes
 // Shared error codes — standardised across all Lernza contracts.
 //
 // Every contract defines its own `#[contracterror]` enum because Soroban
@@ -59,6 +66,8 @@ pub fn error_info(code: u32) -> &'static str {
 pub enum Visibility {
     Public = 0,
     Private = 1,
+    Unlisted = 2,
+    InviteOnly = 3,
 }
 
 #[contracttype]
@@ -67,6 +76,17 @@ pub enum Visibility {
 pub enum QuestStatus {
     Active = 0,
     Archived = 1,
+    Cancelled = 2,
+}
+
+#[contracttype]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u32)]
+pub enum EnrolleeStatus {
+    Active = 0,
+    Suspended = 1,
+    Banned = 2,
+    Inactive = 3,
 }
 
 #[contracttype]
@@ -87,6 +107,15 @@ pub struct QuestInfo {
     pub max_enrollees: Option<u32>,
     pub verified: bool,
     pub version: u32,
+    pub prerequisite_quest_ids: Vec<u32>,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Enrollee {
+    pub address: Address,
+    pub status: EnrolleeStatus,
+    pub enrolled_at: u64,
 }
 
 /// A snapshot of quest fields at a specific version, stored for history.
@@ -163,6 +192,112 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
     env.storage().persistent().extend_ttl(key, THRESHOLD, BUMP);
 }
 
+/// Basic URL format checker used by contract metadata validation.
+/// Lightweight acceptance of http/https/ipfs schemes and rejects whitespace
+/// and empty strings.
+pub fn is_valid_url(s: &String) -> bool {
+    if s.len() == 0 || s.len() > 2048 {
+        return false;
+    }
+    let mut buf = [0u8; 2048];
+    let len = s.len() as usize;
+    s.copy_into_slice(&mut buf[..len]);
+    for &b in buf[..len].iter() {
+        if b == b' ' || b == b'\n' || b == b'\r' || b == b'\t' {
+            return false;
+        }
+    }
+    if len < 7 {
+        return false;
+    }
+    let prefix_http = b"http://";
+    let prefix_https = b"https://";
+    let prefix_ipfs = b"ipfs://";
+    if len >= 7 && &buf[..7] == prefix_http {
+        return true;
+    }
+    if len >= 8 && &buf[..8] == prefix_https {
+        return true;
+    }
+    if len >= 7 && &buf[..7] == prefix_ipfs {
+        return true;
+    }
+    false
+}
+
+/// Emit a structured event for outgoing cross-contract call attempts.
+/// Topics: (cross_contract_call,)
+/// Data: (caller_contract, target_contract, method_symbol, params)
+pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
+        (
+            env.current_contract_address(),
+            target.clone(),
+            soroban_sdk::Symbol::new(&env, method),
+            params.clone(),
+        ),
+    );
+}
+
+/// Emit a structured event for cross-contract call returns.
+/// Topics: (cross_contract_return,)
+/// Data: (caller_contract, target_contract, method_symbol, success, result)
+pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
+        (
+            env.current_contract_address(),
+            target.clone(),
+            soroban_sdk::Symbol::new(&env, method),
+            success,
+            result.clone(),
+        ),
+    );
+}
+
+/// Helper: emit a canonical quest_created event
+/// Topics: (quest_created,)
+/// Data: (quest_id, owner, name, created_at)
+pub fn emit_quest_created(
+    env: &Env,
+    quest_id: u32,
+    owner: &Address,
+    name: &String,
+    created_at: u64,
+) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "quest_created"),),
+        (quest_id, owner.clone(), name.clone(), created_at),
+    );
+}
+
+/// Helper: emit reward_funded event
+/// Topics: (reward_funded,)
+/// Data: (quest_id, funder, amount)
+pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i128) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "reward_funded"),),
+        (quest_id, funder.clone(), amount),
+    );
+}
+
+/// Helper: emit reward_distributed event
+/// Topics: (reward_distributed,)
+/// Data: (quest_id, milestone_id, enrollee, amount)
+pub fn emit_reward_distributed(
+    env: &Env,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: &Address,
+    amount: i128,
+) {
+    env.events().publish(
+        (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
+        (quest_id, milestone_id, enrollee.clone(), amount),
+    );
+}
+
 pub fn is_paused_by_key<K: IsDataKey>(env: &Env, key: &K) -> bool {
     env.storage().instance().get(key).unwrap_or(false)
 }
@@ -179,4 +314,25 @@ pub fn get_persistent<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk:
     key: &K,
 ) -> Option<T> {
     env.storage().persistent().get(key)
+}
+
+/// Planning-only heuristic for rent-cost estimates: stroops charged per
+/// 1,024 bytes of persistent-entry payload for a single `BUMP` (~30 day) TTL
+/// extension window. This mirrors the order of magnitude of Soroban's
+/// published write-fee / rent schedule but is **not** read from the network,
+/// so callers must still confirm exact costs via `simulateTransaction`
+/// before submitting a transaction. See `docs/GAS_COSTS.md` for the full
+/// storage cost model this constant supports.
+pub const RENT_STROOPS_PER_KB_PER_BUMP: i128 = 150;
+
+/// Estimate the rent (in stroops) needed to keep a persistent entry of
+/// `entry_size_bytes` alive for one `BUMP` TTL-extension cycle.
+///
+/// This is a rough, contract-side planning aid so frontends can show users
+/// an approximate storage cost *before* they sign a transaction — it is not
+/// a substitute for simulating the actual transaction.
+pub fn estimate_persistent_rent(entry_size_bytes: u32) -> i128 {
+    let bytes = entry_size_bytes as i128;
+    // Ceil-divide so partial kilobytes still round up to a whole unit of rent.
+    ((bytes * RENT_STROOPS_PER_KB_PER_BUMP) + 1023) / 1024
 }

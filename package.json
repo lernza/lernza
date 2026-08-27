@@ -5,7 +5,9 @@
   "description": "Learn-to-earn platform on Stellar",
   "scripts": {
     "setup": "./scripts/bootstrap.sh",
-    "check:docs": "node scripts/check-docs.js"
+    "check:docs": "node scripts/check-docs.js",
+    "deploy:contracts": "./scripts/deploy-contracts.sh",
+    "switch:network": "./scripts/switch-network.sh"
   },
   "repository": {
     "type": "git",

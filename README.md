@@ -235,6 +235,8 @@ The blockchain IS the backend. All state lives on Stellar's ledger. Zero infrast
 - **Storage:** Instance (counters), Persistent (entities/auth), Temporary (cooldowns)
 - **TTL:** Bump 518,400 ledgers (~30 days), Threshold 120,960 (~7 days)
 - **No cross-contract calls** — frontend orchestrates the flow
+- **Gas & Resource Costs:** Detailed execution costs in [docs/GAS_COSTS.md](docs/GAS_COSTS.md)
+- **Gas Optimization Report:** [docs/GAS_OPTIMIZATION_REPORT.md](docs/GAS_OPTIMIZATION_REPORT.md)
 
 </details>
 

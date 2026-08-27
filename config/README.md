@@ -4,6 +4,25 @@ Centralized environment configuration for development, staging, and production.
 
 ## Usage
 
+### Switch Network via Helper Script
+
+You can switch the network target instantly using `scripts/switch-network.sh` or npm script:
+
+```bash
+# Switch to testnet configuration
+./scripts/switch-network.sh testnet
+# or
+npm run switch:network testnet
+
+# Switch to mainnet configuration
+./scripts/switch-network.sh mainnet
+
+# Switch to local standalone network
+./scripts/switch-network.sh standalone
+```
+
+`scripts/load-config.mjs` accepts network aliases (`testnet` -> `staging`, `mainnet` -> `production`, `standalone` -> `development`).
+
 ### Generate a `.env.local` for the frontend
 
 ```bash
@@ -11,10 +30,10 @@ Centralized environment configuration for development, staging, and production.
 node scripts/load-config.mjs development > frontend/.env.local
 
 # Staging (testnet)
-node scripts/load-config.mjs staging > frontend/.env.local
+node scripts/load-config.mjs testnet > frontend/.env.local
 
 # Production (mainnet)
-node scripts/load-config.mjs production > frontend/.env.local
+node scripts/load-config.mjs mainnet > frontend/.env.local
 ```
 
 ### Generate env vars for the event-indexer

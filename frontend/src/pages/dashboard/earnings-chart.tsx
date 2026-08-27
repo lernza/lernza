@@ -9,7 +9,7 @@ import {
 } from "recharts"
 import { TrendingUp } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { EarningsDataPoint } from "@/lib/mock-data"
+import type { EarningsDataPoint } from "@/lib/shared-types"
 
 interface EarningsChartProps {
   data: EarningsDataPoint[]

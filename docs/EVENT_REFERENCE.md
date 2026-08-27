@@ -134,6 +134,20 @@ Emitted when the contract admin is rotated via `transfer_admin`.
 
 ---
 
+### `quest_migrated`
+
+Emitted when a quest record is migrated to a newer schema version via `migrate_quest`.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("quest_migrated"),)` | |
+| `quest_id` | `u32` | ID of the migrated quest. |
+| `schema_version` | `u32` | Schema version the quest was migrated to. |
+
+**Data tuple:** `(quest_id, schema_version)`
+
+---
+
 ### `creator_verified`
 
 Emitted when an admin marks a creator address as verified via `verify_creator`. Verified creators have their `QuestInfo.verified` flag set to `true` on any quest they create.
@@ -249,6 +263,24 @@ Emitted when peer review reaches the required approval threshold via `approve_co
 | `reward_amount` | `i128` | Reward amount unlocked (may be `0` in Competitive mode if the winner cap was already reached). |
 
 **Data tuple:** `(milestone_id, quest_id, enrollee, peer, reward_amount)`
+
+---
+
+### `milestone_partial`
+
+Emitted when an owner verifies a partial completion via `verify_partial_completion` (requires `DistributionMode::PartialCredit`). The enrollee is marked as having completed the milestone; the reward is proportional to the number of criteria met.
+
+| Field | Type | Description |
+|:------|:-----|:------------|
+| **Topics** | `(Symbol("milestone_partial"),)` | |
+| `quest_id` | `u32` | Quest containing the milestone. |
+| `milestone_id` | `u32` | Milestone that was partially completed. |
+| `enrollee` | `Address` | Learner who completed the milestone. |
+| `criteria_met` | `u32` | Number of criteria the learner satisfied. |
+| `max_criteria` | `u32` | Total criteria configured for this milestone. |
+| `reward` | `i128` | Prorated reward paid (`reward_amount * criteria_met / max_criteria`, truncated). |
+
+**Data tuple:** `(quest_id, milestone_id, enrollee, criteria_met, max_criteria, reward)`
 
 ---
 
@@ -426,6 +458,7 @@ Emitted when the certificate contract's pause state is toggled by the owner. Bot
 | Quest | `quest_updated` | `update_quest` | Quest metadata changed |
 | Quest | `quest_archived` | `archive_quest` | Quest status → Archived |
 | Quest | `quest_cancelled` | `cancel_quest` | Quest status → Cancelled |
+| Quest | `quest_migrated` | `migrate_quest` | Quest record migrated to new schema version |
 | Quest | `enrollee_added` | `add_enrollee`, `join_quest`, `join_quest_with_invite` | Learner enrolled |
 | Quest | `enrollee_removed` | `remove_enrollee` | Owner removes learner |
 | Quest | `admin_transferred` | `transfer_admin` | Admin address rotated |
@@ -433,6 +466,7 @@ Emitted when the certificate contract's pause state is toggled by the owner. Bot
 | Quest | `creator_verification_revoked` | `revoke_creator_verification` | Creator badge revoked |
 | Milestone | `milestone_created` | `create_milestone`, `create_milestones_batch` | Milestone added (once per milestone) |
 | Milestone | `milestone_completed` | `verify_completion` | Owner verifies completion |
+| Milestone | `milestone_partial` | `verify_partial_completion` | Owner verifies partial completion (PartialCredit mode) |
 | Milestone | `peer_approved` | `approve_completion` | Peer threshold reached, milestone auto-completes |
 | Milestone | `distribution_mode_set` | `set_distribution_mode` | Owner changes reward mode |
 | Milestone | `certificate_minted` | `verify_completion`, `approve_completion` | All milestones done — notification only |

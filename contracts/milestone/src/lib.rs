@@ -94,6 +94,7 @@ pub enum DistributionMode {
     Flat,             // equal reward for all milestones
     Competitive(u32), // max_winners: first N completers rewarded; rest get 0
     Percentage(u32),  // percent (1..=100) of milestone.reward_amount, rounded to nearest
+    PartialCredit(u32), // max_criteria: reward = reward_amount * criteria_met / max_criteria
 }
 
 #[contracttype]
@@ -114,6 +115,13 @@ pub struct CompletionInfo {
     pub milestone_id: u32,
     pub enrollee: Address,
     pub completed_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartialScore {
+    pub completed: u32,
+    pub total: u32,
 }
 
 #[contracttype]
@@ -543,6 +551,10 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
 
+        if matches!(mode, DistributionMode::PartialCredit(n) if n == 0) {
+            return Err(Error::InvalidInput);
+        }
+
         // Prevent reward-type changes once milestones exist. Reapplying the
         // same mode is treated as a no-op and remains allowed.
         let count_key = DataKey::MilestoneCount(quest_id);
@@ -786,6 +798,152 @@ impl MilestoneContract {
         env.events().publish(
             (Symbol::new(&env, "milestone_completed"),),
             (quest_id, milestone_id, enrollee.clone()),
+        );
+
+        Ok(reward)
+    }
+
+    /// Verify partial completion of a milestone, awarding a prorated reward.
+    ///
+    /// Used when a quest uses `DistributionMode::PartialCredit(max_criteria)`.
+    /// The reward is `milestone.reward_amount * criteria_met / max_criteria`,
+    /// truncated to the nearest whole unit. A user who meets all criteria gets
+    /// the full reward; one who meets none gets nothing.
+    ///
+    /// `criteria_met` must be > 0 and <= `max_criteria`. Passing `criteria_met`
+    /// equal to `max_criteria` is equivalent to a full completion.
+    ///
+    /// Returns the prorated reward so the frontend can trigger distribution.
+    pub fn verify_partial_completion(
+        env: Env,
+        owner: Address,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+        criteria_met: u32,
+    ) -> Result<i128, Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+
+        let quest_contract_addr: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::QuestContract)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client.get_quest(&quest_id);
+        if quest_info.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+        if quest_info.status != common::QuestStatus::Active {
+            return Err(Error::Unauthorized);
+        }
+        if quest_info.deadline > 0 && env.ledger().timestamp() > quest_info.deadline {
+            return Err(Error::DeadlineExpired);
+        }
+
+        if !Self::is_enrolled(&env, quest_id, &enrollee)? {
+            return Err(Error::NotEnrolled);
+        }
+
+        // Require PartialCredit mode so callers can't accidentally call this
+        // on a quest that isn't configured for it.
+        let max_criteria = match env
+            .storage()
+            .persistent()
+            .get(&DataKey::Mode(quest_id))
+            .unwrap_or(DistributionMode::Custom)
+        {
+            DistributionMode::PartialCredit(n) => n,
+            _ => return Err(Error::InvalidInput),
+        };
+
+        if criteria_met == 0 || criteria_met > max_criteria {
+            return Err(Error::InvalidInput);
+        }
+
+        let ms_key = DataKey::Milestone(quest_id, milestone_id);
+        let milestone: MilestoneInfo = env
+            .storage()
+            .persistent()
+            .get(&ms_key)
+            .ok_or(Error::NotFound)?;
+
+        if milestone.reward_amount <= 0 || milestone.reward_amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
+        Self::ensure_previous_completed(&env, quest_id, milestone_id, &enrollee, &milestone)?;
+
+        let comp_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&comp_key) {
+            return Err(Error::AlreadyCompleted);
+        }
+
+        let reward = milestone
+            .reward_amount
+            .checked_mul(criteria_met as i128)
+            .ok_or(Error::Overflow)?
+            / max_criteria as i128;
+
+        // Update reserved reward tracker
+        let reserved_key = DataKey::TotalReservedReward(quest_id);
+        let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
+        let new_reserved = current_reserved
+            .checked_add(reward)
+            .ok_or(Error::Overflow)?;
+        env.storage().persistent().set(&reserved_key, &new_reserved);
+        env.storage()
+            .persistent()
+            .extend_ttl(&reserved_key, THRESHOLD, BUMP);
+
+        let current_completions: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
+            .unwrap_or(0);
+        let next_completion_count = current_completions.checked_add(1).ok_or(Error::Overflow)?;
+        Self::maybe_mint_certificate(
+            env.clone(),
+            quest_id,
+            enrollee.clone(),
+            next_completion_count,
+        )?;
+
+        env.storage().persistent().set(&comp_key, &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(&comp_key, THRESHOLD, BUMP);
+
+        let time_key = DataKey::CompletionTime(quest_id, milestone_id, enrollee.clone());
+        env.storage()
+            .persistent()
+            .set(&time_key, &env.ledger().timestamp());
+        env.storage()
+            .persistent()
+            .extend_ttl(&time_key, THRESHOLD, BUMP);
+
+        let count_key = DataKey::EnrolleeCompletions(quest_id, enrollee.clone());
+        env.storage()
+            .persistent()
+            .set(&count_key, &next_completion_count);
+        env.storage()
+            .persistent()
+            .extend_ttl(&count_key, THRESHOLD, BUMP);
+
+        let earnings_key = DataKey::EnrolleeEarnings(quest_id, enrollee.clone());
+        let total_earned: i128 = env.storage().persistent().get(&earnings_key).unwrap_or(0);
+        let updated_earnings = total_earned.checked_add(reward).ok_or(Error::Overflow)?;
+        env.storage()
+            .persistent()
+            .set(&earnings_key, &updated_earnings);
+        env.storage()
+            .persistent()
+            .extend_ttl(&earnings_key, THRESHOLD, BUMP);
+
+        env.events().publish(
+            (Symbol::new(&env, "milestone_partial"),),
+            (quest_id, milestone_id, enrollee, criteria_met, max_criteria, reward),
         );
 
         Ok(reward)
@@ -1333,6 +1491,24 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::EnrolleeEarnings(quest_id, enrollee))
             .unwrap_or(0)
+    }
+
+    /// Returns the number of milestones an enrollee has completed out of the
+    /// total milestone count for the quest, as a (completed, total) tuple.
+    /// Useful for frontends that want to display "8 / 10 tasks done" without
+    /// pulling the full progress object.
+    pub fn get_partial_score(env: Env, quest_id: u32, enrollee: Address) -> PartialScore {
+        let completed = env
+            .storage()
+            .persistent()
+            .get(&DataKey::EnrolleeCompletions(quest_id, enrollee))
+            .unwrap_or(0);
+        let total = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MilestoneCount(quest_id))
+            .unwrap_or(0);
+        PartialScore { completed, total }
     }
 
     // --- internals ---

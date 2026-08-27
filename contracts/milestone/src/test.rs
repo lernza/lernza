@@ -1767,3 +1767,206 @@ fn test_verify_completion_cancelled_quest_rejected() {
     let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
     assert_eq!(res, Err(Ok(Error::Unauthorized)));
 }
+
+// ── PartialCredit distribution mode tests ────────────────────────────────────
+
+#[test]
+fn test_partial_credit_mode_proportional_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Graded Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 8 out of 10 criteria met → 80% of 100 = 80
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    assert_eq!(reward, 80);
+    assert!(client.is_completed(&q_id, &0, &enrollee));
+    assert_eq!(client.get_enrollee_completions(&q_id, &enrollee), 1);
+    assert_eq!(client.get_enrollee_earnings(&q_id, &enrollee), 80);
+}
+
+#[test]
+fn test_partial_credit_full_criteria_gives_full_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Full Task", 200);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 10/10 → full reward
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &10);
+    assert_eq!(reward, 200);
+}
+
+#[test]
+fn test_partial_credit_minimum_criteria_gives_minimal_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Minimal Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 1/10 → 10 tokens
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &1);
+    assert_eq!(reward, 10);
+}
+
+#[test]
+fn test_partial_credit_truncates_fractional_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // 3-criteria denominator to force a fractional result
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(3), &0);
+    create_ms(&env, &client, &owner, q_id, "Fractional Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 1/3 of 100 = 33.33... → truncated to 33
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &1);
+    assert_eq!(reward, 33);
+}
+
+#[test]
+fn test_partial_credit_zero_criteria_met_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_criteria_exceeds_max_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &11);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_wrong_mode_rejected() {
+    // verify_partial_completion requires PartialCredit mode; Custom mode must be rejected.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Default mode is Custom — no set_distribution_mode call needed.
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &5);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_double_verify_fails() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    assert_eq!(result, Err(Ok(Error::AlreadyCompleted)));
+}
+
+#[test]
+fn test_partial_credit_not_enrolled_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &stranger, &5);
+    assert_eq!(result, Err(Ok(Error::NotEnrolled)));
+}
+
+#[test]
+fn test_partial_credit_set_zero_max_criteria_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let result =
+        client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(0), &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_multiple_milestones_accumulate_earnings() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task A", 100);
+    create_ms(&env, &client, &owner, q_id, "Task B", 200);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 8/10 of task A → 80, then 5/10 of task B → 100
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    client.verify_partial_completion(&owner, &q_id, &1, &enrollee, &5);
+
+    assert_eq!(client.get_enrollee_earnings(&q_id, &enrollee), 180);
+    assert_eq!(client.get_enrollee_completions(&q_id, &enrollee), 2);
+}
+
+#[test]
+fn test_get_partial_score() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task A", 100);
+    create_ms(&env, &client, &owner, q_id, "Task B", 100);
+    create_ms(&env, &client, &owner, q_id, "Task C", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // Before any completions: 0 / 3
+    let score = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(score.completed, 0);
+    assert_eq!(score.total, 3);
+
+    // Complete two milestones
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    client.verify_partial_completion(&owner, &q_id, &1, &enrollee, &10);
+
+    let score = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(score.completed, 2);
+    assert_eq!(score.total, 3);
+}

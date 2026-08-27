@@ -4,6 +4,8 @@ import { ToastContainer } from "@/components/toast"
 import { useToast } from "@/hooks/use-toast"
 import { useQuest, useMilestones, useEnrollees, useRewardPool, useTotalReservedReward } from "@/hooks/use-quest-data"
 import { milestoneClient } from "@/lib/contracts/milestone"
+import { PageMetadata } from "@/components/PageMetadata"
+import { buildQuestMetadata } from "@/lib/questMetadata"
 import { QuestHeaderPanel } from "@/components/quest/QuestHeaderPanel"
 import { StatsPanel } from "@/components/quest/StatsPanel"
 import { ProgressPanel } from "@/components/quest/ProgressPanel"
@@ -372,6 +374,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         </Button>
       </div>
 
+      {quest && <PageMetadata {...buildQuestMetadata(quest as any, questId)} />}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <BatchClaimResultDialog

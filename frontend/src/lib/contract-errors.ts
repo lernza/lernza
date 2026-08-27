@@ -1,3 +1,4 @@
+import { toUserMessage } from "./errorTaxonomy";
 /**
  * Centralized contract error code → human-readable message mapping.
  *

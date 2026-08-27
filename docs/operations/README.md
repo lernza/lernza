@@ -21,3 +21,5 @@ The upgrade model, storage migration patterns, WASM hash pinning, and a full
 worked example (adding `MilestoneInfo.tags`) live in
 [docs/UPGRADES.md](../UPGRADES.md). Read that document before executing the
 upgrade runbook for any breaking or migration-required change.
+
+| [Storage TTL Strategy](../STORAGE_TTL_STRATEGY.md) | Persistent/temporary storage TTL, health checks, expiry risks |

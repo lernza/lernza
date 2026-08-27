@@ -32,6 +32,7 @@ export SOURCE_ACCOUNT=lernza-deployer
 | `enroll-learner.sh` | Enroll a learner address into a quest |
 | `fund-quest.sh` | Initialize (if needed) and fund the reward pool for a quest |
 | `submit-milestone.sh` | Create a milestone and submit/verify it for a learner |
+| `seed-scenarios.sh` | Create multiple example quests in different states for demos |
 
 ## Usage
 

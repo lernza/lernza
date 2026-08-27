@@ -86,6 +86,7 @@ See [docs/deploy-testnet.md](docs/deploy-testnet.md) for full deployment details
 - Every new feature needs unit tests
 - Use the existing storage patterns (Instance/Persistent/Temporary) and TTL strategy (`BUMP = 518,400`, `THRESHOLD = 120,960`) — see [ADR-005](docs/adr/005-storage-patterns-and-ttl-strategy.md)
 - Consider gas and resource costs for on-chain state mutations — see [docs/GAS_COSTS.md](docs/GAS_COSTS.md)
+- Browser storage usage must follow [docs/DATA_RETENTION_POLICY.md](docs/DATA_RETENTION_POLICY.md) — no private keys or PII in localStorage
 
 ## Frontend (React/TypeScript)
 

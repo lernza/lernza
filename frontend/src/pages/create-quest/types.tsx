@@ -53,6 +53,7 @@ export const step1Schema = z.object({
     )
     .max(5, "Maximum 5 tags allowed")
     .default([]),
+  referralBonus: z.number().min(0).max(1000).optional().default(10),
 })
 export type Step1Values = z.infer<typeof step1Schema>
 
@@ -65,7 +66,10 @@ export const milestoneSchema = z.object({
   description: z
     .string()
     .min(1, "Description is required")
-    .max(MAX_MILESTONE_DESCRIPTION_LEN, `Description max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`)
+    .max(
+      MAX_MILESTONE_DESCRIPTION_LEN,
+      `Description max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`
+    )
     .refine(val => val.trim().length > 0, "Description cannot be blank"),
   rewardAmount: z
     .number({ message: "Reward amount is required" })
@@ -89,7 +93,11 @@ export type TxPhase = "idle" | "funding" | "funded" | "creating" | "created" | "
 export function FieldError({ message, id }: { message?: string; id?: string }) {
   if (!message) return null
   return (
-    <p id={id} className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold" role="alert">
+    <p
+      id={id}
+      className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold"
+      role="alert"
+    >
       <AlertCircle className="h-3 w-3 flex-shrink-0" />
       {message}
     </p>

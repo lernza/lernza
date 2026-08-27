@@ -1,15 +1,5 @@
 import { useState, useEffect } from "react"
-import {
-  Copy,
-  Check,
-  Loader2,
-  AlertCircle,
-  Plus,
-  Link as LinkIcon,
-  Trash2,
-  Eye,
-  EyeOff,
-} from "lucide-react"
+import { Copy, Check, Loader2, Plus, Link as LinkIcon, Trash2, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -32,7 +22,7 @@ interface InviteManagementProps {
   isOwner: boolean
 }
 
-export function InviteManagement({ questId, questName, isOwner }: InviteManagementProps) {
+export function InviteManagement({ questId, isOwner }: InviteManagementProps) {
   const { address } = useWallet()
   const { addToast } = useToast()
   const [invites, setInvites] = useState<InviteEntry[]>([])
@@ -95,7 +85,10 @@ export function InviteManagement({ questId, questName, isOwner }: InviteManageme
         )
       }
     } catch (err) {
-      addToast(`Failed to generate invite: ${err instanceof Error ? err.message : "Unknown error"}`, "error")
+      addToast(
+        `Failed to generate invite: ${err instanceof Error ? err.message : "Unknown error"}`,
+        "error"
+      )
     } finally {
       setIsGenerating(false)
     }
@@ -171,7 +164,9 @@ export function InviteManagement({ questId, questName, isOwner }: InviteManageme
           <CardContent className="flex flex-col items-center py-12 text-center">
             <LinkIcon className="text-muted-foreground mb-4 h-8 w-8" />
             <h4 className="mb-2 font-semibold">No invites yet</h4>
-            <p className="text-muted-foreground text-sm">Create an invite to start sharing this quest with specific learners.</p>
+            <p className="text-muted-foreground text-sm">
+              Create an invite to start sharing this quest with specific learners.
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -185,9 +180,7 @@ export function InviteManagement({ questId, questName, isOwner }: InviteManageme
                       <Badge variant={invite.redeemed ? "destructive" : "default"}>
                         {invite.redeemed ? "Redeemed" : "Active"}
                       </Badge>
-                      <Badge variant="secondary">
-                        {invite.created.toLocaleDateString()}
-                      </Badge>
+                      <Badge variant="secondary">{invite.created.toLocaleDateString()}</Badge>
                     </div>
                     <div className="mt-3 flex items-center gap-2 font-mono text-xs">
                       {invite.visible ? (
@@ -200,7 +193,11 @@ export function InviteManagement({ questId, questName, isOwner }: InviteManageme
                         className="text-muted-foreground hover:text-foreground"
                         title={invite.visible ? "Hide code" : "Show code"}
                       >
-                        {invite.visible ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        {invite.visible ? (
+                          <EyeOff className="h-3 w-3" />
+                        ) : (
+                          <Eye className="h-3 w-3" />
+                        )}
                       </button>
                     </div>
                   </div>

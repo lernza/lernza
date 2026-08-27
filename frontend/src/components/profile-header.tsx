@@ -1,13 +1,4 @@
-import {
-  MapPin,
-  Link2,
-  Tag,
-  Copy,
-  Check,
-  Eye,
-  Lock,
-  ShieldCheck,
-} from "lucide-react"
+import { MapPin, Link2, Tag, Copy, Check, Eye, Lock, ShieldCheck } from "lucide-react"
 import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { ReputationBadge } from "@/components/reputation-badge"
@@ -16,7 +7,6 @@ import type { ReputationSummary } from "@/lib/reputation"
 import type { ProfileMetadata } from "@/lib/profile-types"
 import { PrivacyLevel as PL } from "@/lib/profile-types"
 import type { ProfileFieldPrivacy } from "@/lib/profile-types"
-import { cn } from "@/lib/utils"
 
 interface ProfileHeaderDisplayProps {
   walletAddress: string
@@ -69,7 +59,6 @@ export function ProfileHeaderDisplay({
   displayName,
   roleLabel,
   roleVariant,
-  totalEarned,
   formattedEarnings,
   earningsLoading,
   reputation,
@@ -115,17 +104,15 @@ export function ProfileHeaderDisplay({
               <WalletAvatar address={walletAddress || ""} />
             )}
             {!viewerIsOwner && (
-              <div className="border-border bg-background absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center border shadow-sm">
-                <Eye className="text-muted-foreground h-3 w-3" title="Public view" />
+              <div className="border-border bg-background absolute -right-1 -bottom-1 flex h-6 w-6 items-center justify-center border shadow-sm">
+                <Eye className="text-muted-foreground h-3 w-3" aria-label="Public view" />
               </div>
             )}
           </div>
 
           <div className="mt-2 min-w-0 flex-1 sm:mt-6">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-xl font-semibold truncate max-w-[300px]">
-                {effectiveName}
-              </h2>
+              <h2 className="max-w-[300px] truncate text-xl font-semibold">{effectiveName}</h2>
               {!metadata.displayName && viewerIsOwner && (
                 <Badge variant="outline" className="gap-1 border text-[10px] font-bold">
                   <Lock className="h-2.5 w-2.5" />
@@ -135,9 +122,7 @@ export function ProfileHeaderDisplay({
               <Badge variant={roleVariant} className="gap-1">
                 {roleLabel}
               </Badge>
-              {reputation && (
-                <ReputationBadge summary={reputation} showScore={true} size="sm" />
-              )}
+              {reputation && <ReputationBadge summary={reputation} showScore={true} size="sm" />}
             </div>
 
             <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -152,11 +137,7 @@ export function ProfileHeaderDisplay({
                 className="border-border bg-card neo-press hover:bg-secondary flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-2 shadow-sm"
                 aria-label="Copy address"
               >
-                {copied ? (
-                  <Check className="text-success h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
+                {copied ? <Check className="text-success h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
               {fieldPrivacy && viewerIsOwner && (
                 <PrivacyIndicator level={fieldPrivacy.displayName} field="Display name" />
@@ -165,7 +146,7 @@ export function ProfileHeaderDisplay({
 
             {metadata.bio && (
               <div className="mt-3">
-                <p className="text-muted-foreground text-sm max-w-2xl whitespace-pre-wrap leading-relaxed">
+                <p className="text-muted-foreground max-w-2xl text-sm leading-relaxed whitespace-pre-wrap">
                   {metadata.bio}
                 </p>
                 {fieldPrivacy && viewerIsOwner && (
@@ -196,13 +177,13 @@ export function ProfileHeaderDisplay({
                     <Badge
                       key={tag}
                       variant="secondary"
-                      className="text-[10px] font-bold border shadow-sm"
+                      className="border text-[10px] font-bold shadow-sm"
                     >
                       {tag}
                     </Badge>
                   ))}
                   {metadata.tags.length > 5 && (
-                    <Badge variant="outline" className="text-[10px] font-bold border">
+                    <Badge variant="outline" className="border text-[10px] font-bold">
                       +{metadata.tags.length - 5} more
                     </Badge>
                   )}
@@ -224,7 +205,7 @@ export function ProfileHeaderDisplay({
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-accent inline-flex items-center gap-1 text-xs font-bold underline underline-offset-2 hover:opacity-80 transition-opacity"
+                        className="text-accent inline-flex items-center gap-1 text-xs font-bold underline underline-offset-2 transition-opacity hover:opacity-80"
                       >
                         {link.label}
                       </a>
@@ -238,11 +219,11 @@ export function ProfileHeaderDisplay({
             )}
           </div>
 
-          <div className="sm:mt-6 flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-2 sm:mt-6">
             {viewerIsOwner && onEditProfile && (
               <button
                 onClick={onEditProfile}
-                className="border-border bg-accent text-accent-foreground hover:bg-accent/80 px-4 py-2 text-xs font-semibold border-2 shadow-md transition-colors"
+                className="border-border bg-accent text-accent-foreground hover:bg-accent/80 border-2 px-4 py-2 text-xs font-semibold shadow-md transition-colors"
               >
                 Edit Profile
               </button>
@@ -250,9 +231,7 @@ export function ProfileHeaderDisplay({
             {formattedEarnings && viewerIsOwner && (
               <div className="bg-accent border-border border-2 px-5 py-3 shadow-md">
                 <div className="flex items-center gap-2">
-                  <span className="text-2xl font-semibold tabular-nums">
-                    {formattedEarnings}
-                  </span>
+                  <span className="text-2xl font-semibold tabular-nums">{formattedEarnings}</span>
                 </div>
                 <p className="text-xs font-bold">
                   {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}

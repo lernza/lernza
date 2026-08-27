@@ -10,7 +10,9 @@ function getStoredLocale(): Locale {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored === "en") return stored
-  } catch {}
+  } catch {
+    // ignore localStorage errors
+  }
   return "en"
 }
 
@@ -21,7 +23,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLocaleState(newLocale)
     try {
       localStorage.setItem(STORAGE_KEY, newLocale)
-    } catch {}
+    } catch {
+      // ignore localStorage errors
+    }
   }, [])
 
   const t = useCallback(

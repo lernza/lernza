@@ -1,14 +1,4 @@
-import {
-  Coins,
-  Calendar,
-  Eye,
-  Lock,
-  Users,
-  Trash2,
-  ExternalLink,
-  TrendingUp,
-  Sum,
-} from "lucide-react"
+import { Coins, Calendar, Eye, Lock, Users, Trash2, TrendingUp } from "lucide-react"
 import type { RewardShowcase, PrivacyLevel, ShowcaseSettings } from "@/lib/profile-types"
 import { PrivacyLevel as PL } from "@/lib/profile-types"
 import { Button } from "@/components/ui/button"
@@ -43,9 +33,7 @@ export function RewardsShowcase({
   onDeleteReward,
   onChangeRewardPrivacy,
 }: RewardsShowcaseProps) {
-  const visibleRewards = viewerIsOwner
-    ? rewards
-    : rewards.filter(r => r.privacy === PL.Public)
+  const visibleRewards = viewerIsOwner ? rewards : rewards.filter(r => r.privacy === PL.Public)
 
   const sortedRewards = [...visibleRewards].sort((a, b) => b.earnedAt - a.earnedAt)
 
@@ -60,9 +48,9 @@ export function RewardsShowcase({
             <Coins className="h-4 w-4" />
           </div>
           <div>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
               Rewards Earned
-              <Badge variant="outline" className="text-xs font-bold tabular-nums border">
+              <Badge variant="outline" className="border text-xs font-bold tabular-nums">
                 {rewards.length} rewards
               </Badge>
             </CardTitle>
@@ -79,31 +67,37 @@ export function RewardsShowcase({
                 variant={showcaseSettings.showRewards ? "default" : "outline"}
                 size="sm"
                 onClick={() => onToggleShow(!showcaseSettings.showRewards)}
-                className="text-xs font-bold gap-1"
+                className="gap-1 text-xs font-bold"
               >
                 {showcaseSettings.showRewards ? (
-                  <><Eye className="h-3.5 w-3.5" /> Showing</>
+                  <>
+                    <Eye className="h-3.5 w-3.5" /> Showing
+                  </>
                 ) : (
-                  <><Lock className="h-3.5 w-3.5" /> Hidden</>
+                  <>
+                    <Lock className="h-3.5 w-3.5" /> Hidden
+                  </>
                 )}
               </Button>
             )}
             {onChangeGlobalPrivacy && (
-              <div className="flex gap-0 border-border border shadow-sm">
-                {([
-                  { lvl: PL.Public, Icon: Eye, label: "All Public" },
-                  { lvl: PL.Connections, Icon: Users, label: "Connections" },
-                  { lvl: PL.Private, Icon: Lock, label: "All Private" },
-                ] as const).map(({ lvl, Icon, label }) => (
+              <div className="border-border flex gap-0 border shadow-sm">
+                {(
+                  [
+                    { lvl: PL.Public, Icon: Eye, label: "All Public" },
+                    { lvl: PL.Connections, Icon: Users, label: "Connections" },
+                    { lvl: PL.Private, Icon: Lock, label: "All Private" },
+                  ] as const
+                ).map(({ lvl, Icon, label }) => (
                   <button
                     key={lvl}
                     type="button"
                     onClick={() => onChangeGlobalPrivacy(lvl)}
                     className={cn(
-                      "border-border border-r px-2 py-1.5 text-xs font-bold last:border-r-0 transition-colors",
+                      "border-border border-r px-2 py-1.5 text-xs font-bold transition-colors last:border-r-0",
                       showcaseSettings.rewardsPrivacy === lvl
                         ? "bg-accent"
-                        : "bg-background hover:bg-secondary text-muted-foreground",
+                        : "bg-background hover:bg-secondary text-muted-foreground"
                     )}
                     title={label}
                   >
@@ -116,13 +110,14 @@ export function RewardsShowcase({
         )}
       </CardHeader>
 
-      <CardContent className="p-5 space-y-4">
+      <CardContent className="space-y-4 p-5">
         {!showcaseSettings.showRewards && viewerIsOwner ? (
           <div className="flex flex-col items-center py-10 text-center">
             <Lock className="text-muted-foreground mb-3 h-10 w-10" />
             <h3 className="mb-1 font-semibold">Rewards showcase hidden</h3>
             <p className="text-muted-foreground mb-4 max-w-sm text-sm font-bold">
-              Your rewards are currently hidden from your profile. Toggle the switch above to display them.
+              Your rewards are currently hidden from your profile. Toggle the switch above to
+              display them.
             </p>
             {onToggleShow && (
               <Button onClick={() => onToggleShow(true)} size="sm">
@@ -153,13 +148,13 @@ export function RewardsShowcase({
             <div className="bg-success/5 border-border flex items-center justify-between border p-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="bg-success border-border flex h-10 w-10 items-center justify-center border shadow-sm">
-                  <Sum className="h-4 w-4" />
+                  <Coins className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
+                  <p className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                     Total Showcased Rewards
                   </p>
-                  <p className="text-2xl font-semibold tabular-nums text-success">
+                  <p className="text-success text-2xl font-semibold tabular-nums">
                     {formattedTotal}
                   </p>
                 </div>
@@ -178,20 +173,23 @@ export function RewardsShowcase({
                 return (
                   <div
                     key={reward.id}
-                    className="border-border group flex flex-col gap-3 border p-4 shadow-sm transition-colors hover:bg-secondary/30 sm:flex-row sm:items-center sm:justify-between"
+                    className="border-border group hover:bg-secondary/30 flex flex-col gap-3 border p-4 shadow-sm transition-colors sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
                       <div className="bg-success/10 border-border flex h-10 w-10 shrink-0 items-center justify-center border shadow-sm">
                         <Coins className="text-success h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <p className="font-semibold truncate">{reward.milestoneTitle}</p>
-                          <Badge variant="secondary" className="text-[10px] font-bold truncate max-w-[150px]">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <p className="truncate font-semibold">{reward.milestoneTitle}</p>
+                          <Badge
+                            variant="secondary"
+                            className="max-w-[150px] truncate text-[10px] font-bold"
+                          >
                             {reward.questName}
                           </Badge>
                           {viewerIsOwner && (
-                            <Badge variant="outline" className="gap-1 text-[10px] font-bold border">
+                            <Badge variant="outline" className="gap-1 border text-[10px] font-bold">
                               <PrivacyIcon level={reward.privacy} />
                               {reward.privacy}
                             </Badge>
@@ -209,20 +207,27 @@ export function RewardsShowcase({
                             </span>
                           </div>
                           {reward.txHash && viewerIsOwner && (
-                            <TransactionLink txHash={reward.txHash} status="confirmed" label="View tx" />
+                            <TransactionLink
+                              txHash={reward.txHash}
+                              status="confirmed"
+                              label="View tx"
+                            />
                           )}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between sm:flex-col sm:items-end sm:gap-2">
-                      <Badge variant="success" className="gap-1 text-sm font-bold tabular-nums shadow-sm">
+                      <Badge
+                        variant="success"
+                        className="gap-1 text-sm font-bold tabular-nums shadow-sm"
+                      >
                         +{formattedAmount}
                       </Badge>
                       {viewerIsOwner && (
                         <div className="flex items-center gap-1">
                           {onChangeRewardPrivacy && (
-                            <div className="flex gap-0 border-border border shadow-sm">
+                            <div className="border-border flex gap-0 border shadow-sm">
                               {([PL.Public, PL.Connections, PL.Private] as const).map(lvl => {
                                 const isActive = reward.privacy === lvl
                                 return (
@@ -231,10 +236,10 @@ export function RewardsShowcase({
                                     type="button"
                                     onClick={() => onChangeRewardPrivacy(reward.id, lvl)}
                                     className={cn(
-                                      "border-border border-r p-1.5 last:border-r-0 transition-colors",
+                                      "border-border border-r p-1.5 transition-colors last:border-r-0",
                                       isActive
                                         ? "bg-accent"
-                                        : "bg-background hover:bg-secondary text-muted-foreground",
+                                        : "bg-background hover:bg-secondary text-muted-foreground"
                                     )}
                                     title={`Set reward to ${lvl}`}
                                   >

@@ -5,7 +5,6 @@ import {
   Target,
   Coins,
   ChevronRight,
-  Wallet,
   Sparkles,
   LayoutDashboard,
   Loader2,
@@ -55,8 +54,10 @@ interface DashboardProps {
   onLaunchTutorial?: () => void
 }
 
-export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps) {
-  const { connected, connect, shortAddress, address, loading: walletConnecting, error } = useWallet()
+export function Dashboard(
+  { onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps
+) {
+  const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<
     "none" | "ending-soon" | "recently-funded" | "recently-verified"
@@ -104,7 +105,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
       active = false
     }
   }, [category])
-  
+
   const onboarding = useOnboarding()
 
   // Dashboard data stays refetchable so error-state retry can reload the full view.
@@ -150,9 +151,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
         console.warn("[Dashboard] No preview quests loaded from any source")
       }
 
-      const previewQuestMap = new Map(
-        previewAllQuests.map(quest => [quest.id, quest] as const)
-      )
+      const previewQuestMap = new Map(previewAllQuests.map(quest => [quest.id, quest] as const))
 
       if (previewQuestMap.size < previewAllQuests.length) {
         console.warn(
@@ -259,11 +258,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   const loadedPublicQuests = [...publicQuests, ...extraPublicQuests]
 
   const filteredQuests =
-    filter === "owned"
-      ? ownedQuests
-      : filter === "enrolled"
-        ? enrolledQuests
-        : loadedPublicQuests
+    filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : loadedPublicQuests
 
   const presetFilteredQuests = (() => {
     if (preset === "ending-soon") {
@@ -399,30 +394,43 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     { date: currentMonth, amount: Number(userEarnings) },
   ]
 
-
-
   // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
       {/* Getting Started Banner for new users */}
       {!onboarding?.completed && (
-        <div className="bg-primary text-primary-foreground mb-8 flex flex-col sm:flex-row items-center justify-between p-6 shadow-lg">
+        <div className="bg-primary text-primary-foreground mb-8 flex flex-col items-center justify-between p-6 shadow-lg sm:flex-row">
           <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
+            <h2 className="flex items-center gap-2 text-xl font-bold">
               <Sparkles className="h-5 w-5" /> Let's get you started!
             </h2>
-            <p className="mt-1 text-primary-foreground/80">
+            <p className="text-primary-foreground/80 mt-1">
               New to Lernza? Take our quick interactive tour to learn how to earn or create quests.
             </p>
           </div>
-          <div className="mt-4 sm:mt-0 flex gap-3">
-            <Button variant="secondary" onClick={() => onboarding?.open?.(0)} className="font-bold">
+          <div className="mt-4 flex gap-3 sm:mt-0">
+            <Button
+              variant="secondary"
+              onClick={() => onboarding?.open?.(0)}
+              className="font-bold"
+              aria-label="Start learner tour"
+            >
               Learner Tour
             </Button>
-            <Button variant="outline" onClick={() => onboarding?.open?.(5)} className="bg-transparent border-primary-foreground hover:bg-primary-foreground/10 text-primary-foreground">
+            <Button
+              variant="outline"
+              onClick={() => onboarding?.open?.(5)}
+              className="border-primary-foreground hover:bg-primary-foreground/10 text-primary-foreground bg-transparent"
+              aria-label="Start creator tour"
+            >
               Creator Tour
             </Button>
-            <Button variant="ghost" onClick={() => onboarding?.complete?.()} className="hover:bg-primary-foreground/10 text-primary-foreground" aria-label="Dismiss banner">
+            <Button
+              variant="ghost"
+              onClick={() => onboarding?.complete?.()}
+              className="hover:bg-primary-foreground/10 text-primary-foreground"
+              aria-label="Dismiss banner"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -469,7 +477,7 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
               variant="outline"
               onClick={onLaunchTutorial}
               data-onboarding="tutorial-button"
-              className="flex-shrink-0 flex items-center gap-2"
+              className="flex flex-shrink-0 items-center gap-2"
               aria-label="Open getting started tutorial"
             >
               <BookOpen className="h-4 w-4" aria-hidden="true" />
@@ -509,7 +517,8 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
             <div>
               <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
                 <h2 className="flex items-center gap-2 text-xl font-semibold">
-                  <LayoutDashboard className="h-5 w-5" /> {connected ? "Your Quests" : "Public Quests"}
+                  <LayoutDashboard className="h-5 w-5" />{" "}
+                  {connected ? "Your Quests" : "Public Quests"}
                 </h2>
                 {connected && (
                   <div
@@ -658,7 +667,9 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
               <div className="mb-5 flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <SlidersHorizontal className="text-muted-foreground h-3.5 w-3.5" />
-                  <span className="text-muted-foreground text-xs font-bold uppercase">Reward range:</span>
+                  <span className="text-muted-foreground text-xs font-bold uppercase">
+                    Reward range:
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -683,7 +694,10 @@ export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
                   {(rewardMin !== "" || rewardMax !== "") && (
                     <button
                       type="button"
-                      onClick={() => { setRewardMin(""); setRewardMax("") }}
+                      onClick={() => {
+                        setRewardMin("")
+                        setRewardMax("")
+                      }}
                       aria-label="Clear reward range"
                       className="text-muted-foreground hover:text-foreground"
                     >

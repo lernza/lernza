@@ -1,4 +1,3 @@
-import { toUserMessage } from "./errorTaxonomy";
 /**
  * Centralized contract error code → human-readable message mapping.
  *
@@ -45,14 +44,32 @@ export const REWARDS_CONTRACT_ERRORS: Record<number, string> = {
  * SDK-level or RPC-level failures that users encounter during signing/submission.
  */
 export const TRANSACTION_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
-  { pattern: /user\s+(rejected|denied|cancelled)/i, message: "Transaction was cancelled by the user." },
-  { pattern: /insufficient.*fund/i, message: "Insufficient funds. Add XLM to your account and try again." },
-  { pattern: /network\s+mismatch/i, message: "Freighter is on the wrong network. Switch back in Freighter." },
-  { pattern: /signing\s+failed/i, message: "Transaction signing failed. Make sure Freighter is unlocked." },
+  {
+    pattern: /user\s+(rejected|denied|cancelled)/i,
+    message: "Transaction was cancelled by the user.",
+  },
+  {
+    pattern: /insufficient.*fund/i,
+    message: "Insufficient funds. Add XLM to your account and try again.",
+  },
+  {
+    pattern: /network\s+mismatch/i,
+    message: "Freighter is on the wrong network. Switch back in Freighter.",
+  },
+  {
+    pattern: /signing\s+failed/i,
+    message: "Transaction signing failed. Make sure Freighter is unlocked.",
+  },
   { pattern: /account\s+changed/i, message: "Account changed after signing. Please re-confirm." },
-  { pattern: /timeout|timed?\s*out/i, message: "Request timed out. Check your connection and try again." },
+  {
+    pattern: /timeout|timed?\s*out/i,
+    message: "Request timed out. Check your connection and try again.",
+  },
   { pattern: /duplicate/i, message: "Transaction was already submitted. Please wait a moment." },
-  { pattern: /try.?again.?later|network\s+is\s+busy/i, message: "Network is busy. Please try again shortly." },
+  {
+    pattern: /try.?again.?later|network\s+is\s+busy/i,
+    message: "Network is busy. Please try again shortly.",
+  },
 ]
 
 /**

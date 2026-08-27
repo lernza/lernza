@@ -11,7 +11,6 @@ import {
   Users,
   ExternalLink,
   Settings,
-  User,
   Edit3,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
@@ -35,13 +34,11 @@ import { CompletedQuestsShowcase } from "@/components/quests-showcase"
 import { RewardsShowcase } from "@/components/rewards-showcase"
 import { EmptyProfileOnboarding } from "@/components/empty-profile-onboarding"
 import { ProfileHeaderDisplay } from "@/components/profile-header"
-import { WalletAvatar } from "@/components/wallet-avatar"
-import { calculateReputation, type ReputationSummary } from "@/lib/reputation"
+import { calculateReputation, type ReputationSummary, type ReputationEvent } from "@/lib/reputation"
 import type {
   ProfileMetadata,
   ProfileFieldPrivacy,
   CompletedQuestShowcase,
-  ShowcaseSettings,
   PrivacyLevel,
 } from "@/lib/profile-types"
 import { PrivacyLevel as PL } from "@/lib/profile-types"
@@ -83,7 +80,6 @@ function getActivityDescription(item: WalletActivityItem) {
 
 export function Profile() {
   const { connected, connect, address, loading: walletConnecting } = useWallet()
-  const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
   const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
@@ -118,12 +114,13 @@ export function Profile() {
 
   const reputationSummary: ReputationSummary | null = useMemo(() => {
     if (!profile.profile) return null
-    return calculateReputation({
-      completedQuests: profile.filteredShowcasedQuests.length,
-      totalRewards: totalEarned ? Number(totalEarned) : 0,
-      enrolledCount: enrolledQuests?.length || 0,
-    })
-  }, [profile.profile, profile.filteredShowcasedQuests.length, totalEarned, enrolledQuests])
+    const events: ReputationEvent[] = profile.filteredShowcasedQuests.map(q => ({
+      type: "quest_completed",
+      role: "participant",
+      timestamp: q.completionDate || Date.now(),
+    }))
+    return calculateReputation(events)
+  }, [profile.profile, profile.filteredShowcasedQuests])
 
   const getRoleLabel = () => {
     if (roleLoading) return "Loading..."
@@ -230,14 +227,6 @@ export function Profile() {
     }
   }, [activeTab, address, connected])
 
-  const handleCopy = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   const handleLoadMoreActivity = async (signal?: AbortSignal) => {
     if (!address || !nextActivityCursor || activityLoading) {
       return
@@ -279,9 +268,7 @@ export function Profile() {
 
         if (completions > 0 && totalMilestones > 0) {
           const poolBalance = await rewardsClient.getPoolBalance(quest.id)
-          const alreadyShowcased = profile.profile.showcasedQuests.some(
-            q => q.questId === quest.id,
-          )
+          const alreadyShowcased = profile.profile.showcasedQuests.some(q => q.questId === quest.id)
           if (!alreadyShowcased) {
             const showcase: CompletedQuestShowcase = {
               questId: quest.id,
@@ -425,8 +412,7 @@ export function Profile() {
     )
   }
 
-  const showEmptyOnboarding =
-    profile.profile && !profile.hasContent && !isEditingProfile
+  const showEmptyOnboarding = profile.profile && !profile.hasContent && !isEditingProfile
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -635,7 +621,7 @@ export function Profile() {
             {profile.filteredShowcasedQuests.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2">
+                  <h3 className="flex items-center gap-2 font-semibold">
                     <Trophy className="h-4 w-4" />
                     Featured Achievements
                   </h3>
@@ -667,7 +653,7 @@ export function Profile() {
                             </p>
                           </div>
                           {quest.totalRewardsEarned > 0n && (
-                            <Badge variant="success" className="tabular-nums font-bold">
+                            <Badge variant="success" className="font-bold tabular-nums">
                               +{formatTokens(Number(quest.totalRewardsEarned), 7, "USDC")}
                             </Badge>
                           )}
@@ -682,17 +668,23 @@ export function Profile() {
           <div className="space-y-6">
             <CompletedQuestsShowcase
               quests={profile.filteredShowcasedQuests}
-              showcaseSettings={profile.profile?.showcaseSettings || {
-                showCompletedQuests: true,
-                showRewards: true,
-                questsPrivacy: PL.Public,
-                rewardsPrivacy: PL.Public,
-                featuredQuestIds: [],
-              }}
+              showcaseSettings={
+                profile.profile?.showcaseSettings || {
+                  showCompletedQuests: true,
+                  showRewards: true,
+                  questsPrivacy: PL.Public,
+                  rewardsPrivacy: PL.Public,
+                  featuredQuestIds: [],
+                }
+              }
               viewerIsOwner={profile.viewerIsOwner}
               onToggleShow={profile.viewerIsOwner ? handleShowcaseToggleShowQuests : undefined}
-              onChangeGlobalPrivacy={profile.viewerIsOwner ? handleGlobalQuestPrivacyChange : undefined}
-              onToggleQuestHighlighted={profile.viewerIsOwner ? profile.toggleQuestHighlighted : undefined}
+              onChangeGlobalPrivacy={
+                profile.viewerIsOwner ? handleGlobalQuestPrivacyChange : undefined
+              }
+              onToggleQuestHighlighted={
+                profile.viewerIsOwner ? profile.toggleQuestHighlighted : undefined
+              }
               onDeleteQuest={profile.viewerIsOwner ? profile.deleteShowcasedQuest : undefined}
               onChangeQuestPrivacy={profile.viewerIsOwner ? profile.setQuestPrivacy : undefined}
               onAddQuest={profile.viewerIsOwner ? handleSyncCompletedQuests : undefined}
@@ -701,16 +693,20 @@ export function Profile() {
 
             <RewardsShowcase
               rewards={profile.filteredShowcasedRewards}
-              showcaseSettings={profile.profile?.showcaseSettings || {
-                showCompletedQuests: true,
-                showRewards: true,
-                questsPrivacy: PL.Public,
-                rewardsPrivacy: PL.Public,
-                featuredQuestIds: [],
-              }}
+              showcaseSettings={
+                profile.profile?.showcaseSettings || {
+                  showCompletedQuests: true,
+                  showRewards: true,
+                  questsPrivacy: PL.Public,
+                  rewardsPrivacy: PL.Public,
+                  featuredQuestIds: [],
+                }
+              }
               viewerIsOwner={profile.viewerIsOwner}
               onToggleShow={profile.viewerIsOwner ? handleShowcaseToggleShowRewards : undefined}
-              onChangeGlobalPrivacy={profile.viewerIsOwner ? handleGlobalRewardPrivacyChange : undefined}
+              onChangeGlobalPrivacy={
+                profile.viewerIsOwner ? handleGlobalRewardPrivacyChange : undefined
+              }
               onDeleteReward={profile.viewerIsOwner ? profile.deleteShowcasedReward : undefined}
               onChangeRewardPrivacy={profile.viewerIsOwner ? profile.setRewardPrivacy : undefined}
             />
@@ -852,7 +848,7 @@ export function Profile() {
                       <Edit3 className="h-4 w-4" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg">Profile Information</h3>
+                      <h3 className="text-lg font-semibold">Profile Information</h3>
                       <p className="text-muted-foreground text-xs font-bold">
                         Customize how your profile appears to others
                       </p>
@@ -869,7 +865,7 @@ export function Profile() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground font-bold">Bio</span>
-                      <span className="font-semibold text-right max-w-[200px] truncate">
+                      <span className="max-w-[200px] truncate text-right font-semibold">
                         {profile.profile?.metadata.bio || (
                           <span className="text-muted-foreground italic">Not set</span>
                         )}
@@ -896,10 +892,7 @@ export function Profile() {
                       </span>
                     </div>
                   </div>
-                  <Button
-                    className="mt-5 w-full"
-                    onClick={() => setIsEditingProfile(true)}
-                  >
+                  <Button className="mt-5 w-full" onClick={() => setIsEditingProfile(true)}>
                     <Edit3 className="h-4 w-4" />
                     Edit Profile
                   </Button>
@@ -917,16 +910,26 @@ export function Profile() {
                 <div className="space-y-6">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h4 className="font-semibold text-sm">Interactive Tutorials</h4>
-                      <p className="text-muted-foreground text-xs mt-1">
+                      <h4 className="text-sm font-semibold">Interactive Tutorials</h4>
+                      <p className="text-muted-foreground mt-1 text-xs">
                         Need a refresher? You can replay the introductory tours at any time.
                       </p>
                     </div>
-                    <div className="flex shrink-0 gap-2 mt-2 sm:mt-0">
-                      <Button variant="outline" size="sm" onClick={() => onboarding.open(0)}>
+                    <div className="mt-2 flex shrink-0 gap-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label="Replay learner tour"
+                        onClick={() => onboarding.open(0)}
+                      >
                         Replay Learner Tour
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => onboarding.open(5)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label="Replay creator tour"
+                        onClick={() => onboarding.open(5)}
+                      >
                         Replay Creator Tour
                       </Button>
                     </div>

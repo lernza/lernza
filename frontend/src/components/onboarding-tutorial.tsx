@@ -1,93 +1,81 @@
-import { useEffect } from "react"
-import Joyride, { CallBackProps, STATUS, Step } from "react-joyride"
-import { useOnboarding } from "@/hooks/use-onboarding"
+import { Joyride, STATUS, type Step, type EventData } from "react-joyride"
 import { useColorScheme } from "@/hooks/use-color-scheme"
-import { useWallet } from "@/hooks/use-wallet"
-import { OnboardingTutorialProps } from "./onboarding-tutorial-props"
 
-export function OnboardingTutorial({
-  isOpen,
-  currentStep,
-  onClose,
-  onComplete,
-  onNext,
-  onBack
-}: {
+export interface OnboardingTutorialProps {
   isOpen: boolean
   currentStep: number
   onClose: () => void
   onComplete: () => void
   onNext: () => void
   onBack: () => void
-}) {
+}
+
+export function OnboardingTutorial({
+  isOpen,
+  currentStep,
+  onComplete,
+  onNext,
+  onBack,
+}: OnboardingTutorialProps) {
   const { theme } = useColorScheme()
-  const { connected } = useWallet()
 
   const learnerSteps: Step[] = [
     {
       target: "body",
       content: "Welcome to Lernza! This quick tour will show you how to earn tokens by learning.",
       placement: "center",
-      disableBeacon: true,
     },
     {
       target: "[data-onboarding='connect-wallet']",
-      content: "First, connect your Freighter wallet. This acts as your identity on the Stellar network.",
+      content:
+        "First, connect your Freighter wallet. This acts as your identity on the Stellar network.",
       placement: "bottom",
-      disableBeacon: true,
     },
     {
       target: "[data-onboarding='nav-dashboard']",
-      content: "Browse available quests here. You'll find tasks and milestones to complete.",
+      content: "Explore active quests, view your enrolled tracks, and track earnings here.",
       placement: "bottom",
-      disableBeacon: true,
     },
     {
       target: "[data-onboarding='quest-card']",
-      content: "Click on any quest to view its details.",
-      placement: "top",
-      disableBeacon: true,
+      content: "Click into any quest to view details, prerequisite milestones, and token pools.",
+      placement: "right",
     },
     {
-      target: "[data-onboarding='quest-enroll']",
-      content: "Once you find a quest you like, click Enroll to start your journey and earn rewards!",
+      target: "[data-onboarding='enroll-quest']",
+      content: "Enroll into a quest to start submitting proof and claiming token rewards.",
       placement: "top",
-      disableBeacon: true,
     },
   ]
 
   const creatorSteps: Step[] = [
     {
-      target: "body",
-      content: "Welcome, Creator! Let's see how you can set up a quest.",
-      placement: "center",
-      disableBeacon: true,
-    },
-    {
-      target: "[data-onboarding='nav-create-quest']",
-      content: "Start by creating a new quest here.",
+      target: "[data-onboarding='create-quest']",
+      content: "Ready to educate? Create your own quest, design milestones, and set incentives.",
       placement: "bottom",
-      disableBeacon: true,
     },
     {
-      target: "[data-onboarding='add-milestones']",
-      content: "Add milestones that learners need to complete.",
+      target: "[data-onboarding='step-basics']",
+      content: "Name your quest, choose a category, and specify token rewards.",
+      placement: "right",
+    },
+    {
+      target: "[data-onboarding='step-milestones']",
+      content: "Break the learning path down into bite-sized actionable milestones.",
       placement: "top",
-      disableBeacon: true,
     },
     {
       target: "[data-onboarding='fund-rewards']",
       content: "Fund your quest with tokens to reward learners upon completion.",
       placement: "top",
-      disableBeacon: true,
     },
   ]
 
   const steps = [...learnerSteps, ...creatorSteps]
 
-  const handleJoyrideCallback = (data: CallBackProps) => {
-    const { action, index, status, type } = data
-    
+  const handleJoyrideCallback = (data: EventData) => {
+    const { action, status, type } = data
+
     if (([STATUS.FINISHED, STATUS.SKIPPED] as string[]).includes(status)) {
       onComplete()
     } else if (type === "step:after" || type === "error") {
@@ -106,16 +94,13 @@ export function OnboardingTutorial({
       run={isOpen}
       continuous
       scrollToFirstStep
-      showProgress
-      showSkipButton
-      callback={handleJoyrideCallback}
-      styles={{
-        options: {
-          primaryColor: "#FACC15",
-          backgroundColor: theme === "dark" ? "#1A1A1A" : "#FFFFFF",
-          textColor: theme === "dark" ? "#FFFFFF" : "#000000",
-          zIndex: 9999,
-        },
+      onEvent={handleJoyrideCallback}
+      options={{
+        primaryColor: "#FACC15",
+        backgroundColor: theme === "dark" ? "#1A1A1A" : "#FFFFFF",
+        textColor: theme === "dark" ? "#FFFFFF" : "#000000",
+        zIndex: 9999,
+        showProgress: true,
       }}
     />
   )

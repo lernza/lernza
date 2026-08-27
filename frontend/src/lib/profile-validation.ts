@@ -97,6 +97,7 @@ const URL_REGEX = /^(https?:\/\/|ipfs:\/\/|mailto:)/i
 const HTTP_URL_REGEX = /^https?:\/\//i
 const DISPLAY_NAME_REGEX = /^[\p{L}\p{N}\s\-_.'']+$/u
 const TAG_REGEX = /^[a-z0-9-]+$/
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS_REGEX = /[\x00-\x1F\x7F]/
 const EMAIL_REGEX = /^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -270,7 +271,7 @@ export function validateTags(tags: string[]): ValidationResult {
 
   const seen = new Set<string>()
   tags.forEach((tag, index) => {
-    const trimmed = tag.trim().toLowerCase()
+    const trimmed = tag.trim()
 
     if (trimmed.length < 2) {
       errors.push({
@@ -296,7 +297,8 @@ export function validateTags(tags: string[]): ValidationResult {
       })
     }
 
-    if (seen.has(trimmed)) {
+    const lower = trimmed.toLowerCase()
+    if (seen.has(lower)) {
       errors.push({
         field: `tags[${index}]`,
         message: `Duplicate tag: "${tag}"`,
@@ -401,7 +403,7 @@ export function validateSocialLinks(links: ProfileSocialLink[]): ValidationResul
 
 export function validateCompletedQuestShowcase(
   quest: CompletedQuestShowcase,
-  index: number,
+  index: number
 ): ValidationResult {
   const errors: ValidationError[] = []
   const warnings: ValidationWarning[] = []
@@ -498,10 +500,7 @@ export function validateCompletedQuestShowcase(
   return { valid: errors.length === 0, errors, warnings }
 }
 
-export function validateRewardShowcase(
-  reward: RewardShowcase,
-  index: number,
-): ValidationResult {
+export function validateRewardShowcase(reward: RewardShowcase, index: number): ValidationResult {
   const errors: ValidationError[] = []
   const warnings: ValidationWarning[] = []
 
@@ -648,10 +647,15 @@ export function validateFullProfile(profile: LearnerProfile): ValidationResult {
 }
 
 export function sanitizeDisplayName(name: string): string {
-  return name.replace(/[\x00-\x1F\x7F]/g, "").replace(/\s+/g, " ").trim()
+  // eslint-disable-next-line no-control-regex
+  return name
+    .replace(/[\x00-\x1F\x7F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export function sanitizeBio(bio: string): string {
+  // eslint-disable-next-line no-control-regex
   let result = bio.replace(/[\x00-\x09\x0B\x1F\x7F]/g, "")
   result = result.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
   return result
@@ -661,8 +665,13 @@ export function sanitizeTags(tags: string[]): string[] {
   return Array.from(
     new Set(
       tags
-        .map(t => t.trim().toLowerCase().replace(/[^a-z0-9-]/g, ""))
-        .filter(t => t.length >= 2 && t.length <= PROFILE_FIELD_LIMITS.TAG_MAX),
-    ),
+        .map(t =>
+          t
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, "")
+        )
+        .filter(t => t.length >= 2 && t.length <= PROFILE_FIELD_LIMITS.TAG_MAX)
+    )
   )
 }

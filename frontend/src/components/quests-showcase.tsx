@@ -13,7 +13,6 @@ import {
   Target,
   ChevronRight,
 } from "lucide-react"
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -68,18 +67,16 @@ function QuestShowcaseCard({
     <Card
       className={cn(
         "border-border group overflow-hidden border shadow-md transition-all hover:shadow-lg",
-        quest.highlighted && "border-accent ring-1 ring-accent/30",
+        quest.highlighted && "border-accent ring-accent/30 ring-1"
       )}
     >
       <CardContent className="p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-4 min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
             <div
               className={cn(
                 "border-border flex h-12 w-12 shrink-0 items-center justify-center border shadow-sm",
-                quest.highlighted
-                  ? "bg-accent/15 border-accent"
-                  : "bg-success/10",
+                quest.highlighted ? "bg-accent/15 border-accent" : "bg-success/10"
               )}
             >
               {quest.highlighted ? (
@@ -89,7 +86,7 @@ function QuestShowcaseCard({
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
                 <h4 className="truncate font-semibold">{quest.questName}</h4>
                 {quest.highlighted && (
                   <Badge variant="default" className="gap-1 text-[10px]">
@@ -129,9 +126,7 @@ function QuestShowcaseCard({
                 {formattedRewards && (
                   <div className="flex items-center gap-1">
                     <Coins className="text-success h-3.5 w-3.5" />
-                    <span className="text-success font-bold tabular-nums">
-                      {formattedRewards}
-                    </span>
+                    <span className="text-success font-bold tabular-nums">{formattedRewards}</span>
                   </div>
                 )}
                 {progressPercent === 100 && (
@@ -143,10 +138,8 @@ function QuestShowcaseCard({
               </div>
 
               {quest.reflection && viewerIsOwner && (
-                <div className="border-border mt-3 border-l-2 border-accent bg-accent/5 pl-3 py-1">
-                  <p className="text-muted-foreground text-xs italic">
-                    "{quest.reflection}"
-                  </p>
+                <div className="border-border border-accent bg-accent/5 mt-3 border-l-2 py-1 pl-3">
+                  <p className="text-muted-foreground text-xs italic">"{quest.reflection}"</p>
                 </div>
               )}
             </div>
@@ -165,12 +158,10 @@ function QuestShowcaseCard({
                       onClick={onToggleHighlighted}
                       className={cn(
                         "gap-1 text-xs font-bold",
-                        quest.highlighted && "border-accent bg-accent/10 text-accent",
+                        quest.highlighted && "border-accent bg-accent/10 text-accent"
                       )}
                     >
-                      <Star
-                        className={cn("h-3.5 w-3.5", quest.highlighted && "fill-current")}
-                      />
+                      <Star className={cn("h-3.5 w-3.5", quest.highlighted && "fill-current")} />
                       {quest.highlighted ? "Featured" : "Feature"}
                     </Button>
                   )}
@@ -187,7 +178,7 @@ function QuestShowcaseCard({
                               "border-border border p-1.5 transition-colors",
                               isActive
                                 ? "bg-accent border-accent"
-                                : "bg-background hover:bg-secondary text-muted-foreground",
+                                : "bg-background hover:bg-secondary text-muted-foreground"
                             )}
                             title={`Set to ${lvl}`}
                           >
@@ -204,7 +195,7 @@ function QuestShowcaseCard({
                       variant="outline"
                       size="sm"
                       onClick={onDelete}
-                      className="text-destructive hover:bg-destructive/10 text-xs font-bold gap-1"
+                      className="text-destructive hover:bg-destructive/10 gap-1 text-xs font-bold"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       Remove
@@ -213,7 +204,12 @@ function QuestShowcaseCard({
                 </>
               )}
               {onViewQuest && (
-                <Button variant="outline" size="sm" onClick={onViewQuest} className="gap-1 text-xs font-bold">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onViewQuest}
+                  className="gap-1 text-xs font-bold"
+                >
                   View Quest
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
@@ -251,11 +247,8 @@ export function CompletedQuestsShowcase({
   onChangeQuestPrivacy,
   onAddQuest,
   onViewQuest,
-  isLoading,
 }: CompletedQuestsShowcaseProps) {
-  const visibleQuests = viewerIsOwner
-    ? quests
-    : quests.filter(q => q.privacy === PL.Public)
+  const visibleQuests = viewerIsOwner ? quests : quests.filter(q => q.privacy === PL.Public)
 
   const sortedQuests = [...visibleQuests].sort((a, b) => {
     if (a.highlighted !== b.highlighted) return a.highlighted ? -1 : 1
@@ -270,9 +263,9 @@ export function CompletedQuestsShowcase({
             <Trophy className="h-4 w-4" />
           </div>
           <div>
-            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
               Completed Quests
-              <Badge variant="outline" className="text-xs font-bold tabular-nums border">
+              <Badge variant="outline" className="border text-xs font-bold tabular-nums">
                 {quests.length} total
               </Badge>
             </CardTitle>
@@ -289,31 +282,37 @@ export function CompletedQuestsShowcase({
                 variant={showcaseSettings.showCompletedQuests ? "default" : "outline"}
                 size="sm"
                 onClick={() => onToggleShow(!showcaseSettings.showCompletedQuests)}
-                className="text-xs font-bold gap-1"
+                className="gap-1 text-xs font-bold"
               >
                 {showcaseSettings.showCompletedQuests ? (
-                  <><Eye className="h-3.5 w-3.5" /> Showing</>
+                  <>
+                    <Eye className="h-3.5 w-3.5" /> Showing
+                  </>
                 ) : (
-                  <><Lock className="h-3.5 w-3.5" /> Hidden</>
+                  <>
+                    <Lock className="h-3.5 w-3.5" /> Hidden
+                  </>
                 )}
               </Button>
             )}
             {onChangeGlobalPrivacy && (
-              <div className="flex gap-0 border-border border shadow-sm">
-                {([
-                  { lvl: PL.Public, Icon: Eye, label: "All Public" },
-                  { lvl: PL.Connections, Icon: Users, label: "Connections" },
-                  { lvl: PL.Private, Icon: Lock, label: "All Private" },
-                ] as const).map(({ lvl, Icon, label }) => (
+              <div className="border-border flex gap-0 border shadow-sm">
+                {(
+                  [
+                    { lvl: PL.Public, Icon: Eye, label: "All Public" },
+                    { lvl: PL.Connections, Icon: Users, label: "Connections" },
+                    { lvl: PL.Private, Icon: Lock, label: "All Private" },
+                  ] as const
+                ).map(({ lvl, Icon, label }) => (
                   <button
                     key={lvl}
                     type="button"
                     onClick={() => onChangeGlobalPrivacy(lvl)}
                     className={cn(
-                      "border-border border-r px-2 py-1.5 text-xs font-bold last:border-r-0 transition-colors",
+                      "border-border border-r px-2 py-1.5 text-xs font-bold transition-colors last:border-r-0",
                       showcaseSettings.questsPrivacy === lvl
                         ? "bg-accent"
-                        : "bg-background hover:bg-secondary text-muted-foreground",
+                        : "bg-background hover:bg-secondary text-muted-foreground"
                     )}
                     title={label}
                   >
@@ -323,7 +322,7 @@ export function CompletedQuestsShowcase({
               </div>
             )}
             {onAddQuest && (
-              <Button size="sm" onClick={onAddQuest} className="text-xs font-bold gap-1">
+              <Button size="sm" onClick={onAddQuest} className="gap-1 text-xs font-bold">
                 <Pencil className="h-3.5 w-3.5" />
                 Add
               </Button>
@@ -338,7 +337,8 @@ export function CompletedQuestsShowcase({
             <Lock className="text-muted-foreground mb-3 h-10 w-10" />
             <h3 className="mb-1 font-semibold">Quest showcase hidden</h3>
             <p className="text-muted-foreground mb-4 max-w-sm text-sm font-bold">
-              Your completed quests are currently hidden from your profile. Toggle the switch above to display them.
+              Your completed quests are currently hidden from your profile. Toggle the switch above
+              to display them.
             </p>
             {onToggleShow && (
               <Button onClick={() => onToggleShow(true)} size="sm">
@@ -377,9 +377,15 @@ export function CompletedQuestsShowcase({
                 key={quest.questId}
                 quest={quest}
                 viewerIsOwner={viewerIsOwner}
-                onToggleHighlighted={onToggleQuestHighlighted ? () => onToggleQuestHighlighted(quest.questId) : undefined}
+                onToggleHighlighted={
+                  onToggleQuestHighlighted
+                    ? () => onToggleQuestHighlighted(quest.questId)
+                    : undefined
+                }
                 onDelete={onDeleteQuest ? () => onDeleteQuest(quest.questId) : undefined}
-                onChangePrivacy={onChangeQuestPrivacy ? p => onChangeQuestPrivacy(quest.questId, p) : undefined}
+                onChangePrivacy={
+                  onChangeQuestPrivacy ? p => onChangeQuestPrivacy(quest.questId, p) : undefined
+                }
                 onViewQuest={onViewQuest ? () => onViewQuest(quest.questId) : undefined}
               />
             ))}

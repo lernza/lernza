@@ -13,7 +13,6 @@ import {
   type CompletedQuestShowcase,
   type RewardShowcase,
   type PrivacyLevel,
-  createEmptyProfile,
 } from "@/lib/profile-types"
 import {
   getProfileStore,
@@ -30,7 +29,12 @@ import {
   hasProfileContent,
   type ProfileStoreState,
 } from "@/lib/profile-store"
-import { validateProfileMetadata, sanitizeDisplayName, sanitizeBio, sanitizeTags } from "@/lib/profile-validation"
+import {
+  validateProfileMetadata,
+  sanitizeDisplayName,
+  sanitizeBio,
+  sanitizeTags,
+} from "@/lib/profile-validation"
 
 export interface UseProfileReturn {
   profile: LearnerProfile | null
@@ -132,7 +136,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
 
       return updateProfileMetadata(address, sanitized) !== null
     },
-    [address, profile],
+    [address, profile]
   )
 
   const setFieldPrivacy = useCallback(
@@ -140,7 +144,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return updateFieldPrivacy(address, updates) !== null
     },
-    [address],
+    [address]
   )
 
   const setShowcaseSettings = useCallback(
@@ -148,7 +152,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return updateShowcaseSettings(address, updates) !== null
     },
-    [address],
+    [address]
   )
 
   const addOrUpdateShowcasedQuest = useCallback(
@@ -156,7 +160,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return upsertShowcasedQuest(address, quest) !== null
     },
-    [address],
+    [address]
   )
 
   const deleteShowcasedQuest = useCallback(
@@ -164,7 +168,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return removeShowcasedQuest(address, questId) !== null
     },
-    [address],
+    [address]
   )
 
   const setQuestPrivacy = useCallback(
@@ -174,7 +178,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!quest) return false
       return upsertShowcasedQuest(address, { ...quest, privacy }) !== null
     },
-    [address, profile],
+    [address, profile]
   )
 
   const toggleQuestHighlighted = useCallback(
@@ -184,7 +188,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!quest) return false
       return upsertShowcasedQuest(address, { ...quest, highlighted: !quest.highlighted }) !== null
     },
-    [address, profile],
+    [address, profile]
   )
 
   const addOrUpdateShowcasedReward = useCallback(
@@ -192,7 +196,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return upsertShowcasedReward(address, reward) !== null
     },
-    [address],
+    [address]
   )
 
   const deleteShowcasedReward = useCallback(
@@ -200,7 +204,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!address) return false
       return removeShowcasedReward(address, rewardId) !== null
     },
-    [address],
+    [address]
   )
 
   const setRewardPrivacy = useCallback(
@@ -210,7 +214,7 @@ export function useProfile(viewerIsOwner = true): UseProfileReturn {
       if (!reward) return false
       return upsertShowcasedReward(address, { ...reward, privacy }) !== null
     },
-    [address, profile],
+    [address, profile]
   )
 
   const refreshProfile = useCallback(() => {

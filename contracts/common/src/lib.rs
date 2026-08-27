@@ -173,8 +173,7 @@ pub fn is_contract_address(addr: &Address) -> bool {
         return false;
     }
 
-    for i in 1..56 {
-        let c = buf[i];
+    for &c in buf[1..].iter() {
         let valid = c.is_ascii_uppercase() || (b'2'..=b'7').contains(&c);
         if !valid {
             return false;
@@ -196,7 +195,7 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
 /// Lightweight acceptance of http/https/ipfs schemes and rejects whitespace
 /// and empty strings.
 pub fn is_valid_url(s: &String) -> bool {
-    if s.len() == 0 || s.len() > 2048 {
+    if s.is_empty() || s.len() > 2048 {
         return false;
     }
     let mut buf = [0u8; 2048];
@@ -230,11 +229,11 @@ pub fn is_valid_url(s: &String) -> bool {
 /// Data: (caller_contract, target_contract, method_symbol, params)
 pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_call"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             params.clone(),
         ),
     );
@@ -245,11 +244,11 @@ pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String
 /// Data: (caller_contract, target_contract, method_symbol, success, result)
 pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_return"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             success,
             result.clone(),
         ),
@@ -267,7 +266,7 @@ pub fn emit_quest_created(
     created_at: u64,
 ) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "quest_created"),),
+        (soroban_sdk::Symbol::new(env, "quest_created"),),
         (quest_id, owner.clone(), name.clone(), created_at),
     );
 }
@@ -277,7 +276,7 @@ pub fn emit_quest_created(
 /// Data: (quest_id, funder, amount)
 pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i128) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_funded"),),
+        (soroban_sdk::Symbol::new(env, "reward_funded"),),
         (quest_id, funder.clone(), amount),
     );
 }
@@ -293,7 +292,7 @@ pub fn emit_reward_distributed(
     amount: i128,
 ) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
+        (soroban_sdk::Symbol::new(env, "reward_distributed"),),
         (quest_id, milestone_id, enrollee.clone(), amount),
     );
 }
@@ -337,19 +336,24 @@ pub fn estimate_persistent_rent(entry_size_bytes: u32) -> i128 {
     ((bytes * RENT_STROOPS_PER_KB_PER_BUMP) + 1023) / 1024
 }
 
-
 /// Deterministic milestone ID — issue #1340
 /// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
 pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
-    use soroban_sdk::xdr::Hash;
-    let mut data = Vec::new();
-    data.extend_from_slice(quest_id);
-    data.extend_from_slice(&timestamp.to_be_bytes());
-    data.extend_from_slice(&nonce.to_be_bytes());
-    // Simple hash — in production use soroban_sdk::crypto::sha256 or host hash
     let mut out = [0u8; 32];
-    for (i, b) in data.iter().enumerate() {
-        out[i % 32] ^= b;
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
     }
     out
 }

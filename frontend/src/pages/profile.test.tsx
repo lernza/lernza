@@ -238,7 +238,7 @@ describe("Profile", () => {
 
     renderProfile()
 
-    expect(screen.getByText("Welcome to Lernza")).toBeTruthy()
+    expect(screen.getByText(/Welcome to Lernza/i)).toBeTruthy()
     expect(screen.getByText("Customize Your Profile")).toBeTruthy()
     expect(screen.getByText("Complete your profile setup")).toBeTruthy()
   })
@@ -283,7 +283,7 @@ describe("Profile", () => {
 
     expect(screen.getByText("Completed Quests")).toBeTruthy()
     expect(screen.getByText("Rewards Earned")).toBeTruthy()
-    expect(screen.getByText("DeFi Fundamentals")).toBeTruthy()
+    expect(screen.getAllByText("DeFi Fundamentals").length).toBeGreaterThan(0)
     expect(screen.getByText("Liquidity Pools")).toBeTruthy()
   })
 })

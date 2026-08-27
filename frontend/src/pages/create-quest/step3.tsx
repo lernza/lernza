@@ -13,6 +13,7 @@ import { questClient, Visibility } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { invalidateQuestQueries, invalidateFundingQueries } from "@/lib/query-invalidation"
+import { setQuestReferralConfig } from "@/lib/referrals"
 import {
   getConfiguredRewardToken,
   getVerifiedRewardToken,
@@ -99,6 +100,13 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
       }
 
       setCreatedQuestId(questId)
+
+      // Initialize quest referral program settings
+      setQuestReferralConfig(questId, {
+        enabled: (step1Data.referralBonus ?? 10) > 0,
+        bonusAmount: step1Data.referralBonus ?? 10,
+        rewardTrigger: "complete",
+      })
 
       // Create milestones on-chain
       for (let i = 0; i < step2Data.milestones.length; i++) {

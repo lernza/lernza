@@ -11,15 +11,7 @@ import {
   Cell,
   Legend,
 } from "recharts"
-import {
-  BarChart3,
-  Users,
-  Coins,
-  Target,
-  RefreshCw,
-  TrendingUp,
-  Award,
-} from "lucide-react"
+import { BarChart3, Users, Coins, Target, RefreshCw, TrendingUp, Award } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -72,9 +64,9 @@ async function fetchPlatformStats(): Promise<PlatformStats> {
     if (batch.length < pageSize) break
   }
 
-  const activeQuests = quests.filter((q) => q.status === QuestStatus.Active).length
-  const archivedQuests = quests.filter((q) => q.status === QuestStatus.Archived).length
-  const cancelledQuests = quests.filter((q) => q.status === QuestStatus.Cancelled).length
+  const activeQuests = quests.filter(q => q.status === QuestStatus.Active).length
+  const archivedQuests = quests.filter(q => q.status === QuestStatus.Archived).length
+  const cancelledQuests = quests.filter(q => q.status === QuestStatus.Cancelled).length
 
   return {
     totalQuests: questCount,
@@ -88,7 +80,7 @@ async function fetchPlatformStats(): Promise<PlatformStats> {
 
 async function fetchQuestAnalytics(questIds: number[]): Promise<QuestAnalytics[]> {
   const results = await Promise.all(
-    questIds.map(async (id) => {
+    questIds.map(async id => {
       const [quest, enrollees, milestoneCount, poolBalance] = await Promise.all([
         questClient.getQuest(id),
         questClient.getEnrollees(id),
@@ -99,7 +91,7 @@ async function fetchQuestAnalytics(questIds: number[]): Promise<QuestAnalytics[]
       let completedMilestones = 0
       if (milestoneCount > 0) {
         const completions = await Promise.all(
-          enrollees.map((e) => milestoneClient.getEnrolleeCompletions(id, e))
+          enrollees.map(e => milestoneClient.getEnrolleeCompletions(id, e))
         )
         completedMilestones = completions.reduce((sum, c) => sum + c, 0)
       }
@@ -154,7 +146,7 @@ function StatusPieChart({ stats }: { stats: PlatformStats }) {
     { name: "Active", value: stats.activeQuests },
     { name: "Archived", value: stats.archivedQuests },
     { name: "Cancelled", value: stats.cancelledQuests },
-  ].filter((d) => d.value > 0)
+  ].filter(d => d.value > 0)
 
   if (data.length === 0) return null
 
@@ -174,7 +166,9 @@ function StatusPieChart({ stats }: { stats: PlatformStats }) {
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }: { name?: string; percent?: number }) =>
+                  `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                }
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
@@ -194,9 +188,7 @@ function StatusPieChart({ stats }: { stats: PlatformStats }) {
 }
 
 function EnrollmentBarChart({ quests }: { quests: QuestAnalytics[] }) {
-  const data = quests
-    .slice(0, 10)
-    .map((q) => ({ name: q.name.slice(0, 20), enrollees: q.enrollees }))
+  const data = quests.slice(0, 10).map(q => ({ name: q.name.slice(0, 20), enrollees: q.enrollees }))
 
   if (data.length === 0) return null
 
@@ -233,9 +225,9 @@ function EnrollmentBarChart({ quests }: { quests: QuestAnalytics[] }) {
 
 function MilestoneCompletionChart({ quests }: { quests: QuestAnalytics[] }) {
   const data = quests
-    .filter((q) => q.milestones > 0)
+    .filter(q => q.milestones > 0)
     .slice(0, 10)
-    .map((q) => ({
+    .map(q => ({
       name: q.name.slice(0, 20),
       completed: q.completedMilestones,
       pending: q.milestones * q.enrollees - q.completedMilestones,
@@ -302,8 +294,11 @@ function QuestRewardsTable({ quests }: { quests: QuestAnalytics[] }) {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((q) => (
-                <tr key={q.id} className="border-border hover:bg-muted/30 border-b transition-colors">
+              {sorted.map(q => (
+                <tr
+                  key={q.id}
+                  className="border-border hover:bg-muted/30 border-b transition-colors"
+                >
                   <td className="px-4 py-3 font-medium">{q.name}</td>
                   <td className="px-4 py-3 text-right">{q.enrollees}</td>
                   <td className="px-4 py-3 text-right">{q.milestones}</td>
@@ -348,15 +343,15 @@ export function Analytics() {
     load()
   }, [])
 
-  if (loading) return <LoadingState />
-  if (error) return <SmartError error={new Error(error)} />
-  if (!stats) return <EmptyState message="No analytics data available" />
+  if (loading) return <LoadingState message="Loading analytics..." />
+  if (error) return <SmartError message={error} onRetry={load} />
+  if (!stats) return <EmptyState title="No Data" description="No analytics data available" />
 
   return (
     <PageContainer>
       <PageHeader
         title="Analytics"
-        description="Platform-wide quest and reward metrics"
+        subtitle="Platform-wide quest and reward metrics"
         action={
           <Button variant="outline" size="sm" onClick={load}>
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -373,16 +368,8 @@ export function Analytics() {
           value={String(stats.totalQuests)}
           sub={`${stats.activeQuests} active`}
         />
-        <StatCard
-          icon={Users}
-          label="Active Quests"
-          value={String(stats.activeQuests)}
-        />
-        <StatCard
-          icon={Coins}
-          label="Total Funded"
-          value={formatTokens(stats.totalFunded)}
-        />
+        <StatCard icon={Users} label="Active Quests" value={String(stats.activeQuests)} />
+        <StatCard icon={Coins} label="Total Funded" value={formatTokens(stats.totalFunded)} />
         <StatCard
           icon={TrendingUp}
           label="Total Distributed"
@@ -417,7 +404,9 @@ export function Analytics() {
               <span className="text-muted-foreground text-sm">Avg. Enrollment</span>
               <Badge variant="secondary">
                 {stats.totalQuests > 0
-                  ? (questAnalytics.reduce((s, q) => s + q.enrollees, 0) / questAnalytics.length).toFixed(1)
+                  ? (
+                      questAnalytics.reduce((s, q) => s + q.enrollees, 0) / questAnalytics.length
+                    ).toFixed(1)
                   : "0"}
               </Badge>
             </div>
@@ -425,7 +414,9 @@ export function Analytics() {
               <span className="text-muted-foreground text-sm">Avg. Milestones/Quest</span>
               <Badge variant="secondary">
                 {questAnalytics.length > 0
-                  ? (questAnalytics.reduce((s, q) => s + q.milestones, 0) / questAnalytics.length).toFixed(1)
+                  ? (
+                      questAnalytics.reduce((s, q) => s + q.milestones, 0) / questAnalytics.length
+                    ).toFixed(1)
                   : "0"}
               </Badge>
             </div>

@@ -37,9 +37,15 @@ export function Step1Form() {
 
   // Keep incomplete input in the creation context so "Save draft" works before a step is valid.
   useEffect(() => {
-    const subscription = watch(value => setStep1Data({
-      name: value.name ?? "", description: value.description ?? "", category: value.category ?? "", tags: value.tags ?? [],
-    }))
+    const subscription = watch(value =>
+      setStep1Data({
+        name: value.name ?? "",
+        description: value.description ?? "",
+        category: value.category ?? "",
+        tags: value.tags ?? [],
+        referralBonus: value.referralBonus ?? 10,
+      })
+    )
     return () => subscription.unsubscribe()
   }, [setStep1Data, watch])
 
@@ -111,7 +117,7 @@ export function Step1Form() {
               placeholder="e.g. Learn to Code with Alex"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.name && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.name && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={64}
             />
@@ -142,7 +148,7 @@ export function Step1Form() {
               placeholder="Describe what learners will accomplish..."
               className={cn(
                 "border-border bg-background w-full resize-none border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.description && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.description && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={2000}
             />
@@ -172,7 +178,7 @@ export function Step1Form() {
               placeholder="e.g. Programming, Web3, Design"
               className={cn(
                 "border-border bg-background w-full border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
-                errors.category && "border-destructive focus:ring-1 focus:ring-destructive"
+                errors.category && "border-destructive focus:ring-destructive focus:ring-1"
               )}
               maxLength={32}
             />
@@ -251,6 +257,26 @@ export function Step1Form() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Referral Bonus (Optional) */}
+          <div className="border-border border-t pt-2">
+            <FormLabel htmlFor="quest-referral-bonus">
+              Referral Bonus (Tokens per completed referral)
+            </FormLabel>
+            <input
+              id="quest-referral-bonus"
+              type="number"
+              min="0"
+              max="1000"
+              {...register("referralBonus", { valueAsNumber: true })}
+              placeholder="e.g. 10"
+              className="border-border bg-background w-full flex-1 border px-4 py-2.5 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none"
+            />
+            <p className="text-muted-foreground mt-1 text-xs">
+              Incentivize participants by offering a token bonus when they refer friends who
+              complete milestones.
+            </p>
           </div>
         </div>
       </div>

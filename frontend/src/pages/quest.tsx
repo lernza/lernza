@@ -1,23 +1,35 @@
 // frontend/src/pages/quest.tsx (wired to on-chain data)
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { ToastContainer } from "@/components/toast"
 import { useToast } from "@/hooks/use-toast"
-import { useQuest, useMilestones, useEnrollees, useRewardPool, useTotalReservedReward } from "@/hooks/use-quest-data"
+import { useWallet } from "@/hooks/use-wallet"
+import {
+  useQuest,
+  useMilestones,
+  useEnrollees,
+  useRewardPool,
+  useTotalReservedReward,
+} from "@/hooks/use-quest-data"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import { PageMetadata } from "@/components/PageMetadata"
 import { buildQuestMetadata } from "@/lib/questMetadata"
+import type { QuestInfo } from "@/lib/contract-types"
 import { QuestHeaderPanel } from "@/components/quest/QuestHeaderPanel"
 import { StatsPanel } from "@/components/quest/StatsPanel"
 import { ProgressPanel } from "@/components/quest/ProgressPanel"
-import { TabsNavigation } from "@/components/quest/TabsNavigation"
+import { TabsNavigation, type QuestTab } from "@/components/quest/TabsNavigation"
 import { MilestonesSection } from "@/components/quest/MilestonesSection"
+import { EnrolleesSection } from "@/components/quest/EnrolleesSection"
 import { BatchClaimResultDialog } from "@/components/quest/BatchClaimResultDialog"
 import { TimelineSection } from "@/components/quest/TimelineSection"
+import { QuestAnalyticsDashboard } from "@/components/analytics/QuestAnalyticsDashboard"
+import { ReferralCard } from "@/components/referral/ReferralCard"
 import { ReportQuestDialog } from "@/components/report-quest-dialog"
 import { batchClaimRewards } from "@/lib/contracts/batch-claims"
 import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
 import { LoadingState } from "@/components/ui/async-states"
+import { storePendingReferral, recordReferralEnrollment } from "@/lib/referrals"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
 
 interface QuestViewProps {
@@ -25,15 +37,32 @@ interface QuestViewProps {
   onBack: () => void
 }
 
-type Tab = "milestones" | "enrollees" | "timeline"
-
 export function QuestView({ questId, onBack }: QuestViewProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("milestones")
+  const [activeTab, setActiveTab] = useState<QuestTab>("milestones")
   const { toasts, addToast, removeToast } = useToast()
+  const { address } = useWallet()
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const ref = params.get("ref")
+      if (ref) {
+        storePendingReferral(questId, ref)
+      }
+    }
+  }, [questId])
 
   const { data: quest, isLoading: questLoading, error: questError } = useQuest(questId)
-  const { data: milestonesData, isLoading: milestonesLoading, error: milestonesError } = useMilestones(questId)
-  const { data: enrolleesData, isLoading: enrolleesLoading, error: enrolleesError } = useEnrollees(questId)
+  const {
+    data: milestonesData,
+    isLoading: milestonesLoading,
+    error: milestonesError,
+  } = useMilestones(questId)
+  const {
+    data: enrolleesData,
+    isLoading: enrolleesLoading,
+    error: enrolleesError,
+  } = useEnrollees(questId)
   const { data: poolBalance = 0n } = useRewardPool(questId)
   const { data: reservedReward = 0n } = useTotalReservedReward(questId)
 
@@ -53,7 +82,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const [completionMap, setCompletionMap] = useState<Record<string, boolean>>({})
 
   // Load completions when enrollees or milestones change
-  useMemo(() => {
+  useEffect(() => {
     if (enrolleeAddresses.length === 0 || milestones.length === 0) {
       setCompletionMap({})
       return
@@ -107,9 +136,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   // Memoised derivations
   const { totalReward, completedMilestones, isComplete, earnedReward } = useMemo(() => {
     const total = milestones.reduce((sum, m) => sum + Number(m.rewardAmount), 0)
-    const completedSet = new Set(
-      completions.filter(c => c.completed).map(c => c.milestoneId)
-    )
+    const completedSet = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
     const completed = completedSet.size
     return {
       totalReward: total,
@@ -122,16 +149,22 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   }, [milestones, completions])
 
   const handleAddEnrollee = useCallback(() => {
+    if (address) {
+      recordReferralEnrollment(questId, address)
+    }
     addToast("Add enrollee clicked", "info")
-  }, [addToast])
+  }, [addToast, address, questId])
 
   const handleAddMilestone = useCallback(() => {
     addToast("Add milestone clicked", "info")
   }, [addToast])
 
-  const handleVerifyCompletion = useCallback((milestoneId: number) => {
-    addToast(`Verified milestone ${milestoneId}`, "success")
-  }, [addToast])
+  const handleVerifyCompletion = useCallback(
+    (milestoneId: number) => {
+      addToast(`Verified milestone ${milestoneId}`, "success")
+    },
+    [addToast]
+  )
 
   const handleClaimRewards = useCallback(
     async (
@@ -275,9 +308,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   if (error || !quest) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <h2 className="mb-4 text-2xl font-semibold">
-          {error || "Quest not found"}
-        </h2>
+        <h2 className="mb-4 text-2xl font-semibold">{error || "Quest not found"}</h2>
         <Button variant="outline" onClick={onBack}>
           Go back
         </Button>
@@ -305,7 +336,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
           questName={quest.name}
           questDescription={quest.description}
           isComplete={isComplete}
-          isArchived={quest.status === "Archived"}
+          isArchived={quest.status === 1 || String(quest.status) === "Archived"}
           onBack={onBack}
           onAddEnrollee={handleAddEnrollee}
           onAddMilestone={handleAddMilestone}
@@ -334,6 +365,8 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         onTabChange={setActiveTab}
         milestonesCount={milestones.length}
         enrolleesCount={enrollees.length}
+        showAnalytics={true}
+        showReferrals={true}
       />
 
       {activeTab === "milestones" && (
@@ -368,13 +401,68 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         </SectionErrorBoundary>
       )}
 
+      {activeTab === "referrals" && (
+        <SectionErrorBoundary label="Refer & Earn">
+          <div className="mx-auto max-w-xl py-4">
+            <ReferralCard
+              questId={questId}
+              questTitle={quest.name}
+              userAddress={address}
+              onRewardClaimed={amt => addToast(`Claimed ${amt} referral bonus tokens!`, "success")}
+            />
+          </div>
+        </SectionErrorBoundary>
+      )}
+
+      {activeTab === "analytics" && (
+        <SectionErrorBoundary label="Quest Analytics">
+          <QuestAnalyticsDashboard
+            questId={questId}
+            questTitle={quest.name}
+            createdAt={quest.createdAt}
+            totalEnrollees={enrollees.length}
+            completedLearners={
+              enrollees.filter(e => {
+                const userCompletions = completions.filter(
+                  c => c.enrollee === e.address && c.completed
+                )
+                return userCompletions.length === milestones.length && milestones.length > 0
+              }).length
+            }
+            inProgressLearners={
+              enrollees.filter(e => {
+                const userCompletions = completions.filter(
+                  c => c.enrollee === e.address && c.completed
+                )
+                return userCompletions.length > 0 && userCompletions.length < milestones.length
+              }).length
+            }
+            stalledLearners={
+              enrollees.filter(e => {
+                const userCompletions = completions.filter(
+                  c => c.enrollee === e.address && c.completed
+                )
+                return userCompletions.length === 0
+              }).length
+            }
+            totalDistributedTokens={Number(reservedReward)}
+            poolRemaining={Number(poolBalance)}
+          />
+        </SectionErrorBoundary>
+      )}
+
       <div className="mt-8 flex justify-center">
-        <Button variant="ghost" size="sm" onClick={() => setIsReportOpen(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Report this quest"
+          onClick={() => setIsReportOpen(true)}
+        >
           Report this quest
         </Button>
       </div>
 
-      {quest && <PageMetadata {...buildQuestMetadata(quest as any, questId)} />}
+      {quest && <PageMetadata {...buildQuestMetadata(quest as unknown as QuestInfo, questId)} />}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <BatchClaimResultDialog

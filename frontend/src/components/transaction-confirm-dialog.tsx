@@ -4,7 +4,7 @@ import { X, Shield, AlertCircle, Loader2, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { cn, formatTokens } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { formatTokenAmount } from "@/lib/token-amount"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
 import type { RecipientStatus } from "@/lib/contract-types"
@@ -262,7 +262,7 @@ export function TransactionConfirmDialog({
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:gap-3">
               <Button
                 variant="outline"
                 onClick={handleClose}

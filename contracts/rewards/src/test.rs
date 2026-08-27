@@ -391,6 +391,9 @@ fn test_distribute_reward_overflow() {
         &String::from_str(&env, "Desc"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -859,6 +862,9 @@ fn test_authority_self_distribution() {
         &String::from_str(&env, "Description"),
         &1000,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
@@ -967,6 +973,9 @@ fn test_distribute_reward_after_milestone_completion() {
         &String::from_str(&env, "Complete task"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Fund quest
@@ -1267,6 +1276,9 @@ fn test_distribute_reward_zero_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1316,6 +1328,9 @@ fn test_distribute_reward_negative_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1399,6 +1414,9 @@ fn test_distribute_reward_amount_exceeds_max_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1957,6 +1975,9 @@ fn test_refund_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Enrollee completes it
@@ -2593,6 +2614,9 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -2773,6 +2797,9 @@ fn test_distribute_rejects_self_payment() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Owner tries to pay themselves (caller == enrollee)
@@ -2924,6 +2951,9 @@ fn test_pool_cannot_go_negative() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     let enrollee = Address::generate(&env);

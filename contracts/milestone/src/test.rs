@@ -259,7 +259,10 @@ fn test_branching_prerequisites_require_all_dependencies() {
         &100,
         &soroban_sdk::vec![&env, first, second],
     );
-    assert_eq!(client.get_milestone_prerequisites(&q_id, &branch), soroban_sdk::vec![&env, first, second]);
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &branch),
+        soroban_sdk::vec![&env, first, second]
+    );
 
     let enrollee = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -273,7 +276,10 @@ fn test_branching_prerequisites_require_all_dependencies() {
         Err(Ok(Error::MilestoneNotUnlocked))
     );
     client.verify_completion(&owner, &q_id, &second, &enrollee);
-    assert_eq!(client.verify_completion(&owner, &q_id, &branch, &enrollee), 100);
+    assert_eq!(
+        client.verify_completion(&owner, &q_id, &branch, &enrollee),
+        100
+    );
 }
 
 #[test]
@@ -2056,13 +2062,8 @@ fn test_verify_completion_with_feedback() {
     );
 
     let feedback_comment = String::from_str(&env, "Outstanding solution! Clean architecture.");
-    let reward = client.verify_completion_with_feedback(
-        &owner,
-        &q_id,
-        &ms_id,
-        &enrollee,
-        &feedback_comment,
-    );
+    let reward =
+        client.verify_completion_with_feedback(&owner, &q_id, &ms_id, &enrollee, &feedback_comment);
     assert_eq!(reward, 150);
 
     let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
@@ -2091,14 +2092,9 @@ fn test_reject_completion_with_feedback() {
     client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
     client.submit_for_review(&enrollee, &q_id, &ms_id);
 
-    let reject_feedback = String::from_str(&env, "Proof link is broken. Please submit working code.");
-    client.reject_completion_with_feedback(
-        &owner,
-        &q_id,
-        &ms_id,
-        &enrollee,
-        &reject_feedback,
-    );
+    let reject_feedback =
+        String::from_str(&env, "Proof link is broken. Please submit working code.");
+    client.reject_completion_with_feedback(&owner, &q_id, &ms_id, &enrollee, &reject_feedback);
 
     // Reserved reward should be restored / decreased
     assert_eq!(client.get_total_reserved_reward(&q_id), 0);
@@ -2133,35 +2129,26 @@ fn test_request_changes_and_resubmit_flow() {
 
     // Peer requests changes
     let change_feedback = String::from_str(&env, "Please add tests for edge cases.");
-    client.request_changes_with_feedback(
-        &peer,
-        &q_id,
-        &ms_id,
-        &enrollee,
-        &change_feedback,
-    );
+    client.request_changes_with_feedback(&peer, &q_id, &ms_id, &enrollee, &change_feedback);
 
     // Enrollee addresses changes and resubmits
     client.submit_for_review(&enrollee, &q_id, &ms_id);
 
     // Peer approves completion with feedback
     let approve_feedback = String::from_str(&env, "Tests look comprehensive now! Approved.");
-    let reward = client.approve_completion_with_feedback(
-        &peer,
-        &q_id,
-        &ms_id,
-        &enrollee,
-        &approve_feedback,
-    );
+    let reward =
+        client.approve_completion_with_feedback(&peer, &q_id, &ms_id, &enrollee, &approve_feedback);
     assert_eq!(reward, Some(300));
     assert!(client.is_completed(&q_id, &ms_id, &enrollee));
 
     // Full history preserved across cycle
     let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
     assert_eq!(history.len(), 2);
-    assert_eq!(history.get(0).unwrap().action, FeedbackAction::RequestChanges);
+    assert_eq!(
+        history.get(0).unwrap().action,
+        FeedbackAction::RequestChanges
+    );
     assert_eq!(history.get(0).unwrap().comment, change_feedback);
     assert_eq!(history.get(1).unwrap().action, FeedbackAction::Approve);
     assert_eq!(history.get(1).unwrap().comment, approve_feedback);
 }
-

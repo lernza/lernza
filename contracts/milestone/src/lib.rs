@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::too_many_arguments, dead_code)]
 use common::{extend_instance_ttl, EnrolleeStatus, QuestInfo, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, Address, BytesN, Env,
@@ -408,7 +409,9 @@ impl MilestoneContract {
         let ms_key = DataKey::Milestone(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
         let prerequisite_key = DataKey::Prerequisites(quest_id, id);
-        env.storage().persistent().set(&prerequisite_key, &prerequisites);
+        env.storage()
+            .persistent()
+            .set(&prerequisite_key, &prerequisites);
         env.storage().persistent().set(&next_key, &(id + 1));
 
         // Increment explicit milestone count
@@ -473,7 +476,11 @@ impl MilestoneContract {
         }
         for prerequisite_id in prerequisites.iter() {
             if prerequisite_id >= id
-                || prerequisites.iter().filter(|candidate| *candidate == prerequisite_id).count() > 1
+                || prerequisites
+                    .iter()
+                    .filter(|candidate| *candidate == prerequisite_id)
+                    .count()
+                    > 1
             {
                 return Err(Error::InvalidInput);
             }
@@ -487,7 +494,6 @@ impl MilestoneContract {
                 return Err(Error::NotFound);
             }
         }
-
 
         let milestone = MilestoneInfo {
             id,
@@ -503,11 +509,15 @@ impl MilestoneContract {
         let ms_key = DataKey::Milestone(quest_id, id);
         let prerequisite_key = DataKey::Prerequisites(quest_id, id);
         env.storage().persistent().set(&ms_key, &milestone);
-        env.storage().persistent().set(&prerequisite_key, &prerequisites);
+        env.storage()
+            .persistent()
+            .set(&prerequisite_key, &prerequisites);
         env.storage().persistent().set(&next_key, &(id + 1));
         let count_key = DataKey::MilestoneCount(quest_id);
         let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        env.storage().persistent().set(&count_key, &(current_count + 1));
+        env.storage()
+            .persistent()
+            .set(&count_key, &(current_count + 1));
         Self::bump_ms(&env, &count_key);
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
@@ -1898,7 +1908,7 @@ impl MilestoneContract {
             .unwrap_or_else(|| Vec::new(env));
         history.push_back(MilestoneFeedback {
             reviewer: reviewer.clone(),
-            action: action.clone(),
+            action,
             comment: comment.clone(),
             created_at: env.ledger().timestamp(),
         });
@@ -2010,7 +2020,9 @@ impl MilestoneContract {
         let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
         let new_reserved = current_reserved.saturating_sub(snapshot.reward_amount);
         env.storage().persistent().set(&reserved_key, &new_reserved);
-        env.storage().persistent().extend_ttl(&reserved_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&reserved_key, THRESHOLD, BUMP);
 
         // Record feedback
         Self::record_feedback(
@@ -2085,7 +2097,9 @@ impl MilestoneContract {
         let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
         let new_reserved = current_reserved.saturating_sub(snapshot.reward_amount);
         env.storage().persistent().set(&reserved_key, &new_reserved);
-        env.storage().persistent().extend_ttl(&reserved_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .extend_ttl(&reserved_key, THRESHOLD, BUMP);
 
         // Record feedback
         Self::record_feedback(
@@ -2136,7 +2150,10 @@ impl MilestoneContract {
         enrollee: Address,
     ) -> Vec<MilestoneFeedback> {
         let key = DataKey::MilestoneFeedbackHistory(quest_id, milestone_id, enrollee);
-        env.storage().persistent().get(&key).unwrap_or_else(|| Vec::new(&env))
+        env.storage()
+            .persistent()
+            .get(&key)
+            .unwrap_or_else(|| Vec::new(&env))
     }
 
     /// Get total number of milestones for a quest
@@ -2153,19 +2170,24 @@ impl MilestoneContract {
 #[cfg(test)]
 mod test;
 
-
 /// Deterministic milestone ID — issue #1340
 /// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
 pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
-    use soroban_sdk::xdr::Hash;
-    let mut data = Vec::new();
-    data.extend_from_slice(quest_id);
-    data.extend_from_slice(&timestamp.to_be_bytes());
-    data.extend_from_slice(&nonce.to_be_bytes());
-    // Simple hash — in production use soroban_sdk::crypto::sha256 or host hash
     let mut out = [0u8; 32];
-    for (i, b) in data.iter().enumerate() {
-        out[i % 32] ^= b;
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
     }
     out
 }

@@ -5,7 +5,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, String,
     Symbol, Vec,
 };
-use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_access::ownable::{self as ownable};
 use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::Base;
 
@@ -381,19 +381,24 @@ impl CertificateContract {
 #[cfg(test)]
 mod test;
 
-
 /// Deterministic milestone ID — issue #1340
 /// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
 pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
-    use soroban_sdk::xdr::Hash;
-    let mut data = Vec::new();
-    data.extend_from_slice(quest_id);
-    data.extend_from_slice(&timestamp.to_be_bytes());
-    data.extend_from_slice(&nonce.to_be_bytes());
-    // Simple hash — in production use soroban_sdk::crypto::sha256 or host hash
     let mut out = [0u8; 32];
-    for (i, b) in data.iter().enumerate() {
-        out[i % 32] ^= b;
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
     }
     out
 }

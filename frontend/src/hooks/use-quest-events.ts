@@ -88,12 +88,20 @@ function matchTopic(event: rpc.Api.EventResponse, topicSymbol: string): boolean 
 
 export interface ParsedEvent {
   type: EventTopicKey
-  questId: number
+  questId?: number
   milestoneId?: number
   enrollee?: string
   amount?: bigint
   ledger: number
   txHash: string
+  admin?: string
+  creator?: string
+  previousAdmin?: string
+  newAdmin?: string
+  mode?: number
+  flatReward?: bigint
+  actor?: string
+  authority?: string
 }
 
 export function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
@@ -441,7 +449,7 @@ export function useQuestEventStream(enabled: boolean) {
               title: "Reward Refunded",
               message: `Reward refunded for quest #${parsed.questId}.`,
               type: "success",
-              category: "rewards",
+              category: "reward",
             })
             break
         }

@@ -9,7 +9,6 @@ import {
   Save,
   X,
   Eye,
-  EyeOff,
   Users,
   Lock,
   Plus,
@@ -19,7 +18,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { type ProfileMetadata, type ProfileFieldPrivacy, type ProfileSocialLink, type PrivacyLevel, PROFILE_FIELD_LIMITS, PrivacyLevel as PL } from "@/lib/profile-types"
+import {
+  type ProfileMetadata,
+  type ProfileFieldPrivacy,
+  type ProfileSocialLink,
+  type PrivacyLevel,
+  PROFILE_FIELD_LIMITS,
+  PrivacyLevel as PL,
+} from "@/lib/profile-types"
 import { cn } from "@/lib/utils"
 
 interface PrivacySelectorProps {
@@ -46,15 +52,15 @@ function PrivacySelector({ value, onChange, size = "sm" }: PrivacySelectorProps)
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex items-center gap-1 border-border border px-2 py-1 transition-colors",
+              "border-border flex items-center gap-1 border px-2 py-1 transition-colors",
               isActive
                 ? "bg-accent text-accent-foreground border-accent"
-                : "bg-background hover:bg-secondary text-muted-foreground",
+                : "bg-background hover:bg-secondary text-muted-foreground"
             )}
             title={`${opt.label} visibility`}
           >
             <Icon className={size === "sm" ? "h-3 w-3" : "h-4 w-4"} />
-            <span className="hidden sm:inline font-semibold">{opt.label}</span>
+            <span className="hidden font-semibold sm:inline">{opt.label}</span>
           </button>
         )
       })}
@@ -84,7 +90,7 @@ function FieldWithPrivacy({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="text-muted-foreground h-4 w-4" />
-          <label className="font-semibold text-sm">{label}</label>
+          <label className="text-sm font-semibold">{label}</label>
         </div>
         <PrivacySelector value={privacyValue} onChange={onPrivacyChange} />
       </div>
@@ -145,7 +151,11 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
     }
     setLocalMeta(prev => ({ ...prev, tags: [...prev.tags, val] }))
     input.value = ""
-    setErrors(prev => ({ ...prev, tags: undefined }))
+    setErrors(prev => {
+      const next = { ...prev }
+      delete next.tags
+      return next
+    })
   }
 
   const removeTag = (tag: string) => {
@@ -191,7 +201,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-6 space-y-6">
+      <CardContent className="space-y-6 p-6">
         <FieldWithPrivacy
           label="Display Name"
           icon={User}
@@ -206,8 +216,8 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
             placeholder="e.g., Alex Carter"
             maxLength={PROFILE_FIELD_LIMITS.DISPLAY_NAME_MAX}
             className={cn(
-              "border-border bg-background w-full border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50",
-              errors.displayName && "border-destructive",
+              "border-border bg-background focus:ring-accent/50 w-full border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none",
+              errors.displayName && "border-destructive"
             )}
           />
           <div className="flex items-center justify-between">
@@ -238,8 +248,8 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
             maxLength={PROFILE_FIELD_LIMITS.BIO_MAX}
             rows={4}
             className={cn(
-              "border-border bg-background w-full resize-none border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50",
-              errors.bio && "border-destructive",
+              "border-border bg-background focus:ring-accent/50 w-full resize-none border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none",
+              errors.bio && "border-destructive"
             )}
           />
           <div className="flex items-center justify-between">
@@ -270,7 +280,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
               onChange={e => setLocalMeta(prev => ({ ...prev, location: e.target.value }))}
               placeholder="e.g., Berlin, Germany"
               maxLength={PROFILE_FIELD_LIMITS.LOCATION_MAX}
-              className="border-border bg-background w-full border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className="border-border bg-background focus:ring-accent/50 w-full border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none"
             />
           </FieldWithPrivacy>
 
@@ -287,7 +297,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
               onChange={e => setLocalMeta(prev => ({ ...prev, avatarUrl: e.target.value }))}
               placeholder="https://example.com/avatar.png"
               maxLength={PROFILE_FIELD_LIMITS.WEBSITE_URL_MAX}
-              className="border-border bg-background w-full border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+              className="border-border bg-background focus:ring-accent/50 w-full border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none"
             />
           </FieldWithPrivacy>
         </div>
@@ -314,7 +324,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
                     <button
                       type="button"
                       onClick={() => removeTag(tag)}
-                      className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                      className="hover:text-destructive opacity-0 transition-opacity group-hover:opacity-100"
                       aria-label={`Remove tag ${tag}`}
                     >
                       <X className="h-3 w-3" />
@@ -328,7 +338,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
                 id="new-tag-input"
                 type="text"
                 placeholder="Add a tag (e.g., rust, defi, smart-contracts)"
-                className="border-border bg-background flex-1 border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                className="border-border bg-background focus:ring-accent/50 flex-1 border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none"
                 onKeyDown={e => {
                   if (e.key === "Enter") {
                     e.preventDefault()
@@ -358,9 +368,12 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
         >
           <div className="space-y-3">
             {localMeta.links.map((link, idx) => (
-              <div key={link.id} className="border-border bg-accent/5 space-y-2 border p-3 shadow-sm">
+              <div
+                key={link.id}
+                className="border-border bg-accent/5 space-y-2 border p-3 shadow-sm"
+              >
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
+                  <span className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
                     Link {idx + 1}
                   </span>
                   <div className="flex items-center gap-2">
@@ -385,7 +398,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
                     onChange={e => updateLink(link.id, { label: e.target.value })}
                     placeholder="Label (e.g., GitHub)"
                     maxLength={PROFILE_FIELD_LIMITS.LINK_LABEL_MAX}
-                    className="border-border bg-background border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    className="border-border bg-background focus:ring-accent/50 border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none"
                   />
                   <input
                     type="url"
@@ -393,7 +406,7 @@ export function ProfileEditor({ metadata, fieldPrivacy, onSave, onCancel }: Prof
                     onChange={e => updateLink(link.id, { url: e.target.value })}
                     placeholder="https://github.com/yourhandle"
                     maxLength={PROFILE_FIELD_LIMITS.WEBSITE_URL_MAX}
-                    className="border-border bg-background border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    className="border-border bg-background focus:ring-accent/50 border px-3 py-2 text-sm shadow-sm focus:ring-2 focus:outline-none"
                   />
                 </div>
               </div>

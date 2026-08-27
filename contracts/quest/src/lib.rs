@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::too_many_arguments)]
 use common::{
     extend_instance_ttl, is_contract_address, EnrolleeStatus, QuestInfo, QuestStatus, QuestVersion,
     Visibility, BUMP, MAX_QUEST_DESCRIPTION_LEN, THRESHOLD,
@@ -225,7 +226,7 @@ impl QuestContract {
     ) -> Result<(), Error> {
         Self::require_admin(&env, &admin)?;
         Self::require_not_paused(&env)?;
-        if quest_ids.len() == 0
+        if quest_ids.is_empty()
             || quest_ids.len() > MAX_MIGRATION_BATCH
             || target_schema_version != QUEST_DATA_SCHEMA_VERSION
         {
@@ -1395,17 +1396,8 @@ impl QuestContract {
         // seconds and add to the current ledger close time.
         let approx_seconds_per_ledger: u64 = 5;
         let current_ts = env.ledger().timestamp();
-        let expires_at = current_ts.saturating_add(
-            (ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger),
-        );
-        // Soroban only exposes the remaining ledger count for a persistent
-        // entry, so approximate the absolute expiry. At ~5s/ledger (ADR-005)
-        // this is accurate to within the network's drift tolerance.
-        let ttl_remaining = BUMP;
-        let approx_seconds_per_ledger: u64 = 5;
-        let now = env.ledger().timestamp();
-        let expires_at =
-            now.saturating_add((ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger));
+        let expires_at = current_ts
+            .saturating_add((ttl_remaining as u64).saturating_mul(approx_seconds_per_ledger));
 
         // Refresh the listing's TTL on read so a popular category does not
         // expire merely from being queried.
@@ -1498,11 +1490,7 @@ impl QuestContract {
 
     /// Initiate a two-step ownership transfer. Only the current owner can call.
     /// The quest must be Active. A pending transfer replaces any existing one.
-    pub fn initiate_transfer(
-        env: Env,
-        quest_id: u32,
-        nominee: Address,
-    ) -> Result<(), Error> {
+    pub fn initiate_transfer(env: Env, quest_id: u32, nominee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
@@ -1544,7 +1532,6 @@ impl QuestContract {
 
         transfer.nominee.require_auth();
         let nominee = transfer.nominee.clone();
-
 
         let mut quest = Self::load_quest(&env, quest_id)?;
         if quest.status != QuestStatus::Active {
@@ -1594,10 +1581,7 @@ impl QuestContract {
     }
 
     /// Get the pending ownership transfer for a quest, if any.
-    pub fn get_pending_transfer(
-        env: Env,
-        quest_id: u32,
-    ) -> Result<Option<PendingTransfer>, Error> {
+    pub fn get_pending_transfer(env: Env, quest_id: u32) -> Result<Option<PendingTransfer>, Error> {
         Self::load_quest(&env, quest_id)?;
         let key = DataKey::PendingTransfer(quest_id);
         let transfer: Option<PendingTransfer> = env.storage().persistent().get(&key);
@@ -1609,11 +1593,7 @@ impl QuestContract {
 
     /// Join the waitlist for a quest that is full. FIFO ordering.
     /// The quest must have max_enrollees set and be full.
-    pub fn join_waitlist(
-        env: Env,
-        enrollee: Address,
-        quest_id: u32,
-    ) -> Result<(), Error> {
+    pub fn join_waitlist(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
 
@@ -1656,10 +1636,7 @@ impl QuestContract {
 
     /// Promote the next person from the waitlist to enrollee. Owner only.
     /// Returns the promoted address, or None if the waitlist is empty.
-    pub fn promote_from_waitlist(
-        env: Env,
-        quest_id: u32,
-    ) -> Result<Option<Address>, Error> {
+    pub fn promote_from_waitlist(env: Env, quest_id: u32) -> Result<Option<Address>, Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
@@ -1698,16 +1675,12 @@ impl QuestContract {
     }
 
     /// Remove a person from the waitlist. Owner only.
-    pub fn remove_from_waitlist(
-        env: Env,
-        quest_id: u32,
-        enrollee: Address,
-    ) -> Result<(), Error> {
+    pub fn remove_from_waitlist(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
 
-        let mut waitlist = Self::load_waitlist(&env, quest_id);
+        let waitlist = Self::load_waitlist(&env, quest_id);
         let mut found = false;
         let mut new_list = Vec::new(&env);
 
@@ -1763,7 +1736,7 @@ impl QuestContract {
     ) -> Result<bool, Error> {
         let quest = Self::load_quest(&env, quest_id)?;
 
-        if quest.prerequisite_quest_ids.len() == 0 {
+        if quest.prerequisite_quest_ids.is_empty() {
             return Ok(true);
         }
 
@@ -1991,17 +1964,21 @@ impl QuestContract {
         if env.storage().persistent().has(&DataKey::Quest(quest_id)) {
             common::extend_persistent_ttl(env, &DataKey::Quest(quest_id));
         }
-        if env.storage().persistent().has(&DataKey::Enrollees(quest_id)) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Enrollees(quest_id))
+        {
             common::extend_persistent_ttl(env, &DataKey::Enrollees(quest_id));
-        }
-        if env.storage().persistent().has(&DataKey::QuestVersionHistory(quest_id)) {
-            common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
         }
         if env
             .storage()
             .persistent()
-            .has(&DataKey::Waitlist(quest_id))
+            .has(&DataKey::QuestVersionHistory(quest_id))
         {
+            common::extend_persistent_ttl(env, &DataKey::QuestVersionHistory(quest_id));
+        }
+        if env.storage().persistent().has(&DataKey::Waitlist(quest_id)) {
             common::extend_persistent_ttl(env, &DataKey::Waitlist(quest_id));
         }
         if env
@@ -2017,19 +1994,24 @@ impl QuestContract {
 #[cfg(test)]
 mod test;
 
-
 /// Deterministic milestone ID — issue #1340
 /// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
 pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
-    use soroban_sdk::xdr::Hash;
-    let mut data = Vec::new();
-    data.extend_from_slice(quest_id);
-    data.extend_from_slice(&timestamp.to_be_bytes());
-    data.extend_from_slice(&nonce.to_be_bytes());
-    // Simple hash — in production use soroban_sdk::crypto::sha256 or host hash
     let mut out = [0u8; 32];
-    for (i, b) in data.iter().enumerate() {
-        out[i % 32] ^= b;
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
     }
     out
 }

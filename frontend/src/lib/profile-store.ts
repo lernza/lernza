@@ -17,7 +17,6 @@ import {
 } from "@/lib/profile-types"
 
 const PROFILE_STORAGE_KEY = "lernza_profile"
-const PROFILE_CACHE_VERSION = "1.0.0"
 
 export interface ProfileStoreState {
   profile: LearnerProfile | null
@@ -98,10 +97,7 @@ export function saveProfile(profile: LearnerProfile): boolean {
       ...profile,
       updatedAt: Date.now(),
     }
-    window.localStorage.setItem(
-      getStorageKey(profile.walletAddress),
-      JSON.stringify(toSave),
-    )
+    window.localStorage.setItem(getStorageKey(profile.walletAddress), JSON.stringify(toSave))
     return true
   } catch (err) {
     logger.error("Failed to save profile to storage", { err, walletAddress: profile.walletAddress })
@@ -133,7 +129,7 @@ export function initializeProfileStore(walletAddress: string, viewerIsOwner = tr
 
 export function updateProfileMetadata(
   walletAddress: string,
-  updates: Partial<ProfileMetadata>,
+  updates: Partial<ProfileMetadata>
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -159,7 +155,7 @@ export function updateProfileMetadata(
 
 export function updateFieldPrivacy(
   walletAddress: string,
-  updates: Partial<ProfileFieldPrivacy>,
+  updates: Partial<ProfileFieldPrivacy>
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -185,7 +181,7 @@ export function updateFieldPrivacy(
 
 export function updateShowcaseSettings(
   walletAddress: string,
-  updates: Partial<LearnerProfile["showcaseSettings"]>,
+  updates: Partial<LearnerProfile["showcaseSettings"]>
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -211,7 +207,7 @@ export function updateShowcaseSettings(
 
 export function upsertShowcasedQuest(
   walletAddress: string,
-  quest: LearnerProfile["showcasedQuests"][number],
+  quest: LearnerProfile["showcasedQuests"][number]
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -242,7 +238,7 @@ export function upsertShowcasedQuest(
 
 export function removeShowcasedQuest(
   walletAddress: string,
-  questId: number,
+  questId: number
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -265,7 +261,7 @@ export function removeShowcasedQuest(
 
 export function upsertShowcasedReward(
   walletAddress: string,
-  reward: LearnerProfile["showcasedRewards"][number],
+  reward: LearnerProfile["showcasedRewards"][number]
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -296,7 +292,7 @@ export function upsertShowcasedReward(
 
 export function removeShowcasedReward(
   walletAddress: string,
-  rewardId: string,
+  rewardId: string
 ): LearnerProfile | null {
   const store = getProfileStore()
   const state = store.getState()
@@ -325,7 +321,7 @@ function canView(level: PrivacyLevel, viewerIsOwner: boolean): boolean {
 export function filterMetadataForViewer(
   metadata: ProfileMetadata,
   privacy: ProfileFieldPrivacy,
-  viewerIsOwner: boolean,
+  viewerIsOwner: boolean
 ): Partial<ProfileMetadata> {
   const filtered: Partial<ProfileMetadata> = {}
 

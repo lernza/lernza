@@ -217,16 +217,17 @@ export async function withTimeout<T>(
   }
 }
 
-export enum TransactionStatus {
-  Signing = "signing",
-  Submitted = "submitted",
-  PendingLedger = "pending-ledger",
-  Success = "success",
-  Failed = "failed",
-}
+export const TransactionStatus = {
+  Signing: "SIGNING",
+  Submitted: "SUBMITTED",
+  PendingLedger: "PENDING_LEDGER",
+  Success: "SUCCESS",
+  Failed: "FAILED",
+} as const
+export type TransactionStatus = (typeof TransactionStatus)[keyof typeof TransactionStatus]
 
 function normalizeRpcStatus(status: string): string {
-  return status.toLowerCase()
+  return status.toUpperCase()
 }
 
 export interface TransactionResult {
@@ -529,7 +530,9 @@ async function executeSignAndSubmit(
           logTx("confirmed", "success", { txHash: submitResponse.hash })
           handlers.onSuccess?.(submitResponse.hash)
           return txResult
-        } else if (pollResponse.status === TransactionStatus.PendingLedger) {
+        } else if (
+          normalizeRpcStatus(String(pollResponse.status)) === TransactionStatus.PendingLedger
+        ) {
           handlers.onPendingLedger?.(submitResponse.hash)
           return {
             status: TransactionStatus.PendingLedger,

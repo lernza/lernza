@@ -33,7 +33,8 @@ export function Step2Form() {
     setValue,
     formState: { errors, isValid },
   } = useForm<Step2Values>({
-    resolver: zodResolver(step2Schema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(step2Schema as any),
     defaultValues: step2Data,
     mode: "onChange",
   })
@@ -53,9 +54,18 @@ export function Step2Form() {
 
   const milestones = watch("milestones")
   useEffect(() => {
-    const subscription = watch(value => setStep2Data({
-      milestones: (value.milestones ?? []).map(milestone => ({ ...milestone, prerequisiteIds: milestone.prerequisiteIds ?? [] })),
-    }))
+    const subscription = watch(value => {
+      if (value.milestones) {
+        setStep2Data({
+          milestones: value.milestones.map(milestone => ({
+            title: milestone?.title ?? "",
+            description: milestone?.description ?? "",
+            rewardAmount: milestone?.rewardAmount ?? 0,
+            prerequisiteIds: milestone?.prerequisiteIds ?? [],
+          })),
+        })
+      }
+    })
     return () => subscription.unsubscribe()
   }, [setStep2Data, watch])
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
@@ -160,7 +170,7 @@ export function Step2Form() {
                       className={cn(
                         "border-border bg-background w-full border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.title &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_TITLE_LEN}
                     />
@@ -172,7 +182,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {titleVal.length}/{MAX_MILESTONE_TITLE_LEN}
@@ -199,7 +211,7 @@ export function Step2Form() {
                       className={cn(
                         "border-border bg-background w-full resize-none border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.description &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_DESCRIPTION_LEN}
                     />
@@ -211,7 +223,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {descVal.length}/{MAX_MILESTONE_DESCRIPTION_LEN}
@@ -246,7 +260,7 @@ export function Step2Form() {
                         className={cn(
                           "border-border bg-background flex-1 border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                           errors.milestones?.[index]?.rewardAmount &&
-                            "border-destructive focus:ring-1 focus:ring-destructive"
+                            "border-destructive focus:ring-destructive focus:ring-1"
                         )}
                       />
                     </div>
@@ -258,19 +272,38 @@ export function Step2Form() {
 
                   <div>
                     <FormLabel>Prerequisites</FormLabel>
-                    <p className="text-muted-foreground mb-2 text-xs">Select any earlier milestones that must be completed before this work unlocks.</p>
+                    <p className="text-muted-foreground mb-2 text-xs">
+                      Select any earlier milestones that must be completed before this work unlocks.
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {fields.slice(0, index).map((_, prerequisiteIndex) => {
-                        return <label key={prerequisiteIndex} className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold">
-                          <input type="checkbox" checked={prerequisiteIds.includes(prerequisiteIndex)} onChange={() => {
-                            const next = prerequisiteIds.includes(prerequisiteIndex)
-                              ? prerequisiteIds.filter(id => id !== prerequisiteIndex)
-                              : [...prerequisiteIds, prerequisiteIndex]
-                            setValue(`milestones.${index}.prerequisiteIds`, next, { shouldDirty: true, shouldValidate: true })
-                          }} /> Step {prerequisiteIndex + 1}
-                        </label>
+                        return (
+                          <label
+                            key={prerequisiteIndex}
+                            className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={prerequisiteIds.includes(prerequisiteIndex)}
+                              onChange={() => {
+                                const next = prerequisiteIds.includes(prerequisiteIndex)
+                                  ? prerequisiteIds.filter(id => id !== prerequisiteIndex)
+                                  : [...prerequisiteIds, prerequisiteIndex]
+                                setValue(`milestones.${index}.prerequisiteIds`, next, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }}
+                            />{" "}
+                            Step {prerequisiteIndex + 1}
+                          </label>
+                        )
                       })}
-                      {index === 0 && <span className="text-muted-foreground text-xs">First milestone is immediately available.</span>}
+                      {index === 0 && (
+                        <span className="text-muted-foreground text-xs">
+                          First milestone is immediately available.
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -279,10 +312,12 @@ export function Step2Form() {
           </div>
 
           {/* Add & Import buttons */}
-          <div className="border-border border-t p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border-border grid grid-cols-1 gap-3 border-t p-5 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })}
+              onClick={() =>
+                append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })
+              }
               className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border border-dashed py-3 text-sm font-semibold transition-colors"
             >
               <Plus className="h-4 w-4" />

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react"
-import { X, Twitter, MessageCircle } from "lucide-react"
+import { useEffect, useRef } from "react"
+import { X, Share2, MessageCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -41,13 +41,12 @@ export function SocialShareModal({ isOpen, config, onClose }: SocialShareModalPr
     window.open(
       `https://twitter.com/intent/tweet?text=${encoded}`,
       "twitter-share",
-      "width=550,height=420",
+      "width=550,height=420"
     )
   }
 
   const shareOnDiscord = () => {
     const text = `**${config.title}**\n${config.description}\n${config.achievementText} on ${config.questName}!\n${baseUrl}`
-    const encoded = encodeURIComponent(text)
     navigator.clipboard.writeText(text)
   }
 
@@ -59,7 +58,7 @@ export function SocialShareModal({ isOpen, config, onClose }: SocialShareModalPr
   return (
     <dialog
       ref={dialogRef}
-      className="rounded-lg border border-border bg-background backdrop:bg-black/50"
+      className="border-border bg-background rounded-lg border backdrop:bg-black/50"
       onClose={handleClose}
     >
       <div className="w-full max-w-md space-y-4 p-6">
@@ -74,9 +73,9 @@ export function SocialShareModal({ isOpen, config, onClose }: SocialShareModalPr
           </button>
         </div>
 
-        <div className="space-y-2 rounded-md bg-muted p-3">
+        <div className="bg-muted space-y-2 rounded-md p-3">
           <p className="text-sm font-medium">{config.title}</p>
-          <p className="text-sm text-muted-foreground">{config.achievementText}</p>
+          <p className="text-muted-foreground text-sm">{config.achievementText}</p>
         </div>
 
         <div className="space-y-2">
@@ -84,18 +83,18 @@ export function SocialShareModal({ isOpen, config, onClose }: SocialShareModalPr
             onClick={shareOnTwitter}
             className={cn(
               "w-full justify-start gap-2",
-              "bg-[#1DA1F2] hover:bg-[#1a91da] text-white",
+              "bg-[#1DA1F2] text-white hover:bg-[#1a91da]"
             )}
           >
-            <Twitter size={18} />
-            Share on Twitter
+            <Share2 size={18} />
+            Share on Twitter / X
           </Button>
 
           <Button
             onClick={shareOnDiscord}
             className={cn(
               "w-full justify-start gap-2",
-              "bg-[#5865F2] hover:bg-[#4752c4] text-white",
+              "bg-[#5865F2] text-white hover:bg-[#4752c4]"
             )}
           >
             <MessageCircle size={18} />
@@ -124,7 +123,7 @@ export function SocialShareModal({ isOpen, config, onClose }: SocialShareModalPr
           </Button>
         </div>
 
-        <div className="text-center text-xs text-muted-foreground">
+        <div className="text-muted-foreground text-center text-xs">
           Share your quest completion and inspire others to learn
         </div>
       </div>

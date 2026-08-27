@@ -371,6 +371,44 @@ export class QuestClient {
     })
   }
 
+  async isInviteValid(questId: number, commitment: string): Promise<boolean> {
+    const result = await this.invokeRead("is_invite_valid", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(commitment, { type: "string" }),
+    ])
+    return !!result
+  }
+
+  async registerInvite(owner: string, questId: number, commitment: string) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "register_invite", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(commitment, { type: "string" }),
+      ])
+      return signAndSubmitTracked(tx, "Register Invite")
+    })
+  }
+
+  async revokeInvite(owner: string, questId: number, commitment: string) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "revoke_invite", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(commitment, { type: "string" }),
+      ])
+      return signAndSubmitTracked(tx, "Revoke Invite")
+    })
+  }
+
+  async joinQuestWithInvite(learner: string, questId: number, code: string) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(learner, "join_with_invite", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(code, { type: "string" }),
+      ])
+      return signAndSubmitTracked(tx, "Join Quest With Invite")
+    })
+  }
+
   // --- Private Helpers ---
 
   private parseQuestInfo(raw: unknown): QuestInfo {

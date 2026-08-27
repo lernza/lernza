@@ -21,6 +21,7 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     description: "",
     category: "",
     tags: [],
+    referralBonus: 10,
   })
   const [step2Data, setStep2Data] = useState<Step2Values>({
     milestones: [{ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] }],

@@ -309,3 +309,5 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful an
 ## Questions
 
 Open a [discussion](https://github.com/lernza/lernza/discussions) or comment on an issue. We're happy to help.
+
+See [Issue Triage Guide](docs/ISSUE_TRIAGE.md) for labeling and triage process.

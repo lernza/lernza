@@ -84,14 +84,18 @@ threat model materially.
 The admin keypair has elevated privileges: it can pause the rewards contract,
 set platform fees, rotate itself, and trigger contract upgrades. The system
 assumes the admin is a trusted operator. A compromised admin key can drain
-unallocated token pools and halt distributions. Rotate the key immediately if
-compromise is suspected (see `docs/operations/admin-rotation.md`).
+unallocated token pools and halt distributions. Rotate the key immediately if compromise is suspected (see `docs/operations/admin-rotation.md` and `docs/operations/incident-response.md`).
 
 Before mainnet launch, the admin account will be migrated to a `2-of-3`
 Stellar native multi-sig configuration, eliminating the single-key risk.
 A contract-level timelock is planned for a subsequent release. See
 [ADR-007](docs/adr/007-admin-multisig-timelock.md) for the full migration
 plan and timeline.
+
+## Testnet Incident Response & Emergency Pause
+
+For detailed incident classification, escalation pathways, privileged operation execution, non-production testing, and user communication templates during testnet operations, refer to the [Testnet Incident Response Playbook](docs/operations/incident-response.md).
+
 
 **Sybil resistance is off-chain**
 The contracts do not prevent a single actor from controlling multiple wallet

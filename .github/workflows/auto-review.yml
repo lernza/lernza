@@ -1,16 +1,18 @@
 name: Auto Review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
   pull-requests: write
 
-# Philosophy (Lernza warm reviewer):
+# Philosophy (warm reviewer):
 #   Default is APPROVE. We help contributors get merged.
-#   We NEVER close a PR, NEVER request changes as a block. Only:
+#   Uses upstream repo secrets (DEEPSEEK_API_KEY, OWNER_PAT) even for fork PRs
+#   because pull_request_target runs in base repo context. Never executes fork code.
+#   Only:
 #     1. Approve + squash-merge when linked issue exists and diff shows effort
 #     2. Leave a single warm, constructive comment otherwise.
 #   Uses DeepSeek to check if diff addresses the linked issue.
@@ -22,6 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # pull_request_target runs on base; checkout base securely, not fork code.
+          # We fetch diff via gh API, never execute fork files.
+          ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Gather PR context + linked issues (GraphQL primary)
         id: ctx
@@ -171,7 +177,6 @@ jobs:
         id: review
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PR_TITLE: ${{ steps.ctx.outputs.title }}
           PR_AUTHOR: ${{ steps.ctx.outputs.author }}
           PR_BODY: ${{ steps.ctx.outputs.pr_body }}
@@ -179,25 +184,17 @@ jobs:
           PR_ADDS: ${{ steps.ctx.outputs.adds }}
           PR_DELS: ${{ steps.ctx.outputs.dels }}
         run: |
-          # Prefer DeepSeek, fallback to Groq if DeepSeek not set
-          if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
-            API_URL="https://api.deepseek.com/chat/completions"
-            MODEL="deepseek-chat"
-            API_KEY="$DEEPSEEK_API_KEY"
-            PROVIDER="DeepSeek"
-          elif [ -n "${GROQ_API_KEY:-}" ]; then
-            API_URL="https://api.groq.com/openai/v1/chat/completions"
-            MODEL="openai/gpt-oss-120b"
-            API_KEY="$GROQ_API_KEY"
-            PROVIDER="Groq"
-          else
-            echo "No AI API key set (DEEPSEEK_API_KEY or GROQ_API_KEY). Leaving for human review."
+          if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+            echo "Missing DEEPSEEK_API_KEY secret in upstream repo. Add it at Settings > Secrets and variables > Actions."
             echo "decision=COMMENT" >> $GITHUB_OUTPUT
             echo "confidence=0" >> $GITHUB_OUTPUT
             echo "body=Thanks for the PR! A maintainer will take a look shortly. :sparkles:" >> $GITHUB_OUTPUT
             exit 0
           fi
-          echo "Using $PROVIDER model $MODEL"
+          API_URL="https://api.deepseek.com/chat/completions"
+          MODEL="deepseek-chat"
+          API_KEY="$DEEPSEEK_API_KEY"
+          echo "Using DeepSeek model $MODEL (upstream secret, works for fork PRs via pull_request_target)"
 
           SYSTEM_PROMPT=$(cat <<'SYSTEM_EOF'
           You are a warm, encouraging code reviewer for an open-source hackathon project.
@@ -244,6 +241,7 @@ jobs:
             --arg dels "$PR_DELS" \
             --rawfile diff /tmp/pr-diff-truncated.txt \
             --rawfile issues /tmp/issues-context.txt \
+            --arg MODEL "$MODEL" \
             '{
               model: $MODEL,
               messages: [
@@ -264,12 +262,7 @@ jobs:
               max_completion_tokens: 4096,
               temperature: 0.2,
               response_format: { type: "json_object" }
-            }' --arg MODEL "$MODEL")
-
-          # Add reasoning_effort only for Groq gpt-oss models
-          if [ "$PROVIDER" = "Groq" ]; then
-            PAYLOAD=$(echo "$PAYLOAD" | jq '.reasoning_effort="medium"')
-          fi
+            }')
 
           RESPONSE=$(curl -s --max-time 180 "$API_URL" \
             -H "Content-Type: application/json" \
@@ -284,7 +277,7 @@ jobs:
           SUMMARY=""
 
           if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "null" ] && [ "$API_ERROR" != "" ]; then
-            echo "$PROVIDER API error: $API_ERROR"
+            echo "DeepSeek API error: $API_ERROR"
             SUMMARY="Thanks for the PR! A maintainer will take a look shortly. :sparkles:"
           elif [ -z "$REVIEW_JSON" ] || [ "$REVIEW_JSON" = "null" ] || ! echo "$REVIEW_JSON" | jq empty 2>/dev/null; then
             echo "Empty or malformed model response: $RESPONSE"
@@ -301,7 +294,6 @@ jobs:
           [ -n "$SUMMARY" ] || SUMMARY="Thanks for contributing! Looks good. :heart:"
 
           echo "::group::Auto-review details (run log only)"
-          echo "Provider:   $PROVIDER"
           echo "Model:      $MODEL"
           echo "Decision:   $DECISION"
           echo "Confidence: $CONFIDENCE"

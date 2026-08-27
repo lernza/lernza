@@ -424,7 +424,7 @@ impl MilestoneContract {
 
     /// Create a milestone with zero or more prerequisite milestones.
     /// Prerequisites must already exist in this quest, preventing cycles.
-    pub fn create_milestone_with_prerequisites(
+    pub fn create_milestone_with_prereqs(
         env: Env,
         owner: Address,
         quest_id: u32,
@@ -457,20 +457,22 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
         for prerequisite_id in prerequisites.iter() {
-            if *prerequisite_id >= id
-                || prerequisites.iter().filter(|candidate| **candidate == *prerequisite_id).count() > 1
+            if prerequisite_id >= id
+                || prerequisites.iter().filter(|candidate| *candidate == prerequisite_id).count() > 1
             {
                 return Err(Error::InvalidInput);
             }
+
             if env
                 .storage()
                 .persistent()
-                .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, *prerequisite_id))
+                .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, prerequisite_id))
                 .is_none()
             {
                 return Err(Error::NotFound);
             }
         }
+
 
         let milestone = MilestoneInfo {
             id,
@@ -1770,11 +1772,12 @@ impl MilestoneContract {
         }
 
         for prerequisite_id in prerequisites.iter() {
-            let prerequisite_key = DataKey::Completed(quest_id, *prerequisite_id, enrollee.clone());
+            let prerequisite_key = DataKey::Completed(quest_id, prerequisite_id, enrollee.clone());
             if !env.storage().persistent().has(&prerequisite_key) {
                 return Err(Error::MilestoneNotUnlocked);
             }
         }
+
         Ok(())
     }
 

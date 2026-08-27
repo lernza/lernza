@@ -1535,7 +1535,6 @@ impl QuestContract {
     /// Transfers ownership and clears the pending request.
     pub fn accept_transfer(env: Env, quest_id: u32) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
-        let nominee = env.invoker();
         let transfer_key = DataKey::PendingTransfer(quest_id);
         let transfer: PendingTransfer = env
             .storage()
@@ -1543,9 +1542,9 @@ impl QuestContract {
             .get(&transfer_key)
             .ok_or(Error::NoPendingTransfer)?;
 
-        if transfer.nominee != nominee {
-            return Err(Error::NotTransferNominee);
-        }
+        transfer.nominee.require_auth();
+        let nominee = transfer.nominee.clone();
+
 
         let mut quest = Self::load_quest(&env, quest_id)?;
         if quest.status != QuestStatus::Active {

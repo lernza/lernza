@@ -188,7 +188,7 @@ export interface TransactionLifecycleHandlers {
 }
 
 export const NETWORK_MISMATCH_MESSAGE =
-  "Freighter network changed after signing. Switch back to the app network before submitting."
+  "Transaction blocked: Freighter network changed. Switch Freighter back to the app network and try again."
 
 const MAX_SUBMIT_ATTEMPTS = 5
 const SUBMIT_BACKOFF_MS = 500
@@ -380,7 +380,7 @@ async function executeSignAndSubmit(
 
     const netBeforeSign = await getNetworkDetails()
     if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
-      const message = `Freighter is on the wrong network. Expected: ${getExpectedNetworkLabel()}.`
+      const message = `Transaction blocked: Freighter is on the wrong network. Expected ${getExpectedNetworkLabel()}. Switch Freighter to the app network and try again.`
       logTx("network_check", "failed", { error: message })
       handlers.onError?.(message)
       return {
@@ -572,7 +572,7 @@ export async function reconcilePendingTransactions(): Promise<void> {
   if (pending.length === 0) return
 
   await Promise.all(
-    pending.map(async (tx) => {
+    pending.map(async tx => {
       try {
         const response = await server.getTransaction(tx.txHash)
         const status = normalizeRpcStatus(response.status)

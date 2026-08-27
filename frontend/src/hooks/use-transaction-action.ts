@@ -22,7 +22,11 @@ function classifyTransactionError(message: string): ErrorKind {
 function humanizeTransactionError(message: string): string {
   const lower = message.toLowerCase()
 
-  if (lower.includes("user rejected") || lower.includes("user denied") || lower.includes("cancel")) {
+  if (
+    lower.includes("user rejected") ||
+    lower.includes("user denied") ||
+    lower.includes("cancel")
+  ) {
     return "Transaction was cancelled by the user."
   }
   if (lower.includes("insufficient") && lower.includes("fund")) {
@@ -65,7 +69,7 @@ export function useTransactionAction(options?: { showToast?: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<unknown>(null)
   const mountedRef = useRef(true)
-  const { connected } = useWallet()
+  const { connected, wrongNetwork, expectedNetworkName } = useWallet()
 
   useEffect(() => {
     mountedRef.current = true
@@ -79,6 +83,13 @@ export function useTransactionAction(options?: { showToast?: boolean }) {
       if (!connected) {
         const msg = "Wallet is not connected. Please connect your wallet first."
         if (showToast) pushToast({ message: msg, type: "error", duration: 5000 })
+        setError(msg)
+        throw new Error(msg)
+      }
+
+      if (wrongNetwork) {
+        const msg = `Transaction blocked: Freighter is on the wrong network. Switch Freighter to ${expectedNetworkName} and try again.`
+        if (showToast) pushToast({ message: msg, type: "error", duration: 6000 })
         setError(msg)
         throw new Error(msg)
       }
@@ -128,7 +139,7 @@ export function useTransactionAction(options?: { showToast?: boolean }) {
         throw new Error(friendly)
       }
     },
-    [connected, showToast]
+    [connected, expectedNetworkName, showToast, wrongNetwork]
   )
 
   const reset = useCallback(() => {

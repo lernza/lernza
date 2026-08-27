@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useColorScheme } from "@/hooks/use-color-scheme"
 import { cn } from "@/lib/utils"
-import { NetworkMismatchBanner } from "@/components/error-states"
+import { NetworkIndicator, NetworkMismatchBanner } from "@/components/error-states"
 
 const NAV_ITEMS = [
   { key: "landing", label: "Home" },
@@ -64,7 +64,7 @@ function ThemeToggle() {
 }
 
 export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps) {
-  const { connected, shortAddress, connect, disconnect, loading, wrongNetwork } = useWallet()
+  const { connected, shortAddress, connect, disconnect, loading } = useWallet()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleNavigate = (page: string) => {
@@ -110,6 +110,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
 
         {/* Right side: theme toggle + tutorial + wallet + mobile menu */}
         <div className="flex items-center gap-2">
+          <NetworkIndicator />
           <ThemeToggle />
 
           {/* Tutorial launch button */}
@@ -146,7 +147,13 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               </Button>
             </>
           ) : (
-            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover" data-onboarding="connect-wallet">
+            <Button
+              onClick={connect}
+              disabled={loading}
+              size="sm"
+              className="shimmer-on-hover"
+              data-onboarding="connect-wallet"
+            >
               <Wallet className="h-4 w-4" />
               {loading ? "Connecting..." : "Connect Wallet"}
             </Button>

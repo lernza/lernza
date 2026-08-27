@@ -1,9 +1,42 @@
-import { AlertCircle, WifiOff, FileQuestion, Wallet, RefreshCw, ExternalLink, AlertTriangle, ArrowRight } from "lucide-react"
+import {
+  AlertCircle,
+  WifiOff,
+  FileQuestion,
+  Wallet,
+  RefreshCw,
+  ExternalLink,
+  AlertTriangle,
+  Globe2,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { mapContractError, classifyError } from "@/lib/contract-errors"
 import { useWallet } from "@/hooks/use-wallet"
 
 // ─── NetworkMismatchBanner ──────────────────────────────────────────────────
+
+export function NetworkIndicator() {
+  const { network, networkName, expectedNetworkName, wrongNetwork } = useWallet()
+  const activeName = networkName ?? expectedNetworkName
+  const isTestnet = network === "testnet" || (!network && expectedNetworkName === "Testnet")
+
+  return (
+    <div
+      aria-label={`Active network: ${activeName}`}
+      data-testid="network-indicator"
+      className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold shadow-sm ${
+        wrongNetwork
+          ? "border-warning bg-warning/20 text-foreground"
+          : isTestnet
+            ? "border-warning bg-warning/15 text-foreground"
+            : "border-border bg-secondary text-foreground"
+      }`}
+    >
+      <Globe2 className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>{activeName}</span>
+      {isTestnet && !wrongNetwork && <span className="sr-only">Test environment</span>}
+    </div>
+  )
+}
 
 export function NetworkMismatchBanner() {
   const { wrongNetwork, networkName, expectedNetworkName, installUrl } = useWallet()
@@ -17,8 +50,8 @@ export function NetworkMismatchBanner() {
           <AlertTriangle className="text-warning h-5 w-5 shrink-0" />
           <span>
             <strong>Network Mismatch:</strong> Your wallet is on{" "}
-            <span className="font-semibold underline">{networkName ?? "a different network"}</span>, but Lernza expects{" "}
-            <span className="font-semibold">{expectedNetworkName}</span>.
+            <span className="font-semibold underline">{networkName ?? "a different network"}</span>,
+            but Lernza expects <span className="font-semibold">{expectedNetworkName}</span>.
           </span>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -50,26 +83,26 @@ export function WalletErrorAlert() {
   const isTimeout = error.code === "timeout"
 
   return (
-    <div className="bg-destructive/10 border-destructive border p-4 shadow-sm animate-fade-in-down">
+    <div className="bg-destructive/10 border-destructive animate-fade-in-down border p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <AlertCircle className="text-destructive h-5 w-5 shrink-0 mt-0.5" />
+        <AlertCircle className="text-destructive mt-0.5 h-5 w-5 shrink-0" />
         <div className="flex-1">
-          <h4 className="font-semibold text-sm">Wallet Connection Error</h4>
-          <p className="text-muted-foreground text-xs mt-1">{error.message}</p>
+          <h4 className="text-sm font-semibold">Wallet Connection Error</h4>
+          <p className="text-muted-foreground mt-1 text-xs">{error.message}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {isNotInstalled ? (
               <a
                 href={installUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="bg-primary text-primary-foreground text-xs font-medium px-3 py-1.5 inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                className="bg-primary text-primary-foreground inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90"
               >
                 Install Freighter Extension
                 <ExternalLink className="h-3 w-3" />
               </a>
             ) : (
-              <Button size="sm" onClick={retryConnect} className="text-xs h-8">
-                <RefreshCw className="h-3 w-3 mr-1" />
+              <Button size="sm" onClick={retryConnect} className="h-8 text-xs">
+                <RefreshCw className="mr-1 h-3 w-3" />
                 {isTimeout || isRejected ? "Try Connecting Again" : "Retry"}
               </Button>
             )}
@@ -106,8 +139,8 @@ export function WalletRequired({ message, onConnect }: WalletRequiredProps) {
           (!installed
             ? "Freighter wallet is required to interact with on-chain features."
             : wrongNetwork
-            ? `Please switch your Freighter network to ${expectedNetworkName}.`
-            : "Connect your Freighter wallet to load on-chain data.")}
+              ? `Please switch your Freighter network to ${expectedNetworkName}.`
+              : "Connect your Freighter wallet to load on-chain data.")}
       </p>
 
       {!installed ? (
@@ -115,14 +148,14 @@ export function WalletRequired({ message, onConnect }: WalletRequiredProps) {
           href={installUrl}
           target="_blank"
           rel="noreferrer"
-          className="bg-primary text-primary-foreground hover:opacity-90 inline-flex items-center gap-2 px-5 py-2.5 font-bold text-sm shadow-sm transition-opacity"
+          className="bg-primary text-primary-foreground inline-flex items-center gap-2 px-5 py-2.5 text-sm font-bold shadow-sm transition-opacity hover:opacity-90"
         >
           Install Freighter
           <ExternalLink className="h-4 w-4" />
         </a>
       ) : (
         <Button onClick={handleConnect} disabled={loading} className="shimmer-on-hover">
-          <Wallet className="h-4 w-4 mr-1" />
+          <Wallet className="mr-1 h-4 w-4" />
           {loading ? "Connecting..." : "Connect Wallet"}
         </Button>
       )}

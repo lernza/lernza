@@ -389,6 +389,8 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
 
+        let next_id = id.checked_add(1).ok_or(Error::Overflow)?;
+
         let milestone = MilestoneInfo {
             id,
             quest_id,
@@ -412,14 +414,15 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .set(&prerequisite_key, &prerequisites);
-        env.storage().persistent().set(&next_key, &(id + 1));
+        env.storage().persistent().set(&next_key, &next_id);
 
         // Increment explicit milestone count
         let count_key = DataKey::MilestoneCount(quest_id);
         let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
         env.storage()
             .persistent()
-            .set(&count_key, &(current_count + 1));
+            .set(&count_key, &next_count);
         Self::bump_ms(&env, &count_key);
 
         // Emit milestone creation event
@@ -495,6 +498,8 @@ impl MilestoneContract {
             }
         }
 
+        let next_id = id.checked_add(1).ok_or(Error::Overflow)?;
+
         let milestone = MilestoneInfo {
             id,
             quest_id,
@@ -512,12 +517,13 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .set(&prerequisite_key, &prerequisites);
-        env.storage().persistent().set(&next_key, &(id + 1));
+        env.storage().persistent().set(&next_key, &next_id);
         let count_key = DataKey::MilestoneCount(quest_id);
         let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
         env.storage()
             .persistent()
-            .set(&count_key, &(current_count + 1));
+            .set(&count_key, &next_count);
         Self::bump_ms(&env, &count_key);
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
@@ -592,14 +598,14 @@ impl MilestoneContract {
 
             let ms_key = DataKey::Milestone(quest_id, id);
             env.storage().persistent().set(&ms_key, &ms_info);
-            env.storage().persistent().set(&next_key, &(id + 1));
+            env.storage().persistent().set(&next_key, &(id.checked_add(1).ok_or(Error::Overflow)?));
 
             // Increment explicit milestone count
             let count_key = DataKey::MilestoneCount(quest_id);
             let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
             env.storage()
                 .persistent()
-                .set(&count_key, &(current_count + 1));
+                .set(&count_key, &(current_count.checked_add(1).ok_or(Error::Overflow)?));
             Self::bump_ms(&env, &count_key);
 
             // Emit milestone creation event

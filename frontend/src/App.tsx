@@ -27,6 +27,7 @@ const History = lazy(() => import("@/pages/history").then((m) => ({ default: m.H
 const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 const AnalyticsPage = lazy(() => import("@/pages/analytics").then((m) => ({ default: m.Analytics })))
+const CertificateView = lazy(() => import("@/pages/certificate").then((m) => ({ default: m.CertificateView })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
@@ -45,7 +46,7 @@ const VALID_PAGES = [
   "terms",
   "privacy",
 ] as const
-type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "404"
+type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "certificate" | "404"
 const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["profile", "create-quest", "creator-dashboard"])
 
 function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: () => void }) {
@@ -71,27 +72,38 @@ function pathToPage(pathname: string): {
   page: Page
   questId: number | null
   creatorAddress: string | null
+  certificateId: number | null
 } {
   const clean = pathname.replace(/\/+$/, "") || "/"
 
-  if (clean === "/") return { page: "landing", questId: null, creatorAddress: null }
-  if (clean === "/dashboard") return { page: "dashboard", questId: null, creatorAddress: null }
-  if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null }
+  if (clean === "/") return { page: "landing", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/dashboard") return { page: "dashboard", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/create-quest" || clean === "/quest/create") {
-    return { page: "create-quest", questId: null, creatorAddress: null }
+    return { page: "create-quest", questId: null, creatorAddress: null, certificateId: null }
   }
   if (clean === "/creator-dashboard") {
-    return { page: "creator-dashboard", questId: null, creatorAddress: null }
+    return { page: "creator-dashboard", questId: null, creatorAddress: null, certificateId: null }
   }
-  if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null }
-  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null }
-  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null }
-  if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null }
-  if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null }
+  if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null, certificateId: null }
 
   const questMatch = clean.match(/^\/quest\/(\d+)$/)
   if (questMatch) {
-    return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null }
+    return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null, certificateId: null }
+  }
+
+  const certificateMatch = clean.match(/^\/certificate\/(\d+)$/)
+  if (certificateMatch) {
+    return {
+      page: "certificate",
+      questId: null,
+      creatorAddress: null,
+      certificateId: Number(certificateMatch[1]),
+    }
   }
 
   const creatorMatch = clean.match(/^\/creator\/([^/]+)$/)
@@ -100,10 +112,11 @@ function pathToPage(pathname: string): {
       page: "creator",
       questId: null,
       creatorAddress: decodeURIComponent(creatorMatch[1]),
+      certificateId: null,
     }
   }
 
-  return { page: "404", questId: null, creatorAddress: null }
+  return { page: "404", questId: null, creatorAddress: null, certificateId: null }
 }
 
 function pageToPath(page: Page, questId: number | null, creatorAddress: string | null): string {
@@ -147,20 +160,20 @@ function App() {
     const page = (VALID_PAGES as readonly string[]).includes(p) ? (p as Page) : "404"
     const path = pageToPath(page, null, null)
     window.history.pushState(null, "", path)
-    setState({ page, questId: null, creatorAddress: null })
+    setState({ page, questId: null, creatorAddress: null, certificateId: null })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const handleSelectQuest = useCallback((id: number) => {
     const path = pageToPath("quest", id, null)
     window.history.pushState(null, "", path)
-    setState({ page: "quest", questId: id, creatorAddress: null })
+    setState({ page: "quest", questId: id, creatorAddress: null, certificateId: null })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const redirectToLanding = useCallback(() => {
     window.history.replaceState(null, "", "/")
-    setState({ page: "landing", questId: null, creatorAddress: null })
+    setState({ page: "landing", questId: null, creatorAddress: null, certificateId: null })
   }, [])
 
   useEffect(() => {
@@ -228,6 +241,12 @@ function App() {
         return (
           <Suspense fallback={<PageSkeleton />}>
             <CreatorDashboard />
+          </Suspense>
+        )
+      case "certificate":
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <CertificateView certificateId={state.certificateId ?? 0} />
           </Suspense>
         )
       case "terms":

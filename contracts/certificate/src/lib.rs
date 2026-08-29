@@ -16,6 +16,9 @@ pub struct CertificateMetadata {
     pub quest_name: String,
     pub quest_category: String,
     pub completion_date: u64,
+    /// Number of milestones in the quest at mint time. Surfaced on the
+    /// public certificate page so a viewer can see how much was completed.
+    pub milestone_count: u32,
     pub issuer: Address,
     pub recipient: Address,
 }
@@ -110,6 +113,7 @@ impl CertificateContract {
             quest_name: quest_name.clone(),
             quest_category,
             completion_date: env.ledger().timestamp(),
+            milestone_count: Self::quest_milestone_count(env.clone(), quest_id),
             issuer: issuer.clone(),
             recipient: recipient.clone(),
         };
@@ -304,6 +308,28 @@ impl CertificateContract {
             return Err(Error::Paused);
         }
         Ok(())
+    }
+
+    /// Resolve the number of milestones configured for `quest_id`.
+    ///
+    /// Best-effort: if the milestone contract hasn't been wired up via
+    /// `set_milestone_contract`, or the cross-contract read fails, we fall
+    /// back to 0 rather than failing the mint. The count is purely
+    /// informational metadata for the certificate display page.
+    fn quest_milestone_count(env: Env, quest_id: u32) -> u32 {
+        let milestone_contract: Option<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::MilestoneContract);
+        match milestone_contract {
+            Some(contract) => env
+                .invoke_contract(
+                    &contract,
+                    &Symbol::new(&env, "get_milestone_count"),
+                    soroban_sdk::vec![&env, quest_id.into_val(&env)],
+                ),
+            None => 0,
+        }
     }
 
     #[only_owner]

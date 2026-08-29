@@ -316,6 +316,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "milestone_count"
+                      },
+                      "val": {
+                        "u32": 0
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "quest_category"
                       },
                       "val": {

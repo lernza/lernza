@@ -29,6 +29,8 @@ fn test_certificate_minting() {
     assert_eq!(metadata.quest_category, quest_category);
     assert_eq!(metadata.recipient, recipient);
     assert_eq!(metadata.issuer, owner);
+    // No milestone contract wired up yet -> milestone_count falls back to 0.
+    assert_eq!(metadata.milestone_count, 0);
 
     let user_certs = client.get_user_certificates(&recipient);
     assert_eq!(user_certs.len(), 1);

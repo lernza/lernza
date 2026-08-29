@@ -16,6 +16,8 @@ export interface CertificateMetadata {
   questName: string
   questCategory: string
   completionDate: number
+  /** Number of milestones in the quest at mint time. */
+  milestoneCount: number
   issuer: string
   recipient: string
 }
@@ -27,6 +29,7 @@ function parseMetadata(raw: unknown): CertificateMetadata {
     questName: String(record.quest_name),
     questCategory: String(record.quest_category),
     completionDate: Number(record.completion_date),
+    milestoneCount: Number(record.milestone_count ?? 0),
     issuer: String(record.issuer),
     recipient: String(record.recipient),
   }

@@ -81,18 +81,15 @@ proptest! {
         let m0 = milestone_client.create_milestone(
             &owner, &qid,
             &String::from_str(&env, "M0"), &String::from_str(&env, "desc"),
-            &100, &false,
-        );
+            &100, &false, &None, &None, &None);
         let m1 = milestone_client.create_milestone(
             &owner, &qid,
             &String::from_str(&env, "M1"), &String::from_str(&env, "desc"),
-            &100, &true,
-        );
+            &100, &true, &None, &None, &None);
         let m2 = milestone_client.create_milestone(
             &owner, &qid,
             &String::from_str(&env, "M2"), &String::from_str(&env, "desc"),
-            &100, &false,
-        );
+            &100, &false, &None, &None, &None);
         let milestone_ids = [m0, m1, m2];
         let requires_previous = [false, true, false];
 

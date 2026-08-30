@@ -1,6 +1,7 @@
 import { isDev } from "@/lib/env"
 import * as Sentry from "@sentry/react"
 import { env } from "./env"
+import { mapContractError } from "./contract-errors"
 
 export function setupGlobalErrorHandlers() {
   if (typeof window === "undefined") return
@@ -35,6 +36,16 @@ export function setupGlobalErrorHandlers() {
   })
 }
 
+/**
+ * Wraps a contract call (buildTx + signAndSubmit) so preflight simulation
+ * failures -- thrown by server.prepareTransaction() inside each client's
+ * buildTx() *before* signAndSubmit ever prompts the wallet -- and post-submit
+ * failures both surface as a plain-language message rather than a raw
+ * HostError/simulation dump. Issue #1480: because buildTx() is always
+ * awaited before signAndSubmit() is called, a thrown simulation error here
+ * already means the wallet was never asked to sign -- this only improves
+ * the message, not the skip-signing behavior (which was already correct).
+ */
 export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
@@ -46,15 +57,17 @@ export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
       raw.message.includes("Error(Contract") ||
       raw.message.includes("transaction simulation failed")
     ) {
-      const match = raw.message.match(/Error\(Contract, #(\d+)\)/)
-      raw.message = match
-        ? `Contract error #${match[1]}: ${raw.message}`
-        : `Contract call failed: ${raw.message}`
+      // Prefer the same contract-error-code -> human message lookup used
+      // elsewhere (contract-errors.ts) so a failed simulation and a failed
+      // submission report the exact same wording for the exact same
+      // underlying contract error.
+      const mapped = mapContractError(raw.message)
+      raw.message = mapped !== raw.message ? mapped : `Contract call failed: ${raw.message}`
     } else if (
       raw.message.includes("could not detect network") ||
       raw.message.includes("failed to fetch")
     ) {
-      raw.message = `Network error: ${raw.message}`
+      raw.message = "Network error: could not reach the Stellar network. Check your connection."
     }
 
     throw raw

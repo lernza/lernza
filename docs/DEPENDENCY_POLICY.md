@@ -1,68 +1,86 @@
-# Dependency Policy
+# Dependency Update Policy & Security Scanning
 
-This document describes how Lernza manages dependencies across Rust contracts and the frontend application.
+This document establishes Lernza's dependency management policy, security auditing requirements, and response procedures for supply-chain security vulnerabilities.
 
-## Automated Updates
+---
 
-### Dependabot
+## 1. Dependency Ownership & Update Cadence
 
-[Dependabot](https://docs.github.com/en/code-security/dependabot) is configured to open weekly pull requests for:
+Dependency security and maintenance is shared across contract and frontend maintainers.
 
-| Ecosystem | Directory | Schedule | PR Limit |
-|-----------|-----------|----------|----------|
-| Cargo | `/` | Monday | 10 |
-| npm | `/frontend` | Monday | 10 |
-| GitHub Actions | `/` | Monday | 5 |
+### Automated Update Schedules (Dependabot)
 
-All Dependabot PRs are labeled `dependencies` plus the relevant ecosystem tag (`contracts`, `frontend`, or `infrastructure`).
+Dependabot is configured (`.github/dependabot.yml`) to automatically check for dependency updates every Monday:
 
-### Review Process
+| Ecosystem | Directory | Target Branch | Schedule | PR Limit | Ownership |
+|-----------|-----------|---------------|----------|----------|-----------|
+| **Cargo** | `/` | `main` | Weekly (Mon 00:00 UTC) | 10 | Smart Contract Team |
+| **npm / pnpm** | `/frontend` | `main` | Weekly (Mon 00:00 UTC) | 10 | Frontend Team |
+| **GitHub Actions** | `/` | `main` | Weekly (Mon 00:00 UTC) | 5 | Infrastructure / DevOps |
 
-1. Dependabot opens a PR with version bumps and changelogs.
-2. CI runs the full test suite (lint, type-check, tests, security audit).
-3. A maintainer reviews the changelog for breaking changes.
-4. If CI passes and no breaking changes are detected, the PR is merged.
-5. For major version bumps, the PR is reviewed by at least two maintainers.
+---
 
-## Security Auditing
+## 2. Security Auditing & Automated Scanning in CI
 
-### Rust (Cargo)
+Automated security checks run on every Pull Request and daily schedule in CI:
 
-- **cargo-audit**: Scans the RustSec advisory database for known vulnerabilities. Runs on every PR that touches `contracts/`, `Cargo.toml`, `Cargo.lock`, or `deny.toml`, plus a daily cron job.
-- **cargo-deny**: Enforces license compliance, banned dependencies, and source registry verification via `deny.toml`.
+### Rust / Cargo Scanning (`.github/workflows/dependency-security-scan.yml`)
+- **`cargo audit`**: Queries the RustSec Advisory Database for known CVEs. Fails CI on high/critical findings (CVSS score > 6.0), unsound code, or yanked crates.
+- **`cargo deny`**: Validates license compliance, enforces banned dependencies, and checks crate registry sources via `deny.toml`.
 
-### Frontend (npm)
+### Frontend / Node Scanning
+- **`pnpm audit`**: Scans Node package manifests (`package.json`, `pnpm-lock.yaml`). Fails CI if `high` or `critical` severity vulnerabilities are detected.
 
-- **pnpm audit**: Runs as part of CI on every PR that touches `frontend/`. Fails on `high` and `critical` severity vulnerabilities.
+### Lockfile Integrity Validation
+- **Lockfile Enforcement**: Pull Requests modifying `Cargo.toml` or `frontend/package.json` **must** commit the corresponding updated lockfiles (`Cargo.lock` or `pnpm-lock.yaml`).
+- CI enforces `--frozen-lockfile` (for pnpm) and `--locked` (for Cargo) to detect out-of-sync manifests.
 
-### GitHub Actions
+---
 
-- Dependabot keeps action versions current. Review pinned SHA updates for compatibility.
+## 3. Vulnerability Response SLAs
 
-## Vulnerability Response
+When security vulnerabilities are detected in dependency scans or reported via security advisories:
 
-| Severity | Response Time | Action |
-|----------|---------------|--------|
-| Critical | 24 hours | Immediate hotfix PR; patch to testnet/mainnet as needed |
-| High | 3 business days | Prioritized fix in next regular development cycle |
-| Medium | 1 week | Fix in regular development cycle |
-| Low | Next sprint | Scheduled with other maintenance work |
+| Severity | Definition | Response SLA | Required Action |
+|----------|------------|--------------|-----------------|
+| **Critical** | Remote code execution, key compromise, fund loss | **24 hours** | Immediate emergency patch, release hotfix to testnet/mainnet. |
+| **High** | Potential privilege escalation or severe denial of service | **3 business days** | Prioritized dependency update in current sprint. |
+| **Medium** | Conditional vulnerability, complex exploitation requirements | **1 week** | Standard dependency update in regular development cycle. |
+| **Low** | Non-exploitable informational advisory | **Next sprint** | Scheduled maintenance update. |
 
-### Reporting
+---
 
-Report security vulnerabilities by emailing the maintainers directly or opening a private security advisory on GitHub. Do **not** open a public issue for security vulnerabilities.
+## 4. Policy Exceptions & Advisory Overrides
 
-## Breaking Changes
+If a dependency update cannot be applied immediately (e.g. upstream breaking change or false positive advisory), an exception may be granted subject to strict controls:
 
-When a dependency introduces a breaking change:
+### Exception Criteria
+1. **Documented Rationale**: The exception must include a technical justification explaining why the vulnerability is unexploitable in Lernza's execution context.
+2. **Assigned Owner**: A designated maintainer must be assigned ownership of the exception.
+3. **Expiration & Review Date**: Exceptions cannot be permanent and MUST specify a review/expiration date (maximum 30 days).
 
-1. Check the migration guide in the dependency's changelog.
-2. Update all affected code before merging the version bump.
-3. If the breaking change affects the on-chain contract ABI, follow the contract upgrade process (deploy new WASM, update bindings).
-4. If the breaking change affects the frontend, run the full E2E test suite.
+### Exception Documentation Format
 
-## Pinning Strategy
+#### Cargo / Rust (`deny.toml`)
+```toml
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0001: Reason - Utility script dev dependency only, unexploitable in WASM runtime.
+    # Owner: @DevNetlife
+    # Review Date: 2026-09-30
+    "RUSTSEC-2026-0001"
+]
+```
 
-- **Cargo**: Exact versions in `Cargo.lock`; semver ranges in `Cargo.toml` for direct dependencies.
-- **npm**: Exact versions in `pnpm-lock.yaml`; semver ranges in `package.json`.
-- **GitHub Actions**: Pinned to full commit SHAs with version comments (e.g., `actions/checkout@<sha> # v7.0.0`).
+#### Node / Frontend (`frontend/package.json` pnpm overrides or audit exceptions)
+```json
+{
+  "pnpm": {
+    "auditConfig": {
+      "ignoreCves": [
+        "CVE-2026-XXXX" // Reason: Build tool dependency, unexploitable in client bundle. Owner: @frontend-lead. Review: 2026-09-30
+      ]
+    }
+  }
+}
+```

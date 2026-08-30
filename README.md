@@ -159,7 +159,8 @@ sequenceDiagram
   <img src=".github/assets/architecture.svg" alt="Lernza architecture" width="100%" />
 </p>
 
-For the full transaction-by-transaction breakdown — enrollment variants, peer review, funding, refunds — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For the full transaction-by-transaction breakdown — enrollment variants, peer review, funding, refunds — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). For key architectural decisions and rationale, see the [ADR Index](docs/adr/README.md).
+
 
 **Why four contracts?**
 - **Separation of concerns** — each contract has a single responsibility

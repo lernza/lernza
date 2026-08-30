@@ -57,8 +57,8 @@ function loadYaml(path) {
       continue;
     }
 
-    // Nested key:value (two-space indented)
-    const nestedMatch = line.match(/^  (\w+):\s*(.*)$/);
+    // Nested key:value
+    const nestedMatch = line.match(/^  (\w+):\s*(.*)/);
     if (nestedMatch && currentKey) {
       if (typeof result[currentKey] !== "object" || result[currentKey] === null) {
         result[currentKey] = {};
@@ -131,6 +131,26 @@ function main() {
 
   // Output the VITE_* env vars the frontend consumes
   const envLines = VITE_KEYS.map(([path, key]) => `${key}=${getConfigPath(config, path) ?? ""}`);
+
+  // Emit the canonical frontend names consumed by src/lib/env.ts. The
+  // flattened names remain available for tooling that reads the YAML shape.
+  const frontendAliases = {
+    VITE_SOROBAN_RPC_URL: config.stellar?.rpc_url || "",
+    VITE_SOROBAN_NETWORK_PASSPHRASE: config.stellar?.network_passphrase || "",
+    VITE_HORIZON_URL: config.stellar?.horizon_url || "",
+    VITE_QUEST_CONTRACT_ID: config.contracts?.quest || "",
+    VITE_MILESTONE_CONTRACT_ID: config.contracts?.milestone || "",
+    VITE_REWARDS_CONTRACT_ID: config.contracts?.rewards || "",
+    VITE_CERTIFICATE_CONTRACT_ID: config.contracts?.certificate || "",
+    VITE_REWARDS_TOKEN_CONTRACT_ID: config.contracts?.rewards_token || "",
+    VITE_USDC_TOKEN_ADDRESS: config.contracts?.usdc_token || "",
+    VITE_RPC_READ_RATE_LIMIT_CAPACITY: config.rpc_rate_limits?.capacity || "",
+    VITE_RPC_READ_RATE_LIMIT_REFILL_PER_SECOND: config.rpc_rate_limits?.refill_per_second || "",
+    VITE_SENTRY_DSN: config.sentry?.dsn || "",
+  };
+  for (const [key, value] of Object.entries(frontendAliases)) {
+    envLines.push(`${key}=${value}`);
+  }
 
   // Add derived vars
   envLines.push(`VITE_ENVIRONMENT=${env}`);

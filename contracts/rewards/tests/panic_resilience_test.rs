@@ -108,7 +108,6 @@ fn quest_state_intact_after_milestone_panic() {
 
     ctx.mint(&owner, 5_000);
 
-        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -120,6 +119,9 @@ fn quest_state_intact_after_milestone_panic() {
         &String::from_str(&ctx.env, "Desc"),
         &500,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Snapshot A state before the failing call
@@ -151,7 +153,6 @@ fn rewards_pool_intact_after_distribute_without_completion() {
 
     ctx.mint(&owner, 5_000);
 
-        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
     ctx.rewards().fund_quest(&owner, &q_id, &5_000);
@@ -163,6 +164,9 @@ fn rewards_pool_intact_after_distribute_without_completion() {
         &String::from_str(&ctx.env, "Desc"),
         &500,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     let pool_before = ctx.rewards().get_pool_balance(&q_id);
@@ -193,7 +197,6 @@ fn quest_enrollment_intact_after_failed_fund() {
     let enrollee = Address::generate(&ctx.env);
 
     // owner has no tokens — fund_quest will fail
-        &None,
     let q_id = ctx.create_quest(&owner);
     ctx.quest().add_enrollee(&q_id, &enrollee);
 

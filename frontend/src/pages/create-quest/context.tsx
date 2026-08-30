@@ -10,6 +10,7 @@ interface QuestCreationContextType {
   goToNext: () => void
   goToBack: () => void
   setCurrentStep: (step: FormStep) => void
+  loadDraft: (step1: Step1Values, step2: Step2Values, currentStep: FormStep) => void
 }
 
 const QuestCreationContext = createContext<QuestCreationContextType | undefined>(undefined)
@@ -20,9 +21,10 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     description: "",
     category: "",
     tags: [],
+    referralBonus: 10,
   })
   const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0 }],
+    milestones: [{ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] }],
   })
   const [currentStep, setCurrentStep] = useState<FormStep>(1)
 
@@ -35,6 +37,11 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     setCurrentStep(prev => (prev - 1) as FormStep)
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
+  const loadDraft = useCallback((step1: Step1Values, step2: Step2Values, step: FormStep) => {
+    setStep1Data(step1)
+    setStep2Data(step2)
+    setCurrentStep(step)
+  }, [])
 
   const value = {
     step1Data,
@@ -45,6 +52,7 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     goToNext,
     goToBack,
     setCurrentStep,
+    loadDraft,
   }
 
   return <QuestCreationContext.Provider value={value}>{children}</QuestCreationContext.Provider>

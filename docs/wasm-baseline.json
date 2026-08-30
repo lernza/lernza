@@ -1,0 +1,6 @@
+{
+  "certificate.wasm": 45000,
+  "milestone.wasm": 65000,
+  "quest.wasm": 70000,
+  "rewards.wasm": 40000
+}

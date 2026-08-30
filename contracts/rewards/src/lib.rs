@@ -1,5 +1,7 @@
 #![no_std]
-use common::{extend_instance_ttl, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD};
+use common::{
+    extend_instance_ttl, EnrolleeStatus, QuestInfo, QuestStatus, BUMP, MAX_REWARD_AMOUNT, THRESHOLD,
+};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, token, Address, BytesN,
     Env, String, Symbol, Vec,
@@ -10,6 +12,12 @@ use soroban_sdk::{
 #[contractclient(name = "QuestClient")]
 pub trait QuestContractTrait {
     fn get_quest(env: Env, quest_id: u32) -> Result<QuestInfo, soroban_sdk::Val>;
+    fn is_enrollee(env: Env, quest_id: u32, user: Address) -> Result<bool, soroban_sdk::Val>;
+    fn get_enrollee_status(
+        env: Env,
+        quest_id: u32,
+        enrollee: Address,
+    ) -> Result<EnrolleeStatus, soroban_sdk::Val>;
 }
 
 #[contractclient(name = "MilestoneClient")]
@@ -38,8 +46,10 @@ pub enum DataKey {
     MilestoneContractAddr,
     // Who funded / controls a quest's pool
     QuestAuthority(u32),
-    // Token balance allocated to a quest
+    // Token balance allocated to a quest (legacy - single token)
     QuestPool(u32),
+    // Per-token balance for a quest - supports multiple token types
+    QuestPoolPerToken(u32, Address), // (quest_id, token_addr)
     // Per-user total earnings
     UserEarnings(Address),
     // Global stats
@@ -62,6 +72,14 @@ pub enum DataKey {
     Admin,
     // Pause state for admin operations
     Paused,
+    // Configurable whitelist of supported reward token addresses — Issue #1349.
+    // When enabled, `fund_quest_with_token` / `distribute_reward_with_token`
+    // reject any token not present in this list.
+    SupportedTokens,
+    // Whether the supported-token whitelist is currently enforced. Starts false
+    // (fail-open) so existing single/multi-token flows keep working until an
+    // admin explicitly configures the platform's supported tokens.
+    SupportedTokensEnabled,
 }
 
 #[contracterror]
@@ -69,11 +87,11 @@ pub enum DataKey {
 #[repr(u32)]
 pub enum Error {
     /// Entity not found (shared code 1).
-    NotFound = common::ERR_NOT_FOUND as u32,
+    NotFound = 1,
     /// Caller is not authorized (shared code 2).
-    Unauthorized = common::ERR_UNAUTHORIZED as u32,
+    Unauthorized = 2,
     /// Invalid input provided (shared code 3).
-    InvalidInput = common::ERR_INVALID_INPUT as u32,
+    InvalidInput = 3,
     InsufficientPool = 4,
     InvalidAmount = 5,
     QuestNotFunded = 6,
@@ -91,8 +109,10 @@ pub enum Error {
     AlreadyInitialized = 99, // moved away from standard range
     NotInitialized = 100,    // moved away from standard range
     /// Contract is administratively paused (shared code 400).
-    Paused = common::ERR_PAUSED as u32,
+    Paused = 400,
     BatchTooLarge = 17,
+    /// Reward recipient is no longer an active participant in the quest (issue #1325).
+    RecipientNotEnrolled = 18,
 }
 
 // TTL constants moved to common.
@@ -317,6 +337,117 @@ impl RewardsContract {
         Ok(())
     }
 
+    /// Fund a quest with a specific token type. Extends fund_quest to support multiple tokens.
+    /// Each quest can hold balances in multiple different SAC tokens simultaneously.
+    pub fn fund_quest_with_token(
+        env: Env,
+        funder: Address,
+        quest_id: u32,
+        token_addr: Address,
+        amount: i128,
+    ) -> Result<(), Error> {
+        funder.require_auth();
+
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
+
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Verify the quest exists and funder is authorized
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let quest_info = quest_client
+            .try_get_quest(&quest_id)
+            .map_err(|_| Error::QuestLookupFailed)?
+            .map_err(|_| Error::QuestLookupFailed)?;
+
+        if quest_info.owner != funder {
+            return Err(Error::Unauthorized);
+        }
+
+        // Validate the token address
+        let token_client = token::Client::new(&env, &token_addr);
+        if token_client.try_symbol().is_err() {
+            return Err(Error::InvalidToken);
+        }
+
+        // Reject tokens that are not on the platform's supported-token whitelist.
+        // Prevents a milestone from promising — and the platform from holding or
+        // distributing — a token the platform has not deployed/approved.
+        if !Self::is_token_supported(&env, &token_addr) {
+            return Err(Error::InvalidToken);
+        }
+
+        // Set authority if not already set
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        if let Some(existing) = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+        {
+            if existing != funder {
+                return Err(Error::Unauthorized);
+            }
+        } else {
+            env.storage().persistent().set(&auth_key, &funder);
+            common::extend_persistent_ttl(&env, &auth_key);
+        }
+
+        // Transfer tokens from funder to this contract
+        token_client.transfer(&funder, &env.current_contract_address(), &amount);
+
+        // Credit the quest pool for this specific token
+        let pool_key = DataKey::QuestPoolPerToken(quest_id, token_addr.clone());
+        let current: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
+        let new_pool = current
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
+        common::extend_persistent_ttl(&env, &pool_key);
+
+        // Update global funding stats
+        let total_funded: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalFunded)
+            .unwrap_or(0);
+        let new_total_funded = total_funded
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &new_total_funded);
+
+        if current == 0 {
+            let quest_count: u32 = env
+                .storage()
+                .instance()
+                .get(&DataKey::QuestCount)
+                .unwrap_or(0);
+            let new_qc = quest_count
+                .checked_add(1)
+                .ok_or(Error::ArithmeticOverflow)?;
+            env.storage().instance().set(&DataKey::QuestCount, &new_qc);
+        }
+
+        common::emit_reward_funded(&env, quest_id, &funder, amount);
+
+        Ok(())
+    }
+
     /// Distribute reward tokens to an enrollee. Authority only.
     /// Requires milestone completion verification before payment.
     /// Idempotent: a second call for the same (quest, milestone, enrollee) returns AlreadyPaid.
@@ -388,6 +519,28 @@ impl RewardsContract {
         );
         if !completed {
             return Err(Error::MilestoneNotCompleted);
+        }
+
+        // Issue #1325: Verify the recipient is still an active participant.
+        // A user who was removed or left the quest after completing a milestone
+        // must not receive a reward payout.
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_client = QuestClient::new(&env, &quest_contract_addr);
+        let is_active = quest_client
+            .try_is_enrollee(&quest_id, &enrollee)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false)
+            && quest_client
+                .try_get_enrollee_status(&quest_id, &enrollee)
+                .unwrap_or(Ok(EnrolleeStatus::Inactive))
+                .unwrap_or(EnrolleeStatus::Inactive)
+                == EnrolleeStatus::Active;
+        if !is_active {
+            return Err(Error::RecipientNotEnrolled);
         }
 
         // Validate amount matches the milestone's configured reward to prevent
@@ -467,6 +620,131 @@ impl RewardsContract {
         Ok(())
     }
 
+    /// Distribute reward tokens from a specific token's pool. Extends distribute_reward
+    /// to support multiple token types per quest. Caller specifies which token to distribute from.
+    pub fn distribute_reward_with_token(
+        env: Env,
+        caller: Address,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+        token_addr: Address,
+        amount: i128,
+    ) -> Result<(), Error> {
+        caller.require_auth();
+
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(Error::Paused);
+        }
+
+        if amount <= 0 || amount > MAX_REWARD_AMOUNT {
+            return Err(Error::InvalidAmount);
+        }
+
+        // Idempotency check
+        let payout_key = DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&payout_key) {
+            return Err(Error::AlreadyPaid);
+        }
+
+        // Verify caller is the quest authority
+        let auth_key = DataKey::QuestAuthority(quest_id);
+        let authority: Address = env
+            .storage()
+            .persistent()
+            .get::<DataKey, Address>(&auth_key)
+            .ok_or(Error::QuestNotFunded)?;
+        if caller != authority {
+            return Err(Error::Unauthorized);
+        }
+        if caller == enrollee {
+            return Err(Error::Unauthorized);
+        }
+
+        // Verify milestone completion
+        let milestone_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::MilestoneContractAddr)
+            .ok_or(Error::MilestoneContractNotInitialized)?;
+
+        let milestone_client = MilestoneClient::new(&env, &milestone_contract_addr);
+        let completed = milestone_client.is_completed(&quest_id, &milestone_id, &enrollee);
+        if !completed {
+            return Err(Error::MilestoneNotCompleted);
+        }
+
+        // Validate token
+        let token_client = token::Client::new(&env, &token_addr);
+        if token_client.try_symbol().is_err() {
+            return Err(Error::InvalidToken);
+        }
+
+        // Reject tokens that are not on the platform's supported-token whitelist.
+        if !Self::is_token_supported(&env, &token_addr) {
+            return Err(Error::InvalidToken);
+        }
+
+        // Check pool balance for this specific token
+        let pool_key = DataKey::QuestPoolPerToken(quest_id, token_addr.clone());
+        let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
+        if pool < amount {
+            return Err(Error::InsufficientPool);
+        }
+
+        // Record payout for idempotency
+        env.storage().persistent().set(&payout_key, &amount);
+        common::extend_persistent_ttl(&env, &payout_key);
+
+        // Update pool balance
+        let new_pool = pool.checked_sub(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&pool_key, &new_pool);
+        common::extend_persistent_ttl(&env, &pool_key);
+
+        // Transfer tokens
+        token_client.transfer(&env.current_contract_address(), &enrollee, &amount);
+
+        // Track user earnings
+        let earn_key = DataKey::UserEarnings(enrollee.clone());
+        let earned: i128 = env.storage().persistent().get(&earn_key).unwrap_or(0);
+        let new_earned = earned
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&earn_key, &new_earned);
+        common::extend_persistent_ttl(&env, &earn_key);
+
+        // Update global stats
+        let total: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalDistributed)
+            .unwrap_or(0);
+        let new_total = total.checked_add(amount).ok_or(Error::ArithmeticOverflow)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &new_total);
+
+        let q_dist_key = DataKey::QuestDistributed(quest_id);
+        let q_total: i128 = env.storage().persistent().get(&q_dist_key).unwrap_or(0);
+        let q_new = q_total
+            .checked_add(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        env.storage().persistent().set(&q_dist_key, &q_new);
+        common::extend_persistent_ttl(&env, &q_dist_key);
+
+        extend_instance_ttl(&env);
+
+        // Emit event
+        common::emit_reward_distributed(&env, quest_id, milestone_id, &enrollee, amount);
+
+        Ok(())
+    }
+
     /// Self-service batch claim: an enrollee claims rewards for multiple
     /// completed milestones in a single call.
     ///
@@ -510,6 +788,27 @@ impl RewardsContract {
             .get::<DataKey, Address>(&auth_key)
             .ok_or(Error::QuestNotFunded)?;
 
+        // Issue #1325: Verify the claimant is still an active participant.
+        // A user who was removed or left the quest after completing milestones
+        // must not be able to self-claim rewards.
+        let quest_contract_addr_cb = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let claimant_active = QuestClient::new(&env, &quest_contract_addr_cb)
+            .try_is_enrollee(&quest_id, &claimant)
+            .unwrap_or(Ok(false))
+            .unwrap_or(false)
+            && QuestClient::new(&env, &quest_contract_addr_cb)
+                .try_get_enrollee_status(&quest_id, &claimant)
+                .unwrap_or(Ok(EnrolleeStatus::Inactive))
+                .unwrap_or(EnrolleeStatus::Inactive)
+                == EnrolleeStatus::Active;
+        if !claimant_active {
+            return Err(Error::RecipientNotEnrolled);
+        }
+
         let milestone_contract_addr = env
             .storage()
             .instance()
@@ -533,7 +832,7 @@ impl RewardsContract {
             // Without this check, the same milestone would pass the
             // PayoutRecord check twice (since Phase 1 never writes), leading
             // to two token transfers for the same milestone.
-            if seen_ids.contains(&ms_id) {
+            if seen_ids.contains(ms_id) {
                 return Err(Error::InvalidInput);
             }
             seen_ids.push_back(ms_id);
@@ -542,15 +841,13 @@ impl RewardsContract {
             // This cross-contract call is the core security check:
             // it ensures the claimant cannot claim rewards for milestones
             // they didn't complete.
-            let completed =
-                milestone_client.is_completed(&quest_id, &ms_id, &claimant);
+            let completed = milestone_client.is_completed(&quest_id, &ms_id, &claimant);
             if !completed {
                 return Err(Error::MilestoneNotCompleted);
             }
 
             // Verify this payout hasn't already been made (idempotency).
-            let payout_key =
-                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
             if env.storage().persistent().has(&payout_key) {
                 return Err(Error::AlreadyPaid);
             }
@@ -558,9 +855,7 @@ impl RewardsContract {
             // Resolve reward amount from the milestone contract.
             // A non-existent milestone returns NotFound (distinct from
             // RewardAmountMismatch which is reserved for amount mismatches).
-            let amount = match milestone_client
-                .try_get_milestone_reward(&quest_id, &ms_id)
-            {
+            let amount = match milestone_client.try_get_milestone_reward(&quest_id, &ms_id) {
                 Ok(Ok(a)) if a > 0 && a <= MAX_REWARD_AMOUNT => a,
                 Ok(Ok(_)) => return Err(Error::InvalidAmount),
                 Ok(Err(_)) | Err(_) => return Err(Error::NotFound),
@@ -587,8 +882,7 @@ impl RewardsContract {
             let amount = amounts.get(i).unwrap();
 
             // Record payout for idempotency BEFORE the token transfer.
-            let payout_key =
-                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
             env.storage().persistent().set(&payout_key, &amount);
             common::extend_persistent_ttl(&env, &payout_key);
 
@@ -598,20 +892,10 @@ impl RewardsContract {
                 .ok_or(Error::ArithmeticOverflow)?;
 
             // Transfer tokens to claimant.
-            token_client.transfer(
-                &env.current_contract_address(),
-                &claimant,
-                &amount,
-            );
+            token_client.transfer(&env.current_contract_address(), &claimant, &amount);
 
             // Emit reward distribution event.
-            common::emit_reward_distributed(
-                &env,
-                quest_id,
-                ms_id,
-                &claimant,
-                amount,
-            );
+            common::emit_reward_distributed(&env, quest_id, ms_id, &claimant, amount);
         }
 
         // Commit the final pool balance.
@@ -818,6 +1102,15 @@ impl RewardsContract {
             .unwrap_or(0)
     }
 
+    /// Get pool balance for a specific token in a quest.
+    /// Returns 0 if no balance exists for that token.
+    pub fn get_pool_balance_with_token(env: Env, quest_id: u32, token_addr: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::QuestPoolPerToken(quest_id, token_addr))
+            .unwrap_or(0)
+    }
+
     /// Get total earnings for a user across all quests.
     pub fn get_user_earnings(env: Env, user: Address) -> i128 {
         env.storage()
@@ -938,6 +1231,111 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::TokenAddr)
             .ok_or(Error::NotInitialized)
+    }
+
+    // --- Supported-token whitelist (Issue #1349) ---
+
+    /// Returns true if `token` is allowed for funding/distribution.
+    ///
+    /// The whitelist is fail-open: until an admin enables it (by adding at least
+    /// one supported token), any valid token contract is accepted so existing
+    /// flows keep working. Once enabled, only addresses present in the list pass.
+    fn is_token_supported(env: &Env, token: &Address) -> bool {
+        if !env
+            .storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::SupportedTokensEnabled)
+            .unwrap_or(false)
+        {
+            return true;
+        }
+        let list: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SupportedTokens)
+            .unwrap_or(Vec::new(env));
+        list.contains(token)
+    }
+
+    /// Add a token to the supported-token whitelist. Admin only.
+    /// Adding the first token enables enforcement for all subsequent
+    /// `fund_quest_with_token` / `distribute_reward_with_token` calls.
+    pub fn add_supported_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored = Self::get_admin(env.clone())?;
+        if stored != admin {
+            return Err(Error::Unauthorized);
+        }
+        let mut list: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SupportedTokens)
+            .unwrap_or(Vec::new(&env));
+        if !list.contains(&token) {
+            list.push_back(token);
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokensEnabled, &true);
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Remove a token from the supported-token whitelist. Admin only.
+    /// When the last token is removed, enforcement is disabled (fail-open again).
+    pub fn remove_supported_token(env: Env, admin: Address, token: Address) -> Result<(), Error> {
+        admin.require_auth();
+        let stored = Self::get_admin(env.clone())?;
+        if stored != admin {
+            return Err(Error::Unauthorized);
+        }
+        let current: Vec<Address> = env
+            .storage()
+            .instance()
+            .get(&DataKey::SupportedTokens)
+            .unwrap_or(Vec::new(&env));
+        // Rebuild the list excluding the removed token (Vec has no in-place
+        // removal guarantee across SDK versions, so copy explicitly).
+        let mut list = Vec::new(&env);
+        for i in 0..current.len() {
+            if let Some(t) = current.get(i) {
+                if t != token {
+                    list.push_back(t);
+                }
+            }
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
+        env.storage()
+            .instance()
+            .set(&DataKey::SupportedTokens, &list);
+        if list.is_empty() {
+            env.storage()
+                .instance()
+                .set(&DataKey::SupportedTokensEnabled, &false);
+        }
+        extend_instance_ttl(&env);
+        Ok(())
+    }
+
+    /// Check whether a token is currently on the supported-token whitelist.
+    pub fn is_supported_token(env: Env, token: Address) -> bool {
+        Self::is_token_supported(&env, &token)
+    }
+
+    /// Return the full list of supported-token addresses.
+    pub fn get_supported_tokens(env: Env) -> Vec<Address> {
+        env.storage()
+            .instance()
+            .get(&DataKey::SupportedTokens)
+            .unwrap_or(Vec::new(&env))
     }
 
     /// Return aggregated platform statistics — Issue #717.
@@ -1254,3 +1652,25 @@ impl RewardsContract {
 
 #[cfg(test)]
 mod test;
+
+/// Deterministic milestone ID — issue #1340
+/// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
+pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    out
+}

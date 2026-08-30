@@ -1,9 +1,11 @@
-import { Suspense, lazy } from "react"
-import { ArrowLeft, Wallet } from "lucide-react"
+import { Suspense, lazy, useState } from "react"
+import { ArrowLeft, Wallet, Bookmark, LayoutTemplate, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { QuestCreationProvider, useQuestCreation } from "./context"
 import { StepIndicator } from "./types"
+import { QUEST_TEMPLATES } from "./templates"
+import { questDrafts } from "./drafts"
 
 const Step1Form = lazy(() => import("./step1").then(m => ({ default: m.Step1Form })))
 const Step2Form = lazy(() => import("./step2").then(m => ({ default: m.Step2Form })))
@@ -18,7 +20,15 @@ interface CreateQuestProps {
 }
 
 function CreateQuestContent({ onBack }: CreateQuestProps) {
-  const { currentStep } = useQuestCreation()
+  const { currentStep, step1Data, step2Data, loadDraft } = useQuestCreation()
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const saveDraft = () => {
+    const id = `${Date.now()}`
+    questDrafts.save({ id, step1: step1Data, step2: step2Data, currentStep })
+    setNotice("Draft saved on this device. You can reopen it from Drafts.")
+  }
 
   return (
     <div className="relative mx-auto max-w-2xl px-4 py-8 sm:px-6">
@@ -42,6 +52,30 @@ function CreateQuestContent({ onBack }: CreateQuestProps) {
           Set up milestones and fund the reward pool to incentivize learners.
         </p>
       </div>
+
+      <div className="relative mb-6 flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => setShowLibrary(value => !value)}>
+          <LayoutTemplate className="h-4 w-4" /> Templates
+        </Button>
+        <Button variant="outline" size="sm" onClick={saveDraft}>
+          <Bookmark className="h-4 w-4" /> Save draft
+        </Button>
+        {notice && <span className="text-muted-foreground self-center text-xs font-semibold">{notice}</span>}
+      </div>
+
+      {showLibrary && (
+        <div className="border-border bg-background relative mb-6 border p-4 shadow-md">
+          <button aria-label="Close template and draft library" onClick={() => setShowLibrary(false)} className="absolute right-3 top-3"><X className="h-4 w-4" /></button>
+          <p className="mb-3 text-xs font-bold uppercase text-muted-foreground">Start from a template</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {QUEST_TEMPLATES.map(template => <button key={template.id} type="button" onClick={() => { loadDraft(template.step1, template.step2, 1); setShowLibrary(false); setNotice(`${template.name} loaded — customize it before publishing.`) }} className="border-border hover:bg-secondary border p-3 text-left">
+              <span className="block text-sm font-semibold">{template.name}</span><span className="text-muted-foreground text-xs">{template.description}</span>
+            </button>)}
+          </div>
+          <p className="mb-2 mt-5 text-xs font-bold uppercase text-muted-foreground">Saved drafts</p>
+          {questDrafts.list().length ? <div className="space-y-2">{questDrafts.list().map(draft => <div key={draft.id} className="border-border flex items-center justify-between border p-2"><span className="text-sm font-semibold">{draft.step1.name || "Untitled quest"}</span><div className="flex gap-2"><button className="text-xs font-bold underline" onClick={() => { loadDraft(draft.step1, draft.step2, draft.currentStep); setShowLibrary(false) }}>Open</button><button className="text-destructive text-xs font-bold underline" onClick={() => { questDrafts.remove(draft.id); setShowLibrary(false); setShowLibrary(true) }}>Delete</button></div></div>)}</div> : <p className="text-muted-foreground text-sm">No saved drafts yet.</p>}
+        </div>
+      )}
 
       {/* Step indicator */}
       <div className="animate-fade-in-up stagger-1 relative">

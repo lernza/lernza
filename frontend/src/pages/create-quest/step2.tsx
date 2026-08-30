@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
@@ -30,9 +30,11 @@ export function Step2Form() {
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isValid },
   } = useForm<Step2Values>({
-    resolver: zodResolver(step2Schema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(step2Schema as any),
     defaultValues: step2Data,
     mode: "onChange",
   })
@@ -44,13 +46,28 @@ export function Step2Form() {
 
   const handleBatchImport = (imported: ParsedMilestone[], mode: "append" | "replace") => {
     if (mode === "replace") {
-      replace(imported)
+      replace(imported.map(item => ({ ...item, prerequisiteIds: [] })))
     } else {
-      append(imported)
+      append(imported.map(item => ({ ...item, prerequisiteIds: [] })))
     }
   }
 
   const milestones = watch("milestones")
+  useEffect(() => {
+    const subscription = watch(value => {
+      if (value.milestones) {
+        setStep2Data({
+          milestones: value.milestones.map(milestone => ({
+            title: milestone?.title ?? "",
+            description: milestone?.description ?? "",
+            rewardAmount: milestone?.rewardAmount ?? 0,
+            prerequisiteIds: milestone?.prerequisiteIds ?? [],
+          })),
+        })
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [setStep2Data, watch])
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
     const n = Number(m.rewardAmount)
     return sum + (isNaN(n) ? 0 : n)
@@ -90,6 +107,7 @@ export function Step2Form() {
             {fields.map((field, index) => {
               const titleVal = milestones?.[index]?.title || ""
               const descVal = milestones?.[index]?.description || ""
+              const prerequisiteIds = milestones?.[index]?.prerequisiteIds || []
 
               return (
                 <div key={field.id} className="space-y-4 p-5">
@@ -152,7 +170,7 @@ export function Step2Form() {
                       className={cn(
                         "border-border bg-background w-full border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.title &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_TITLE_LEN}
                     />
@@ -164,7 +182,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {titleVal.length}/{MAX_MILESTONE_TITLE_LEN}
@@ -191,7 +211,7 @@ export function Step2Form() {
                       className={cn(
                         "border-border bg-background w-full resize-none border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.description &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_DESCRIPTION_LEN}
                     />
@@ -203,7 +223,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {descVal.length}/{MAX_MILESTONE_DESCRIPTION_LEN}
@@ -238,7 +260,7 @@ export function Step2Form() {
                         className={cn(
                           "border-border bg-background flex-1 border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                           errors.milestones?.[index]?.rewardAmount &&
-                            "border-destructive focus:ring-1 focus:ring-destructive"
+                            "border-destructive focus:ring-destructive focus:ring-1"
                         )}
                       />
                     </div>
@@ -247,16 +269,55 @@ export function Step2Form() {
                       message={errors.milestones?.[index]?.rewardAmount?.message}
                     />
                   </div>
+
+                  <div>
+                    <FormLabel>Prerequisites</FormLabel>
+                    <p className="text-muted-foreground mb-2 text-xs">
+                      Select any earlier milestones that must be completed before this work unlocks.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {fields.slice(0, index).map((_, prerequisiteIndex) => {
+                        return (
+                          <label
+                            key={prerequisiteIndex}
+                            className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={prerequisiteIds.includes(prerequisiteIndex)}
+                              onChange={() => {
+                                const next = prerequisiteIds.includes(prerequisiteIndex)
+                                  ? prerequisiteIds.filter(id => id !== prerequisiteIndex)
+                                  : [...prerequisiteIds, prerequisiteIndex]
+                                setValue(`milestones.${index}.prerequisiteIds`, next, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }}
+                            />{" "}
+                            Step {prerequisiteIndex + 1}
+                          </label>
+                        )
+                      })}
+                      {index === 0 && (
+                        <span className="text-muted-foreground text-xs">
+                          First milestone is immediately available.
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )
             })}
           </div>
 
           {/* Add & Import buttons */}
-          <div className="border-border border-t p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border-border grid grid-cols-1 gap-3 border-t p-5 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => append({ title: "", description: "", rewardAmount: 0 })}
+              onClick={() =>
+                append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })
+              }
               className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border border-dashed py-3 text-sm font-semibold transition-colors"
             >
               <Plus className="h-4 w-4" />

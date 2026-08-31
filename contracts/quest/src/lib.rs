@@ -93,6 +93,8 @@ pub enum Error {
     InviteAlreadyUsed = 16,
     /// Quest has been cancelled.
     QuestCancelled = 17,
+    /// Removal is blocked while a submission is awaiting review or settlement.
+    RemovalBlockedByPendingApproval = 21,
     /// No pending ownership transfer exists for this quest.
     NoPendingTransfer = 18,
     /// The caller is not the nominated new owner for this transfer.
@@ -982,6 +984,20 @@ impl QuestContract {
         Self::require_not_paused(&env)?;
         let quest = Self::load_quest(&env, quest_id)?;
         quest.owner.require_auth();
+        if quest.status != QuestStatus::Active {
+            return Err(Error::EnrollmentClosed);
+        }
+
+        // A hold is placed by the quest owner while a submission is in flight
+        // or a verified reward is awaiting settlement. Removing the enrollee
+        // through this path must not bypass that protection.
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::LeaveHold(quest_id, enrollee.clone()))
+        {
+            return Err(Error::RemovalBlockedByPendingApproval);
+        }
 
         Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
 
@@ -1006,14 +1022,23 @@ impl QuestContract {
     pub fn leave_quest(env: Env, enrollee: Address, quest_id: u32) -> Result<(), Error> {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
-        Self::load_quest(&env, quest_id)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.status != QuestStatus::Active {
+            return Err(Error::EnrollmentClosed);
+        }
 
         let hold_key = DataKey::LeaveHold(quest_id, enrollee.clone());
         if env.storage().persistent().has(&hold_key) {
             return Err(Error::LeaveBlockedByPendingApproval);
         }
 
-        Self::internal_remove_enrollee(&env, quest_id, enrollee)
+        Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
+        env.events().publish(
+            (Symbol::new(&env, "enrollee_removed"),),
+            (quest_id, enrollee),
+        );
+        Self::bump(&env, quest_id);
+        Ok(())
     }
 
     /// Place a peer-review hold on an enrollee. Owner only.
@@ -1864,7 +1889,16 @@ impl QuestContract {
         env.storage()
             .persistent()
             .set(&DataKey::Enrollees(quest_id), &new_list);
-        Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee), quest_id);
+        Self::remove_id_from_index(env, DataKey::EnrolleeQuests(enrollee.clone()), quest_id);
+        // Status and holds are scoped to enrollment and must not leak into a
+        // future re-enrollment. Verified milestone records live in the
+        // milestone contract and are intentionally untouched here.
+        env.storage()
+            .persistent()
+            .remove(&DataKey::EnrolleeStatus(quest_id, enrollee.clone()));
+        env.storage()
+            .persistent()
+            .remove(&DataKey::LeaveHold(quest_id, enrollee));
 
         // Auto-promote from waitlist if the quest has a cap and there are waitlisted people.
         let quest = Self::load_quest(env, quest_id)?;

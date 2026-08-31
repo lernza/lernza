@@ -11,6 +11,7 @@ import {
   useTotalReservedReward,
 } from "@/hooks/use-quest-data"
 import { milestoneClient } from "@/lib/contracts/milestone"
+import { questClient } from "@/lib/contracts/quest"
 import { PageMetadata } from "@/components/PageMetadata"
 import { buildQuestMetadata } from "@/lib/questMetadata"
 import type { QuestInfo } from "@/lib/contract-types"
@@ -154,6 +155,38 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     }
     addToast("Add enrollee clicked", "info")
   }, [addToast, address, questId])
+
+  const handleRemoveEnrollee = useCallback(
+    async (enrollee: { address: string }) => {
+      if (!address || !quest || quest.owner !== address) {
+        addToast("Only the quest owner can remove a learner.", "error")
+        return
+      }
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(
+          "Remove this learner? Verified milestones and earned rewards stay protected. A learner with a submission awaiting review or reward settlement cannot be removed until the review is resolved."
+        )
+      ) {
+        return
+      }
+      try {
+        await questClient.removeEnrollee(address, questId, enrollee.address)
+        addToast("Learner removed. Verified work and earned rewards remain protected.", "success")
+        window.location.reload()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Removal failed."
+        addToast(
+          message.includes("RemovalBlockedByPendingApproval") ||
+            message.includes("LeaveBlockedByPendingApproval")
+            ? "Removal is blocked while a submission is awaiting review or reward settlement."
+            : message,
+          "error"
+        )
+      }
+    },
+    [addToast, address, quest, questId]
+  )
 
   const handleAddMilestone = useCallback(() => {
     addToast("Add milestone clicked", "info")
@@ -391,6 +424,9 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
             onAddEnrollee={handleAddEnrollee}
             onClaimRewards={handleClaimRewards}
             isClaiming={isClaiming}
+            onRemoveEnrollee={
+              address && quest?.owner === address ? handleRemoveEnrollee : undefined
+            }
           />
         </SectionErrorBoundary>
       )}

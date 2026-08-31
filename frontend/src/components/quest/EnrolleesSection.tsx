@@ -28,6 +28,8 @@ interface EnrolleesSectionProps {
   onClaimRewards?: (enrollee: Enrollee, claimableMilestones: Milestone[]) => void
   /** Whether batch claiming is currently in progress. */
   isClaiming?: boolean
+  /** Called when the quest owner requests removal of an enrollee. */
+  onRemoveEnrollee?: (enrollee: Enrollee) => void
 }
 
 export function EnrolleesSection({
@@ -37,6 +39,7 @@ export function EnrolleesSection({
   onAddEnrollee,
   onClaimRewards,
   isClaiming = false,
+  onRemoveEnrollee,
 }: EnrolleesSectionProps) {
   if (enrollees.length === 0) {
     return (
@@ -53,6 +56,11 @@ export function EnrolleesSection({
 
   return (
     <div className="space-y-3">
+      <div className="border-border bg-muted/30 text-muted-foreground border px-4 py-3 text-sm">
+        Removing a learner ends future participation, but never erases verified milestones or earned
+        rewards. A learner with a submission awaiting review or reward settlement cannot be removed
+        until that review is resolved.
+      </div>
       {enrollees.map(enrollee => {
         const enrolleeCompletions = completions.filter(
           c => c.completed && milestones.some(m => m.id === c.milestoneId)
@@ -112,9 +120,17 @@ export function EnrolleesSection({
                   )}
                 </>
               )}
-              <Button variant="ghost" size="sm">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              {onRemoveEnrollee && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove ${enrollee.name || enrollee.address}`}
+                  title="Remove learner (verified work and earned rewards are protected)"
+                  onClick={() => onRemoveEnrollee(enrollee)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         )

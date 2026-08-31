@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { questClient, type QuestInfo } from "@/lib/contracts/quest"
 import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
+import { queryKeys } from "@/lib/query-keys"
 
 const CONTRACT_UNAVAILABLE = "not configured"
 
@@ -20,7 +21,7 @@ function mapError(err: unknown, fallback: string): string {
 export function useQuest(id: number) {
   const enabled = Number.isInteger(id) && id >= 0
   const query = useQuery<QuestInfo | null, Error>({
-    queryKey: ["quest", id],
+    queryKey: queryKeys.quest(id),
     queryFn: async () => {
       if (!Number.isInteger(id) || id < 0) throw new Error("Invalid quest id")
       const quest = await questClient.getQuest(id)
@@ -28,6 +29,7 @@ export function useQuest(id: number) {
       return quest
     },
     enabled,
+    placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   })
@@ -55,12 +57,13 @@ export function useQuest(id: number) {
 export function useMilestones(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<MilestoneInfo[], Error>({
-    queryKey: ["milestones", questId],
+    queryKey: queryKeys.milestones(questId),
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
       return milestoneClient.getMilestones(questId)
     },
     enabled,
+    placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   })
@@ -88,12 +91,13 @@ export function useMilestones(questId: number) {
 export function useEnrollees(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<string[], Error>({
-    queryKey: ["enrollees", questId],
+    queryKey: queryKeys.enrollees(questId),
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
       return questClient.getEnrollees(questId)
     },
     enabled,
+    placeholderData: keepPreviousData,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   })
@@ -121,12 +125,13 @@ export function useEnrollees(questId: number) {
 export function useMilestoneCount(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<number, Error>({
-    queryKey: ["milestoneCount", questId],
+    queryKey: queryKeys.milestoneCount(questId),
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
       return milestoneClient.getMilestoneCount(questId)
     },
     enabled,
+    placeholderData: keepPreviousData,
   })
 
   const errMsg = query.error
@@ -152,12 +157,13 @@ export function useMilestoneCount(questId: number) {
 export function useRewardPool(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<bigint, Error>({
-    queryKey: ["rewardPool", questId],
+    queryKey: queryKeys.rewardPool(questId),
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
       return rewardsClient.getPoolBalance(questId)
     },
     enabled,
+    placeholderData: keepPreviousData,
   })
 
   const errMsg = query.error
@@ -180,15 +186,48 @@ export function useRewardPool(questId: number) {
   }
 }
 
+export function useTotalReservedReward(questId: number) {
+  const enabled = Number.isInteger(questId) && questId >= 0
+  const query = useQuery<bigint, Error>({
+    queryKey: [...queryKeys.milestones(questId), "reservedReward"],
+    queryFn: async () => {
+      if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
+      return milestoneClient.getTotalReservedReward(questId)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+
+  const errMsg = query.error
+    ? mapError(
+        query.error,
+        contractError(
+          "milestones",
+          "On-chain milestone data is unavailable until the milestone contract is configured."
+        )
+      )
+    : null
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: errMsg,
+    isEmpty: !query.data,
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
+  }
+}
+
 export function useQuestAuthority(questId: number) {
   const enabled = Number.isInteger(questId) && questId >= 0
   const query = useQuery<string | null, Error>({
-    queryKey: ["questAuthority", questId],
+    queryKey: queryKeys.questAuthority(questId),
     queryFn: async () => {
       if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
       return rewardsClient.getQuestAuthority(questId)
     },
     enabled,
+    placeholderData: keepPreviousData,
   })
 
   const errMsg = query.error

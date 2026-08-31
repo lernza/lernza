@@ -39,6 +39,40 @@ export const REWARDS_CONTRACT_ERRORS: Record<number, string> = {
 }
 
 /**
+ * Common Stellar/Soroban transaction-level error patterns and their
+ * user-friendly messages. These are not contract Error codes but rather
+ * SDK-level or RPC-level failures that users encounter during signing/submission.
+ */
+export const TRANSACTION_ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
+  {
+    pattern: /user\s+(rejected|denied|cancelled)/i,
+    message: "Transaction was cancelled by the user.",
+  },
+  {
+    pattern: /insufficient.*fund/i,
+    message: "Insufficient funds. Add XLM to your account and try again.",
+  },
+  {
+    pattern: /network\s+mismatch/i,
+    message: "Freighter is on the wrong network. Switch back in Freighter.",
+  },
+  {
+    pattern: /signing\s+failed/i,
+    message: "Transaction signing failed. Make sure Freighter is unlocked.",
+  },
+  { pattern: /account\s+changed/i, message: "Account changed after signing. Please re-confirm." },
+  {
+    pattern: /timeout|timed?\s*out/i,
+    message: "Request timed out. Check your connection and try again.",
+  },
+  { pattern: /duplicate/i, message: "Transaction was already submitted. Please wait a moment." },
+  {
+    pattern: /try.?again.?later|network\s+is\s+busy/i,
+    message: "Network is busy. Please try again shortly.",
+  },
+]
+
+/**
  * Extracts the numeric code from an `Error(Contract, #N)` string.
  * Returns null if no match is found.
  */
@@ -71,21 +105,35 @@ export type ErrorKind = "wallet" | "network" | "contract" | "not_found" | "unkno
 
 export function classifyError(message: string): ErrorKind {
   const lower = message.toLowerCase()
-  if (lower.includes("connect wallet") || lower.includes("not connected")) return "wallet"
+  if (
+    lower.includes("connect wallet") ||
+    lower.includes("not connected") ||
+    lower.includes("wallet required")
+  )
+    return "wallet"
   if (
     lower.includes("network error") ||
     lower.includes("failed to fetch") ||
     lower.includes("could not detect network") ||
     lower.includes("rpc") ||
-    lower.includes("timeout")
+    lower.includes("timeout") ||
+    lower.includes("timed out") ||
+    lower.includes("econnrefused") ||
+    lower.includes("networkerror")
   )
     return "network"
-  if (lower.includes("not found") || lower.includes("does not exist")) return "not_found"
+  if (
+    lower.includes("not found") ||
+    lower.includes("does not exist") ||
+    lower.includes("quest not found")
+  )
+    return "not_found"
   if (
     lower.includes("error(contract") ||
     lower.includes("contract error") ||
     lower.includes("hoststatus") ||
-    lower.includes("hostfunction")
+    lower.includes("hostfunction") ||
+    lower.includes("contract call failed")
   )
     return "contract"
   return "unknown"

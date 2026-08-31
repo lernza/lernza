@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { formatTokenAmount } from "./token-amount"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -10,32 +11,17 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 export function formatTokens(amount: number | bigint, decimals = 7, symbol = "TOKEN"): string {
-  const numAmount = Number(amount)
-
-  if (numAmount < 0) {
-    console.error("[formatTokens] Negative amount encountered:", amount)
-    return `ERROR: Negative ${symbol}`
-  }
-
-  const adjusted = numAmount / Math.pow(10, decimals)
-
-  if (adjusted >= 1_000_000) {
-    return `${(adjusted / 1_000_000).toFixed(1)}M ${symbol}`
-  }
-
-  if (adjusted >= 1_000) {
-    return `${(adjusted / 1_000).toFixed(1)}K ${symbol}`
-  }
-
-  return `${adjusted.toLocaleString(undefined, { maximumFractionDigits: decimals })} ${symbol}`
+  return formatTokenAmount(amount, { decimals, symbol, compact: true })
 }
 
 export function getSecondsRemaining(deadline: number, nowMs = Date.now()): number {
-  return Math.max(0, Math.floor(deadline - nowMs / 1000))
+  const nowSeconds = Math.floor(nowMs / 1000) // Convert once to whole seconds
+  return Math.max(0, deadline - nowSeconds)
 }
 
 export function isExpiredDeadline(deadline: number, nowMs = Date.now()): boolean {
-  return deadline > 0 && deadline <= nowMs / 1000
+  const nowSeconds = Math.floor(nowMs / 1000)
+  return deadline > 0 && deadline <= nowSeconds
 }
 
 export function isExpiringSoon(deadline: number, nowMs = Date.now()): boolean {
@@ -63,4 +49,3 @@ export function formatDeadlineLabel(deadline: number, nowMs = Date.now()): strin
   }
   return `Expires in ${days} day${days === 1 ? "" : "s"}`
 }
-

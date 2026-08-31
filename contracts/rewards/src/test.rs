@@ -391,6 +391,9 @@ fn test_distribute_reward_overflow() {
         &String::from_str(&env, "Desc"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -859,6 +862,9 @@ fn test_authority_self_distribution() {
         &String::from_str(&env, "Description"),
         &1000,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
@@ -967,6 +973,9 @@ fn test_distribute_reward_after_milestone_completion() {
         &String::from_str(&env, "Complete task"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Fund quest
@@ -1267,6 +1276,9 @@ fn test_distribute_reward_zero_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1316,6 +1328,9 @@ fn test_distribute_reward_negative_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1399,6 +1414,9 @@ fn test_distribute_reward_amount_exceeds_max_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1957,6 +1975,9 @@ fn test_refund_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Enrollee completes it
@@ -2360,6 +2381,7 @@ fn test_refund_expired_pool_success_without_archiving() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     // Creator funds the pool but the quest is never completed or archived.
@@ -2415,6 +2437,7 @@ fn test_refund_expired_pool_no_deadline() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2452,6 +2475,7 @@ fn test_refund_expired_pool_grace_period_enforced() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2495,6 +2519,7 @@ fn test_refund_expired_pool_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2531,6 +2556,7 @@ fn test_refund_expired_pool_not_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2576,6 +2602,7 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2587,6 +2614,9 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -2636,6 +2666,7 @@ fn test_refund_expired_pool_paused() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2647,4 +2678,288 @@ fn test_refund_expired_pool_paused() {
 
     let result = client.try_refund_expired_pool(&owner, &q_id);
     assert_eq!(result, Err(Ok(Error::Paused)));
+}
+
+// --- Security audit tests — issue #1428 ---
+
+#[test]
+fn test_fund_quest_rejects_zero_amount() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let r = client.try_fund_quest(&owner, &0, &0);
+    assert_eq!(r, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_fund_quest_rejects_negative_amount() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let r = client.try_fund_quest(&owner, &0, &(-100));
+    assert_eq!(r, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_distribute_rejects_zero_amount() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Q"),
+        &String::from_str(&env, "D"),
+        &String::from_str(&env, "C"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+    client.fund_quest(&owner, &q_id, &1_000);
+
+    let r = client.try_distribute_reward(&owner, &q_id, &0, &Address::generate(&env), &0);
+    assert_eq!(r, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_distribute_rejects_self_payment() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Q"),
+        &String::from_str(&env, "D"),
+        &String::from_str(&env, "C"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+    client.fund_quest(&owner, &q_id, &1_000);
+
+    let m_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &100,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+
+    // Owner tries to pay themselves (caller == enrollee)
+    let r = client.try_distribute_reward(&owner, &q_id, &m_id, &owner, &100);
+    assert_eq!(r, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_claim_batch_rejects_empty() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let claimant = Address::generate(&env);
+    let r = client.try_claim_batch(&claimant, &0, &soroban_sdk::Vec::<u32>::new(&env));
+    assert_eq!(r, Err(Ok(Error::BatchTooLarge)));
+}
+
+#[test]
+fn test_claim_batch_rejects_over_limit() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let claimant = Address::generate(&env);
+    let mut ids = soroban_sdk::Vec::<u32>::new(&env);
+    for i in 0..21 {
+        ids.push_back(i);
+    }
+    let r = client.try_claim_batch(&claimant, &0, &ids);
+    assert_eq!(r, Err(Ok(Error::BatchTooLarge)));
+}
+
+#[test]
+fn test_set_grace_period_rejects_too_short() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    // 1 second is below MIN_REFUND_GRACE_PERIOD (86400)
+    let r = client.try_set_refund_grace_period(&admin, &1);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_set_grace_period_rejects_too_long() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    // 2 years exceeds MAX_REFUND_GRACE_PERIOD (31536000)
+    let r = client.try_set_refund_grace_period(&admin, &63_072_000);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_non_admin_cannot_set_grace_period() {
+    let (
+        env,
+        client,
+        _cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let stranger = Address::generate(&env);
+    let r = client.try_set_refund_grace_period(&stranger, &604_800);
+    assert_eq!(r, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_pool_cannot_go_negative() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Q"),
+        &String::from_str(&env, "D"),
+        &String::from_str(&env, "C"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+    client.fund_quest(&owner, &q_id, &1_000);
+
+    // Fund 1000 but try to distribute more than pool
+    let m_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "M1"),
+        &String::from_str(&env, "Desc"),
+        &2_000,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &m_id, &enrollee);
+
+    let r = client.try_distribute_reward(&owner, &q_id, &m_id, &enrollee, &2_000);
+    assert_eq!(r, Err(Ok(Error::InsufficientPool)));
 }

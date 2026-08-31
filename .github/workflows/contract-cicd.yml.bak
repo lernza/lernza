@@ -1,0 +1,324 @@
+name: Smart Contract CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "release/**"
+    paths:
+      - "contracts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/contract-cicd.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Contract Testing & Building ──────────────────────────────────
+  contract-tests:
+    name: Test & Build Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install stellar-cli
+        run: |
+          curl -fsSL https://github.com/stellar/stellar-cli/releases/download/v25.2.0/stellar-cli-25.2.0-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz -C /usr/local/bin
+          stellar version
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown,wasm32v1-none
+          components: rustfmt, clippy
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run unit tests
+        run: cargo test --workspace --verbose
+
+      - name: Run integration tests
+        run: cargo test -p rewards --test integration_test --verbose
+
+      - name: Run property-based tests
+        run: cargo test -p rewards --test proptest_invariants --verbose
+
+      - name: Build WASM contracts
+        run: stellar contract build
+
+      - name: Verify WASM builds
+        run: |
+          echo "=== Verifying WASM Contract Builds ==="
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            NAME=$(basename "$wasm")
+            SIZE=$(stat -c%s "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            echo "✓ $NAME: ${SIZE_KB}KB"
+          done
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-wasm-${{ github.sha }}
+          path: target/wasm32v1-none/release/*.wasm
+          retention-days: 30
+
+      - name: Generate contract metadata
+        run: |
+          echo "=== Contract Build Metadata ===" > contract-metadata.txt
+          echo "Commit: ${{ github.sha }}" >> contract-metadata.txt
+          echo "Branch: ${{ github.ref_name }}" >> contract-metadata.txt
+          echo "Build Time: $(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> contract-metadata.txt
+          echo "" >> contract-metadata.txt
+          echo "Contract Sizes:" >> contract-metadata.txt
+          for wasm in target/wasm32v1-none/release/*.wasm; do
+            [ -f "$wasm" ] || continue
+            NAME=$(basename "$wasm")
+            SIZE=$(stat -c%s "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            SHA256=$(sha256sum "$wasm" | cut -d' ' -f1)
+            echo "  $NAME: ${SIZE_KB}KB (sha256: $SHA256)" >> contract-metadata.txt
+          done
+          cat contract-metadata.txt
+
+      - name: Upload metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-metadata-${{ github.sha }}
+          path: contract-metadata.txt
+          retention-days: 90
+
+  # ── Security Audit ────────────────────────────────────────────────
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
+          arguments: --config deny.toml
+
+  # ── Contract Size Report ──────────────────────────────────────────
+  size-report:
+    name: Contract Size Report
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: contract-tests
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contract-wasm-${{ github.sha }}
+          path: ./wasm
+
+      - name: Fetch baseline sizes
+        run: |
+          # Fetch baseline from main branch, fallback to empty JSON if not found
+          HTTP_STATUS=$(curl -s -o baseline.json -w "%{http_code}" -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://raw.githubusercontent.com/${{ github.repository }}/main/docs/wasm-baseline.json")
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "{}" > baseline.json
+          fi
+
+      - name: Generate size report
+        id: report
+        run: |
+          echo "# 📦 Smart Contract Size Report" > report.md
+          echo "" >> report.md
+          echo "| Contract | Size | Diff | Budget | Status |" >> report.md
+          echo "|----------|------|------|--------|--------|" >> report.md
+
+          declare -A BUDGETS=(
+            ["certificate.wasm"]=$((100 * 1024))
+            ["milestone.wasm"]=$((150 * 1024))
+            ["quest.wasm"]=$((150 * 1024))
+            ["rewards.wasm"]=$((100 * 1024))
+          )
+
+          for wasm in ./wasm/*.wasm; do
+            [ -f "$wasm" ] || continue
+            NAME=$(basename "$wasm")
+            SIZE=$(stat -c%s "$wasm")
+            SIZE_KB=$(echo "scale=2; $SIZE / 1024" | bc)
+            BUDGET=${BUDGETS[$NAME]:-$((256 * 1024))}
+            BUDGET_KB=$(echo "scale=2; $BUDGET / 1024" | bc)
+            
+            # Extract baseline size from JSON (requires jq)
+            BASELINE=$(jq -r ".\"$NAME\" // 0" baseline.json)
+            
+            DIFF_STR="-"
+            ALERT=""
+            if [ "$BASELINE" != "0" ] && [ "$BASELINE" != "null" ]; then
+              DIFF=$((SIZE - BASELINE))
+              DIFF_KB=$(echo "scale=2; $DIFF / 1024" | bc)
+              if [ "$DIFF" -gt 0 ]; then
+                DIFF_STR="+$DIFF_KB KB 📈"
+                if [ "$DIFF" -gt 5120 ]; then # 5KB threshold
+                  ALERT="⚠️ "
+                fi
+              elif [ "$DIFF" -lt 0 ]; then
+                DIFF_STR="$DIFF_KB KB 📉"
+              else
+                DIFF_STR="0 KB"
+              fi
+            fi
+
+            if [ "$SIZE" -gt "$BUDGET" ]; then
+              STATUS="🔴 Over budget"
+            else
+              PERCENT=$(echo "scale=1; ($SIZE * 100) / $BUDGET" | bc)
+              STATUS="🟢 ${PERCENT}%"
+            fi
+            
+            echo "| \`$NAME\` | ${SIZE_KB} KB | $DIFF_STR | ${BUDGET_KB} KB | $ALERT$STATUS |" >> report.md
+          done
+
+          echo "" >> report.md
+          echo "_Built from commit ${{ github.sha }}_" >> report.md
+
+      - name: Comment size report
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('report.md', 'utf8');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user?.type === 'Bot' && c.body?.includes('Smart Contract Size Report')
+            );
+
+            try {
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: report
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: report
+                });
+              }
+            } catch (error) {
+              console.log("Failed to post size report.", error.message);
+            }
+
+  # ── Test Coverage Report ──────────────────────────────────────────
+  coverage:
+    name: Test Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+
+      - name: Generate coverage report
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          flags: contracts
+          fail_ci_if_error: false
+
+  # ── Deployment Readiness Check ────────────────────────────────────
+  deployment-check:
+    name: Deployment Readiness
+    runs-on: ubuntu-latest
+    needs: [contract-tests, security-audit]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: contract-wasm-${{ github.sha }}
+          path: ./wasm
+
+      - name: Verify deployment readiness
+        run: |
+          echo "=== Deployment Readiness Check ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "✓ All tests passed"
+          echo "✓ Security audit passed"
+          echo "✓ WASM artifacts ready"
+          echo ""
+          echo "Contracts ready for deployment to testnet/mainnet"
+
+      - name: Create deployment summary
+        run: |
+          echo "# 🚀 Deployment Ready" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Smart contracts have passed all checks and are ready for deployment." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- WASM contracts: \`contract-wasm-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Metadata: \`contract-metadata-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

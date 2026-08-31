@@ -1,7 +1,8 @@
 /** SEP-41 token contract client for balance queries, transfers, and metadata. */
-import { isDev, env } from "@/lib/env"
-import { Contract, scValToNative, Keypair, Account, TransactionBuilder } from "@stellar/stellar-sdk"
-import { server, NETWORK_PASSPHRASE, RPC_TIMEOUT_MS, withTimeout, withRpcReadThrottle } from "./client"
+import { isDev } from "@/lib/env"
+import { Contract } from "@stellar/stellar-sdk"
+import { simulateContractRead } from "./client"
+import { contractAddresses } from "./config"
 
 export interface TokenMetadata {
   symbol: string
@@ -49,61 +50,15 @@ export class TokenClient {
     }
 
     try {
-      // Use server to simulate the transaction and get results
-      const randomKP = Keypair.random()
-      const account = new Account(randomKP.publicKey(), "0")
-
-      // Build transaction to call symbol
-      const txSymbol = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call("symbol"))
-        .setTimeout(30)
-        .build()
-
-      // Build transaction to call decimal
-      const txDecimal = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call("decimal"))
-        .setTimeout(30)
-        .build()
-
-      // Build transaction to call name
-      const txName = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call("name"))
-        .setTimeout(30)
-        .build()
-
-      // Simulate transactions to get results
       const [symbolResult, decimalsResult, nameResult] = await Promise.all([
-        withRpcReadThrottle("loading token symbol", () =>
-          withTimeout(server.simulateTransaction(txSymbol), RPC_TIMEOUT_MS, "RPC timeout: symbol")
-        ),
-        withRpcReadThrottle("loading token decimals", () =>
-          withTimeout(server.simulateTransaction(txDecimal), RPC_TIMEOUT_MS, "RPC timeout: decimal")
-        ),
-        withRpcReadThrottle("loading token name", () =>
-          withTimeout(server.simulateTransaction(txName), RPC_TIMEOUT_MS, "RPC timeout: name")
-        ),
+        simulateContractRead(this.getContract(), { method: "symbol", args: [] }),
+        simulateContractRead(this.getContract(), { method: "decimals", args: [] }),
+        simulateContractRead(this.getContract(), { method: "name", args: [] }),
       ])
 
-      // Extract values from simulation results
-      const extractResult = (sim: typeof symbolResult, fallback: unknown) => {
-        if ("result" in sim && sim.result) {
-          return scValToNative(sim.result.retval)
-        }
-        return fallback
-      }
-
-      const symbol = extractResult(symbolResult, "TOKEN") as string
-      const decimals = Number(extractResult(decimalsResult, 7))
-      const name = extractResult(nameResult, "Unknown Token") as string
+      const symbol = typeof symbolResult === "string" ? symbolResult : "TOKEN"
+      const decimals = decimalsResult == null ? 7 : Number(decimalsResult)
+      const name = typeof nameResult === "string" ? nameResult : "Unknown Token"
 
       const metadata: TokenMetadata = {
         symbol,
@@ -133,10 +88,7 @@ export class TokenClient {
    * Throws if no address is provided via constructor or environment.
    */
   private getContractAddress(): string {
-    const addr =
-      this.tokenAddress ||
-      env.VITE_REWARDS_TOKEN_CONTRACT_ID ||
-      env.VITE_USDC_TOKEN_ADDRESS
+    const addr = this.tokenAddress || contractAddresses.token
 
     if (!addr) {
       throw new Error(

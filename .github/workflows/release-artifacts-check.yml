@@ -1,0 +1,49 @@
+name: Release Artifact Generation Check
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'scripts/generate-release-artifacts.sh'
+      - 'releases/**'
+      - '.github/workflows/release-artifacts-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release-artifacts:
+    name: Validate Release Artifact Generation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+
+      - name: Build Contract Release WASM Binaries
+        run: |
+          cargo build --target wasm32-unknown-unknown --release
+
+      - name: Generate Release Artifacts
+        run: |
+          chmod +x ./scripts/generate-release-artifacts.sh
+          ./scripts/generate-release-artifacts.sh --version test-candidate --network testnet
+
+      - name: Verify Release Manifest Generation
+        run: |
+          if [ ! -f "releases/release-manifest.json" ]; then
+            echo "Error: releases/release-manifest.json was not generated."
+            exit 1
+          fi
+          
+          echo "Generated release manifest contents:"
+          cat releases/release-manifest.json

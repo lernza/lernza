@@ -1,34 +1,42 @@
 name: Auto Review
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
   pull-requests: write
 
-# Philosophy:
-#   This bot helps contributors get merged. It is not a gatekeeper.
-#   It only ever does ONE of two things:
-#     1. Approve and squash-merge a PR with real, on-topic changes.
-#     2. Leave a single warm, constructive comment.
-#   It NEVER closes a PR, NEVER requests changes, NEVER blocks. Those
-#   destructive actions are gone on purpose.
+# Philosophy (warm reviewer):
+#   Default is APPROVE. We help contributors get merged.
+#   Uses upstream repo secrets (DEEPSEEK_API_KEY, OWNER_PAT) even for fork PRs
+#   because pull_request_target runs in base repo context. Never executes fork code.
+#   Only:
+#     1. Approve + squash-merge when linked issue exists and diff shows effort
+#     2. Leave a single warm, constructive comment otherwise.
+#   Uses DeepSeek to check if diff addresses the linked issue.
+#   Uses GitHub GraphQL closingIssuesReferences for accurate linking.
 
 jobs:
   review:
     if: github.event.pull_request.state == 'open' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@v4
+        with:
+          # pull_request_target runs on base; checkout base securely, not fork code.
+          # We fetch diff via gh API, never execute fork files.
+          ref: ${{ github.event.pull_request.base.sha }}
 
-      - name: Gather PR context
+      - name: Gather PR context + linked issues (GraphQL primary)
         id: ctx
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUM: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           PR_DATA=$(gh pr view "$PR_NUM" --json title,body,author,changedFiles,additions,deletions)
           AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login')
           TITLE=$(echo "$PR_DATA" | jq -r '.title')
@@ -46,48 +54,129 @@ jobs:
 
           gh pr diff "$PR_NUM" > /tmp/pr-diff.txt 2>/dev/null || true
           DIFF_BYTES=$(wc -c < /tmp/pr-diff.txt | tr -d ' ')
-          REAL_CHANGE_LINES=$(grep -E '^[+-]' /tmp/pr-diff.txt | grep -vE '^(\+\+\+|---)' | wc -l | tr -d ' ')
+          REAL_CHANGE_LINES=$(grep -E '^[+-]' /tmp/pr-diff.txt | grep -vE '^(\+\+\+|---)' | wc -l | tr -d ' ' || echo 0)
           echo "diff_bytes=$DIFF_BYTES" >> $GITHUB_OUTPUT
           echo "real_change_lines=$REAL_CHANGE_LINES" >> $GITHUB_OUTPUT
           head -3000 /tmp/pr-diff.txt > /tmp/pr-diff-truncated.txt
 
-          # Detect a truly empty diff (no real code). We do NOT treat this as fraud
-          # and we do NOT close it - we just nudge gently later.
           if [ "$DIFF_BYTES" -lt 50 ] || [ "${ADDS:-0}" -eq 0 ] || [ "${REAL_CHANGE_LINES:-0}" -lt 1 ]; then
             echo "is_empty=true" >> $GITHUB_OUTPUT
           else
             echo "is_empty=false" >> $GITHUB_OUTPUT
           fi
 
-          # Linked-issue context just helps the model write a relevant comment.
-          ISSUE_NUMS=$(echo "$BODY" | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true)
-          : > /tmp/issues-context.txt
-          if [ -n "${ISSUE_NUMS:-}" ]; then
-            for NUM in $ISSUE_NUMS; do
-              ISSUE_DATA=$(gh issue view "$NUM" --repo "${{ github.repository }}" --json number,title,body 2>/dev/null || echo "")
-              if [ -n "$ISSUE_DATA" ]; then
-                ISSUE_TITLE=$(echo "$ISSUE_DATA" | jq -r '.title // ""')
-                ISSUE_BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""' | head -c 2000)
-                { echo "--- Issue #$NUM: $ISSUE_TITLE ---"; echo "$ISSUE_BODY"; echo ""; } >> /tmp/issues-context.txt
-              fi
-            done
-          fi
-          [ -s /tmp/issues-context.txt ] || echo "(No linked issue)" > /tmp/issues-context.txt
+          OWNER=$(echo "$REPO" | cut -d'/' -f1)
+          NAME=$(echo "$REPO" | cut -d'/' -f2)
 
-      # Empty diff: leave a kind nudge, then stop. No closing, ever.
+          : > /tmp/issues-context.txt
+          ISSUE_NUMS=""
+
+          # Method 1: GraphQL closingIssuesReferences (most accurate)
+          GRAPHQL_RESULT=$(gh api graphql -f query='
+            query($owner:String!,$name:String!,$number:Int!){
+              repository(owner:$owner,name:$name){
+                pullRequest(number:$number){
+                  closingIssuesReferences(first:10){ nodes{ number title body url } }
+                }
+              }
+            }' -F owner="$OWNER" -F name="$NAME" -F number="$PR_NUM" 2>/dev/null || echo "")
+          if [ -n "$GRAPHQL_RESULT" ]; then
+            GQL_NUMS=$(echo "$GRAPHQL_RESULT" | jq -r '.data.repository.pullRequest.closingIssuesReferences.nodes[].number // empty' 2>/dev/null | tr '\n' ' ' || true)
+            if [ -n "$GQL_NUMS" ]; then
+              ISSUE_NUMS="$GQL_NUMS"
+              for NUM in $GQL_NUMS; do
+                TITLE_ISS=$(echo "$GRAPHQL_RESULT" | jq -r --argjson n "$NUM" '.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.number==$n) | .title // ""')
+                BODY_ISS=$(echo "$GRAPHQL_RESULT" | jq -r --argjson n "$NUM" '.data.repository.pullRequest.closingIssuesReferences.nodes[] | select(.number==$n) | .body // ""' | head -c 2500)
+                { echo "--- Issue #$NUM: $TITLE_ISS ---"; echo "$BODY_ISS"; echo ""; } >> /tmp/issues-context.txt
+              done
+            fi
+          fi
+
+          # Method 2: If empty, try timeline connected events via GraphQL
+          if [ ! -s /tmp/issues-context.txt ]; then
+            TIMELINE_RESULT=$(gh api graphql -f query='
+              query($owner:String!,$name:String!,$number:Int!){
+                repository(owner:$owner,name:$name){
+                  pullRequest(number:$number){
+                    timelineItems(itemTypes:[CONNECTED_EVENT,DISCONNECTED_EVENT], first:100){
+                      nodes{
+                        ... on ConnectedEvent{ subject{ ... on Issue{ number title body url } } }
+                        ... on DisconnectedEvent{ subject{ ... on Issue{ number title body url } } }
+                      }
+                    }
+                  }
+                }
+              }' -F owner="$OWNER" -F name="$NAME" -F number="$PR_NUM" 2>/dev/null || echo "")
+            if [ -n "$TIMELINE_RESULT" ]; then
+              TL_NUMS=$(echo "$TIMELINE_RESULT" | jq -r '.data.repository.pullRequest.timelineItems.nodes[]?.subject.number // empty' 2>/dev/null | sort -u | tr '\n' ' ' || true)
+              if [ -n "$TL_NUMS" ]; then
+                ISSUE_NUMS="$TL_NUMS"
+                for NUM in $TL_NUMS; do
+                  ISSUE_DATA=$(gh issue view "$NUM" --repo "$REPO" --json number,title,body 2>/dev/null || echo "")
+                  if [ -n "$ISSUE_DATA" ]; then
+                    IT=$(echo "$ISSUE_DATA" | jq -r '.title // ""')
+                    IB=$(echo "$ISSUE_DATA" | jq -r '.body // ""' | head -c 2500)
+                    { echo "--- Issue #$NUM: $IT ---"; echo "$IB"; echo ""; } >> /tmp/issues-context.txt
+                  fi
+                done
+              fi
+            fi
+          fi
+
+          # Method 3: Regex fallback scanning PR body for closing keywords
+          if [ ! -s /tmp/issues-context.txt ]; then
+            REGEX_NUMS=$(echo "$BODY" | grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+' | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' || true)
+            if [ -n "${REGEX_NUMS:-}" ]; then
+              ISSUE_NUMS="$REGEX_NUMS"
+              for NUM in $REGEX_NUMS; do
+                ISSUE_DATA=$(gh issue view "$NUM" --repo "$REPO" --json number,title,body 2>/dev/null || echo "")
+                if [ -n "$ISSUE_DATA" ]; then
+                  IT=$(echo "$ISSUE_DATA" | jq -r '.title // ""')
+                  IB=$(echo "$ISSUE_DATA" | jq -r '.body // ""' | head -c 2500)
+                  { echo "--- Issue #$NUM: $IT ---"; echo "$IB"; echo ""; } >> /tmp/issues-context.txt
+                fi
+              done
+            fi
+          fi
+
+          if [ -s /tmp/issues-context.txt ]; then
+            echo "has_issue=true" >> $GITHUB_OUTPUT
+            echo "issue_nums=$ISSUE_NUMS" >> $GITHUB_OUTPUT
+          else
+            echo "(No linked issue detected. Please link an issue via 'Fixes #123' in the PR body or via the Development sidebar.)" > /tmp/issues-context.txt
+            echo "has_issue=false" >> $GITHUB_OUTPUT
+            echo "issue_nums=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Gentle nudge on empty diff
         if: steps.ctx.outputs.is_empty == 'true'
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
-          gh pr comment "$PR_NUM" --body "Hey! I don't see any code changes in this PR yet. If you still need to push your commits, go ahead and they'll show up here automatically. I'll take another look once they land."
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping comment due to missing OWNER_PAT"
+            exit 0
+          fi
+          gh pr comment "$PR_NUM" --body "Hey! I don't see any code changes in this PR yet. If you still need to push your commits, go ahead and they'll show up here automatically. I'll take another look once they land. :hugs:" || true
 
-      - name: AI review (Groq gpt-oss-120b)
-        if: steps.ctx.outputs.is_empty != 'true'
+      - name: Friendly reminder when no linked issue
+        if: steps.ctx.outputs.is_empty != 'true' && steps.ctx.outputs.has_issue == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.OWNER_PAT }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping comment due to missing OWNER_PAT"
+            exit 0
+          fi
+          gh pr comment "$PR_NUM" --body "Thanks for your contribution! :heart: It looks like this PR isn't linked to an issue yet. Please add \`Fixes #123\` (or \`Closes #123\`) to the PR description, or link it via the Development sidebar on the right. Once linked, I'll automatically re-review and merge if the changes show effort toward the issue. No stress — we'll help fix things up if needed!" || true
+
+      - name: AI review (DeepSeek)
+        if: steps.ctx.outputs.is_empty != 'true' && steps.ctx.outputs.has_issue == 'true'
         id: review
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           PR_TITLE: ${{ steps.ctx.outputs.title }}
           PR_AUTHOR: ${{ steps.ctx.outputs.author }}
           PR_BODY: ${{ steps.ctx.outputs.pr_body }}
@@ -95,40 +184,43 @@ jobs:
           PR_ADDS: ${{ steps.ctx.outputs.adds }}
           PR_DELS: ${{ steps.ctx.outputs.dels }}
         run: |
+          if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+            echo "Missing DEEPSEEK_API_KEY secret in upstream repo. Add it at Settings > Secrets and variables > Actions."
+            echo "decision=COMMENT" >> $GITHUB_OUTPUT
+            echo "confidence=0" >> $GITHUB_OUTPUT
+            echo "body=Thanks for the PR! A maintainer will take a look shortly. :sparkles:" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          API_URL="https://api.deepseek.com/chat/completions"
+          MODEL="deepseek-chat"
+          API_KEY="$DEEPSEEK_API_KEY"
+          echo "Using DeepSeek model $MODEL (upstream secret, works for fork PRs via pull_request_target)"
+
           SYSTEM_PROMPT=$(cat <<'SYSTEM_EOF'
-          You are a warm, encouraging code reviewer for a fast-moving hackathon project.
+          You are a warm, encouraging code reviewer for an open-source hackathon project.
           Your job is to help contributors get their work merged, not to gatekeep.
+          The community is nice and wants contributors to feel welcome. We will fix issues later — what matters is effort and trying to contribute toward the linked issue.
 
           ## Default: APPROVE
-          Approve almost everything that contains real code changes plausibly related
-          to the PR title or linked issue. When in doubt, APPROVE.
+          Approve almost everything that contains real code changes plausibly related to the PR title or linked issue. When in doubt, APPROVE.
 
           Completely ignore (these are NEVER reasons to withhold approval):
-          code style, formatting, naming, missing tests, untyped code, unhandled edge
-          cases, performance, accessibility, missing comments or docs, "not idiomatic"
-          patterns, partial or work-in-progress implementations that compile, hardcoded
-          values, magic numbers, no error handling, typos, suggestions for improvement.
+          code style, formatting, naming, missing tests, untyped code, unhandled edge cases, performance, accessibility, missing comments or docs, "not idiomatic" patterns, partial or work-in-progress implementations that compile, hardcoded values, magic numbers, no error handling, typos, suggestions for improvement.
+
+          You need to answer: does the diff show genuine effort toward the linked issue? If the contributor tried, even if imperfect or incomplete, APPROVE.
 
           ## The only time you do NOT approve: COMMENT (still never blocks or closes)
-          Return decision "COMMENT" only when something genuinely deserves a human's
-          eyes, and even then your tone stays friendly and helpful. Cases:
-          - the diff has no plausible connection at all to what the PR claims
-          - it is clearly auto-generated dead code that solves nothing (functions never
-            called, files never imported) with no real problem addressed
+          Return decision "COMMENT" only when something genuinely deserves a human's eyes, and even then your tone stays friendly and helpful. Cases:
+          - the diff has no plausible connection at all to what the PR claims / linked issue
+          - it is clearly auto-generated dead code that solves nothing (functions never called, files never imported) with no real problem addressed
           - it duplicates existing repo code verbatim and presents it as new work
-          - it exposes secrets, API keys, or credentials, or contains obviously
-            destructive commands
+          - it exposes secrets, API keys, or credentials, or contains obviously destructive commands
 
-          Even in these cases: do NOT accuse, do NOT use the word "fraud", do NOT
-          mention closing or rejecting. Ask a gentle clarifying question or kindly note
-          what looks off and invite them to take a look. If you are not highly certain
-          there is a real problem, APPROVE instead.
+          Even in these cases: do NOT accuse, do NOT use the word "fraud", do NOT mention closing or rejecting. Ask a gentle clarifying question or kindly note what looks off and invite them to take a look. If you are not highly certain there is a real problem, APPROVE instead.
 
           ## Output
           Respond with a SINGLE JSON object only. No markdown fences, no text outside it.
-          The "summary" is posted to the PR as-is: warm, friendly, under 120 words,
-          addressed to the contributor, with no meta-commentary about being a bot,
-          confidence, or decision type.
+          The "summary" is posted to the PR as-is: warm, friendly, under 120 words, addressed to the contributor, with no meta-commentary about being a bot, confidence, or decision type. Include a heart emoji if natural.
 
           Schema:
           {
@@ -149,8 +241,9 @@ jobs:
             --arg dels "$PR_DELS" \
             --rawfile diff /tmp/pr-diff-truncated.txt \
             --rawfile issues /tmp/issues-context.txt \
+            --arg MODEL "$MODEL" \
             '{
-              model: "openai/gpt-oss-120b",
+              model: $MODEL,
               messages: [
                 { role: "system", content: $system },
                 { role: "user", content: (
@@ -161,20 +254,19 @@ jobs:
                     "Additions: " + $adds + "\n" +
                     "Deletions: " + $dels + "\n\n" +
                     "## PR description\n\n" + $pr_body + "\n\n" +
-                    "## Linked issue(s)\n\n" + $issues + "\n\n" +
+                    "## Linked issue(s) (via closingIssuesReferences / timeline / regex)\n\n" + $issues + "\n\n" +
                     "## Diff (first 3000 lines)\n\n```diff\n" + $diff + "\n```\n\n" +
-                    "Now produce the JSON review object."
+                    "Now produce the JSON review object. Remember: be warm, lenient, approve if the contributor showed effort toward the linked issue."
                 ) }
               ],
               max_completion_tokens: 4096,
-              temperature: 0.1,
-              response_format: { type: "json_object" },
-              reasoning_effort: "medium"
+              temperature: 0.2,
+              response_format: { type: "json_object" }
             }')
 
-          RESPONSE=$(curl -s --max-time 180 https://api.groq.com/openai/v1/chat/completions \
+          RESPONSE=$(curl -s --max-time 180 "$API_URL" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Authorization: Bearer $API_KEY" \
             -d "$PAYLOAD")
 
           API_ERROR=$(echo "$RESPONSE" | jq -r '.error.message // ""' 2>/dev/null || echo "")
@@ -184,25 +276,25 @@ jobs:
           CONFIDENCE="0"
           SUMMARY=""
 
-          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "null" ]; then
-            echo "Groq API error: $API_ERROR"
-            SUMMARY="Thanks for the PR! A maintainer will take a look shortly."
+          if [ -n "$API_ERROR" ] && [ "$API_ERROR" != "null" ] && [ "$API_ERROR" != "" ]; then
+            echo "DeepSeek API error: $API_ERROR"
+            SUMMARY="Thanks for the PR! A maintainer will take a look shortly. :sparkles:"
           elif [ -z "$REVIEW_JSON" ] || [ "$REVIEW_JSON" = "null" ] || ! echo "$REVIEW_JSON" | jq empty 2>/dev/null; then
-            echo "Empty or malformed model response"
-            SUMMARY="Thanks for the PR! A maintainer will take a look shortly."
+            echo "Empty or malformed model response: $RESPONSE"
+            SUMMARY="Thanks for the PR! A maintainer will take a look shortly. :sparkles:"
           else
             DECISION=$(echo "$REVIEW_JSON" | jq -r '.decision // "COMMENT"')
             CONFIDENCE=$(echo "$REVIEW_JSON" | jq -r '.confidence // 0')
             SUMMARY=$(echo "$REVIEW_JSON" | jq -r '.summary // ""')
-            # Anything that is not a clean APPROVE just becomes a friendly comment.
             if [ "$DECISION" != "APPROVE" ]; then
               DECISION="COMMENT"
             fi
           fi
 
-          [ -n "$SUMMARY" ] || SUMMARY="Looks good, thanks for contributing!"
+          [ -n "$SUMMARY" ] || SUMMARY="Thanks for contributing! Looks good. :heart:"
 
           echo "::group::Auto-review details (run log only)"
+          echo "Model:      $MODEL"
           echo "Decision:   $DECISION"
           echo "Confidence: $CONFIDENCE"
           echo "::endgroup::"
@@ -211,9 +303,8 @@ jobs:
           echo "confidence=$CONFIDENCE" >> $GITHUB_OUTPUT
           { echo "body<<REVIEW_EOF"; echo "$SUMMARY"; echo "REVIEW_EOF"; } >> $GITHUB_OUTPUT
 
-      # The only actions: approve + merge, or a friendly comment. Never close, never block.
       - name: Approve and merge, or comment
-        if: steps.ctx.outputs.is_empty != 'true'
+        if: steps.ctx.outputs.is_empty != 'true' && steps.ctx.outputs.has_issue == 'true'
         env:
           GH_TOKEN: ${{ secrets.OWNER_PAT }}
           PR_NUM: ${{ github.event.pull_request.number }}
@@ -222,20 +313,23 @@ jobs:
           DECISION: ${{ steps.review.outputs.decision }}
           BODY: ${{ steps.review.outputs.body }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "Skipping approval/comment due to missing OWNER_PAT"
+            exit 0
+          fi
+
           PAT_USER=$(gh api user --jq '.login' 2>/dev/null || echo "")
           IS_SELF="false"
           [ "$PR_AUTHOR" = "$PAT_USER" ] && IS_SELF="true"
-          [ -n "$BODY" ] || BODY="Looks good, thanks for contributing!"
+          [ -n "$BODY" ] || BODY="Looks good, thanks for contributing! :heart:"
 
           if [ "$DECISION" = "APPROVE" ]; then
-            # Post the approval (you cannot formally approve your own PR, so self-PRs get a comment).
             if [ "$IS_SELF" = "true" ]; then
               gh pr comment "$PR_NUM" --body "$BODY" || true
             else
               gh pr review "$PR_NUM" --approve --body "$BODY" || gh pr comment "$PR_NUM" --body "$BODY" || true
             fi
 
-            # Squash-merge. Strip bot co-authors, keep human ones, add your attribution.
             COMMIT_BODY=$(gh pr view "$PR_NUM" --json commits \
               --jq '[.commits[].messageBody] | join("\n")' \
               | grep -viE 'co-authored-by:.*(claude|qwen|copilot|github-actions|bot|\[bot\]|gpt|openai|anthropic)' \
@@ -243,11 +337,8 @@ jobs:
             MERGE_BODY=$(printf '%s\n\nCo-authored-by: Dopey <hello@sshdopey.com>' "$COMMIT_BODY" \
               | sed '/^$/N;/^\n$/d')
 
-            # If the merge cannot happen right now (conflicts, checks pending), do NOT
-            # close or fail loudly - just leave a friendly note so the human can finish.
             gh pr merge "$PR_NUM" --squash --admin --subject "$PR_TITLE" --body "$MERGE_BODY" \
-              || gh pr comment "$PR_NUM" --body "Approved! I couldn't auto-merge this just yet (it may need a rebase or have a check still running). A maintainer can merge it whenever it's ready."
+              || gh pr comment "$PR_NUM" --body "Approved! :tada: I couldn't auto-merge this just yet (it may need a rebase or have a check still running). A maintainer can merge it whenever it's ready." || true
           else
-            # COMMENT path: a single warm, non-blocking comment. That's all.
             gh pr comment "$PR_NUM" --body "$BODY" || true
           fi

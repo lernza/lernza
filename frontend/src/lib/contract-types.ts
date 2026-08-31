@@ -19,6 +19,8 @@ export const MAX_REWARD_AMOUNT = 1_000_000_000
 export const Visibility = {
   Public: 0,
   Private: 1,
+  Unlisted: 2,
+  InviteOnly: 3,
 } as const
 export type Visibility = (typeof Visibility)[keyof typeof Visibility]
 
@@ -57,6 +59,18 @@ export interface QuestInfo {
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
+}
+
+/**
+ * Metadata returned by the `get_category` contract query (issue #1348).
+ * `expiresAt` is an absolute ledger timestamp (seconds) at which the category
+ * listing's TTL expires and the category can vanish from discovery.
+ */
+export interface CategoryInfo {
+  category: string // String
+  questCount: number // u32
+  ttlRemaining: number // u32 (ledgers left)
+  expiresAt: number // u64 (absolute expiry timestamp)
 }
 
 // ─── Rewards Contract Types ──────────────────────────────────────────────────

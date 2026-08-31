@@ -1,0 +1,44 @@
+{
+  "name": "@rolldown/binding-wasm32-wasi",
+  "version": "1.2.1",
+  "main": "rolldown-binding.wasi.cjs",
+  "files": [
+    "rolldown-binding.wasm32-wasi.wasm",
+    "rolldown-binding.wasi.cjs",
+    "rolldown-binding.wasi.d.cts",
+    "rolldown-binding.wasi-browser.js",
+    "wasi-worker.mjs",
+    "wasi-worker-browser.mjs"
+  ],
+  "description": "Fast JavaScript/TypeScript bundler in Rust with Rollup-compatible API.",
+  "keywords": [
+    "bundler",
+    "esbuild",
+    "parcel",
+    "rolldown",
+    "rollup",
+    "webpack"
+  ],
+  "homepage": "https://rolldown.rs/",
+  "license": "MIT",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=23.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rolldown/rolldown.git",
+    "directory": "packages/rolldown"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "types": "rolldown-binding.wasi.d.cts",
+  "browser": "rolldown-binding.wasi-browser.js",
+  "type": "module",
+  "dependencies": {
+    "@napi-rs/wasm-runtime": "^1.2.0",
+    "@emnapi/core": "2.0.0-alpha.3",
+    "@emnapi/runtime": "2.0.0-alpha.3"
+  }
+}

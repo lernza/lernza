@@ -212,42 +212,115 @@ Example:
 - Target: 2 weeks
 - Tracking: #1234
 
+## Testnet Incident Response & Emergency Pause Procedures
+
+### Common Testnet Incident Scenarios
+
+1. **Faulty Contract Deployment or Misconfiguration**
+   - **Symptoms:** Contract reverts on basic invocations, invalid contract IDs set in frontend, mismatched WASM hashes.
+   - **Response:** Trigger rollback or update deployment config, verify WASM hash against release manifest, issue frontend patch.
+
+2. **Compromised Privileged Admin Wallet**
+   - **Symptoms:** Unauthorized contract parameter modifications, unexpected `pause`/`unpause` calls, unauthorized admin key transfer attempt.
+   - **Response:** Execute emergency key rotation (`transfer_admin` to secure multi-sig keypair), pause target contracts, audit recent transactions on Stellar Horizon.
+
+3. **Harmful Contract Behavior or Exploitation Attempt**
+   - **Symptoms:** Token balance drain attempt, double claim of rewards, state corruption.
+   - **Response:** Execute emergency `pause` on Rewards and Milestone contracts immediately, investigate transaction payload, prepare emergency patch release.
+
+4. **Stellar RPC Network Outage or Degradation**
+   - **Symptoms:** Frontend transaction timeout, RPC node 5xx errors, RPC sync lag.
+   - **Response:** Switch frontend fallback RPC endpoints (`frontend/src/lib/contracts/client.ts`), update status page, monitor Stellar Testnet status.
+
+5. **Token Pool Drainage / Unauthorized Reward Claims**
+   - **Symptoms:** Sudden drop in contract token balance without matching milestone completions.
+   - **Response:** Pause Rewards contract (`stellar contract invoke --fn pause`), verify enrollee signatures, audit event log indexer.
+
+---
+
+## Privileged Operations & Authorization Matrix
+
+| Privileged Operation | Target Contract(s) | Function Signature | Required Authorization | Impact / Purpose |
+|----------------------|--------------------|--------------------|------------------------|------------------|
+| **Emergency Pause** | Rewards, Milestone | `pause(admin: Address)` | Admin Signature (Single / 2-of-3 Multi-Sig) | Blocks state-changing calls (fund, claim, distribute) |
+| **Emergency Unpause** | Rewards, Milestone | `unpause(admin: Address)` | Admin Signature (Single / 2-of-3 Multi-Sig) | Restores regular contract operations |
+| **Admin Key Rotation** | All Contracts | `transfer_admin(new_admin: Address)` | Current Admin Signature | Rotates privileged key to secure keypair or multi-sig |
+| **Contract Upgrade** | All Contracts | `upgrade(new_wasm_hash: BytesN<32>)` | Admin Signature (with timelock when enabled) | Replaces WASM bytecode on-chain |
+
+---
+
+## Non-Production Emergency Action Testing Procedures
+
+Before executing emergency actions on live testnet or mainnet, emergency pause capabilities must be verified in non-production environments:
+
+### 1. Automated Unit/Integration Test Verification
+Run local cargo tests to confirm contract pause invariants:
+```bash
+cargo test -p rewards test_pause_unpause
+cargo test -p milestone test_pause_blocks_milestone_writes_until_unpaused
+```
+
+### 2. Standalone / Testnet Non-Production Dry-Run
+Execute pause command on standalone test node before live intervention:
+```bash
+# 1. Execute Pause in dry-run mode
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source admin-keypair \
+  --network testnet \
+  -- pause
+
+# 2. Verify that state-changing functions revert when paused
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source user-keypair \
+  --network testnet \
+  -- distribute_reward --quest_id 1 --user <USER_ADDRESS>
+# Expected output: Error(Contract, #ErrorCode)
+
+# 3. Resume operation via Unpause
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source admin-keypair \
+  --network testnet \
+  -- unpause
+```
+
+---
+
+## User-Facing Communication Templates
+
+### Template 1: Initial Testnet Incident Notice (Discord / Status Page)
+```markdown
+🚨 **Testnet Incident Notice**
+**Status:** Investigating
+**Impact:** [Affected feature: e.g., Reward claims / Milestone submissions]
+**Details:** We are currently investigating an issue impacting [Feature] on Stellar Testnet. Further updates will be provided as soon as possible.
+**Action Required:** Users do not need to resubmit transactions at this time.
+```
+
+### Template 2: Service Degraded / Emergency Pause Enacted
+```markdown
+⚠️ **Testnet Service Update: Emergency Pause Active**
+**Status:** Action Enacted
+**Impact:** Smart contract operations temporarily paused on Testnet.
+**Details:** To protect token funds and user state, the Lernza team has executed an emergency pause on [Rewards / Milestone] contracts following [Brief reason / suspicious activity].
+**Estimated Duration:** [ETA or 'Until further notice']
+```
+
+### Template 3: Resolution & Service Restoration
+```markdown
+✅ **Testnet Incident Resolved**
+**Status:** Operational
+**Impact:** Service restored on Stellar Testnet.
+**Details:** The underlying issue with [Feature / Contract] has been resolved and verified. Contract pause has been lifted.
+**Post-Mortem:** A detailed post-incident review will be published in `docs/operations/`.
+```
+
+---
+
 ## Special Cases
 
-### RPC Endpoint Failure
-
-1. Automatic failover via health checks should activate
-2. If all endpoints down:
-   - Page tech lead immediately
-   - Switch to public RPC endpoint temporarily (see `frontend/src/lib/contracts/client.ts`)
-   - Update status page
-   - Investigate RPC provider issue
-
-### Contract Exploit / Exploit Attempt
-
-1. **Immediate actions:**
-   - Contact founder / security team
-   - Do NOT attempt to fix contract (re-deployment risk)
-   - Consider pause operation if available
-   - Preserve logs and transaction details
-
-2. **Communication:**
-   - P1 severity (likely)
-   - Minimal disclosure initially
-   - Coordinate with external security if needed
-   - See SECURITY.md for detailed procedures
-
-### Data Loss / Corruption
-
-1. **Verify impact:**
-   - Confirm data actually lost (not just display bug)
-   - Check on-chain contract state
-   - Query Horizon transaction history
-
-2. **Escalation:**
-   - P1 severity
-   - Immediate page of founder
-   - War room decision: recovery feasible or user compensation?
 
 ## Tools & Resources
 

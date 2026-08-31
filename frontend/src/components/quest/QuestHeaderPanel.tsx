@@ -7,6 +7,7 @@ interface QuestHeaderPanelProps {
   questName: string
   questDescription: string
   isComplete: boolean
+  isArchived?: boolean
   onBack: () => void
   onAddEnrollee: () => void
   onAddMilestone: () => void
@@ -18,6 +19,7 @@ export function QuestHeaderPanel({
   questName,
   questDescription,
   isComplete,
+  isArchived,
   onBack,
   onAddEnrollee,
   onAddMilestone,
@@ -38,6 +40,7 @@ export function QuestHeaderPanel({
               <ArrowLeft className="h-4 w-4" />
               Back
             </Button>
+            {isArchived && <Badge variant="destructive">Archived</Badge>}
             {isComplete && <Badge variant="success">Completed</Badge>}
           </div>
 
@@ -50,11 +53,11 @@ export function QuestHeaderPanel({
             <Share2 className="h-4 w-4" />
             Share
           </Button>
-          <Button variant="outline" size="sm" onClick={onAddMilestone} className="gap-2">
+          <Button variant="outline" size="sm" onClick={onAddMilestone} disabled={isArchived} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Milestone
           </Button>
-          <Button size="sm" onClick={onAddEnrollee} className="gap-2">
+          <Button size="sm" onClick={onAddEnrollee} disabled={isArchived} className="gap-2" data-onboarding="quest-enroll">
             <Plus className="h-4 w-4" />
             Add Enrollee
           </Button>

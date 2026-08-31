@@ -40,20 +40,24 @@ export function CreatorDashboard() {
             enrollees.map(enrollee => milestoneClient.getEnrolleeCompletions(quest.id, enrollee))
           )
           const totalCompletions = completionCounts.reduce((sum, count) => sum + count, 0)
+          const stalledLearners = completionCounts.filter(count => count === 0).length
+          const pendingReviews = enrollees.reduce(
+            (sum, _, index) => sum + Math.max(milestones.length - completionCounts[index], 0),
+            0
+          )
 
           // Estimate distributed amount based on milestone rewards
-          const totalMilestoneRewards = milestones.reduce(
-            (sum, m) => sum + BigInt(m.rewardAmount || 0),
-            0n
-          )
-          const estimatedDistributed =
-            totalMilestoneRewards > poolBalance ? totalMilestoneRewards - poolBalance : 0n
+          const estimatedDistributed = completionCounts.reduce((sum, completions) =>
+            sum + milestones.slice(0, completions).reduce((earned, milestone) => earned + milestone.rewardAmount, 0n), 0n)
 
           return {
             id: quest.id,
             name: quest.name,
             enrolleeCount: enrollees.length,
             completionCount: totalCompletions,
+            pendingReviews,
+            stalledLearners,
+            milestoneCount: milestones.length,
             poolBalance,
             totalDistributed: estimatedDistributed,
           }

@@ -3,13 +3,16 @@ import { Wallet, LogOut, Menu, X, Sun, Moon, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useColorScheme } from "@/hooks/use-color-scheme"
+import { useTranslation } from "@/i18n"
 import { cn } from "@/lib/utils"
+import { NetworkIndicator, NetworkMismatchBanner } from "@/components/error-states"
 
 const NAV_ITEMS = [
-  { key: "landing", label: "Home" },
-  { key: "dashboard", label: "Dashboard" },
-  { key: "leaderboard", label: "Leaderboard" },
-  { key: "profile", label: "Profile" },
+  { key: "landing", labelKey: "nav.home" as const },
+  { key: "dashboard", labelKey: "nav.dashboard" as const },
+  { key: "leaderboard", labelKey: "nav.leaderboard" as const },
+  { key: "history", labelKey: "nav.history" as const },
+  { key: "profile", labelKey: "nav.profile" as const },
 ] as const
 
 interface NavbarProps {
@@ -63,6 +66,7 @@ function ThemeToggle() {
 
 export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps) {
   const { connected, shortAddress, connect, disconnect, loading } = useWallet()
+  const { t } = useTranslation()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleNavigate = (page: string) => {
@@ -72,6 +76,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
 
   return (
     <header className="border-border bg-background sticky top-0 z-50 border-b transition-colors duration-300">
+      <NetworkMismatchBanner />
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <button
@@ -90,6 +95,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               <li key={item.key}>
                 <button
                   onClick={() => handleNavigate(item.key)}
+                  data-onboarding={`nav-${item.key}`}
                   className={cn(
                     "animated-underline cursor-pointer border px-4 py-2 text-sm font-bold transition-all",
                     activePage === item.key
@@ -97,7 +103,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
                       : "hover:border-border hover:bg-secondary border-transparent"
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               </li>
             ))}
@@ -106,6 +112,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
 
         {/* Right side: theme toggle + tutorial + wallet + mobile menu */}
         <div className="flex items-center gap-2">
+          <NetworkIndicator />
           <ThemeToggle />
 
           {/* Tutorial launch button */}
@@ -142,9 +149,15 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               </Button>
             </>
           ) : (
-            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover">
+            <Button
+              onClick={connect}
+              disabled={loading}
+              size="sm"
+              className="shimmer-on-hover"
+              data-onboarding="connect-wallet"
+            >
               <Wallet className="h-4 w-4" />
-              {loading ? "Connecting..." : "Connect Wallet"}
+              {loading ? t("nav.connecting") : t("nav.connectWallet")}
             </Button>
           )}
 
@@ -184,7 +197,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
                       : "hover:border-border hover:bg-secondary border-transparent"
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               </li>
             ))}

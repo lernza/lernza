@@ -81,7 +81,7 @@ describe("useWallet - connect", () => {
     expect(result.current.installUrl).toBe("https://www.freighter.app/")
   })
 
-  it("suppresses error when user cancels connection", async () => {
+  it("surfaces a distinct user_rejected error when the user cancels connection", async () => {
     mockFreighter.requestAccess.mockRejectedValue(new Error("User rejected"))
 
     const { result } = renderWallet()
@@ -92,7 +92,8 @@ describe("useWallet - connect", () => {
 
     expect(result.current.connected).toBe(false)
     expect(result.current.address).toBeNull()
-    expect(result.current.error).toBeNull()
+    expect(result.current.error?.code).toBe("user_rejected")
+    expect(result.current.error?.message.toLowerCase()).toContain("rejected")
   })
 
   it("maps network failures to typed network_error", async () => {

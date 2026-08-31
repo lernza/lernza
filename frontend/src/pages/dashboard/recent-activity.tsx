@@ -1,6 +1,7 @@
 import { Clock, Plus, Target, Sparkles } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import type { ActivityEvent } from "@/lib/mock-data"
+import { EmptyState } from "@/components/ui/async-states"
+import type { ActivityEvent } from "@/lib/shared-types"
 
 interface RecentActivityProps {
   activities: ActivityEvent[]
@@ -12,7 +13,10 @@ export function RecentActivity({ activities }: RecentActivityProps) {
       <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
         <Clock className="h-5 w-5" /> Recent Activity
       </h2>
-      <Card className="border-border border shadow-md">
+      {activities.length === 0 ? (
+        <EmptyState variant="activity" />
+      ) : (
+        <Card className="border-border border shadow-md">
         <CardContent className="p-0">
           <div className="divide-border divide-y-[2px]">
             {activities.map(activity => {
@@ -57,7 +61,8 @@ export function RecentActivity({ activities }: RecentActivityProps) {
             })}
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      )}
     </div>
   )
 }

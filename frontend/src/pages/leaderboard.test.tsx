@@ -99,7 +99,7 @@ describe("Leaderboard", () => {
   it("quest row links to the quest detail page", async () => {
     render(<Leaderboard />)
 
-    fireEvent.click(screen.getByRole("button", { name: /view active quests/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /view active quests/i }))
 
     await act(async () => {
       await Promise.resolve()

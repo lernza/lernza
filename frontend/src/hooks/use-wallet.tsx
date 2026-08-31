@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react"
 import freighter, { WatchWalletChanges } from "@stellar/freighter-api"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
+import { pushToast } from "@/lib/notifications"
 
 const DISCONNECTED_KEY = "lernza_wallet_disconnected"
 const FREIGHTER_INSTALL_URL = "https://www.freighter.app/"
@@ -11,7 +12,12 @@ const WALLET_WATCH_INTERVAL_MS = 3000
 export type WalletNetwork = "mainnet" | "testnet" | "standalone" | "futurenet" | "unknown"
 
 export type WalletErrorCode =
-  "freighter_not_installed" | "network_error" | "timeout" | "missing_api" | "unknown"
+  | "freighter_not_installed"
+  | "network_error"
+  | "timeout"
+  | "missing_api"
+  | "user_rejected"
+  | "unknown"
 
 export interface WalletErrorState {
   code: WalletErrorCode
@@ -94,6 +100,8 @@ const freighterApi = freighter as unknown as FreighterApi
 type WalletContextValue = WalletState & {
   installUrl: string
   connect: () => Promise<void>
+  retryConnect: () => Promise<void>
+  resetWalletError: () => void
   /** Re-checks wallet permission and the active account before protected use. */
   verifySession: () => Promise<boolean>
   disconnect: () => void
@@ -258,12 +266,20 @@ function useWalletState(): WalletContextValue {
         normalized.includes("cancel") ||
         normalized.includes("denied")
       ) {
+        // Distinguish a user declining the connection from a network/timeout
+        // failure. Previously both resulted in a silent (null) error, leaving
+        // the user unable to tell whether to retry, switch wallets, or check
+        // their network.
         setState(s => ({
           ...s,
           loading: false,
-          error: null,
           connected: false,
           address: null,
+          error: {
+            code: "user_rejected",
+            message:
+              "You rejected the wallet connection request. Reconnect and approve the request to continue, or switch wallets if you changed your mind.",
+          },
         }))
         return
       }
@@ -375,20 +391,27 @@ function useWalletState(): WalletContextValue {
 
       if (error || !address) {
         // Wallet locked or access revoked from inside the extension.
-        setState(s =>
-          s.connected
-            ? {
-                ...s,
-                address: null,
-                connected: false,
-                network: null,
-                networkName: null,
-                networkPassphrase: null,
-                isSupportedNetwork: true,
-                wrongNetwork: false,
-              }
-            : s
-        )
+        setState(s => {
+          if (s.connected) {
+            // Notify user of unexpected disconnect
+            pushToast({
+              message: "Wallet disconnected. Reconnect to continue using on-chain features.",
+              type: "warning",
+              duration: 6000,
+            })
+            return {
+              ...s,
+              address: null,
+              connected: false,
+              network: null,
+              networkName: null,
+              networkPassphrase: null,
+              isSupportedNetwork: true,
+              wrongNetwork: false,
+            }
+          }
+          return s
+        })
         return
       }
 
@@ -424,18 +447,29 @@ function useWalletState(): WalletContextValue {
     return () => watcher.stop()
   }, [])
 
+  const resetWalletError = useCallback(() => {
+    setState(s => ({ ...s, error: null }))
+  }, [])
+
+  const retryConnect = useCallback(async () => {
+    resetWalletError()
+    await connect()
+  }, [connect, resetWalletError])
+
   return useMemo(
     () => ({
       ...state,
       installUrl: FREIGHTER_INSTALL_URL,
       connect,
+      retryConnect,
+      resetWalletError,
       verifySession,
       disconnect,
       shortAddress: state.address
         ? `${state.address.slice(0, 4)}...${state.address.slice(-4)}`
         : null,
     }),
-    [connect, disconnect, state, verifySession]
+    [connect, disconnect, resetWalletError, retryConnect, state, verifySession]
   )
 }
 

@@ -145,7 +145,12 @@ function SkeletonWelcomeBanner({ className }: { className?: string }) {
 
 function SkeletonQuestList({ count = 3, className }: { count?: number; className?: string }) {
   return (
-    <div className={cn("grid gap-5", className)}>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className={cn("grid gap-5", className)}
+    >
       {Array.from({ length: count }).map((_, i) => (
         <SkeletonCard key={i} />
       ))}

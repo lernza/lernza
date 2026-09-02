@@ -2738,6 +2738,8 @@ fn test_removal_after_completion_state_does_not_retain_enrollment_state() {
     // Re-enrollment resets the prior inactive status to the default active state.
     client.add_enrollee(&quest_id, &learner);
     assert_eq!(client.get_enrollee_status(&quest_id, &learner), EnrolleeStatus::Active);
+}
+
 #[test]
 fn test_owner_can_suspend_and_resume_with_notice() {
     let (env, client, owner, token) = setup();

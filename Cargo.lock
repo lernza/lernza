@@ -290,18 +290,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "completion"
-version = "0.0.0"
-dependencies = [
- "certificate",
- "common",
- "milestone",
- "quest",
- "rewards",
- "soroban-sdk",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

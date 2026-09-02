@@ -999,6 +999,7 @@ impl MilestoneContract {
                     0
                 }
             }
+            DistributionMode::PartialCredit(_) => return Err(Error::InvalidInput),
         };
 
         // Store completion timestamp
@@ -1550,6 +1551,7 @@ impl MilestoneContract {
                         0
                     }
                 }
+                DistributionMode::PartialCredit(_) => return Err(Error::InvalidInput),
             };
 
             // Emit peer approval completion event

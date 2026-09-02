@@ -59,6 +59,8 @@ pub enum DataKey {
     Suspension(u32),
     /// Waitlist for a quest when enrollment is full. Key: quest_id. Value: Vec<Address> (FIFO).
     Waitlist(u32),
+    /// Learner-dismissed dashboard guidance. Key: (learner, quest_id).
+    DismissedGuidance(Address, u32),
 }
 
 // QuestInfo moved to common.
@@ -96,7 +98,7 @@ pub enum Error {
     /// Quest has been cancelled.
     QuestCancelled = 17,
     /// Removal is blocked while a submission is awaiting review or settlement.
-    RemovalBlockedByPendingApproval = 21,
+    RemovalBlockedByPendingApproval = 22,
     QuestSuspended = 21,
     /// No pending ownership transfer exists for this quest.
     NoPendingTransfer = 18,
@@ -139,6 +141,19 @@ const MAX_MIGRATION_BATCH: u32 = 25;
 pub struct PendingTransfer {
     pub nominee: Address,
     pub initiated_at: u64,
+}
+
+/// A single actionable item on a learner's dashboard.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct LearnerDashboardItem {
+    pub quest_id: u32,
+    pub quest_name: String,
+    pub deadline: u64,
+    pub next_action: Symbol,
+    pub is_blocked: bool,
+    pub review_status: Symbol,
+    pub is_dismissed: bool,
 }
 
 #[contracttype]
@@ -1580,6 +1595,128 @@ impl QuestContract {
         }
         env.storage().instance().extend_ttl(THRESHOLD, BUMP);
         matches
+    }
+
+    /// Returns the learner dashboard for an address.
+    ///
+    /// The dashboard contains one item per active quest the learner is
+    /// enrolled in. Each item includes the single highest-priority next
+    /// action, deadline, review status, blocked state, and dismissal state.
+    pub fn get_learner_dashboard(env: Env, learner: Address) -> Vec<LearnerDashboardItem> {
+        let enrollee_key = DataKey::EnrolleeQuests(learner.clone());
+        let quest_ids: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&enrollee_key)
+            .unwrap_or(Vec::new(&env));
+        let mut items = Vec::new(&env);
+
+        for i in 0..quest_ids.len() {
+            if let Some(quest_id) = quest_ids.get(i) {
+                let quest = match Self::load_quest(&env, quest_id) {
+                    Ok(q) => q,
+                    Err(_) => continue,
+                };
+                if quest.status != QuestStatus::Active {
+                    continue;
+                }
+
+                let prerequisites_met = Self::has_completed_prerequisites(
+                    env.clone(),
+                    learner.clone(),
+                    quest_id,
+                )
+                .unwrap_or(false);
+                let is_blocked = !prerequisites_met;
+
+                let has_pending_review = env
+                    .storage()
+                    .persistent()
+                    .has(&DataKey::LeaveHold(quest_id, learner.clone()));
+
+                let is_dismissed = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::DismissedGuidance(learner.clone(), quest_id))
+                    .unwrap_or(false);
+
+                let next_action = if quest.deadline != 0
+                    && env.ledger().timestamp() > quest.deadline
+                {
+                    Symbol::new(&env, "deadline_expired")
+                } else if has_pending_review {
+                    Symbol::new(&env, "pending_review")
+                } else if is_blocked {
+                    Symbol::new(&env, "blocked")
+                } else {
+                    Symbol::new(&env, "available")
+                };
+
+                let review_status = if has_pending_review {
+                    Symbol::new(&env, "pending")
+                } else {
+                    Symbol::new(&env, "none")
+                };
+
+                items.push_back(LearnerDashboardItem {
+                    quest_id,
+                    quest_name: quest.name.clone(),
+                    deadline: quest.deadline,
+                    next_action,
+                    is_blocked,
+                    review_status,
+                    is_dismissed,
+                });
+            }
+        }
+
+        if env.storage().persistent().has(&enrollee_key) {
+            common::extend_persistent_ttl(&env, &enrollee_key);
+        }
+        env.storage().instance().extend_ttl(THRESHOLD, BUMP);
+        items
+    }
+
+    /// Dismiss non-critical dashboard guidance for a learner. The underlying
+    /// enrollment and quest data are preserved; only the guidance flag is set.
+    pub fn dismiss_dashboard_guidance(
+        env: Env,
+        learner: Address,
+        quest_id: u32,
+    ) -> Result<(), Error> {
+        learner.require_auth();
+        Self::require_not_paused(&env)?;
+        Self::load_quest(&env, quest_id)?;
+        if !Self::is_enrollee(env.clone(), quest_id, learner.clone())? {
+            return Err(Error::NotEnrolled);
+        }
+
+        let key = DataKey::DismissedGuidance(learner.clone(), quest_id);
+        env.storage().persistent().set(&key, &true);
+        common::extend_persistent_ttl(&env, &key);
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Restore dismissed dashboard guidance for a learner.
+    pub fn undismiss_dashboard_guidance(
+        env: Env,
+        learner: Address,
+        quest_id: u32,
+    ) -> Result<(), Error> {
+        learner.require_auth();
+        Self::require_not_paused(&env)?;
+        let key = DataKey::DismissedGuidance(learner, quest_id);
+        env.storage().persistent().remove(&key);
+        Ok(())
+    }
+
+    /// Check whether a learner has dismissed dashboard guidance for a quest.
+    pub fn is_dashboard_guidance_dismissed(env: Env, learner: Address, quest_id: u32) -> bool {
+        env.storage()
+            .persistent()
+            .get(&DataKey::DismissedGuidance(learner, quest_id))
+            .unwrap_or(false)
     }
 
     /// Get enrollment cap for a quest.

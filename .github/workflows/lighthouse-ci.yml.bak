@@ -96,6 +96,9 @@ jobs:
             console.log('Lighthouse CI completed successfully');
             console.log('No regressions > 10% detected');
 
+      - name: Run performance benchmarking
+        run: pnpm run benchmark
+
       - name: Post Lighthouse scores comment
         if: always()
         uses: actions/github-script@v7

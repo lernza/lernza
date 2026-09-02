@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode, useCallback } from "react"
 import type { Step1Values, Step2Values, FormStep } from "./types"
+import type { QuestTemplate } from "./templates"
 
 interface QuestCreationContextType {
   step1Data: Step1Values
@@ -10,6 +11,7 @@ interface QuestCreationContextType {
   goToNext: () => void
   goToBack: () => void
   setCurrentStep: (step: FormStep) => void
+  applyTemplate: (template: QuestTemplate) => void
   loadDraft: (step1: Step1Values, step2: Step2Values, currentStep: FormStep) => void
 }
 
@@ -43,6 +45,14 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     setCurrentStep(step)
   }, [])
 
+  const applyTemplate = useCallback((template: QuestTemplate) => {
+    setStep1Data({ ...template.step1, tags: [...template.step1.tags] })
+    setStep2Data({
+      milestones: template.step2.milestones.map(milestone => ({ ...milestone })),
+    })
+    setCurrentStep(1)
+  }, [])
+
   const value = {
     step1Data,
     setStep1Data,
@@ -52,6 +62,7 @@ export function QuestCreationProvider({ children }: { children: ReactNode }) {
     goToNext,
     goToBack,
     setCurrentStep,
+    applyTemplate,
     loadDraft,
   }
 

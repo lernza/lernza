@@ -48,6 +48,12 @@ jobs:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
 
+      - name: Run performance benchmarks
+        run: pnpm run test:perf
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ github.event.deployment_status.target_url }}
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

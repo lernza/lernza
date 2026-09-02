@@ -79,6 +79,7 @@ pub enum QuestStatus {
     Active = 0,
     Archived = 1,
     Cancelled = 2,
+    Suspended = 3,
 }
 
 #[contracttype]

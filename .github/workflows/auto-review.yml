@@ -23,7 +23,7 @@ jobs:
     if: github.event.pull_request.state == 'open' && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # pull_request_target runs on base; checkout base securely, not fork code.
           # We fetch diff via gh API, never execute fork files.

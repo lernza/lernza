@@ -250,6 +250,9 @@ impl RewardsContract {
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);
         }
+        if quest_info.status != QuestStatus::Active {
+            return Err(Error::QuestNotFunded);
+        }
 
         let token_addr = Self::get_token(&env)?;
 
@@ -377,6 +380,9 @@ impl RewardsContract {
         if quest_info.owner != funder {
             return Err(Error::Unauthorized);
         }
+        if quest_info.status != QuestStatus::Active {
+            return Err(Error::QuestNotFunded);
+        }
 
         // Validate the token address
         let token_client = token::Client::new(&env, &token_addr);
@@ -472,6 +478,19 @@ impl RewardsContract {
 
         if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
+        }
+
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_info = QuestClient::new(&env, &quest_contract_addr)
+            .try_get_quest(&quest_id)
+            .map_err(|_| Error::QuestLookupFailed)?
+            .map_err(|_| Error::QuestLookupFailed)?;
+        if quest_info.status != QuestStatus::Active {
+            return Err(Error::QuestNotFunded);
         }
 
         // Idempotency check: reject duplicate payouts for (quest, milestone, enrollee)
@@ -644,6 +663,19 @@ impl RewardsContract {
 
         if amount <= 0 || amount > MAX_REWARD_AMOUNT {
             return Err(Error::InvalidAmount);
+        }
+
+        let quest_contract_addr = env
+            .storage()
+            .instance()
+            .get::<DataKey, Address>(&DataKey::QuestContractAddr)
+            .ok_or(Error::NotInitialized)?;
+        let quest_info = QuestClient::new(&env, &quest_contract_addr)
+            .try_get_quest(&quest_id)
+            .map_err(|_| Error::QuestLookupFailed)?
+            .map_err(|_| Error::QuestLookupFailed)?;
+        if quest_info.status != QuestStatus::Active {
+            return Err(Error::QuestNotFunded);
         }
 
         // Idempotency check

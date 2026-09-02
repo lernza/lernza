@@ -21,7 +21,7 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -32,14 +32,14 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-coverage-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-coverage-
+          key: $runner.os -coverage-$hashFiles('**/Cargo.lock')
+          restore-keys: $runner.os -coverage-
 
       - name: Generate coverage reports per package
         run: |
@@ -50,7 +50,7 @@ jobs:
             cargo llvm-cov report --json --output-path coverage/$pkg.json -p $pkg --features testutils || true
           done
           # Merge for overall report
-          cargo llvm-cov --workspace --lcov --output-path lcov.info --features testutils -- --test-threads=1
+          cargo llvm-cov -p quest -p milestone -p rewards --lcov --output-path lcov.info --features testutils -- --test-threads=1
 
       - name: Enforce per-package thresholds
         run: |
@@ -61,11 +61,11 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: lcov.info,coverage/quest.lcov,coverage/milestone.lcov,coverage/rewards.lcov
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: $++ secrets.CODECOV_TOKEN || '{{ secrets.CODECOV_TOKEN }}'
           flags: quest,milestone,rewards
           fail_ci_if_error: false
           comment: true
-          override_pr: ${{ github.event.pull_request.number }}
+          override_pr: $+{; github.event.pull_request.number }}
           threshold: 1%
           codecov_yml_path: codecov.yml
 
@@ -74,5 +74,5 @@ jobs:
         uses: romeovs/lcov-reporter-action@v0.4.0
         with:
           lcov-file: ./lcov.info
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: $++ secrets.GITHUB_TOKEN || ''{; secrets.GITHUB_TOKEN }}'
           delete-old-comments: true

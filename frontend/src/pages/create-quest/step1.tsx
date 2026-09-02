@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
+import { QUEST_TEMPLATES, type QuestTemplate } from "./templates"
 
 export function Step1Form() {
-  const { step1Data, setStep1Data, goToNext } = useQuestCreation()
+  const { step1Data, setStep1Data, goToNext, applyTemplate } = useQuestCreation()
   const [tagInput, setTagInput] = useState("")
   const [tagError, setTagError] = useState<string | null>(null)
 
@@ -18,6 +19,7 @@ export function Step1Form() {
     watch,
     setValue,
     formState: { errors, isValid },
+    reset,
   } = useForm<Step1Values>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(step1Schema as any),
@@ -87,6 +89,13 @@ export function Step1Form() {
     }
   }
 
+  const handleTemplateSelect = (template: QuestTemplate) => {
+    applyTemplate(template)
+    reset(template.step1)
+    setTagInput("")
+    setTagError(null)
+  }
+
   const onSubmit = (data: Step1Values) => {
     setStep1Data(data)
     goToNext()
@@ -94,6 +103,35 @@ export function Step1Form() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+      <div>
+        <div className="bg-accent border-border border-b px-6 py-3">
+          <span className="text-sm font-semibold tracking-wider uppercase">
+            Start with a template
+          </span>
+        </div>
+        <div className="border-border bg-background grid gap-3 border border-t-0 p-4 sm:grid-cols-3">
+          {QUEST_TEMPLATES.map(template => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => handleTemplateSelect(template)}
+              className="border-border hover:bg-secondary border p-4 text-left transition-colors hover:shadow-md"
+              aria-label={`Use ${template.name} template`}
+            >
+              <span className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">
+                {template.audience}
+              </span>
+              <span className="mt-1 block text-sm font-semibold">{template.name}</span>
+              <span className="text-muted-foreground mt-1 block text-xs leading-relaxed">
+                {template.description}
+              </span>
+              <span className="text-muted-foreground mt-3 block text-xs font-bold">
+                {template.step2.milestones.length} milestones
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div>
         <div className="bg-accent border-border border-b px-6 py-3">
           <div className="flex items-center gap-2">

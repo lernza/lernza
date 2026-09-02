@@ -7,7 +7,11 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'contracts/**'
+      - 'src/**'
+      - 'benches/**'
       - 'scripts/generate-release-artifacts.sh'
       - 'releases/**'
       - '.github/workflows/release-artifacts-check.yml'
@@ -21,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -32,6 +36,11 @@ jobs:
       - name: Build Contract Release WASM Binaries
         run: |
           cargo build --target wasm32-unknown-unknown --release
+
+      - name: Install wasm-opt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
 
       - name: Generate Release Artifacts
         run: |
@@ -44,6 +53,5 @@ jobs:
             echo "Error: releases/release-manifest.json was not generated."
             exit 1
           fi
-          
           echo "Generated release manifest contents:"
           cat releases/release-manifest.json

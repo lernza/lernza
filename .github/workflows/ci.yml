@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [main]
@@ -10,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-$++ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -18,16 +17,50 @@ jobs:
     name: Basic CI (lightweight, always passes)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Basic validation
         run: |
           echo "Running basic CI checks..."
-          echo "Repo: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref }}"
+          echo "Repo: $++ github.repository }}"
+          echo "Branch: $++ github.ref }}"
           # Lightweight checks only - no heavy builds that block contributions
           # Format check (allow failure, just report)
           if command -v cargo >/dev/null 2>&1; then
-            cargo fmt --all -- --check || echo "cargo fmt hint: formatting can be fixed later"
+            cargo fmt --all ---check || echo "cargo fmt hint: formatting can be fixed later"
           fi
           echo "Basic CI passed :heart:"
+
+  performance:
+    name: Performance Benchmarking
+    needs: basic
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          elif [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json found; skipping install"
+          fi
+
+      - name: Run performance benchmarks
+        run: |
+          echo "Running performance benchmarks..."
+          # The benchmark script should output metrics in a machine-readable format,
+          # e.g. "render_time_ms=12.3" and "contract_call_latency_ms=45.6".
+          if [ -f package.json ] && grep -q '"benchmark"' package.json; then
+            npm run benchmark
+          else
+            echo "No 'benchmark' script found in package.json."
+            echo "Add a script like: \"benchmark\": \"node scripts/benchmark.js\""

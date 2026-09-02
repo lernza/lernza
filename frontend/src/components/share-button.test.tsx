@@ -64,7 +64,7 @@ describe("ShareButton Clipboard Fallback", () => {
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining("http"))
-      expect(mockOnToast).toHaveBeenCalledWith("Link copied to clipboard!", "success")
+      expect(mockOnToast).toHaveBeenCalledWith("Copied to clipboard!", "success")
     })
   })
 
@@ -87,7 +87,10 @@ describe("ShareButton Clipboard Fallback", () => {
     fireEvent.click(copyButton)
 
     await waitFor(() => {
-      expect(mockOnToast).toHaveBeenCalledWith("Failed to copy link", "error")
+      expect(mockOnToast).toHaveBeenCalledWith(
+        "Unable to copy to clipboard. Please try again.",
+        "error"
+      )
     })
   })
 
@@ -110,7 +113,10 @@ describe("ShareButton Clipboard Fallback", () => {
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalled()
-      expect(mockOnToast).toHaveBeenCalledWith("Failed to copy link", "error")
+      expect(mockOnToast).toHaveBeenCalledWith(
+        "Unable to copy to clipboard. Please try again.",
+        "error"
+      )
     })
   })
 })

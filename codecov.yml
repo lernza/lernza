@@ -1,0 +1,53 @@
+coverage:
+  status:
+    project:
+      quest:
+        target: 70%
+        threshold: 1%
+        flags: quest
+        informational: false
+      milestone:
+        target: 70%
+        threshold: 1%
+        flags: milestone
+        informational: false
+      rewards:
+        target: 70%
+        threshold: 1%
+        flags: rewards
+        informational: false
+    patch:
+      default:
+        target: 60%
+        threshold: 1%
+  range: "65...85"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+  require_base: true
+  require_head: true
+
+flags:
+  quest:
+    paths:
+      - contracts/quest/
+    carryforward: false
+  milestone:
+    paths:
+      - contracts/milestone/
+    carryforward: false
+  rewards:
+    paths:
+      - contracts/rewards/
+    carryforward: false
+  common:
+    paths:
+      - contracts/common/
+    carryforward: false
+
+ignore:
+  - "contracts/testutils/**"
+  - "**/test_snapshots/**"
+  - "frontend/**"

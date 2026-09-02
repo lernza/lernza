@@ -1,10 +1,19 @@
 {
   "ci": {
     "collect": {
-      "numberOfRuns": 3,
+      "numberOfRuns": 2,
+      "url": [
+        "/",
+        "/dashboard",
+        "/create-quest",
+        "/creator-dashboard",
+        "/leaderboard",
+        "/quest/1"
+      ],
       "settings": {
         "preset": "desktop",
         "staticDistDir": "./dist",
+        "isSinglePageApplication": true,
         "budgetFile": "./budget.json"
       }
     },
@@ -15,7 +24,13 @@
         "largest-contentful-paint": ["error", { "maxNumericValue": 2500, "aggregationMethod": "optimistic" }],
         "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1, "aggregationMethod": "percentile" }],
         "interactive": ["warn", { "maxNumericValue": 3800 }],
-        "total-blocking-time": ["warn", { "maxNumericValue": 300 }]
+        "total-blocking-time": ["warn", { "maxNumericValue": 300 }],
+        "resource-summary:script:size": ["error", { "maxNumericValue": 204800 }],
+        "resource-summary:stylesheet:size": ["error", { "maxNumericValue": 61440 }],
+        "resource-summary:image:size": ["error", { "maxNumericValue": 102400 }],
+        "resource-summary:font:size": ["error", { "maxNumericValue": 51200 }],
+        "resource-summary:total:size": ["error", { "maxNumericValue": 512000 }],
+        "resource-summary:third-party:count": ["error", { "maxNumericValue": 15 }]
       }
     },
     "upload": {

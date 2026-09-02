@@ -1,0 +1,39 @@
+{
+  "release_version": "v0.1.0",
+  "timestamp": "2026-08-27T07:01:56Z",
+  "source": {
+    "repository": "https://github.com/lernza/lernza",
+    "commit_sha": "fbfe08440cb905705018470331155630a6bd0a39",
+    "branch": "main",
+    "is_dirty": true
+  },
+  "toolchain": {
+    "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "cargo": "cargo 1.96.0 (30a34c682 2026-05-25)",
+    "stellar_cli": "stellar 27.0.0 (5a7c5fe76530bf4248477ac812fc757146b98cc4)",
+    "target": "wasm32-unknown-unknown",
+    "profile": "release"
+  },
+  "deployment_context": {
+    "network": "testnet",
+    "deployer_public_key": "GBRP5LFAV4Y6L2W3M3Z45PXX... (public key only)"
+  },
+  "contracts": {
+    "quest": {
+      "wasm_file": "quest.wasm",
+      "sha256": "2a7c2626e3cf30187096b6096f3b0fdaaf7f1d77269eec467754761d7e429de5"
+    },
+    "milestone": {
+      "wasm_file": "milestone.wasm",
+      "sha256": "2cf89ad3f233c03e4e850b9b1e00ab2163d08cf3c8108417cf4baf4ad095451d"
+    },
+    "rewards": {
+      "wasm_file": "rewards.wasm",
+      "sha256": "29177f0c5602f7d9f79db0add6e4dacc8702e41dbda8be4efcd82f43efe35f0e"
+    },
+    "certificate": {
+      "wasm_file": "certificate.wasm",
+      "sha256": "690532af62c028f10f8426df8e586175686fa2b84a0f7d144285aba24a8263b6"
+    }
+  }
+}

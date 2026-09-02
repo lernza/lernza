@@ -15,6 +15,7 @@ contracts:
   milestone: ""
   rewards: ""
   rewards_token: ""
+  certificate: ""
   usdc_token: ""
 
 rpc_rate_limits:

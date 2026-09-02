@@ -1,0 +1,204 @@
+name: Cargo Security Audit
+
+# Supply-chain scanning for Rust dependencies
+# Closes #960
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
+  schedule:
+    # Run daily at 00:00 UTC to catch new advisories
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo audit database
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/advisory-db
+          key: cargo-audit-db-${{ github.run_id }}
+          restore-keys: |
+            cargo-audit-db-
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Refresh advisory database
+        run: cargo audit fetch
+
+      - name: Run cargo audit
+        id: audit
+        run: |
+          # Fail on CVSS > 6 (medium-high severity)
+          cargo audit --deny warnings --deny unmaintained --deny unsound --deny yanked
+        continue-on-error: true
+
+      - name: Post audit results
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## 🔒 Cargo Audit Failed
+            
+            Security vulnerabilities detected in dependencies.
+            
+            **Policy:**
+            - ❌ CVSS score > 6.0
+            - ❌ Unmaintained dependencies
+            - ❌ Unsound code
+            - ❌ Yanked crates
+            
+            Please review the workflow logs and update affected dependencies.
+            
+            Run locally: \`cargo audit\``;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Fail if vulnerabilities found
+        if: steps.audit.outcome == 'failure'
+        run: exit 1
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Cache cargo-deny database
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/advisory-db
+            ~/.cargo/registry/cache
+          key: cargo-deny-${{ hashFiles('**/Cargo.lock', 'deny.toml') }}
+          restore-keys: |
+            cargo-deny-
+
+      - name: Run cargo deny check
+        id: deny
+        run: |
+          # Check advisories, licenses, bans, and sources
+          cargo deny check --config deny.toml
+        continue-on-error: true
+
+      - name: Post deny results
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## ⛔ Cargo Deny Check Failed
+            
+            Supply-chain policy violations detected.
+            
+            **Checked:**
+            - 🔐 Security advisories (RustSec DB)
+            - 📜 License compliance (Apache-2.0, MIT, etc.)
+            - 🚫 Banned dependencies
+            - 🔗 Source registry verification
+            
+            See \`deny.toml\` for policy configuration.
+            
+            Run locally: \`cargo deny check\``;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+      - name: Fail if policy violations found
+        if: steps.deny.outcome == 'failure'
+        run: exit 1
+
+  audit-summary:
+    needs: [cargo-audit, cargo-deny]
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post success summary
+        if: needs.cargo-audit.result == 'success' && needs.cargo-deny.result == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## ✅ Cargo Security Checks Passed
+            
+            All supply-chain security checks passed:
+            - ✅ No security advisories (CVSS > 6)
+            - ✅ License compliance enforced
+            - ✅ No banned dependencies
+            - ✅ Source verification passed
+            
+            _Advisory database refreshed from RustSec._`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(c =>
+              c.user?.type === 'Bot' && c.body?.includes('Cargo Security Checks')
+            );
+
+            try {
+              if (botComment) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: botComment.id,
+                  body: body
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: body
+                });
+              }
+            } catch (error) {
+              console.log("Failed to post summary (likely fork PR):", error.message);
+            }

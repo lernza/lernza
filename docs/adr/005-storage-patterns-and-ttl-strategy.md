@@ -1,38 +1,30 @@
 # ADR-005: Storage Patterns and TTL Strategy
 
-- Status: Accepted
-- Date: 2026-03-25
+- **Status**: Accepted
+- **Date**: 2026-03-25
 
 ## Context
 
-Soroban storage is split across instance, persistent, and temporary durability classes, each with different cost and lifecycle characteristics. Lernza needs a consistent rule for where data lives so that contracts remain affordable, predictable, and recoverable over time.
-
-The current contracts already show clear storage categories:
-
-- instance storage for contract-scoped configuration and counters such as `NextId`, `TokenAddr`, and `TotalDistributed`,
-- persistent storage for long-lived business data such as quests, enrollees, milestone records, authorities, pool balances, and earnings, and
-- temporary storage reserved for short-lived or easily recomputed state such as cooldowns, transient workflow markers, or other expiry-friendly data introduced later.
-
-The contracts also standardize on a TTL policy using `BUMP = 518_400` ledgers and `THRESHOLD = 120_960` ledgers, which the README documents as approximately 30 days and 7 days.
+Soroban storage is split across instance, persistent, and temporary durability classes, each with different rent cost, footprint, and lifecycle characteristics. Lernza needs a standardized rule for data storage so contracts remain affordable, state growth remains controlled, and data entries do not prematurely expire.
 
 ## Decision
 
-Adopt the following storage policy across Lernza contracts:
+Adopt a explicit 3-tier storage allocation policy and uniform TTL extension strategy:
+- **Instance Storage**: Reserved for small contract-wide configuration parameters (e.g. `Admin`, `TokenAddress`, `NextQuestId`, `TotalDistributed`).
+- **Persistent Storage**: Used for core domain state requiring permanent retention (e.g. Quests, Milestones, Enrollee Registrations, Pool Balances).
+- **Temporary Storage**: Used exclusively for short-lived operational data (e.g. anti-spam rate limit cooldowns, session nonce checks).
+- **TTL Strategy**: Standardize entry extension to `518,400` ledgers (~30 days) whenever entries are created or updated, with bump threshold set to `120,960` ledgers (~7 days).
 
-- use instance storage for per-contract metadata, counters, and configuration that is small in scope and tied to the contract instance,
-- use persistent storage for user-facing business state that must survive over time and cannot be safely discarded, and
-- use temporary storage only for short-lived state that can expire without harming core business integrity.
+## Alternatives
 
-Adopt a shared TTL strategy for long-lived contract data:
-
-- bump contract-managed entries to `518_400` ledgers,
-- refresh entries when they are created or materially updated, and
-- extend entries again once they approach the `120_960`-ledger threshold.
+- **All-Instance Storage Pattern**:
+  - *Description*: Store all user records, quests, and milestone entries directly inside the contract's instance data map.
+  - *Rejection Rationale*: Instance storage payload expands with every new user and quest, dramatically increasing gas read/write costs for all contract functions due to inflating instance serialization size.
+- **Pure Persistent Storage Without Active TTL Bumping**:
+  - *Description*: Store everything in persistent storage without automated TTL extension in contract execution calls.
+  - *Rejection Rationale*: Risk of data entries expiring into archived state if users do not manually call extend TTL, requiring expensive restoration operations.
 
 ## Consequences
 
-This gives contributors a clear rubric for modeling new state and keeps storage behavior consistent across contracts.
-
-Separating storage by durability reduces unnecessary persistence costs for ephemeral data while protecting the records that define quests, milestones, balances, and authorization.
-
-The trade-off is that TTL management becomes an explicit maintenance concern. Developers must remember to extend relevant entries as part of normal contract operations, and future features that introduce temporary state must be deliberate about what can safely expire.
+- **Positive**: Controlled gas execution costs, predictable ledger rent footprints, and automatic state preservation for active quests.
+- **Negative / Risks**: Continuous obligation to execute TTL bump calls in contract functions and track rent reserve allowances.

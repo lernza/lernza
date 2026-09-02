@@ -5,28 +5,45 @@ import {
   Trophy,
   Sparkles,
   History,
-  Copy,
-  Check,
   Loader2,
   AlertCircle,
   Target,
   Users,
   ExternalLink,
+  Settings,
+  Edit3,
 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { useContractData } from "@/hooks/use-async-data"
 import { useUserRole } from "@/hooks/use-user-role"
+import { useProfile } from "@/hooks/use-profile"
 import { formatTokens } from "@/lib/utils"
-import { rewardsClient } from "@/lib/contracts/rewards"
 import { questClient } from "@/lib/contracts/quest"
+import { rewardsClient } from "@/lib/contracts/rewards"
+import { milestoneClient } from "@/lib/contracts/milestone-client"
 import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
 import { navigateToPath } from "@/lib/navigation"
+import { useOnboarding } from "@/hooks/use-onboarding"
+import { NotificationPreferencesCard } from "@/components/notification-preferences"
+import { ProfileEditor } from "@/components/profile-editor"
+import { CompletedQuestsShowcase } from "@/components/quests-showcase"
+import { RewardsShowcase } from "@/components/rewards-showcase"
+import { EmptyProfileOnboarding } from "@/components/empty-profile-onboarding"
+import { ProfileHeaderDisplay } from "@/components/profile-header"
+import { calculateReputation, type ReputationSummary, type ReputationEvent } from "@/lib/reputation"
+import type {
+  ProfileMetadata,
+  ProfileFieldPrivacy,
+  CompletedQuestShowcase,
+  PrivacyLevel,
+} from "@/lib/profile-types"
+import { PrivacyLevel as PL } from "@/lib/profile-types"
 
-type ProfileTab = "overview" | "activity"
+type ProfileTab = "overview" | "activity" | "achievements" | "settings"
 
 function formatActivityDate(timestamp: number) {
   return new Date(timestamp).toLocaleString([], {
@@ -61,37 +78,20 @@ function getActivityDescription(item: WalletActivityItem) {
   }
 }
 
-/* ─── Generated Avatar from wallet address ─── */
-
-function WalletAvatar({ address }: { address: string }) {
-  // Generate a grid of colored blocks from the address
-  const colors = ["#FACC15", "#22C55E", "#000000", "#F5F5F4", "#FFFFFF"]
-  const cells = Array.from({ length: 16 }, (_, i) => {
-    const charCode = address.charCodeAt(i % address.length) || 0
-    return colors[charCode % colors.length]
-  })
-
-  return (
-    <div className="border-border grid h-20 w-20 shrink-0 grid-cols-4 overflow-hidden border shadow-md">
-      {cells.map((color, i) => (
-        <div key={i} style={{ backgroundColor: color }} />
-      ))}
-    </div>
-  )
-}
-
 export function Profile() {
   const { connected, connect, address, loading: walletConnecting } = useWallet()
-  const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
   const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState<string | null>(null)
   const [nextActivityCursor, setNextActivityCursor] = useState<string | null>(null)
   const [capReached, setCapReached] = useState(false)
-  const { role, isLoading: roleLoading } = useUserRole()
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const { role, isLoading: roleLoading, enrolledQuests } = useUserRole()
+  const onboarding = useOnboarding()
 
-  // Use the new async hook for earnings data
+  const profile = useProfile(true)
+
   const {
     data: totalEarned,
     isLoading: earningsLoading,
@@ -102,7 +102,7 @@ export function Profile() {
       if (!address) throw new Error("No wallet address")
       const earnings = await rewardsClient.getUserEarnings(address)
       if (earnings === null) {
-        throw new Error("not configured") // Special error for contract unavailability
+        throw new Error("not configured")
       }
       return earnings
     },
@@ -111,6 +111,16 @@ export function Profile() {
       queryKey: [connected, address],
     }
   )
+
+  const reputationSummary: ReputationSummary | null = useMemo(() => {
+    if (!profile.profile) return null
+    const events: ReputationEvent[] = profile.filteredShowcasedQuests.map(q => ({
+      type: "quest_completed",
+      role: "participant",
+      timestamp: q.completionDate || Date.now(),
+    }))
+    return calculateReputation(events)
+  }, [profile.profile, profile.filteredShowcasedQuests])
 
   const getRoleLabel = () => {
     if (roleLoading) return "Loading..."
@@ -138,6 +148,7 @@ export function Profile() {
         return "secondary"
     }
   }
+
   const {
     data: creatorStats,
     isLoading: statsLoading,
@@ -216,14 +227,6 @@ export function Profile() {
     }
   }, [activeTab, address, connected])
 
-  const handleCopy = () => {
-    if (address) {
-      navigator.clipboard.writeText(address)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
   const handleLoadMoreActivity = async (signal?: AbortSignal) => {
     if (!address || !nextActivityCursor || activityLoading) {
       return
@@ -253,12 +256,78 @@ export function Profile() {
     }
   }
 
+  const handleSyncCompletedQuests = async () => {
+    if (!address || !profile.profile) return
+
+    try {
+      const enrolled = enrolledQuests || []
+      for (const quest of enrolled) {
+        const completions = await milestoneClient.getEnrolleeCompletions(quest.id, address)
+        const milestones = await milestoneClient.listMilestones(quest.id)
+        const totalMilestones = milestones.length
+
+        if (completions > 0 && totalMilestones > 0) {
+          const poolBalance = await rewardsClient.getPoolBalance(quest.id)
+          const alreadyShowcased = profile.profile.showcasedQuests.some(q => q.questId === quest.id)
+          if (!alreadyShowcased) {
+            const showcase: CompletedQuestShowcase = {
+              questId: quest.id,
+              questName: quest.name,
+              description: quest.description,
+              completionDate: Date.now(),
+              milestoneCount: totalMilestones,
+              completedMilestones: completions,
+              totalRewardsEarned: poolBalance,
+              highlighted: false,
+              privacy: PL.Public,
+            }
+            profile.addOrUpdateShowcasedQuest(showcase)
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to sync completed quests:", err)
+    }
+  }
+
   const formattedEarned =
     totalEarned === null
       ? "Unavailable"
       : totalEarned > BigInt(Number.MAX_SAFE_INTEGER)
         ? totalEarned.toString()
         : formatTokens(Number(totalEarned), 7, "USDC")
+
+  const handleSaveProfile = (metadata: ProfileMetadata, privacy: ProfileFieldPrivacy) => {
+    profile.setMetadata(metadata)
+    profile.setFieldPrivacy(privacy)
+    setIsEditingProfile(false)
+  }
+
+  const handleShowcaseToggleShowQuests = (show: boolean) => {
+    profile.setShowcaseSettings({ showCompletedQuests: show })
+  }
+
+  const handleShowcaseToggleShowRewards = (show: boolean) => {
+    profile.setShowcaseSettings({ showRewards: show })
+  }
+
+  const handleGlobalQuestPrivacyChange = (privacy: PrivacyLevel) => {
+    profile.setShowcaseSettings({ questsPrivacy: privacy })
+    if (profile.profile) {
+      profile.profile.showcasedQuests.forEach(q => {
+        profile.setQuestPrivacy(q.questId, privacy)
+      })
+    }
+  }
+
+  const handleGlobalRewardPrivacyChange = (privacy: PrivacyLevel) => {
+    profile.setShowcaseSettings({ rewardsPrivacy: privacy })
+    if (profile.profile) {
+      profile.profile.showcasedRewards.forEach(r => {
+        profile.setRewardPrivacy(r.id, privacy)
+      })
+    }
+  }
 
   if (!connected) {
     return (
@@ -343,77 +412,325 @@ export function Profile() {
     )
   }
 
+  const showEmptyOnboarding = profile.profile && !profile.hasContent && !isEditingProfile
+
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
 
-      {/* Profile header */}
-      <div className="animate-fade-in-up relative mb-8">
-        <div className="bg-accent border-border overflow-hidden border shadow-lg">
-          <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-20" />
-
-          {/* Banner */}
-          <div className="relative h-20 sm:h-28">
-            <div
-              className="bg-foreground/5 border-foreground/10 animate-float absolute top-3 right-6 h-10 w-10 rotate-12 border-2"
-              style={{ animationDuration: "7s" }}
-            />
-            <div
-              className="bg-foreground/5 border-foreground/10 animate-float absolute right-24 bottom-2 h-6 w-6 -rotate-6 border-2"
-              style={{ animationDuration: "5s", animationDelay: "1s" }}
+      {isEditingProfile && profile.profile ? (
+        <div className="mb-8">
+          <ProfileEditor
+            metadata={profile.profile.metadata}
+            fieldPrivacy={profile.profile.fieldPrivacy}
+            onSave={handleSaveProfile}
+            onCancel={() => setIsEditingProfile(false)}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="animate-fade-in-up relative mb-8">
+            <ProfileHeaderDisplay
+              walletAddress={address || ""}
+              metadata={profile.filteredMetadata}
+              fieldPrivacy={profile.profile?.fieldPrivacy}
+              viewerIsOwner={profile.viewerIsOwner}
+              displayName={getRoleLabel()}
+              roleLabel={profile.viewerIsOwner ? getRoleLabel() : "Learner"}
+              roleVariant={getRoleBadgeVariant()}
+              totalEarned={totalEarned}
+              formattedEarnings={profile.viewerIsOwner ? formattedEarned : undefined}
+              earningsLoading={earningsLoading}
+              reputation={reputationSummary || undefined}
+              onEditProfile={profile.viewerIsOwner ? () => setIsEditingProfile(true) : undefined}
             />
           </div>
 
-          {/* Profile info */}
-          <div className="bg-card text-card-foreground border-border relative border-t px-6 py-5">
-            <div className="-mt-14 flex flex-col items-start gap-6 sm:-mt-16 sm:flex-row sm:items-center">
-              <WalletAvatar address={address || ""} />
+          {showEmptyOnboarding ? (
+            <div className="mb-8">
+              <EmptyProfileOnboarding
+                onStartEdit={() => setIsEditingProfile(true)}
+                onBrowseQuests={() => navigateToPath("/")}
+                walletAddress={address || ""}
+                hasEnrolledQuests={(enrolledQuests?.length || 0) > 0}
+                hasCompletedQuests={profile.filteredShowcasedQuests.length > 0}
+                hasRewards={profile.filteredShowcasedRewards.length > 0}
+              />
+            </div>
+          ) : null}
+        </>
+      )}
 
-              <div className="mt-2 min-w-0 flex-1 sm:mt-6">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-semibold">{getRoleLabel()}</h2>
-                  <Badge variant={getRoleBadgeVariant()} className="gap-1">
-                    <Sparkles className="h-3 w-3" />
-                    Active
-                  </Badge>
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <p className="text-muted-foreground max-w-[140px] truncate font-mono text-sm font-bold sm:max-w-xs">
-                    {address}
-                  </p>
-                  <button
-                    onClick={handleCopy}
-                    className="border-border bg-card neo-press hover:bg-secondary flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center border-2 shadow-sm"
-                    aria-label="Copy address"
-                  >
-                    {copied ? (
-                      <Check className="text-success h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-              </div>
+      <div>
+        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">
+              {activeTab === "overview" && "Profile Overview"}
+              {activeTab === "activity" && "Wallet Activity"}
+              {activeTab === "achievements" && "Achievements Showcase"}
+              {activeTab === "settings" && "Profile Settings"}
+            </h1>
+            <p className="text-muted-foreground text-sm font-bold">
+              {activeTab === "overview" && "Track aggregate rewards and recent wallet actions."}
+              {activeTab === "activity" && "Load recent wallet operations from Horizon."}
+              {activeTab === "achievements" && "Showcase your completed quests and rewards."}
+              {activeTab === "settings" && "Manage your profile privacy and preferences."}
+            </p>
+          </div>
+          <div className="border-border flex flex-wrap gap-0 border shadow-md">
+            {(["overview", "achievements", "activity", "settings"] as const).map(tab => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setActiveTab(tab)}
+                className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-colors last:border-r-0 ${
+                  activeTab === tab ? "bg-accent" : "bg-background hover:bg-secondary"
+                }`}
+              >
+                {tab === "overview" && "Overview"}
+                {tab === "achievements" && "Achievements"}
+                {tab === "activity" && "Activity"}
+                {tab === "settings" && (
+                  <span className="inline-flex items-center gap-1">
+                    <Settings className="h-3 w-3" />
+                    Settings
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
-              <div className="sm:mt-6">
-                <div className="bg-accent border-border border-2 px-5 py-3 shadow-md">
-                  <div className="flex items-center gap-2">
-                    {earningsLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <TrendingUp className="h-4 w-4" />
-                    )}
-                    <p className="text-2xl font-semibold tabular-nums">{formattedEarned}</p>
+        {activeTab === "overview" ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <Card className="bg-success/5 border-border border shadow-md">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-success border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Trophy className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
+                        Completed Quests
+                      </p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {profile.filteredShowcasedQuests.length}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs font-bold">
-                    {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}
+                </CardContent>
+              </Card>
+
+              <Card className="bg-accent/5 border-border border shadow-md">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-accent border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Coins className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
+                        Rewards Showcased
+                      </p>
+                      <p className="text-2xl font-semibold tabular-nums">
+                        {profile.filteredShowcasedRewards.length}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-secondary/5 border-border border shadow-md">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-secondary border-border flex h-10 w-10 items-center justify-center border-2">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs font-bold uppercase">
+                        Reputation Tier
+                      </p>
+                      <p className="text-2xl font-semibold">
+                        {reputationSummary?.tier || "Newcomer"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {earningsLoading ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="bg-accent border-border mb-4 flex h-14 w-14 items-center justify-center border shadow-md">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                  </div>
+                  <h3 className="mb-2 font-semibold">Loading on-chain earnings</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Fetching your aggregate rewards from the rewards contract.
                   </p>
+                </CardContent>
+              </Card>
+            ) : earningsError ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border shadow-md">
+                    <AlertCircle className="text-destructive h-6 w-6" />
+                  </div>
+                  <h3 className="mb-2 font-semibold">On-chain earnings unavailable</h3>
+                  <p className="text-muted-foreground max-w-md text-sm">{earningsError}</p>
+                </CardContent>
+              </Card>
+            ) : totalEarned === 0n ? (
+              <Card className="animate-fade-in-up">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <div className="mb-6">
+                    <Trophy className="text-muted-foreground mb-3 h-10 w-10 opacity-50" />
+                  </div>
+                  <h3 className="mb-2 font-semibold">No on-chain earnings yet</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Your wallet has not received rewards from the rewards contract yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="animate-fade-in-up">
+                <CardContent className="py-10">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="bg-success/10 border-border flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-sm">
+                        <Coins className="text-success h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">On-chain earnings total</p>
+                        <p className="text-muted-foreground mt-1 max-w-md text-sm">
+                          Aggregate rewards are read from the rewards contract. Use the Activity tab
+                          to inspect recent enrollments, completions, and payouts sourced from
+                          Horizon.
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant="success" className="self-start tabular-nums">
+                      +{formattedEarned}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {profile.filteredShowcasedQuests.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 font-semibold">
+                    <Trophy className="h-4 w-4" />
+                    Featured Achievements
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setActiveTab("achievements")}
+                    className="text-xs font-bold"
+                  >
+                    View All
+                  </Button>
+                </div>
+                {profile.filteredShowcasedQuests
+                  .filter(q => q.highlighted)
+                  .slice(0, 2)
+                  .map(quest => (
+                    <Card key={quest.questId} className="border-accent/30 bg-accent/5 shadow-md">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Badge variant="default" className="mb-2 gap-1 text-[10px]">
+                              <Sparkles className="h-3 w-3" />
+                              Featured
+                            </Badge>
+                            <h4 className="font-semibold">{quest.questName}</h4>
+                            <p className="text-muted-foreground text-xs">
+                              {quest.completedMilestones}/{quest.milestoneCount} milestones ·{" "}
+                              {new Date(quest.completionDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          {quest.totalRewardsEarned > 0n && (
+                            <Badge variant="success" className="font-bold tabular-nums">
+                              +{formatTokens(Number(quest.totalRewardsEarned), 7, "USDC")}
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "achievements" ? (
+          <div className="space-y-6">
+            <CompletedQuestsShowcase
+              quests={profile.filteredShowcasedQuests}
+              showcaseSettings={
+                profile.profile?.showcaseSettings || {
+                  showCompletedQuests: true,
+                  showRewards: true,
+                  questsPrivacy: PL.Public,
+                  rewardsPrivacy: PL.Public,
+                  featuredQuestIds: [],
+                }
+              }
+              viewerIsOwner={profile.viewerIsOwner}
+              onToggleShow={profile.viewerIsOwner ? handleShowcaseToggleShowQuests : undefined}
+              onChangeGlobalPrivacy={
+                profile.viewerIsOwner ? handleGlobalQuestPrivacyChange : undefined
+              }
+              onToggleQuestHighlighted={
+                profile.viewerIsOwner ? profile.toggleQuestHighlighted : undefined
+              }
+              onDeleteQuest={profile.viewerIsOwner ? profile.deleteShowcasedQuest : undefined}
+              onChangeQuestPrivacy={profile.viewerIsOwner ? profile.setQuestPrivacy : undefined}
+              onAddQuest={profile.viewerIsOwner ? handleSyncCompletedQuests : undefined}
+              onViewQuest={questId => navigateToPath(`/quest/${questId}`)}
+            />
+
+            <RewardsShowcase
+              rewards={profile.filteredShowcasedRewards}
+              showcaseSettings={
+                profile.profile?.showcaseSettings || {
+                  showCompletedQuests: true,
+                  showRewards: true,
+                  questsPrivacy: PL.Public,
+                  rewardsPrivacy: PL.Public,
+                  featuredQuestIds: [],
+                }
+              }
+              viewerIsOwner={profile.viewerIsOwner}
+              onToggleShow={profile.viewerIsOwner ? handleShowcaseToggleShowRewards : undefined}
+              onChangeGlobalPrivacy={
+                profile.viewerIsOwner ? handleGlobalRewardPrivacyChange : undefined
+              }
+              onDeleteReward={profile.viewerIsOwner ? profile.deleteShowcasedReward : undefined}
+              onChangeRewardPrivacy={profile.viewerIsOwner ? profile.setRewardPrivacy : undefined}
+            />
+          </div>
+        ) : activeTab === "activity" ? (
+          <div className="space-y-4">
+            <Card className="animate-fade-in-up">
+              <CardContent className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-accent border-border flex h-12 w-12 items-center justify-center border shadow-md">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">Wallet timeline</h3>
+                    <p className="text-muted-foreground text-sm">
+                      Loaded from `VITE_HORIZON_URL` with direct transaction links.
+                    </p>
+                  </div>
                 </div>
                 <Badge variant="outline" className="border font-bold">
                   {activityItems.length} loaded
                 </Badge>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
 
             {activityLoading && activityItems.length === 0 ? (
               <Card className="animate-fade-in-up">
@@ -521,224 +838,109 @@ export function Profile() {
               </>
             )}
           </div>
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">Profile Activity</h1>
-            <p className="text-muted-foreground text-sm font-bold">
-              Track aggregate rewards and recent wallet actions.
-            </p>
-          </div>
-          <div className="border-border flex gap-0 border shadow-md">
-            {(["overview", "activity"] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider uppercase transition-colors last:border-r-0 ${
-                  activeTab === tab ? "bg-accent" : "bg-background hover:bg-secondary"
-                }`}
-              >
-                {tab === "overview" ? "View overview" : "View activity"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {activeTab === "overview" ? (
-          <div className="space-y-4">
-            {earningsLoading ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <div className="bg-accent border-border mb-4 flex h-14 w-14 items-center justify-center border shadow-md">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                  <h3 className="mb-2 font-semibold">Loading on-chain earnings</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Fetching your aggregate rewards from the rewards contract.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : earningsError ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <div className="bg-destructive/10 border-destructive mb-4 flex h-14 w-14 items-center justify-center border shadow-md">
-                    <AlertCircle className="text-destructive h-6 w-6" />
-                  </div>
-                  <h3 className="mb-2 font-semibold">On-chain earnings unavailable</h3>
-                  <p className="text-muted-foreground max-w-md text-sm">{earningsError}</p>
-                </CardContent>
-              </Card>
-            ) : totalEarned === 0n ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <div className="mb-6">
-                    <img
-                      src="/illustrations/empty-profile.svg"
-                      alt=""
-                      className="h-32 w-32 sm:h-40 sm:w-40"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <h3 className="mb-2 font-semibold">No on-chain earnings yet</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Your wallet has not received rewards from the rewards contract yet.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="animate-fade-in-up">
-                <CardContent className="py-10">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="bg-success/10 border-border flex h-12 w-12 shrink-0 items-center justify-center border-2 shadow-sm">
-                        <Coins className="text-success h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">On-chain earnings total</p>
-                        <p className="text-muted-foreground mt-1 max-w-md text-sm">
-                          Aggregate rewards are read from the rewards contract. Use the Activity tab
-                          to inspect recent enrollments, completions, and payouts sourced from
-                          Horizon.
-                        </p>
-                      </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {!isEditingProfile && (
+              <Card className="animate-fade-in-up border-border shadow-md">
+                <CardContent className="p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="bg-accent border-border flex h-10 w-10 items-center justify-center border shadow-sm">
+                      <Edit3 className="h-4 w-4" />
                     </div>
-                    <Badge variant="success" className="self-start tabular-nums">
-                      +{formattedEarned}
-                    </Badge>
+                    <div>
+                      <h3 className="text-lg font-semibold">Profile Information</h3>
+                      <p className="text-muted-foreground text-xs font-bold">
+                        Customize how your profile appears to others
+                      </p>
+                    </div>
                   </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-bold">Display Name</span>
+                      <span className="font-semibold">
+                        {profile.profile?.metadata.displayName || (
+                          <span className="text-muted-foreground italic">Not set</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-bold">Bio</span>
+                      <span className="max-w-[200px] truncate text-right font-semibold">
+                        {profile.profile?.metadata.bio || (
+                          <span className="text-muted-foreground italic">Not set</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-bold">Location</span>
+                      <span className="font-semibold">
+                        {profile.profile?.metadata.location || (
+                          <span className="text-muted-foreground italic">Not set</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-bold">Tags</span>
+                      <span className="font-semibold">
+                        {profile.profile?.metadata.tags.length || 0} tags
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground font-bold">Links</span>
+                      <span className="font-semibold">
+                        {profile.profile?.metadata.links.length || 0} links
+                      </span>
+                    </div>
+                  </div>
+                  <Button className="mt-5 w-full" onClick={() => setIsEditingProfile(true)}>
+                    <Edit3 className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
                 </CardContent>
               </Card>
             )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <Card className="animate-fade-in-up">
-              <CardContent className="flex flex-col gap-3 py-6 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-accent border-border flex h-12 w-12 items-center justify-center border shadow-md">
-                    <History className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Wallet timeline</h3>
-                    <p className="text-muted-foreground text-sm">
-                      Loaded from `VITE_HORIZON_URL` with direct transaction links.
-                    </p>
+
+            <div className="animate-fade-in-up">
+              <NotificationPreferencesCard />
+            </div>
+
+            <Card className="animate-fade-in-up stagger-1 border-border shadow-md">
+              <CardContent className="p-6">
+                <h3 className="mb-4 text-lg font-semibold">Application Experience</h3>
+                <div className="space-y-6">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h4 className="text-sm font-semibold">Interactive Tutorials</h4>
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        Need a refresher? You can replay the introductory tours at any time.
+                      </p>
+                    </div>
+                    <div className="mt-2 flex shrink-0 gap-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label="Replay learner tour"
+                        onClick={() => onboarding.open(0)}
+                      >
+                        Replay Learner Tour
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label="Replay creator tour"
+                        onClick={() => onboarding.open(5)}
+                      >
+                        Replay Creator Tour
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                <Badge variant="outline" className="border font-bold">
-                  {activityItems.length} loaded
-                </Badge>
               </CardContent>
             </Card>
-
-            {activityLoading && activityItems.length === 0 ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <Loader2 className="text-accent mb-4 h-8 w-8 animate-spin" />
-                  <h3 className="mb-2 font-semibold">Loading activity</h3>
-                  <p className="text-muted-foreground text-sm">
-                    Fetching recent wallet operations from Horizon.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : activityError ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <AlertCircle className="text-destructive mb-4 h-8 w-8" />
-                  <h3 className="mb-2 font-semibold">Could not load activity</h3>
-                  <p className="text-muted-foreground max-w-md text-sm">{activityError}</p>
-                </CardContent>
-              </Card>
-            ) : activityItems.length === 0 ? (
-              <Card className="animate-fade-in-up">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <History className="text-muted-foreground mb-4 h-8 w-8" />
-                  <h3 className="mb-2 font-semibold">No wallet activity yet</h3>
-                  <p className="text-muted-foreground max-w-md text-sm">
-                    Enroll in a quest or complete a milestone to start building your on-chain
-                    timeline.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <>
-                {activityItems.map(item => (
-                  <Card key={item.id} className="animate-fade-in-up">
-                    <CardContent className="py-5">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex items-start gap-4">
-                          <div className="bg-accent/10 border-border flex h-11 w-11 items-center justify-center border shadow-sm">
-                            {item.type === "rewarded" ? (
-                              <Coins className="h-5 w-5" />
-                            ) : item.type === "completed" ? (
-                              <Trophy className="h-5 w-5" />
-                            ) : (
-                              <History className="h-5 w-5" />
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="font-semibold">{getActivityLabel(item.type)}</p>
-                              <Badge variant="secondary">{item.questName}</Badge>
-                            </div>
-                            <p className="text-muted-foreground mt-1 text-sm">
-                              {getActivityDescription(item)}
-                            </p>
-                            <p className="text-muted-foreground mt-2 text-xs font-bold">
-                              {formatActivityDate(item.timestamp)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 sm:flex-col sm:items-end">
-                          {item.amount !== undefined && (
-                            <Badge variant="success" className="tabular-nums">
-                              +{formatTokens(item.amount, 7, "USDC")}
-                            </Badge>
-                          )}
-                          <a
-                            href={item.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-accent inline-flex items-center gap-1 text-sm font-bold underline underline-offset-2"
-                          >
-                            View transaction
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {nextActivityCursor && (
-                  <div className="flex justify-center">
-                    <Button
-                      onClick={() => void handleLoadMoreActivity()}
-                      disabled={activityLoading}
-                    >
-                      {activityLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        "Load more"
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
           </div>
         )}
       </div>
 
-      {/* Creator Dashboard (Issue #354) */}
       <div className="mt-12">
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -786,7 +988,6 @@ export function Profile() {
           </Card>
         ) : (
           <div className="animate-fade-in-up stagger-1 space-y-6">
-            {/* Creator Overview Stats */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Card className="bg-accent/5 border-border border shadow-md">
                 <CardContent className="p-5">
@@ -839,7 +1040,6 @@ export function Profile() {
               </Card>
             </div>
 
-            {/* Individual Quests List */}
             <div className="space-y-4">
               <h3 className="text-muted-foreground text-sm font-semibold tracking-wider uppercase">
                 Your Quests

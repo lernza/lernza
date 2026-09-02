@@ -19,6 +19,7 @@ import {
   Keypair,
   nativeToScVal,
   scValToNative,
+  TransactionBuilder,
   xdr,
 } from "@stellar/stellar-sdk"
 
@@ -50,6 +51,38 @@ vi.mock("./client", () => ({
     simulateTransaction: (...args: unknown[]) => mocks.simulateTransaction(...args),
   },
   signAndSubmit: (...args: unknown[]) => mocks.signAndSubmit(...args),
+  signAndSubmitTracked: (tx: unknown, _label: string, handlers?: unknown) =>
+    mocks.signAndSubmit(tx, handlers),
+  simulateContractRead: async (contract: Contract, call: { method: string; args: xdr.ScVal[] }) => {
+    const account = new Account(OWNER, "0")
+    const tx = new TransactionBuilder(account, {
+      fee: "10000",
+      networkPassphrase: "Standalone Network ; February 2017",
+    })
+      .addOperation(contract.call(call.method, ...call.args))
+      .setTimeout(30)
+      .build()
+    const response = await mocks.simulateTransaction(tx)
+    return response && "result" in response && response.result
+      ? scValToNative(response.result.retval)
+      : null
+  },
+  prepareContractTransaction: async (
+    contract: Contract,
+    source: string,
+    call: { method: string; args: xdr.ScVal[] }
+  ) => {
+    const account = await mocks.getAccount(source)
+    return mocks.prepareTransaction(
+      new TransactionBuilder(account, {
+        fee: "10000",
+        networkPassphrase: "Standalone Network ; February 2017",
+      })
+        .addOperation(contract.call(call.method, ...call.args))
+        .setTimeout(30)
+        .build()
+    )
+  },
   NETWORK_PASSPHRASE: "Standalone Network ; February 2017",
   RPC_TIMEOUT_MS: 15000,
   withTimeout: <T>(promise: Promise<T>) => promise,
@@ -158,6 +191,7 @@ describe("QuestClient contract interactions (#1216)", () => {
           TOKEN,
           0,
           25,
+          null,
         ],
       })
       expect(mocks.prepareTransaction).toHaveBeenCalledTimes(1)
@@ -172,6 +206,7 @@ describe("QuestClient contract interactions (#1216)", () => {
       expect(method).toBe("create_quest")
       expect(args[6]).toBe(1) // Visibility.Private
       expect(args[7]).toBeNull()
+      expect(args[8]).toBeNull()
     })
 
     it("updateQuest sends null for every omitted optional field", async () => {
@@ -406,7 +441,7 @@ describe("QuestClient contract interactions (#1216)", () => {
     it("surfaces a decoded on-chain contract error code", async () => {
       mocks.signAndSubmit.mockRejectedValue(new Error("HostError: Error(Contract, #7)"))
 
-      await expect(client.archiveQuest(OWNER, 4)).rejects.toThrow(/Contract error #7/)
+      await expect(client.archiveQuest(OWNER, 4)).rejects.toThrow(/already full/i)
     })
 
     it("swallows read errors and resolves to null", async () => {

@@ -15,6 +15,16 @@ vi.mock("@/hooks/use-async-data", () => ({
   useContractData: vi.fn(),
 }))
 
+vi.mock("@/hooks/use-profile", () => ({
+  useProfile: vi.fn(),
+}))
+
+vi.mock("@/hooks/use-onboarding", () => ({
+  useOnboarding: vi.fn(() => ({
+    open: vi.fn(),
+  })),
+}))
+
 vi.mock("@/lib/horizon-activity", () => ({
   fetchWalletActivity: vi.fn(),
 }))
@@ -32,28 +42,48 @@ vi.mock("@/lib/contracts/client", () => ({
   withTimeout: <T,>(promise: Promise<T>) => promise,
 }))
 
+vi.mock("@/lib/reputation", () => ({
+  calculateReputation: vi.fn(() => ({
+    tier: "Bronze",
+    score: 250,
+    confidence: 0.8,
+  })),
+}))
+
 import { useWallet } from "@/hooks/use-wallet"
 import { useUserRole } from "@/hooks/use-user-role"
 import { useContractData } from "@/hooks/use-async-data"
+import { useProfile } from "@/hooks/use-profile"
 import { fetchWalletActivity } from "@/lib/horizon-activity"
+import { PrivacyLevel as PL, createEmptyProfile } from "@/lib/profile-types"
 
 const mockUseWallet = vi.mocked(useWallet)
 const mockUseUserRole = vi.mocked(useUserRole)
 const mockUseContractData = vi.mocked(useContractData)
+const mockUseProfile = vi.mocked(useProfile)
 const mockFetchWalletActivity = vi.mocked(fetchWalletActivity)
+
+function createMockProfileData(address: string) {
+  const profile = createEmptyProfile(address)
+  profile.metadata.displayName = "Test Learner"
+  profile.metadata.bio = "Learning Rust and DeFi"
+  return profile
+}
 
 function renderProfile() {
   return render(<Profile />)
 }
 
 describe("Profile", () => {
+  const testAddress = "GABC1234567890XYZ"
+
   beforeEach(() => {
     vi.clearAllMocks()
 
     mockUseWallet.mockReturnValue({
       connected: true,
       connect: vi.fn(),
-      address: "GABC1234567890XYZ",
+      address: testAddress,
     } as ReturnType<typeof useWallet>)
 
     mockUseUserRole.mockReturnValue({
@@ -65,6 +95,35 @@ describe("Profile", () => {
       isLoading: false,
       error: null,
     } as ReturnType<typeof useUserRole>)
+
+    const mockProfile = createMockProfileData(testAddress)
+    mockUseProfile.mockReturnValue({
+      profile: mockProfile,
+      isLoading: false,
+      error: null,
+      viewerIsOwner: true,
+      hasContent: true,
+      filteredMetadata: {
+        displayName: mockProfile.metadata.displayName,
+        bio: mockProfile.metadata.bio,
+        tags: mockProfile.metadata.tags,
+        links: mockProfile.metadata.links,
+      },
+      filteredShowcasedQuests: [],
+      filteredShowcasedRewards: [],
+      setMetadata: vi.fn(),
+      setFieldPrivacy: vi.fn(),
+      setShowcaseSettings: vi.fn(),
+      addOrUpdateShowcasedQuest: vi.fn(),
+      deleteShowcasedQuest: vi.fn(),
+      setQuestPrivacy: vi.fn(),
+      toggleQuestHighlighted: vi.fn(),
+      addOrUpdateShowcasedReward: vi.fn(),
+      deleteShowcasedReward: vi.fn(),
+      setRewardPrivacy: vi.fn(),
+      refreshProfile: vi.fn(),
+      validateCurrent: vi.fn(() => ({ valid: true, errors: [], warnings: [] })),
+    })
 
     mockUseContractData.mockImplementation(key => {
       if (key === "rewards") {
@@ -88,16 +147,32 @@ describe("Profile", () => {
     })
   })
 
-  it("shows the aggregate on-chain earnings in the overview tab", () => {
+  it("shows overview stats including completed quests count and reputation tier", () => {
     renderProfile()
 
-    expect(screen.getByText("Profile Activity")).toBeTruthy()
-    expect(screen.getByText("750 USDC")).toBeTruthy()
-    expect(screen.getByText("USDC earned on-chain")).toBeTruthy()
-    expect(screen.getByText(/use the activity tab to inspect recent enrollments/i)).toBeTruthy()
+    expect(screen.getByText("Profile Overview")).toBeTruthy()
+    expect(screen.getByText("Completed Quests")).toBeTruthy()
+    expect(screen.getByText("Rewards Showcased")).toBeTruthy()
+    expect(screen.getByText("Reputation Tier")).toBeTruthy()
   })
 
-  it("loads and renders wallet activity from Horizon", async () => {
+  it("shows the aggregate on-chain earnings card", () => {
+    renderProfile()
+
+    expect(screen.getByText("On-chain earnings total")).toBeTruthy()
+    expect(screen.getByText("+750 USDC")).toBeTruthy()
+  })
+
+  it("renders profile tab navigation", () => {
+    renderProfile()
+
+    expect(screen.getByRole("button", { name: "Overview" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Achievements" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Activity" })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /settings/i })).toBeTruthy()
+  })
+
+  it("loads and renders wallet activity from Horizon when Activity tab is clicked", async () => {
     mockFetchWalletActivity.mockResolvedValue({
       items: [
         {
@@ -116,11 +191,11 @@ describe("Profile", () => {
     })
 
     renderProfile()
-    fireEvent.click(screen.getByRole("button", { name: "View activity" }))
+    fireEvent.click(screen.getByRole("button", { name: "Activity" }))
 
     await waitFor(() => {
       expect(mockFetchWalletActivity).toHaveBeenCalledWith(
-        "GABC1234567890XYZ",
+        testAddress,
         null,
         0,
         expect.any(AbortSignal)
@@ -135,5 +210,80 @@ describe("Profile", () => {
     expect(allLinks[0].getAttribute("href")).toBe(
       "https://stellar.expert/explorer/testnet/tx/abc123"
     )
+  })
+
+  it("shows empty onboarding state when profile has no content", () => {
+    mockUseProfile.mockReturnValue({
+      profile: createEmptyProfile(testAddress),
+      isLoading: false,
+      error: null,
+      viewerIsOwner: true,
+      hasContent: false,
+      filteredMetadata: {},
+      filteredShowcasedQuests: [],
+      filteredShowcasedRewards: [],
+      setMetadata: vi.fn(),
+      setFieldPrivacy: vi.fn(),
+      setShowcaseSettings: vi.fn(),
+      addOrUpdateShowcasedQuest: vi.fn(),
+      deleteShowcasedQuest: vi.fn(),
+      setQuestPrivacy: vi.fn(),
+      toggleQuestHighlighted: vi.fn(),
+      addOrUpdateShowcasedReward: vi.fn(),
+      deleteShowcasedReward: vi.fn(),
+      setRewardPrivacy: vi.fn(),
+      refreshProfile: vi.fn(),
+      validateCurrent: vi.fn(() => ({ valid: true, errors: [], warnings: [] })),
+    })
+
+    renderProfile()
+
+    expect(screen.getByText(/Welcome to Lernza/i)).toBeTruthy()
+    expect(screen.getByText("Customize Your Profile")).toBeTruthy()
+    expect(screen.getByText("Complete your profile setup")).toBeTruthy()
+  })
+
+  it("displays user's display name in profile header when set", () => {
+    renderProfile()
+    expect(screen.getByText("Test Learner")).toBeTruthy()
+  })
+
+  it("shows Achievements tab with quests and rewards showcase", () => {
+    mockUseProfile.mockReturnValue({
+      ...mockUseProfile(),
+      filteredShowcasedQuests: [
+        {
+          questId: 1,
+          questName: "DeFi Fundamentals",
+          description: "Learn about AMMs and liquidity pools",
+          completionDate: Date.now(),
+          milestoneCount: 5,
+          completedMilestones: 5,
+          totalRewardsEarned: 100_000_000n,
+          highlighted: true,
+          privacy: PL.Public,
+        },
+      ],
+      filteredShowcasedRewards: [
+        {
+          id: "r1",
+          questId: 1,
+          questName: "DeFi Fundamentals",
+          milestoneId: 3,
+          milestoneTitle: "Liquidity Pools",
+          amount: 50_000_000n,
+          earnedAt: Date.now(),
+          privacy: PL.Public,
+        },
+      ],
+    } as ReturnType<typeof useProfile>)
+
+    renderProfile()
+    fireEvent.click(screen.getByRole("button", { name: "Achievements" }))
+
+    expect(screen.getByText("Completed Quests")).toBeTruthy()
+    expect(screen.getByText("Rewards Earned")).toBeTruthy()
+    expect(screen.getAllByText("DeFi Fundamentals").length).toBeGreaterThan(0)
+    expect(screen.getByText("Liquidity Pools")).toBeTruthy()
   })
 })

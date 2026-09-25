@@ -250,7 +250,7 @@ export function Leaderboard() {
           onClick={() => setActiveTab("earners")}
           className={cn(
             "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "earners" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+            activeTab === "earners" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-secondary"
           )}
         >
           <Coins className="h-4 w-4" />
@@ -262,7 +262,7 @@ export function Leaderboard() {
           onClick={() => setActiveTab("quests")}
           className={cn(
             "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "quests" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+            activeTab === "quests" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-secondary"
           )}
         >
           <Users className="h-4 w-4" />

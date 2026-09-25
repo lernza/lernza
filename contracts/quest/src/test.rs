@@ -2775,3 +2775,125 @@ fn test_suspended_quest_rejects_enrollment_and_unauthorized_operator() {
         Err(Ok(Error::QuestSuspended))
     );
 }
+
+#[test]
+fn test_create_quest_default_metadata_uri_is_none() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.metadata_uri, None);
+}
+
+#[test]
+fn test_create_quest_with_valid_metadata_uri() {
+    let (env, client, owner, token) = setup();
+    let uri = String::from_str(&env, "ipfs://bafybeic52i.../metadata.json");
+    let quest_id = client.create_quest_with_metadata(
+        &owner,
+        &String::from_str(&env, "IPFS Quest"),
+        &String::from_str(&env, "Short on-chain summary"),
+        &String::from_str(&env, "Web3"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+        &Some(uri.clone()),
+    );
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.metadata_uri, Some(uri));
+}
+
+#[test]
+fn test_create_quest_with_invalid_metadata_uri_rejected() {
+    let (env, client, owner, token) = setup();
+    // Invalid scheme
+    let invalid_scheme = String::from_str(&env, "ftp://example.com/meta.json");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Invalid Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(invalid_scheme),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Too short (< 7 bytes)
+    let too_short = String::from_str(&env, "http:/");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Short URI Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(too_short),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Contains whitespace
+    let with_space = String::from_str(&env, "https://example.com/path with space.json");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Space URI Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(with_space),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+}
+
+#[test]
+fn test_set_metadata_uri_updates_version_and_history() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let initial_quest = client.get_quest(&quest_id);
+    assert_eq!(initial_quest.version, 1);
+    assert_eq!(initial_quest.metadata_uri, None);
+
+    let stranger = Address::generate(&env);
+    let new_uri = String::from_str(&env, "https://arweave.net/tx-id-12345");
+
+    // Stranger cannot update metadata URI
+    assert_eq!(
+        client.try_set_metadata_uri(&quest_id, &stranger, &Some(new_uri.clone())),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // Owner sets metadata URI
+    client.set_metadata_uri(&quest_id, &owner, &Some(new_uri.clone()));
+    let updated = client.get_quest(&quest_id);
+    assert_eq!(updated.version, 2);
+    assert_eq!(updated.metadata_uri, Some(new_uri));
+
+    // History contains version 1 with None metadata_uri
+    let history = client.get_quest_version_history(&quest_id);
+    assert_eq!(history.len(), 1);
+    assert_eq!(history.get(0).unwrap().version, 1);
+    assert_eq!(history.get(0).unwrap().metadata_uri, None);
+
+    // Clear metadata URI
+    client.set_metadata_uri(&quest_id, &owner, &None);
+    let cleared = client.get_quest(&quest_id);
+    assert_eq!(cleared.version, 3);
+    assert_eq!(cleared.metadata_uri, None);
+}

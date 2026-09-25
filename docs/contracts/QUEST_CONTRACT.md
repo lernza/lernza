@@ -55,6 +55,8 @@ pub struct QuestInfo {
     pub max_enrollees: Option<u32>,
     pub verified: bool,           // snapshotted from is_creator_verified() at creation
     pub version: u32,             // starts at 1, incremented by update_quest()
+    pub prerequisite_quest_ids: Vec<u32>,
+    pub metadata_uri: Option<String>, // optional off-chain JSON URI (IPFS/Arweave/HTTP) for extended metadata
 }
 ```
 

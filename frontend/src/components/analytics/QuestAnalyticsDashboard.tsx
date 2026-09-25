@@ -257,7 +257,7 @@ export function QuestAnalyticsDashboard({
             <Share2 className="h-4 w-4 text-purple-500" />
           </div>
           <div className="text-2xl font-bold">{referralOverview.totalReferrals}</div>
-          <div className="text-muted-foreground mt-1 text-xs font-medium text-purple-600 dark:text-purple-400">
+          <div className="text-muted-foreground mt-1 text-xs font-medium text-purple-700 dark:text-purple-400">
             {referralOverview.completedReferrals} qualified conversions
           </div>
         </Card>
@@ -347,15 +347,15 @@ export function QuestAnalyticsDashboard({
             <div className="border-border grid w-full grid-cols-3 gap-2 border-t pt-2 text-center">
               <div>
                 <div className="text-muted-foreground text-xs">Done</div>
-                <div className="text-sm font-semibold text-green-500">{completedLearners}</div>
+                <div className="text-sm font-semibold text-green-700 dark:text-green-400">{completedLearners}</div>
               </div>
               <div>
                 <div className="text-muted-foreground text-xs">Active</div>
-                <div className="text-sm font-semibold text-blue-500">{inProgressLearners}</div>
+                <div className="text-sm font-semibold text-blue-700 dark:text-blue-400">{inProgressLearners}</div>
               </div>
               <div>
                 <div className="text-muted-foreground text-xs">Stalled</div>
-                <div className="text-sm font-semibold text-amber-500">{stalledLearners}</div>
+                <div className="text-sm font-semibold text-amber-700 dark:text-amber-400">{stalledLearners}</div>
               </div>
             </div>
           </CardContent>
@@ -399,10 +399,10 @@ export function QuestAnalyticsDashboard({
                     <td className="px-3 py-3 text-right font-mono font-medium">
                       {m.rewardAmount} Tokens
                     </td>
-                    <td className="px-3 py-3 text-right font-medium text-green-600 dark:text-green-400">
+                    <td className="px-3 py-3 text-right font-medium text-green-700 dark:text-green-400">
                       {m.completedCount}
                     </td>
-                    <td className="px-3 py-3 text-right font-medium text-blue-600 dark:text-blue-400">
+                    <td className="px-3 py-3 text-right font-medium text-blue-700 dark:text-blue-400">
                       {m.inProgressCount}
                     </td>
                     <td className="px-3 py-3 text-right">
@@ -410,10 +410,10 @@ export function QuestAnalyticsDashboard({
                         variant="outline"
                         className={`font-mono text-[11px] ${
                           m.dropoffRate > 40
-                            ? "border-red-500/30 bg-red-500/5 text-red-500"
+                            ? "border-red-500/30 bg-red-500/5 text-red-700 dark:text-red-400"
                             : m.dropoffRate > 20
-                              ? "border-amber-500/30 bg-amber-500/5 text-amber-500"
-                              : "border-green-500/30 bg-green-500/5 text-green-500"
+                              ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                              : "border-green-500/30 bg-green-500/5 text-green-700 dark:text-green-400"
                         }`}
                       >
                         {m.dropoffRate}%

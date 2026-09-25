@@ -117,6 +117,7 @@ function questStruct(o: {
   deadline?: number
   maxEnrollees?: number | null
   verified?: boolean
+  metadataUri?: string | null
 }): xdr.ScVal {
   return nativeToScVal({
     id: nativeToScVal(o.id, { type: "u32" }),
@@ -133,6 +134,8 @@ function questStruct(o: {
     max_enrollees:
       o.maxEnrollees == null ? nativeToScVal(null) : nativeToScVal(o.maxEnrollees, { type: "u32" }),
     verified: nativeToScVal(o.verified ?? false),
+    metadata_uri:
+      o.metadataUri == null ? nativeToScVal(null) : nativeToScVal(o.metadataUri, { type: "string" }),
   })
 }
 
@@ -345,6 +348,20 @@ describe("QuestClient contract interactions (#1216)", () => {
         verified: true,
         maxEnrollees: 100,
       })
+    })
+
+    it("getQuest decodes metadataUri when present", async () => {
+      readReturns(
+        questStruct({
+          id: 2,
+          owner: OWNER,
+          name: "Quest with IPFS metadata",
+          metadataUri: "ipfs://bafybeic52i.../metadata.json",
+        })
+      )
+
+      const quest = await client.getQuest(2)
+      expect(quest?.metadataUri).toBe("ipfs://bafybeic52i.../metadata.json")
     })
 
     it("getQuest returns null when the simulation has no result", async () => {

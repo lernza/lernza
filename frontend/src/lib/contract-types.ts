@@ -59,6 +59,7 @@ export interface QuestInfo {
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
+  metadataUri?: string // Option<String> (metadata_uri in Rust)
 }
 
 /**

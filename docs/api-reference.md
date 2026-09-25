@@ -43,6 +43,7 @@ Returned by `get_quest`, `list_public_quests`, `list_quests_by_owner`, `list_que
 | `archived_at` | `u64` | Timestamp when archived; `0` if not archived. |
 | `max_enrollees` | `Option<u32>` | Enrollment cap; `None` means unlimited. |
 | `verified` | `bool` | Whether the creator was verified at creation time. |
+| `metadata_uri` | `Option<String>` | Optional off-chain URI (IPFS/Arweave/HTTP, 7-2048 bytes) for extended metadata. |
 
 ### `MilestoneInfo`
 

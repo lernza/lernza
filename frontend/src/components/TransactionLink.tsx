@@ -19,7 +19,7 @@ function getExplorerBase(): string {
 export function TransactionLink({ txHash, status, label }: TransactionLinkProps) {
   if (status !== "confirmed" || !txHash) {
     return (
-      <span className="font-mono text-xs text-zinc-400" aria-label={`${status} transaction`}>
+      <span className="text-muted-foreground font-mono text-xs" aria-label={`${status} transaction`}>
         {label ?? txHash ?? "pending"}
       </span>
     )
@@ -31,7 +31,7 @@ export function TransactionLink({ txHash, status, label }: TransactionLinkProps)
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`View confirmed transaction ${txHash} on Stellar Explorer`}
-      className="rounded px-1 font-mono text-xs text-blue-600 hover:underline focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none dark:text-blue-400"
+      className="rounded px-1 font-mono text-xs text-blue-700 hover:underline focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none dark:text-blue-400"
     >
       {label ?? `${txHash.slice(0, 8)}…${txHash.slice(-6)}`} ↗
     </a>

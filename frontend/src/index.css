@@ -24,9 +24,9 @@
   --color-accent-foreground: #ffffff;
   --color-destructive: #b91c1c;
   --color-destructive-foreground: #ffffff;
-  --color-success: #15803d;
+  --color-success: #166534; /* green-800 for >=4.5:1 WCAG AA compliance */
   --color-success-foreground: #ffffff;
-  --color-warning: #b45309;
+  --color-warning: #92400e; /* amber-800 for >=4.5:1 WCAG AA compliance */
   --color-warning-foreground: #ffffff;
 
   /* ── Typography — editorial serif display + clean sans body ── */

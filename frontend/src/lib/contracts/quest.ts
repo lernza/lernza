@@ -427,7 +427,19 @@ export class QuestClient {
       deadline: Number(r.deadline),
       maxEnrollees: r.max_enrollees ? Number(r.max_enrollees) : undefined,
       verified: !!r.verified,
+      metadataUri: r.metadata_uri ? String(r.metadata_uri) : undefined,
     }
+  }
+
+  async setMetadataUri(owner: string, questId: number, metadataUri?: string) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "set_metadata_uri", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(owner).toScVal(),
+        metadataUri ? nativeToScVal(metadataUri, { type: "string" }) : nativeToScVal(null),
+      ])
+      return signAndSubmitTracked(tx, "Set Quest Metadata URI")
+    })
   }
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {

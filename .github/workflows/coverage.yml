@@ -58,7 +58,7 @@ jobs:
           ./scripts/coverage.sh
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: lcov.info,coverage/quest.lcov,coverage/milestone.lcov,coverage/rewards.lcov
           token: $++ secrets.CODECOV_TOKEN || '{{ secrets.CODECOV_TOKEN }}'

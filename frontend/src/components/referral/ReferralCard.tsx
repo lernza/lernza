@@ -158,7 +158,7 @@ export function ReferralCard({
                   <Sparkles className="h-3.5 w-3.5 text-green-500" />
                   <span className="text-xs">Completed</span>
                 </div>
-                <div className="text-base font-bold text-green-600 dark:text-green-400">
+                <div className="text-base font-bold text-green-700 dark:text-green-400">
                   {stats.completedReferrals}
                 </div>
               </div>
@@ -186,7 +186,7 @@ export function ReferralCard({
             )}
 
             {claimedNotice && (
-              <div className="rounded-md border border-green-500/20 bg-green-500/10 p-2.5 text-center text-xs font-medium text-green-600 dark:text-green-400">
+              <div className="rounded-md border border-green-500/20 bg-green-500/10 p-2.5 text-center text-xs font-medium text-green-700 dark:text-green-400">
                 {claimedNotice}
               </div>
             )}

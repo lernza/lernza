@@ -418,6 +418,36 @@ impl QuestContract {
         max_enrollees: Option<u32>,
         deadline: Option<u64>,
     ) -> Result<u32, Error> {
+        Self::create_quest_with_metadata(
+            env,
+            owner,
+            name,
+            description,
+            category,
+            tags,
+            token_addr,
+            visibility,
+            max_enrollees,
+            deadline,
+            None,
+        )
+    }
+
+    /// Create a new quest with an optional off-chain metadata URI (IPFS/Arweave/HTTP).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_quest_with_metadata(
+        env: Env,
+        owner: Address,
+        name: String,
+        description: String,
+        category: String,
+        tags: Vec<String>,
+        token_addr: Address,
+        visibility: Visibility,
+        max_enrollees: Option<u32>,
+        deadline: Option<u64>,
+        metadata_uri: Option<String>,
+    ) -> Result<u32, Error> {
         owner.require_auth();
         Self::require_not_paused(&env)?;
 
@@ -429,6 +459,12 @@ impl QuestContract {
             return Err(Error::InvalidInput);
         }
         Self::validate_tags(&tags)?;
+
+        if let Some(ref uri) = metadata_uri {
+            if !common::is_valid_url(uri) {
+                return Err(Error::InvalidInput);
+            }
+        }
 
         let deadline = deadline.unwrap_or(0);
         if deadline != 0 && deadline <= env.ledger().timestamp() {
@@ -455,6 +491,7 @@ impl QuestContract {
             verified,
             version: 1,
             prerequisite_quest_ids: Vec::new(&env),
+            metadata_uri,
         };
 
         env.storage().persistent().set(&DataKey::Quest(id), &quest);
@@ -588,6 +625,7 @@ impl QuestContract {
             visibility: quest.visibility,
             max_enrollees: quest.max_enrollees,
             updated_at: env.ledger().timestamp(),
+            metadata_uri: quest.metadata_uri.clone(),
         };
 
         // Increment version
@@ -622,6 +660,77 @@ impl QuestContract {
                 tags,
                 max_enrollees,
             ),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Set, update, or clear the off-chain metadata URI for a quest.
+    /// Validates URI format (http/https/ipfs scheme, 7-2048 bytes). Owner only.
+    pub fn set_metadata_uri(
+        env: Env,
+        quest_id: u32,
+        owner: Address,
+        metadata_uri: Option<String>,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let mut quest = Self::load_quest(&env, quest_id)?;
+
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+
+        if quest.status == QuestStatus::Archived {
+            return Err(Error::QuestArchived);
+        }
+        if quest.status == QuestStatus::Cancelled {
+            return Err(Error::QuestCancelled);
+        }
+        if quest.status == QuestStatus::Suspended {
+            return Err(Error::QuestSuspended);
+        }
+
+        if let Some(ref uri) = metadata_uri {
+            if !common::is_valid_url(uri) {
+                return Err(Error::InvalidInput);
+            }
+        }
+
+        // Store version snapshot before updating
+        let old_version = QuestVersion {
+            version: quest.version,
+            name: quest.name.clone(),
+            description: quest.description.clone(),
+            category: quest.category.clone(),
+            tags: quest.tags.clone(),
+            visibility: quest.visibility,
+            max_enrollees: quest.max_enrollees,
+            updated_at: env.ledger().timestamp(),
+            metadata_uri: quest.metadata_uri.clone(),
+        };
+
+        quest.version += 1;
+        quest.metadata_uri = metadata_uri.clone();
+
+        let quest_key = DataKey::Quest(quest_id);
+        env.storage().persistent().set(&quest_key, &quest);
+        common::extend_persistent_ttl(&env, &quest_key);
+
+        let history_key = DataKey::QuestVersionHistory(quest_id);
+        let mut history: Vec<QuestVersion> = env
+            .storage()
+            .persistent()
+            .get(&history_key)
+            .unwrap_or(Vec::new(&env));
+        history.push_back(old_version);
+        env.storage().persistent().set(&history_key, &history);
+        common::extend_persistent_ttl(&env, &history_key);
+
+        env.events().publish(
+            (Symbol::new(&env, "quest_metadata_uri_updated"),),
+            (quest_id, quest.version, metadata_uri),
         );
 
         Self::bump(&env, quest_id);

@@ -10,6 +10,7 @@ import {
 } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
 import { signTransaction, getNetworkDetails, getAddress } from "@stellar/freighter-api"
+import { getActiveWalletAdapter } from "../wallets"
 import { env } from "../env"
 import { pushToast } from "../notifications"
 import { logContractCall } from "./logger"
@@ -459,35 +460,15 @@ async function executeSignAndSubmit(
 
     handlers.onSigning?.()
 
-    const netBeforeSign = await getNetworkDetails()
-    if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
-      const message = `Transaction blocked: Freighter is on the wrong network. Expected ${getExpectedNetworkLabel()}. Switch Freighter to the app network and try again.`
-      logTx("network_check", "failed", { error: message })
-      observeFailure("network_check", message)
-      handlers.onError?.(message)
-      return {
-        status: TransactionStatus.Failed,
-        txHash: "",
-        error: message,
-      }
-    }
+    const activeAdapter = getActiveWalletAdapter()
+    let signedTxXdr: string
 
-    const signResult = await signTransaction(tx.toXDR(), {
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-
-    if (typeof signResult === "object" && signResult !== null && "signedTxXdr" in signResult) {
-      const { signedTxXdr } = signResult
-      handlers.onSigned?.(signedTxXdr)
-
-      // Convert to Transaction Envelope XDR string for safety
-      const signedTx = new Transaction(signedTxXdr as string, NETWORK_PASSPHRASE)
-
-      const netAfterSign = await getNetworkDetails()
-      if (!freighterNetworkMatches(netAfterSign.networkPassphrase)) {
-        const message = NETWORK_MISMATCH_MESSAGE
-        logTx("network_check_post_sign", "failed", { error: message })
-        observeFailure("network_check_post_sign", message)
+    if (activeAdapter.id === "freighter") {
+      const netBeforeSign = await getNetworkDetails()
+      if (!freighterNetworkMatches(netBeforeSign.networkPassphrase)) {
+        const message = `Transaction blocked: Freighter is on the wrong network. Expected ${getExpectedNetworkLabel()}. Switch Freighter to the app network and try again.`
+        logTx("network_check", "failed", { error: message })
+        observeFailure("network_check", message)
         handlers.onError?.(message)
         return {
           status: TransactionStatus.Failed,
@@ -496,8 +477,51 @@ async function executeSignAndSubmit(
         }
       }
 
-      const { address: currentAddress } = await getAddress()
-      if (signedTx.source !== currentAddress) {
+      const signResult = await signTransaction(tx.toXDR(), {
+        networkPassphrase: NETWORK_PASSPHRASE,
+      })
+
+      if (typeof signResult === "object" && signResult !== null && "signedTxXdr" in signResult) {
+        signedTxXdr = (signResult as { signedTxXdr: string }).signedTxXdr
+      } else if (typeof signResult === "string") {
+        signedTxXdr = signResult
+      } else {
+        throw new Error("Invalid response from wallet signer")
+      }
+    } else {
+      const result = await activeAdapter.signTransaction(tx.toXDR(), {
+        networkPassphrase: NETWORK_PASSPHRASE,
+      })
+      signedTxXdr = result.signedTxXdr
+    }
+
+    if (signedTxXdr) {
+      handlers.onSigned?.(signedTxXdr)
+
+      // Convert to Transaction Envelope XDR string for safety
+      const signedTx = new Transaction(signedTxXdr, NETWORK_PASSPHRASE)
+
+      if (activeAdapter.id === "freighter") {
+        const netAfterSign = await getNetworkDetails()
+        if (!freighterNetworkMatches(netAfterSign.networkPassphrase)) {
+          const message = NETWORK_MISMATCH_MESSAGE
+          logTx("network_check_post_sign", "failed", { error: message })
+          observeFailure("network_check_post_sign", message)
+          handlers.onError?.(message)
+          return {
+            status: TransactionStatus.Failed,
+            txHash: "",
+            error: message,
+          }
+        }
+      }
+
+      const currentAddress =
+        activeAdapter.id === "freighter"
+          ? (await getAddress()).address
+          : (await activeAdapter.getAddress()).address
+
+      if (currentAddress && signedTx.source !== currentAddress) {
         const message = "Account changed after signing. Please re-confirm."
         logTx("account_check", "failed", { error: message })
         observeFailure("account_check", message)

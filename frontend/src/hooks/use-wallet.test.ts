@@ -224,3 +224,43 @@ describe("useWallet - auto reconnect", () => {
     expect(result.current.expectedNetwork).toBe("testnet")
   })
 })
+
+describe("useWallet - multi-wallet adapter pattern", () => {
+  it("provides registered wallet adapters including Freighter, xBull, Albedo, WalletConnect", () => {
+    const { result } = renderWallet()
+    const walletIds = result.current.wallets.map(w => w.id)
+    expect(walletIds).toContain("freighter")
+    expect(walletIds).toContain("xbull")
+    expect(walletIds).toContain("albedo")
+    expect(walletIds).toContain("walletconnect")
+  })
+
+  it("opens and closes wallet connection modal", async () => {
+    const { result } = renderWallet()
+    expect(result.current.isModalOpen).toBe(false)
+
+    act(() => {
+      result.current.openModal()
+    })
+    expect(result.current.isModalOpen).toBe(true)
+
+    act(() => {
+      result.current.closeModal()
+    })
+    expect(result.current.isModalOpen).toBe(false)
+  })
+
+  it("selects and attempts connection for chosen wallet", async () => {
+    const { result } = renderWallet()
+    mockFreighter.requestAccess.mockResolvedValue({ address: "GFREIGHTER123" })
+
+    await act(async () => {
+      await result.current.selectWallet("freighter")
+    })
+
+    expect(result.current.selectedWalletId).toBe("freighter")
+    expect(result.current.connected).toBe(true)
+    expect(result.current.address).toBe("GFREIGHTER123")
+  })
+})
+

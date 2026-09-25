@@ -28,7 +28,11 @@
     "test:e2e:ui": "playwright test --ui",
     "prepare": "cd .. && husky",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "test:contrast": "vitest run src/test/color-contrast.test.tsx",
+    "test:a11y": "vitest run **/*.a11y.test.tsx src/test/color-contrast.test.tsx",
+    "chromatic": "chromatic",
+    "test:visual": "chromatic --exit-zero-on-changes"
   },
   "dependencies": {
     "@sentry/react": "^10.68.0",

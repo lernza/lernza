@@ -111,6 +111,7 @@ pub struct QuestInfo {
     pub verified: bool,
     pub version: u32,
     pub prerequisite_quest_ids: Vec<u32>,
+    pub metadata_uri: Option<String>,
 }
 
 #[contracttype]
@@ -133,6 +134,7 @@ pub struct QuestVersion {
     pub visibility: Visibility,
     pub max_enrollees: Option<u32>,
     pub updated_at: u64,
+    pub metadata_uri: Option<String>,
 }
 
 /// Validate that an address is a Stellar contract address (not an account).

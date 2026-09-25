@@ -30,7 +30,7 @@ export function PageHeader({ eyebrow, title, subtitle, action, className }: Page
     >
       <div className="min-w-0 flex-1">
         {eyebrow && (
-          <div className="bg-accent border-border mb-4 inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-semibold tracking-wider uppercase shadow-md">
+          <div className="bg-accent text-accent-foreground border-border mb-4 inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-semibold tracking-wider uppercase shadow-md">
             {eyebrow}
           </div>
         )}

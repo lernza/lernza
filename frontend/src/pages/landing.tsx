@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useInView } from "@/hooks/use-animations"
+import { handleQuestCardGridKeyDown } from "@/lib/quest-card-keyboard"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -269,7 +270,13 @@ export function Landing({ onNavigate }: LandingProps) {
             <h2 className="font-display text-4xl sm:text-5xl">Three steps. Zero complexity.</h2>
           </div>
 
-          <div className="grid grid-cols-1 items-stretch gap-0 sm:grid-cols-3">
+          <div
+            className="grid grid-cols-1 items-stretch gap-0 sm:grid-cols-3"
+            role="list"
+            aria-label="How it works. Use arrow keys to move between steps."
+            data-quest-card-group
+            onKeyDown={handleQuestCardGridKeyDown}
+          >
             {[
               {
                 step: "01",
@@ -290,9 +297,12 @@ export function Landing({ onNavigate }: LandingProps) {
                 desc: "When a learner completes a milestone, verify it on-chain. Tokens transfer automatically. No middleman.",
               },
             ].map((item, i) => (
-              <div key={item.step} className="flex items-stretch">
+              <div key={item.step} className="flex items-stretch" role="listitem">
                 <div
-                  className={`bg-card text-card-foreground border-border card-tilt reveal-up relative flex-1 border p-8 shadow-lg ${howInView ? "in-view" : ""} shimmer-on-hover group`}
+                  tabIndex={0}
+                  data-quest-card
+                  aria-label={`Step ${item.step}: ${item.title}`}
+                  className={`bg-card text-card-foreground border-border card-tilt reveal-up focus-visible:ring-ring relative flex-1 border p-8 shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${howInView ? "in-view" : ""} shimmer-on-hover group`}
                   style={{ transitionDelay: `${i * 200}ms` }}
                 >
                   <div className="text-accent/15 group-hover:text-accent/25 pointer-events-none absolute top-3 right-4 text-[80px] leading-none font-semibold transition-colors duration-300 select-none">
@@ -336,7 +346,13 @@ export function Landing({ onNavigate }: LandingProps) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div
+            className="grid grid-cols-1 gap-6 sm:grid-cols-2"
+            role="list"
+            aria-label="Why Lernza. Use arrow keys to move between features."
+            data-quest-card-group
+            onKeyDown={handleQuestCardGridKeyDown}
+          >
             {[
               {
                 icon: Users,
@@ -369,7 +385,11 @@ export function Landing({ onNavigate }: LandingProps) {
             ].map((feature, i) => (
               <div
                 key={feature.title}
-                className={`border-border bg-card text-card-foreground card-tilt shimmer-on-hover group reveal-up border shadow-lg ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
+                role="listitem"
+                tabIndex={0}
+                data-quest-card
+                aria-label={feature.title}
+                className={`border-border bg-card text-card-foreground card-tilt shimmer-on-hover group reveal-up focus-visible:ring-ring border shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none ${featInView ? "in-view" : ""} ${feature.large ? "p-10" : "p-8"}`}
                 style={{ transitionDelay: `${i * 150}ms` }}
               >
                 <div

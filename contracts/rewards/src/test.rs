@@ -2349,6 +2349,249 @@ fn test_refund_pool_decrements_total_funded() {
     assert_eq!(client.get_quest_refunded(&q_id), 3_500);
 }
 
+// --- refund_remaining_funds: issue #1624 — explicit archive-triggered refund
+// callable by the quest owner after archival (grace period) or cancellation
+// (immediate), returning pool minus reserved-but-unpaid obligations. ---
+
+#[test]
+fn test_refund_remaining_funds_success_after_archive() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+
+    assert_eq!(refunded, 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 5_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 5_000);
+}
+
+#[test]
+fn test_refund_remaining_funds_requires_archive() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Active quest — refund must be rejected.
+    let result = client.try_refund_remaining_funds(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::QuestNotArchived)));
+
+    // Archived but inside the grace window — still rejected.
+    quest_client.archive_quest(&q_id);
+    let result = client.try_refund_remaining_funds(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+}
+
+#[test]
+fn test_refund_remaining_funds_unauthorized_when_not_owner() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let result = client.try_refund_remaining_funds(&attacker, &q_id);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_refund_remaining_funds_cancelled_refunds_immediately() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.cancel_quest(&q_id);
+
+    // Cancelled quests skip the grace period.
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+    assert_eq!(refunded, 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_remaining_funds_respects_reserved_obligations() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Create a peer-review milestone with a pending submission so 2_000 is
+    // reserved but unpaid. Only the unreserved 3_000 is refundable.
+    use milestone::VerificationMode;
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Task"),
+        &String::from_str(&env, "Desc"),
+        &2_000,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    milestone_client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 2_000);
+}
+
 // --- refund_expired_pool: issue #1187 — recover funds from an abandoned,
 // never-archived quest once its deadline has passed. ---
 

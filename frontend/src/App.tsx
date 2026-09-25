@@ -31,6 +31,7 @@ const CertificateView = lazy(() => import("@/pages/certificate").then((m) => ({ 
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
+import { OfflineBanner } from "@/components/offline-banner"
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
 
@@ -274,6 +275,8 @@ function App() {
             <SectionErrorBoundary label="Navigation">
               <Navbar activePage={state.page} onNavigate={handleNavigate} onLaunchTutorial={() => onboarding.open(0)} />
             </SectionErrorBoundary>
+            {/* Offline connectivity status (#1626) */}
+            <OfflineBanner />
             <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
               <main id="main-content">
                 {PROTECTED_PAGES.has(state.page) ? (

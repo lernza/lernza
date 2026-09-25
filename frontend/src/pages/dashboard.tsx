@@ -32,6 +32,10 @@ import { useQuestStatsMap } from "@/hooks/use-quest-stats"
 import { formatTokens } from "@/lib/utils"
 import { navigateToPath } from "@/lib/navigation"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import {
+  handleQuestCardGridKeyDown,
+  handleQuestCardKeyDown,
+} from "@/lib/quest-card-keyboard"
 
 // Sub-components
 import { PersonalProgress } from "./dashboard/personal-progress"
@@ -215,6 +219,17 @@ export function Dashboard(
       setHasMorePublic(true)
     }
   }, [publicQuests])
+
+  // Cache the latest quest list for offline viewing (#1626). Runs on every
+  // successful fetch; failures inside the cache helper are swallowed so the
+  // online path is never affected.
+  useEffect(() => {
+    if (accessibleQuests.length > 0) {
+      void import("@/lib/offline-quest-cache").then(({ saveQuestsForOffline }) =>
+        saveQuestsForOffline(accessibleQuests)
+      )
+    }
+  }, [accessibleQuests])
 
   // Fetch the next page of public quests from the contract and append it.
   const loadMorePublic = useCallback(async () => {
@@ -740,7 +755,13 @@ export function Dashboard(
 
               {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
 
-              <div className="relative grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-1">
+              <div
+                className="relative grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-1"
+                role="list"
+                aria-label="Available quests. Use arrow keys to move between quest cards."
+                data-quest-card-group
+                onKeyDown={handleQuestCardGridKeyDown}
+              >
                 {visibleQuests.map((ws, i) => {
                   const stats = questStats[ws.id] || {
                     enrolleeCount: 0,
@@ -766,10 +787,14 @@ export function Dashboard(
                     <button
                       key={ws.id}
                       type="button"
+                      role="listitem"
+                      tabIndex={0}
+                      data-quest-card
                       onClick={() => goToQuest(ws.id)}
+                      onKeyDown={handleQuestCardKeyDown}
                       aria-label={`Open quest ${ws.name}`}
                       data-onboarding={i === 0 ? "quest-card" : undefined}
-                      className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
+                      className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none`}
                     >
                       <Card>
                         <CardHeader className="pb-3">

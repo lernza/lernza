@@ -4,6 +4,10 @@ import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { env } from "@/lib/env"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
+import {
+  handleQuestCardGridKeyDown,
+  handleQuestCardKeyDown,
+} from "@/lib/quest-card-keyboard"
 import type { QuestInfo } from "@/lib/contracts/quest"
 // Quest type removed — component now accepts only QuestInfo[]
 import type { QuestStatSummary } from "@/hooks/use-quest-stats"
@@ -30,7 +34,13 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
       <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
         <Sparkles className="h-5 w-5" /> Trending Quests
       </h2>
-      <div className="space-y-4">
+      <div
+        className="space-y-4"
+        role="list"
+        aria-label="Trending quests. Use arrow keys to move between quest cards."
+        data-quest-card-group
+        onKeyDown={handleQuestCardGridKeyDown}
+      >
         {quests.map(quest => {
           const stats = statsByQuest?.[quest.id] ?? {
             enrolleeCount: 0,
@@ -41,9 +51,13 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
             <button
               key={quest.id}
               type="button"
+              role="listitem"
+              tabIndex={0}
+              data-quest-card
               onClick={() => onSelectQuest(quest.id)}
+              onKeyDown={handleQuestCardKeyDown}
               aria-label={`Open quest ${quest.name}`}
-              className="card-tilt border-border focus-visible:ring-ring w-full cursor-pointer border text-left shadow-md focus-visible:ring-2 focus-visible:outline-none"
+              className="card-tilt border-border focus-visible:ring-ring w-full cursor-pointer border text-left shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               <Card className="border-0 shadow-none">
                 <CardHeader className="p-4 pb-2">

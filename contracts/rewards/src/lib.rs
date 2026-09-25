@@ -114,6 +114,8 @@ pub enum Error {
     BatchTooLarge = 17,
     /// Reward recipient is no longer an active participant in the quest (issue #1325).
     RecipientNotEnrolled = 18,
+    /// The platform aggregate counters are mutually inconsistent (issue #1274).
+    InconsistentStats = 19,
 }
 
 // TTL constants moved to common.
@@ -1372,11 +1374,25 @@ impl RewardsContract {
             .unwrap_or(Vec::new(&env))
     }
 
-    /// Return aggregated platform statistics — Issue #717.
+    /// Return aggregated platform statistics — Issue #717, validated in #1274.
     ///
     /// Enables a single-call dashboard query instead of N per-contract calls.
     /// Returns `(total_quests_funded, total_funded, total_distributed)`.
-    pub fn get_platform_stats(env: Env) -> (u32, i128, i128) {
+    ///
+    /// The counters are validated before they are handed out. `TotalFunded` is
+    /// a fast read that every funding path increments and every refund path
+    /// (`record_refund`) decrements, while `TotalDistributed` only ever grows,
+    /// so a desynchronised pair — a partially applied write, a ledger restored
+    /// from a stale snapshot, or a counter written by an older contract version
+    /// — would otherwise be published as fact. The invariants enforced here:
+    ///   - neither counter is negative, and
+    ///   - `total_distributed <= total_funded`, i.e. the platform can never
+    ///     have paid out more than it has ever received.
+    ///
+    /// A state violating either invariant is rejected with
+    /// [`Error::InconsistentStats`] instead of returning a plausible-looking
+    /// but wrong number.
+    pub fn get_platform_stats(env: Env) -> Result<(u32, i128, i128), Error> {
         let total_quests: u32 = env
             .storage()
             .instance()
@@ -1392,7 +1408,10 @@ impl RewardsContract {
             .instance()
             .get(&DataKey::TotalDistributed)
             .unwrap_or(0);
-        (total_quests, total_funded, total_distributed)
+        if total_funded < 0 || total_distributed < 0 || total_distributed > total_funded {
+            return Err(Error::InconsistentStats);
+        }
+        Ok((total_quests, total_funded, total_distributed))
     }
 
     /// Get the refund window for a quest's pool — Issue #702.

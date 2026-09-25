@@ -2329,7 +2329,7 @@ fn test_refund_pool_decrements_total_funded() {
 
     client.fund_quest(&owner, &q_id, &5_000);
     // TotalFunded should be 5_000.
-    let (_, total_funded, _) = client.get_platform_stats();
+    let (_, total_funded, _) = client.get_platform_stats().unwrap();
     assert_eq!(total_funded, 5_000);
     assert_eq!(client.get_quest_refunded(&q_id), 0);
 
@@ -2341,12 +2341,112 @@ fn test_refund_pool_decrements_total_funded() {
 
     // TotalFunded decreases by the refunded amount, and
     // QuestRefunded reflects the refunded amount.
-    let (_, total_funded, _) = client.get_platform_stats();
+    let (_, total_funded, _) = client.get_platform_stats().unwrap();
     assert_eq!(total_funded, 3_000);
     assert_eq!(client.get_quest_refunded(&q_id), 2_000);
 
     client.refund_pool(&owner, &q_id, &1_500);
     assert_eq!(client.get_quest_refunded(&q_id), 3_500);
+}
+
+// --- get_platform_stats counter validation (issue #1274) ---
+
+#[test]
+fn test_get_platform_stats_returns_consistent_counters() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Stats quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let (quests, funded, distributed) = client.get_platform_stats().unwrap();
+    assert_eq!(quests, 1);
+    assert_eq!(funded, 5_000);
+    assert_eq!(distributed, 0);
+}
+
+#[test]
+fn test_get_platform_stats_errors_when_distributed_exceeds_funded() {
+    // A stale/corrupt `TotalFunded` (e.g. a refund that was applied to the
+    // counter without the matching pool write) must not be reported as a
+    // platform statistic: the platform can never pay out more than it received.
+    let (
+        env,
+        client,
+        cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+
+    env.as_contract(&cid, || {
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &1_000_i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &2_500_i128);
+    });
+
+    let result = client.try_get_platform_stats();
+    assert_eq!(result, Err(Ok(Error::InconsistentStats)));
+}
+
+#[test]
+fn test_get_platform_stats_errors_on_negative_counter() {
+    let (
+        env,
+        client,
+        cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+
+    env.as_contract(&cid, || {
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &-1_i128);
+    });
+
+    let result = client.try_get_platform_stats();
+    assert_eq!(result, Err(Ok(Error::InconsistentStats)));
 }
 
 // --- refund_remaining_funds: issue #1624 — explicit archive-triggered refund

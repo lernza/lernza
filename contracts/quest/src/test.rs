@@ -1897,6 +1897,45 @@ fn test_invite_respects_enrollment_cap() {
 }
 
 #[test]
+fn test_is_invite_valid_false_when_quest_full() {
+    // Issue #1283 — a quest at its enrollment cap rejects invite redemption
+    // with QuestFull, so the outstanding invite must not be reported as valid
+    // either (otherwise the query surface advertises an invite that can never
+    // be redeemed).
+    let (env, client, owner, token) = setup();
+    let quest_id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Capped Quest"),
+        &String::from_str(&env, "Only one seat"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Private,
+        &Some(1u32),
+        &None,
+    );
+
+    let preimage_a = b"seat-one";
+    let preimage_b = b"seat-two";
+    let commitment_a = sha256_commitment(&env, preimage_a);
+    let commitment_b = sha256_commitment(&env, preimage_b);
+    client.register_invite(&owner, &quest_id, &commitment_a);
+    client.register_invite(&owner, &quest_id, &commitment_b);
+
+    // While the quest still has a free seat both invites are redeemable.
+    assert!(client.is_invite_valid(&quest_id, &commitment_a));
+    assert!(client.is_invite_valid(&quest_id, &commitment_b));
+
+    // The single seat is taken by the first redemption.
+    let alice = Address::generate(&env);
+    client.join_quest_with_invite(&alice, &quest_id, &Bytes::from_slice(&env, preimage_a));
+
+    // The quest is now full: no outstanding invite may be reported as valid.
+    assert!(!client.is_invite_valid(&quest_id, &commitment_a));
+    assert!(!client.is_invite_valid(&quest_id, &commitment_b));
+}
+
+#[test]
 fn test_invite_already_enrolled_rejected() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);

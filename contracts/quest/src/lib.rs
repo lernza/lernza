@@ -979,9 +979,10 @@ impl QuestContract {
 
     /// Check whether an invite commitment is registered, not yet consumed,
     /// and still redeemable (the quest is neither closed nor past its
-    /// deadline). A commitment that would be rejected by
-    /// `join_quest_with_invite` for any of these reasons reports as invalid
-    /// here too, so callers never see a stale invite reported as valid.
+    /// deadline, and still has room for one more enrollee). A commitment that
+    /// would be rejected by `join_quest_with_invite` for any of these reasons
+    /// reports as invalid here too, so callers never see a stale invite
+    /// reported as valid.
     pub fn is_invite_valid(env: Env, quest_id: u32, commitment: BytesN<32>) -> bool {
         let quest = match Self::load_quest(&env, quest_id) {
             Ok(q) => q,
@@ -992,6 +993,15 @@ impl QuestContract {
         }
         if quest.deadline > 0 && env.ledger().timestamp() > quest.deadline {
             return false;
+        }
+        // A quest at its enrollment cap rejects invite redemption with
+        // `QuestFull`, so the commitment must not be advertised as valid
+        // either — otherwise a learner is told their invite works and only
+        // discovers at redemption time that the quest is full. Issue #1283.
+        if let Some(max) = quest.max_enrollees {
+            if Self::load_enrollees(&env, quest_id).len() >= max {
+                return false;
+            }
         }
         let registered = env
             .storage()

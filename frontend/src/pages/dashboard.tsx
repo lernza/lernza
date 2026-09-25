@@ -29,6 +29,7 @@ import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import type { QuestInfo, CategoryInfo } from "@/lib/contract-types"
 import { useQuestStatsMap } from "@/hooks/use-quest-stats"
+import { useNowSeconds } from "@/hooks/use-now"
 import { formatTokens, getQuestLifecycleStatus } from "@/lib/utils"
 import { navigateToPath } from "@/lib/navigation"
 import { useOnboarding } from "@/hooks/use-onboarding"
@@ -73,7 +74,12 @@ export function Dashboard(
   const [rewardMin, setRewardMin] = useState<string>("")
   const [rewardMax, setRewardMax] = useState<string>("")
   const [displayCount, setDisplayCount] = useState(DASHBOARD_QUEST_PAGE_SIZE)
-  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
+  // Live clock: deadline filters and derived lifecycle status must reflect the
+  // real time, not the value sampled on first render — a tab left open in the
+  // background used to keep showing quests as "ending soon" long after their
+  // deadline passed (issue #1335). A minute is enough granularity here and
+  // keeps the (potentially long) quest list from re-rendering more often.
+  const nowSeconds = useNowSeconds(60_000)
 
   // Incremental, contract-side pagination of the public quest feed so the
   // dashboard never renders all (potentially hundreds of) quests at once.

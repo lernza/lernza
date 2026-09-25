@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2, Circle, Lock, Sparkles, Clock, Coins } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useNowSeconds } from "@/hooks/use-now"
 
 interface Milestone {
   id: number
@@ -27,8 +28,7 @@ function getMilestoneState(index: number, milestones: Milestone[]): MilestoneSta
   return "locked"
 }
 
-// Precompute at module load: Math.random() and Date.now() must not be called during render
-const MODULE_NOW = Date.now()
+// Precompute at module load: Math.random() must not be called during render
 const CONFETTI_COUNT = 20
 const confettiStyles = Array.from({ length: CONFETTI_COUNT }, () => ({
   left: `${Math.random() * 100}%`,
@@ -61,10 +61,11 @@ export function QuestProgressTracker({
     }
   }, [isComplete])
 
-  const timeRemaining = useMemo(
-    () => (deadline ? Math.max(0, deadline - MODULE_NOW / 1000) : null),
-    [deadline]
-  )
+  // Live clock: the countdown must reflect real time, not the timestamp
+  // captured when this module was first loaded (#1335).
+  const nowSeconds = useNowSeconds()
+
+  const timeRemaining = deadline ? Math.max(0, deadline - nowSeconds) : null
   const daysRemaining = timeRemaining ? Math.ceil(timeRemaining / 86400) : null
 
   return (

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { CheckCircle2, Circle, Clock, Coins, Lock, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatDeadlineLabel, isExpiredDeadline, isExpiringSoon } from "@/lib/utils"
+import { useNow } from "@/hooks/use-now"
 import { MilestoneSubmitDialog, type SubmissionEvidence } from "./MilestoneSubmitDialog"
 
 interface Milestone {
@@ -17,15 +18,13 @@ interface Milestone {
 
 /** Live countdown badge for a milestone's own deadline, if it has one. */
 function MilestoneCountdown({ deadline }: { deadline: number }) {
-  const [label, setLabel] = useState(() => formatDeadlineLabel(deadline))
+  // Ticking clock so the label is re-derived from the real time after the tab
+  // has been in the background (issue #1335).
+  const nowMs = useNow()
+  const label = formatDeadlineLabel(deadline, nowMs)
 
-  useEffect(() => {
-    const id = setInterval(() => setLabel(formatDeadlineLabel(deadline)), 30_000)
-    return () => clearInterval(id)
-  }, [deadline])
-
-  const expired = isExpiredDeadline(deadline)
-  const soon = !expired && isExpiringSoon(deadline)
+  const expired = isExpiredDeadline(deadline, nowMs)
+  const soon = !expired && isExpiringSoon(deadline, nowMs)
 
   return (
     <span

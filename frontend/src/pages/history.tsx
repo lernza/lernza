@@ -7,13 +7,20 @@ import {
   Calendar,
   Coins,
   Trophy,
+  Download,
+  FileJson,
+  FileSpreadsheet,
 } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
+import {
+  downloadTransactionHistory,
+  type TransactionExportFormat,
+} from "@/lib/transaction-export"
 import { formatTokens } from "@/lib/utils"
 
 function formatHistoryDate(timestamp: number) {
@@ -81,6 +88,7 @@ export function History() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [capReached, setCapReached] = useState(false)
   const [filterType, setFilterType] = useState<WalletActivityItem["type"] | "all">("all")
+  const [exportStatus, setExportStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (!connected || !address) {
@@ -146,6 +154,25 @@ export function History() {
 
   const filteredItems = historyItems.filter(
     item => filterType === "all" || item.type === filterType
+  )
+
+  // Issue #1632 — let the learner keep their own on-chain record as CSV or JSON.
+  const handleExport = useCallback(
+    (format: TransactionExportFormat) => {
+      if (!address || filteredItems.length === 0) return
+      const label = format === "csv" ? "CSV" : "JSON"
+      try {
+        downloadTransactionHistory(filteredItems, format, {
+          wallet: address,
+          filter: filterType,
+          truncated: capReached,
+        })
+        setExportStatus(`Exported ${filteredItems.length} transactions as ${label}.`)
+      } catch {
+        setExportStatus(`Could not export history as ${label}. Please try again.`)
+      }
+    },
+    [address, capReached, filterType, filteredItems]
   )
 
   if (!connected) {
@@ -231,7 +258,7 @@ export function History() {
         </div>
       </div>
 
-      {/* Filter */}
+      {/* Filter + export */}
       <div className="animate-fade-in-up relative mb-6">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
@@ -251,7 +278,35 @@ export function History() {
               </button>
             ))}
           </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport("csv")}
+              disabled={filteredItems.length === 0}
+              className="gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleExport("json")}
+              disabled={filteredItems.length === 0}
+              className="gap-2"
+            >
+              <FileJson className="h-4 w-4" />
+              Export JSON
+            </Button>
+          </div>
         </div>
+        {exportStatus && (
+          <p className="text-muted-foreground mt-2 flex items-center gap-1.5 text-xs">
+            <Download className="h-3 w-3" />
+            {exportStatus}
+          </p>
+        )}
       </div>
 
       {/* Content */}

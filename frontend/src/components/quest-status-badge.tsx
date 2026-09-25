@@ -2,6 +2,7 @@ import { Archive, CircleDot, Clock3 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { type QuestInfo } from "@/lib/contract-types"
 import { getSecondsRemaining } from "@/lib/utils"
+import { useNow } from "@/hooks/use-now"
 import { getQuestStatusLabel, getQuestStatusVariant } from "./quest-status-badge-helpers"
 
 export { getQuestStatusLabel, getQuestStatusVariant }
@@ -17,12 +18,17 @@ interface QuestStatusBadgeProps {
  * and pool balance. Active quests with a deadline also surface "Xd Xh left".
  */
 export function QuestStatusBadge({ quest, poolBalance, className }: QuestStatusBadgeProps) {
+  // Ticking clock so the remaining time (and the Active -> Ended transition)
+  // stays accurate instead of freezing at the value seen on first paint
+  // (issue #1335).
+  const nowMs = useNow()
+
   const label = getQuestStatusLabel(quest.status, quest.deadline, poolBalance)
   const variant = getQuestStatusVariant(quest.status, quest.deadline, poolBalance)
   const Icon = label === "Active" ? CircleDot : label === "Ended" ? Clock3 : Archive
 
   const showTimeRemaining = label === "Active" && quest.deadline > 0
-  const timeRemaining = showTimeRemaining ? getSecondsRemaining(quest.deadline) : 0
+  const timeRemaining = showTimeRemaining ? getSecondsRemaining(quest.deadline, nowMs) : 0
 
   const formatTimeRemaining = (seconds: number): string => {
     const days = Math.floor(seconds / (24 * 60 * 60))

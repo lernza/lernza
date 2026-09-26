@@ -1,17 +1,27 @@
 import type { Step1Values, Step2Values } from "./types"
 
 export interface QuestTemplate {
-  id: "course" | "bootcamp" | "skill-challenge"
+  id: string
   name: string
   description: string
-  audience: string
-  id: "onboarding" | "api-development" | "smart-contract-development" | "frontend-fundamentals"
-  name: string
-  description: string
+  audience?: string
   step1: Step1Values
   step2: Step2Values
 }
 
+const milestone = (
+  title: string,
+  description: string,
+  rewardAmount: number,
+  prerequisiteIds: number[] = []
+) => ({
+  title,
+  description,
+  rewardAmount,
+  prerequisiteIds,
+})
+
+/** Pre-built quest templates for common use cases. Creators can edit every field before publishing. */
 export const QUEST_TEMPLATES: QuestTemplate[] = [
   {
     id: "course",
@@ -113,27 +123,6 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
       ],
     },
   },
-]
-
-export function getQuestTemplate(id: QuestTemplate["id"]): QuestTemplate {
-  const template = QUEST_TEMPLATES.find(item => item.id === id)
-  if (!template) throw new Error(`Unknown quest template: ${id}`)
-  return template
-}
-const milestone = (
-  title: string,
-  description: string,
-  rewardAmount: number,
-  prerequisiteIds: number[] = []
-) => ({
-  title,
-  description,
-  rewardAmount,
-  prerequisiteIds,
-})
-
-/** Starter paths are deliberately ordinary form data: creators can edit every field before publishing. */
-export const QUEST_TEMPLATES: QuestTemplate[] = [
   {
     id: "onboarding",
     name: "Team onboarding",
@@ -259,3 +248,7 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
     },
   },
 ]
+
+export function getQuestTemplate(id: string): QuestTemplate | undefined {
+  return QUEST_TEMPLATES.find((t) => t.id === id)
+}

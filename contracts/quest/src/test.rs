@@ -2944,7 +2944,7 @@ fn test_reenroll_allowed_when_cooldown_unset() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
-    assert_eq!(client.get_enrollment_cooldown(&quest_id), None);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(None));
 
     let enrollee = Address::generate(&env);
     client.add_enrollee(&quest_id, &enrollee);
@@ -2961,7 +2961,7 @@ fn test_reenroll_blocked_within_cooldown_period() {
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
     client.set_enrollment_cooldown(&quest_id, &owner, &100);
-    assert_eq!(client.get_enrollment_cooldown(&quest_id), Some(100));
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(Some(100)));
 
     let enrollee = Address::generate(&env);
     client.add_enrollee(&quest_id, &enrollee);
@@ -3013,5 +3013,5 @@ fn test_reenroll_cooldown_owner_only_and_disablable() {
     );
 
     client.set_enrollment_cooldown(&quest_id, &owner, &0);
-    assert_eq!(client.get_enrollment_cooldown(&quest_id), None);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(None));
 }

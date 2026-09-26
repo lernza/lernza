@@ -61,6 +61,10 @@ pub enum DataKey {
     Waitlist(u32),
     /// Learner-dismissed dashboard guidance. Key: (learner, quest_id).
     DismissedGuidance(Address, u32),
+    /// Ledger sequence at which an address left a quest, used to enforce
+    /// the quest's re-enrollment cooldown (#1649). Key: (quest_id, address).
+    /// Value: u32 ledger sequence of the removal.
+    ReEnrollCooldown(u32, Address),
 }
 
 // QuestInfo moved to common.
@@ -99,6 +103,9 @@ pub enum Error {
     QuestCancelled = 17,
     /// Removal is blocked while a submission is awaiting review or settlement.
     RemovalBlockedByPendingApproval = 22,
+    /// Re-enrollment is rejected because the quest's cooldown period has not
+    /// elapsed since the address left (#1649).
+    ReEnrollCooldown = 23,
     QuestSuspended = 21,
     /// No pending ownership transfer exists for this quest.
     NoPendingTransfer = 18,
@@ -488,6 +495,7 @@ impl QuestContract {
             deadline,
             archived_at: 0,
             max_enrollees,
+            cooldown_period: None,
             verified,
             version: 1,
             prerequisite_quest_ids: Vec::new(&env),
@@ -923,6 +931,8 @@ impl QuestContract {
             return Err(Error::AlreadyEnrolled);
         }
 
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
+
         let mut new_enrollees = enrollees;
         new_enrollees.push_back(enrollee.clone());
         env.storage()
@@ -977,6 +987,8 @@ impl QuestContract {
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
         }
+
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
 
         // If the quest has a cap and is full, add to the waitlist instead.
         if let Some(max) = quest.max_enrollees {
@@ -1188,6 +1200,8 @@ impl QuestContract {
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
         }
+
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
 
         // Mark invite as consumed before mutating enrollment state.
         env.storage().persistent().set(&used_key, &true);
@@ -2180,6 +2194,73 @@ impl QuestContract {
             .unwrap_or(Vec::new(env))
     }
 
+    /// Reject re-enrollment while the quest's cooldown period has not yet
+    /// elapsed since the address left (#1649). Elapsed markers are removed so
+    /// the state stays clean. Quests without a cooldown are unaffected.
+    fn require_reenroll_allowed(env: &Env, quest_id: u32, enrollee: &Address) -> Result<(), Error> {
+        let quest = Self::load_quest(env, quest_id)?;
+        let Some(cooldown_ledgers) = quest.cooldown_period else {
+            return Ok(());
+        };
+        if cooldown_ledgers == 0 {
+            return Ok(());
+        }
+
+        let cooldown_key = DataKey::ReEnrollCooldown(quest_id, enrollee.clone());
+        if let Some(removed_ledger) = env.storage().persistent().get::<_, u32>(&cooldown_key) {
+            if env.ledger().sequence().saturating_sub(removed_ledger) < cooldown_ledgers {
+                return Err(Error::ReEnrollCooldown);
+            }
+            env.storage().persistent().remove(&cooldown_key);
+        }
+        Ok(())
+    }
+
+    /// Configure the quest's optional re-enrollment cooldown. Owner only.
+    /// A value of 0 disables the cooldown. Applies to every enrollment path
+    /// (owner add, self-join, and invite redemption) and is measured in
+    /// ledger sequences since the address was removed.
+    pub fn set_enrollment_cooldown(
+        env: Env,
+        quest_id: u32,
+        owner: Address,
+        cooldown_ledgers: u32,
+    ) -> Result<(), Error> {
+        owner.require_auth();
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        if quest.owner != owner {
+            return Err(Error::Unauthorized);
+        }
+
+        let mut updated = quest;
+        updated.cooldown_period = if cooldown_ledgers == 0 {
+            None
+        } else {
+            Some(cooldown_ledgers)
+        };
+        env.storage()
+            .persistent()
+            .set(&DataKey::Quest(quest_id), &updated);
+
+        // Event topics: (enrollment_cooldown_set,)
+        // Event data: (quest_id, cooldown_ledgers, actor, timestamp)
+        env.events().publish(
+            (Symbol::new(&env, "enrollment_cooldown_set"),),
+            (quest_id, cooldown_ledgers, owner, env.ledger().timestamp()),
+        );
+
+        Self::bump(&env, quest_id);
+        Ok(())
+    }
+
+    /// Read the quest's configured re-enrollment cooldown in ledger
+    /// sequences (`None` when disabled).
+    pub fn get_enrollment_cooldown(env: Env, quest_id: u32) -> Result<Option<u32>, Error> {
+        let quest = Self::load_quest(&env, quest_id)?;
+        Ok(quest.cooldown_period)
+    }
+
     fn load_waitlist(env: &Env, id: u32) -> Vec<Address> {
         env.storage()
             .persistent()
@@ -2258,10 +2339,24 @@ impl QuestContract {
             .remove(&DataKey::EnrolleeStatus(quest_id, enrollee.clone()));
         env.storage()
             .persistent()
-            .remove(&DataKey::LeaveHold(quest_id, enrollee));
+            .remove(&DataKey::LeaveHold(quest_id, enrollee.clone()));
+
+        // Record when the address left so the quest's re-enrollment cooldown
+        // can gate a later re-enrollment (#1649). The marker is only written
+        // when a cooldown is configured; the ledger sequence (not the wall
+        // clock) is the cooldown's clock.
+        let quest = Self::load_quest(env, quest_id)?;
+        if let Some(cooldown_ledgers) = quest.cooldown_period {
+            if cooldown_ledgers > 0 {
+                let cooldown_key = DataKey::ReEnrollCooldown(quest_id, enrollee.clone());
+                env.storage()
+                    .persistent()
+                    .set(&cooldown_key, &env.ledger().sequence());
+                common::extend_persistent_ttl(env, &cooldown_key);
+            }
+        }
 
         // Auto-promote from waitlist if the quest has a cap and there are waitlisted people.
-        let quest = Self::load_quest(env, quest_id)?;
         if quest.max_enrollees.is_some() {
             let mut waitlist = Self::load_waitlist(env, quest_id);
             if !waitlist.is_empty() {

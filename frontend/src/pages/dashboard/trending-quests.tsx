@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { env } from "@/lib/env"
 import { useTokenMetadata } from "@/hooks/use-token-metadata"
+import { prefetchQuestData } from "@/hooks/use-quest-data"
+import { queryClient } from "@/lib/query-client"
 import {
   handleQuestCardGridKeyDown,
   handleQuestCardKeyDown,
@@ -55,6 +57,8 @@ export function TrendingQuests({ quests, statsByQuest, onSelectQuest }: Trending
               tabIndex={0}
               data-quest-card
               onClick={() => onSelectQuest(quest.id)}
+              onMouseEnter={() => void prefetchQuestData(queryClient, quest.id)}
+              onFocus={() => void prefetchQuestData(queryClient, quest.id)}
               onKeyDown={handleQuestCardKeyDown}
               aria-label={`Open quest ${quest.name}`}
               className="card-tilt border-border focus-visible:ring-ring w-full cursor-pointer border text-left shadow-md focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"

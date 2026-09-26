@@ -2936,3 +2936,82 @@ fn test_set_metadata_uri_updates_version_and_history() {
     assert_eq!(cleared.version, 3);
     assert_eq!(cleared.metadata_uri, None);
 }
+
+// --- Re-enrollment cooldown (issue #1649) ---
+
+#[test]
+fn test_reenroll_allowed_when_cooldown_unset() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(None));
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // No cooldown configured: re-enrolling on the same ledger is allowed.
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
+fn test_reenroll_blocked_within_cooldown_period() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &100);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(Some(100)));
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // Still within 100 ledgers of leaving — rejected for every path.
+    assert_eq!(
+        client.try_add_enrollee(&quest_id, &enrollee),
+        Err(Ok(Error::ReEnrollCooldown))
+    );
+    assert_eq!(
+        client.try_join_quest(&enrollee, &quest_id),
+        Err(Ok(Error::ReEnrollCooldown))
+    );
+
+    // Other learners are unaffected.
+    let other = Address::generate(&env);
+    client.add_enrollee(&quest_id, &other);
+    assert!(client.is_enrollee(&quest_id, &other));
+}
+
+#[test]
+fn test_reenroll_allowed_after_cooldown_expires() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &10);
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // Advance the ledger past the cooldown window.
+    let current = env.ledger().sequence();
+    env.ledger().set_sequence_number(current + 10);
+
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
+fn test_reenroll_cooldown_owner_only_and_disablable() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let stranger = Address::generate(&env);
+    assert_eq!(
+        client.try_set_enrollment_cooldown(&quest_id, &stranger, &10),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &0);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Ok(None));
+}

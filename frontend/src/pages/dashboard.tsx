@@ -29,6 +29,8 @@ import { milestoneClient } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import type { QuestInfo, CategoryInfo } from "@/lib/contract-types"
 import { useQuestStatsMap } from "@/hooks/use-quest-stats"
+import { prefetchQuestData } from "@/hooks/use-quest-data"
+import { queryClient } from "@/lib/query-client"
 import { useNowSeconds } from "@/hooks/use-now"
 import { formatTokens, getQuestLifecycleStatus } from "@/lib/utils"
 import { navigateToPath } from "@/lib/navigation"
@@ -772,6 +774,8 @@ export function Dashboard(
                       key={ws.id}
                       type="button"
                       onClick={() => goToQuest(ws.id)}
+                      onMouseEnter={() => void prefetchQuestData(queryClient, ws.id)}
+                      onFocus={() => void prefetchQuestData(queryClient, ws.id)}
                       aria-label={`Open quest ${ws.name}`}
                       data-onboarding={i === 0 ? "quest-card" : undefined}
                       className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}

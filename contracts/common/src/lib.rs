@@ -108,6 +108,11 @@ pub struct QuestInfo {
     pub deadline: u64,
     pub archived_at: u64,
     pub max_enrollees: Option<u32>,
+    /// Optional re-enrollment cooldown in ledger sequences. When set, an
+    /// address that leaves a quest cannot re-enroll until this many ledgers
+    /// have passed since it was removed (#1649). `None` preserves the
+    /// previous behaviour of unrestricted re-enrollment.
+    pub cooldown_period: Option<u32>,
     pub verified: bool,
     pub version: u32,
     pub prerequisite_quest_ids: Vec<u32>,

@@ -629,6 +629,15 @@ impl MilestoneContract {
             Self::validate_ms_input(&ms.title, &ms.description, ms.reward_amount)?;
         }
 
+        // Step 1b: Reject any cycle in the effective prerequisite graph
+        // (see validate_prerequisite_acyclic, #1630).
+        let base_id: u32 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextMilestoneId(quest_id))
+            .unwrap_or(0);
+        Self::validate_prerequisite_acyclic(&env, quest_id, base_id, &milestones)?;
+
         // Step 2: Create milestones
         let mut ids = Vec::new(&env);
         for ms in milestones {
@@ -724,10 +733,107 @@ impl MilestoneContract {
         Ok(())
     }
 
-    /// Validates an optional per-milestone deadline against the quest's own
-    /// deadline. A milestone deadline must not exceed the quest deadline —
-    /// see #1652. A quest deadline of 0 means "no deadline", in which case
-    /// any milestone deadline is allowed.
+    /// Reject any cycle in the quest's effective prerequisite graph using
+    /// Kahn's topological sort (#1630). The graph covers every milestone the
+    /// quest will hold after the batch lands (`0..base_id + batch_len`):
+    /// - each existing milestone contributes its stored prerequisite list,
+    ///   or the legacy single `id - 1` edge when it has none stored but
+    ///   `requires_previous` is set;
+    /// - each new batch item with `requires_previous` depends on the
+    ///   milestone created just before it (the previous batch item, or the
+    ///   last existing milestone for the first item).
+    /// `create_milestone_with_prereqs` alone cannot produce a cycle since
+    /// prerequisite ids must be strictly smaller, but the batch path is
+    /// validated defensively here; any cycle is rejected with
+    /// `CircularDependency` before any state is written.
+    fn validate_prerequisite_acyclic(
+        env: &Env,
+        quest_id: u32,
+        base_id: u32,
+        batch: &Vec<MilestoneInput>,
+    ) -> Result<(), Error> {
+        let batch_len = batch.len();
+        if batch_len == 0 {
+            return Ok(());
+        }
+        let total = base_id.saturating_add(batch_len);
+
+        // prerequisites[id] = effective prerequisite ids of milestone `id`.
+        let mut prerequisites: Vec<Vec<u32>> = Vec::new(env);
+        for id in 0..total {
+            let mut deps = Vec::new(env);
+            if id < base_id {
+                if let Some(stored) = env
+                    .storage()
+                    .persistent()
+                    .get::<_, Vec<u32>>(&DataKey::Prerequisites(quest_id, id))
+                {
+                    for p in stored.iter() {
+                        deps.push_back(p);
+                    }
+                } else if let Some(ms) = env
+                    .storage()
+                    .persistent()
+                    .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, id))
+                {
+                    if ms.requires_previous && id > 0 {
+                        deps.push_back(id - 1);
+                    }
+                }
+            } else {
+                let item = batch.get(id - base_id).unwrap();
+                if item.requires_previous && id > 0 {
+                    deps.push_back(id - 1);
+                }
+            }
+            prerequisites.push_back(deps);
+        }
+
+        // Reverse adjacency: dependents[x] = ids that list x as a
+        // prerequisite; indegree[id] = number of unresolved prerequisites.
+        let mut dependents: Vec<Vec<u32>> = Vec::new(env);
+        for _ in 0..total {
+            dependents.push_back(Vec::new(env));
+        }
+        let mut indegree: Vec<u32> = Vec::new(env);
+        for id in 0..total {
+            indegree.push_back(prerequisites.get(id).unwrap().len() as u32);
+            for p in prerequisites.get(id).unwrap().iter() {
+                if *p >= total {
+                    return Err(Error::InvalidInput);
+                }
+                let mut targets = dependents.get(*p).unwrap();
+                targets.push_back(id);
+                dependents.set(*p, targets);
+            }
+        }
+
+        // Kahn's algorithm: peel nodes with no unresolved prerequisites.
+        let mut queue: Vec<u32> = Vec::new(env);
+        for id in 0..total {
+            if indegree.get(id).unwrap() == 0 {
+                queue.push_back(id);
+            }
+        }
+        let mut processed: u32 = 0;
+        while !queue.is_empty() {
+            let id = queue.pop_back().unwrap();
+            processed = processed.checked_add(1).ok_or(Error::Overflow)?;
+            for dep in dependents.get(id).unwrap().iter() {
+                let remaining = indegree.get(*dep).unwrap() - 1;
+                indegree.set(*dep, remaining);
+                if remaining == 0 {
+                    queue.push_back(*dep);
+                }
+            }
+        }
+
+        if processed != total {
+            return Err(Error::CircularDependency);
+        }
+        Ok(())
+    }
+
     fn validate_milestone_deadline(
         quest_deadline: u64,
         milestone_deadline: Option<u64>,
@@ -996,11 +1102,20 @@ impl MilestoneContract {
 
         let reward = match mode.clone() {
             DistributionMode::Custom => milestone.reward_amount,
-            DistributionMode::Flat => env
-                .storage()
-                .persistent()
-                .get(&DataKey::FlatReward(quest_id))
-                .ok_or(Error::FlatRewardNotConfigured)?,
+            DistributionMode::Flat => {
+                let flat = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::FlatReward(quest_id))
+                    .ok_or(Error::FlatRewardNotConfigured)?;
+                if flat <= 0 {
+                    // Defensive: set_distribution_mode rejects non-positive
+                    // flat rewards, so this only triggers on corrupted or
+                    // externally tampered storage (#1285).
+                    return Err(Error::InvalidAmount);
+                }
+                flat
+            }
             DistributionMode::Percentage(pct) => {
                 // Compute reward = round(milestone.reward_amount * pct / 100)
                 let pct_i: i128 = pct as i128;

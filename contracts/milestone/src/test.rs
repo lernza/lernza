@@ -1385,6 +1385,93 @@ fn test_create_milestones_batch_success() {
     assert_eq!(m2.title, String::from_str(&env, "M2"));
 }
 
+/// Batch chains that depend on the previous milestone remain legal (#1630).
+#[test]
+fn test_create_milestones_batch_chain_is_acyclic() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M3"),
+        description: String::from_str(&env, "D3"),
+        reward_amount: 100,
+        requires_previous: true,
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(ids.len(), 3);
+    assert_eq!(ids.get(0).unwrap(), 0);
+    assert_eq!(ids.get(2).unwrap(), 2);
+}
+
+/// Topological validation (#1630): a cycle in the effective prerequisite
+/// graph is rejected before any milestone is written. The cycle is
+/// manufactured via direct storage injection because the public creation
+/// paths cannot produce one.
+#[test]
+fn test_create_milestones_batch_rejects_prerequisite_cycle() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Store a forward prerequisite for milestone 0 pointing at 1, which the
+    // batch will then chain back to 0: 0 -> 1 -> 0.
+    let mut forward = Vec::new(&env);
+    forward.push_back(1u32);
+    env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Prerequisites(q_id, 0), &forward);
+    });
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(result, Err(Ok(Error::CircularDependency)));
+
+    // Nothing was written: the quest still has no milestones.
+    assert_eq!(client.get_milestone_count(&q_id), 0);
+}
+
 #[test]
 fn test_create_milestones_batch_oversized_rejection() {
     let (env, client, quest_client, owner) = setup();
@@ -1666,6 +1753,32 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
 
     let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
     assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
+}
+
+/// Defensive guard (#1285): a Flat reward that is present but non-positive
+/// cannot exist through the public API (set_distribution_mode rejects it),
+/// so it is simulated by writing storage directly. Verification must fail
+/// with InvalidAmount instead of paying a non-positive reward.
+#[test]
+fn test_verify_completion_fails_if_flat_reward_is_zero() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Mode(q_id), &DistributionMode::Flat);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FlatReward(q_id), &0i128);
+    });
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
 // --- Snapshot distribution mode at submission (issue #863) ---

@@ -996,11 +996,20 @@ impl MilestoneContract {
 
         let reward = match mode.clone() {
             DistributionMode::Custom => milestone.reward_amount,
-            DistributionMode::Flat => env
-                .storage()
-                .persistent()
-                .get(&DataKey::FlatReward(quest_id))
-                .ok_or(Error::FlatRewardNotConfigured)?,
+            DistributionMode::Flat => {
+                let flat = env
+                    .storage()
+                    .persistent()
+                    .get(&DataKey::FlatReward(quest_id))
+                    .ok_or(Error::FlatRewardNotConfigured)?;
+                if flat <= 0 {
+                    // Defensive: set_distribution_mode rejects non-positive
+                    // flat rewards, so this only triggers on corrupted or
+                    // externally tampered storage (#1285).
+                    return Err(Error::InvalidAmount);
+                }
+                flat
+            }
             DistributionMode::Percentage(pct) => {
                 // Compute reward = round(milestone.reward_amount * pct / 100)
                 let pct_i: i128 = pct as i128;

@@ -1668,6 +1668,32 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
     assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
 }
 
+/// Defensive guard (#1285): a Flat reward that is present but non-positive
+/// cannot exist through the public API (set_distribution_mode rejects it),
+/// so it is simulated by writing storage directly. Verification must fail
+/// with InvalidAmount instead of paying a non-positive reward.
+#[test]
+fn test_verify_completion_fails_if_flat_reward_is_zero() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Mode(q_id), &DistributionMode::Flat);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FlatReward(q_id), &0i128);
+    });
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
+}
+
 // --- Snapshot distribution mode at submission (issue #863) ---
 
 #[test]

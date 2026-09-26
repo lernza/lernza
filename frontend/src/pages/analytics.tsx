@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   BarChart,
   Bar,
@@ -11,7 +11,7 @@ import {
   Cell,
   Legend,
 } from "recharts"
-import { BarChart3, Users, Coins, Target, RefreshCw, TrendingUp, Award } from "lucide-react"
+import { BarChart3, Users, Coins, Target, RefreshCw, TrendingUp, Award, Download, FileText } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,6 +23,14 @@ import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { milestoneClient } from "@/lib/contracts/milestone-client"
 import { formatTokens, getQuestLifecycleStatus } from "@/lib/utils"
+import {
+  analyticsFilename,
+  buildAnalyticsCsv,
+  downloadCsv,
+  exportPdf,
+  filterByCreatedAt,
+  type DateRange,
+} from "@/lib/analytics-export"
 import type { QuestInfo } from "@/lib/contract-types"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +47,7 @@ interface PlatformStats {
 interface QuestAnalytics {
   id: number
   name: string
+  createdAt: number
   enrollees: number
   milestones: number
   completedMilestones: number
@@ -102,6 +111,7 @@ async function fetchQuestAnalytics(questIds: number[]): Promise<QuestAnalytics[]
       return {
         id,
         name: quest?.name ?? `Quest #${id}`,
+        createdAt: quest?.createdAt ?? 0,
         enrollees: enrollees.length,
         milestones: milestoneCount,
         completedMilestones,
@@ -323,6 +333,11 @@ export function Analytics() {
   const [questAnalytics, setQuestAnalytics] = useState<QuestAnalytics[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [range, setRange] = useState<DateRange>({ from: "", to: "" })
+
+  // Date filtering applies to the exported reports and to every chart/table
+  // below, so what a creator sees is what they download.
+  const visibleQuests = useMemo(() => filterByCreatedAt(questAnalytics, range), [questAnalytics, range])
 
   const load = async () => {
     setLoading(true)
@@ -346,6 +361,10 @@ export function Analytics() {
     load()
   }, [])
 
+  const exportCsv = () => {
+    downloadCsv(analyticsFilename(range, "csv"), buildAnalyticsCsv(visibleQuests, range))
+  }
+
   if (loading) return <LoadingState message="Loading analytics..." />
   if (error) return <SmartError message={error} onRetry={load} />
   if (!stats) return <EmptyState title="No Data" description="No analytics data available" />
@@ -362,6 +381,59 @@ export function Analytics() {
           </Button>
         }
       />
+
+      {/* Date range filter + exports (issue #1648) */}
+      <div className="print:hidden mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div>
+            <label htmlFor="analytics-from" className="text-muted-foreground mb-1 block text-xs font-medium">
+              Created from
+            </label>
+            <input
+              id="analytics-from"
+              type="date"
+              value={range.from}
+              max={range.to || undefined}
+              onChange={e => setRange(r => ({ ...r, from: e.target.value }))}
+              className="border-border rounded-md border px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="analytics-to" className="text-muted-foreground mb-1 block text-xs font-medium">
+              Created to
+            </label>
+            <input
+              id="analytics-to"
+              type="date"
+              value={range.to}
+              min={range.from || undefined}
+              onChange={e => setRange(r => ({ ...r, to: e.target.value }))}
+              className="border-border rounded-md border px-2 py-1.5 text-sm"
+            />
+          </div>
+          {(range.from || range.to) && (
+            <Button variant="ghost" size="sm" onClick={() => setRange({ from: "", to: "" })}>
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={visibleQuests.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportPdf}>
+            <FileText className="mr-2 h-4 w-4" />
+            Export PDF
+          </Button>
+        </div>
+      </div>
+
+      {visibleQuests.length !== questAnalytics.length && (
+        <p className="text-muted-foreground mb-4 text-sm">
+          Showing {visibleQuests.length} of {questAnalytics.length} quests in the selected date range.
+        </p>
+      )}
 
       {/* Platform overview */}
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -383,11 +455,11 @@ export function Analytics() {
       {/* Charts row */}
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <StatusPieChart stats={stats} />
-        <EnrollmentBarChart quests={questAnalytics} />
+        <EnrollmentBarChart quests={visibleQuests} />
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <MilestoneCompletionChart quests={questAnalytics} />
+        <MilestoneCompletionChart quests={visibleQuests} />
         <Card className="border-border shadow-lg">
           <CardHeader className="border-border border-b py-4">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -406,9 +478,9 @@ export function Analytics() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-sm">Avg. Enrollment</span>
               <Badge variant="secondary">
-                {stats.totalQuests > 0
+                {visibleQuests.length > 0
                   ? (
-                      questAnalytics.reduce((s, q) => s + q.enrollees, 0) / questAnalytics.length
+                      visibleQuests.reduce((s, q) => s + q.enrollees, 0) / visibleQuests.length
                     ).toFixed(1)
                   : "0"}
               </Badge>
@@ -416,9 +488,9 @@ export function Analytics() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-sm">Avg. Milestones/Quest</span>
               <Badge variant="secondary">
-                {questAnalytics.length > 0
+                {visibleQuests.length > 0
                   ? (
-                      questAnalytics.reduce((s, q) => s + q.milestones, 0) / questAnalytics.length
+                      visibleQuests.reduce((s, q) => s + q.milestones, 0) / visibleQuests.length
                     ).toFixed(1)
                   : "0"}
               </Badge>
@@ -426,13 +498,13 @@ export function Analytics() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground text-sm">Completion Rate</span>
               <Badge variant="secondary">
-                {questAnalytics.length > 0
+                {visibleQuests.length > 0
                   ? (() => {
-                      const totalPossible = questAnalytics.reduce(
+                      const totalPossible = visibleQuests.reduce(
                         (s, q) => s + q.milestones * q.enrollees,
                         0
                       )
-                      const totalCompleted = questAnalytics.reduce(
+                      const totalCompleted = visibleQuests.reduce(
                         (s, q) => s + q.completedMilestones,
                         0
                       )
@@ -448,7 +520,7 @@ export function Analytics() {
       </div>
 
       {/* Quest rewards table */}
-      <QuestRewardsTable quests={questAnalytics} />
+      <QuestRewardsTable quests={visibleQuests} />
     </PageContainer>
   )
 }

@@ -2333,9 +2333,13 @@ impl QuestContract {
     /// no runtime TTL read outside of testutils).
     fn record_category_expiry(env: &Env, category: &String) {
         let expiry = env.ledger().sequence().saturating_add(common::BUMP);
-        env.storage()
-            .persistent()
-            .set(&DataKey::CategoryExpiry(category.clone()), &expiry);
+        let key = DataKey::CategoryExpiry(category.clone());
+        env.storage().persistent().set(&key, &expiry);
+        // A bare `set` leaves the TTL at the network minimum, which archives
+        // this key well before the listing it describes — and, because
+        // `Self::bump` re-reads it, turns a healthy `get_quest` into a storage
+        // error. Keep the bump the doc comment above promises.
+        common::extend_persistent_ttl(env, &key);
     }
 
     fn validate_tags(tags: &Vec<String>) -> Result<(), Error> {

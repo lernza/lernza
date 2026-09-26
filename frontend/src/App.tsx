@@ -69,7 +69,7 @@ function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: (
   return verified ? <>{children}</> : <PageSkeleton />
 }
 
-function pathToPage(pathname: string): {
+export function pathToPage(pathname: string): {
   page: Page
   questId: number | null
   creatorAddress: string | null

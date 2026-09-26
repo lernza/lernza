@@ -28,6 +28,7 @@ const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ defau
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 const AnalyticsPage = lazy(() => import("@/pages/analytics").then((m) => ({ default: m.Analytics })))
 const CertificateView = lazy(() => import("@/pages/certificate").then((m) => ({ default: m.CertificateView })))
+const NotificationsPage = lazy(() => import("@/pages/notifications").then((m) => ({ default: m.NotificationsPage })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
@@ -44,6 +45,7 @@ const VALID_PAGES = [
   "leaderboard",
   "history",
   "analytics",
+  "notifications",
   "terms",
   "privacy",
 ] as const
@@ -89,6 +91,7 @@ function pathToPage(pathname: string): {
   if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/history") return { page: "history", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/notifications") return { page: "notifications", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null, certificateId: null }
 
@@ -248,6 +251,12 @@ function App() {
         return (
           <Suspense fallback={<PageSkeleton />}>
             <CertificateView certificateId={state.certificateId ?? 0} />
+          </Suspense>
+        )
+      case "notifications":
+        return (
+          <Suspense fallback={<PageSkeleton />}>
+            <NotificationsPage onBack={() => handleNavigate("dashboard")} />
           </Suspense>
         )
       case "terms":

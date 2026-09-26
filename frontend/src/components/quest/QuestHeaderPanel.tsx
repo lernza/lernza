@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, Share2 } from "lucide-react"
+import { ArrowLeft, Plus, Share2, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
@@ -11,6 +11,7 @@ interface QuestHeaderPanelProps {
   onBack: () => void
   onAddEnrollee: () => void
   onAddMilestone: () => void
+  onTransferOwnership?: () => void
   onToast: (message: string, type?: "success" | "error" | "info") => void
 }
 
@@ -23,6 +24,7 @@ export function QuestHeaderPanel({
   onBack,
   onAddEnrollee,
   onAddMilestone,
+  onTransferOwnership,
   onToast,
 }: QuestHeaderPanelProps) {
   const handleShare = () => {
@@ -53,6 +55,12 @@ export function QuestHeaderPanel({
             <Share2 className="h-4 w-4" />
             Share
           </Button>
+          {onTransferOwnership && !isArchived && (
+            <Button variant="outline" size="sm" onClick={onTransferOwnership} className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Transfer Ownership
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={onAddMilestone} disabled={isArchived} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Milestone

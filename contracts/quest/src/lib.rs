@@ -919,7 +919,7 @@ impl QuestContract {
     /// `join_quest` will instead add to the waitlist.
     pub fn add_enrollee(env: Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
         Self::require_not_paused(&env)?;
-        let quest = Self::load_quest(&env, quest_id)?;
+        let (quest, enrollees) = Self::load_quest_and_enrollees(&env, quest_id)?;
         quest.owner.require_auth();
 
         if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
@@ -932,8 +932,6 @@ impl QuestContract {
             return Err(Error::DeadlineExpired);
         }
 
-        let enrollees = Self::load_enrollees(&env, quest_id);
-
         // Owner can force-add even when full (bypasses cap).
         // For self-enrollment, see join_quest which waitlists when full.
 
@@ -942,7 +940,7 @@ impl QuestContract {
             return Err(Error::AlreadyEnrolled);
         }
 
-        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee, quest.cooldown_period)?;
 
         let mut new_enrollees = enrollees;
         new_enrollees.push_back(enrollee.clone());
@@ -979,7 +977,7 @@ impl QuestContract {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
 
-        let quest = Self::load_quest(&env, quest_id)?;
+        let (quest, enrollees) = Self::load_quest_and_enrollees(&env, quest_id)?;
         if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
@@ -993,13 +991,11 @@ impl QuestContract {
             return Err(Error::InviteOnly);
         }
 
-        let enrollees = Self::load_enrollees(&env, quest_id);
-
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
         }
 
-        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee, quest.cooldown_period)?;
 
         // If the quest has a cap and is full, add to the waitlist instead.
         if let Some(max) = quest.max_enrollees {
@@ -1166,7 +1162,7 @@ impl QuestContract {
         enrollee.require_auth();
         Self::require_not_paused(&env)?;
 
-        let quest = Self::load_quest(&env, quest_id)?;
+        let (quest, enrollees) = Self::load_quest_and_enrollees(&env, quest_id)?;
         if quest.status == QuestStatus::Archived || quest.status == QuestStatus::Cancelled {
             return Err(Error::EnrollmentClosed);
         }
@@ -1180,27 +1176,19 @@ impl QuestContract {
         let commitment_key = DataKey::InviteCommitment(quest_id, commitment.clone());
         let used_key = DataKey::InviteUsed(quest_id, commitment.clone());
 
+        // Batch lookup commitment and used status (#1641).
+        let (commitment_opt, used_opt): (Option<bool>, Option<bool>) =
+            common::get_persistent_pair(&env, &commitment_key, &used_key);
+
         // Commitment must be registered.
-        if !env
-            .storage()
-            .persistent()
-            .get::<_, bool>(&commitment_key)
-            .unwrap_or(false)
-        {
+        if !commitment_opt.unwrap_or(false) {
             return Err(Error::InvalidInvite);
         }
 
         // Commitment must not have been consumed already.
-        if env
-            .storage()
-            .persistent()
-            .get::<_, bool>(&used_key)
-            .unwrap_or(false)
-        {
+        if used_opt.unwrap_or(false) {
             return Err(Error::InviteAlreadyUsed);
         }
-
-        let enrollees = Self::load_enrollees(&env, quest_id);
 
         if let Some(max) = quest.max_enrollees {
             if enrollees.len() >= max {
@@ -1212,7 +1200,7 @@ impl QuestContract {
             return Err(Error::AlreadyEnrolled);
         }
 
-        Self::require_reenroll_allowed(&env, quest_id, &enrollee)?;
+        Self::require_reenroll_allowed(&env, quest_id, &enrollee, quest.cooldown_period)?;
 
         // Mark invite as consumed before mutating enrollment state.
         env.storage().persistent().set(&used_key, &true);
@@ -2048,6 +2036,9 @@ impl QuestContract {
         if nominee == quest.owner {
             return Err(Error::InvalidInput);
         }
+        if !common::is_valid_stellar_address(&nominee) {
+            return Err(Error::InvalidInput);
+        }
 
         let transfer = PendingTransfer {
             nominee: nominee.clone(),
@@ -2064,6 +2055,15 @@ impl QuestContract {
 
         Self::bump(&env, quest_id);
         Ok(())
+    }
+
+    /// Alias / entrypoint for initiating two-step quest ownership transfer (#1644).
+    pub fn transfer_quest_ownership(
+        env: Env,
+        quest_id: u32,
+        new_owner: Address,
+    ) -> Result<(), Error> {
+        Self::initiate_transfer(env, quest_id, new_owner)
     }
 
     /// Accept a pending ownership transfer. Only the nominated address can call.
@@ -2350,12 +2350,27 @@ impl QuestContract {
             .unwrap_or(Vec::new(env))
     }
 
+    /// Batch load quest and its enrollees in a single operation (#1641).
+    fn load_quest_and_enrollees(env: &Env, quest_id: u32) -> Result<(QuestInfo, Vec<Address>), Error> {
+        let quest_key = DataKey::Quest(quest_id);
+        let enrollees_key = DataKey::Enrollees(quest_id);
+        let (quest_opt, enrollees_opt): (Option<QuestInfo>, Option<Vec<Address>>) =
+            common::get_persistent_pair(env, &quest_key, &enrollees_key);
+        let quest = quest_opt.ok_or(Error::NotFound)?;
+        let enrollees = enrollees_opt.unwrap_or(Vec::new(env));
+        Ok((quest, enrollees))
+    }
+
     /// Reject re-enrollment while the quest's cooldown period has not yet
     /// elapsed since the address left (#1649). Elapsed markers are removed so
     /// the state stays clean. Quests without a cooldown are unaffected.
-    fn require_reenroll_allowed(env: &Env, quest_id: u32, enrollee: &Address) -> Result<(), Error> {
-        let quest = Self::load_quest(env, quest_id)?;
-        let Some(cooldown_ledgers) = quest.cooldown_period else {
+    fn require_reenroll_allowed(
+        env: &Env,
+        quest_id: u32,
+        enrollee: &Address,
+        cooldown_period: Option<u32>,
+    ) -> Result<(), Error> {
+        let Some(cooldown_ledgers) = cooldown_period else {
             return Ok(());
         };
         if cooldown_ledgers == 0 {
@@ -2466,7 +2481,7 @@ impl QuestContract {
     }
 
     fn internal_remove_enrollee(env: &Env, quest_id: u32, enrollee: Address) -> Result<(), Error> {
-        let enrollees = Self::load_enrollees(env, quest_id);
+        let (quest, enrollees) = Self::load_quest_and_enrollees(env, quest_id)?;
         let mut found = false;
         let mut new_list = Vec::new(env);
 
@@ -2501,7 +2516,6 @@ impl QuestContract {
         // can gate a later re-enrollment (#1649). The marker is only written
         // when a cooldown is configured; the ledger sequence (not the wall
         // clock) is the cooldown's clock.
-        let quest = Self::load_quest(env, quest_id)?;
         if let Some(cooldown_ledgers) = quest.cooldown_period {
             if cooldown_ledgers > 0 {
                 let cooldown_key = DataKey::ReEnrollCooldown(quest_id, enrollee.clone());
@@ -2522,7 +2536,7 @@ impl QuestContract {
                 env.storage().persistent().set(&wl_key, &waitlist);
                 common::extend_persistent_ttl(env, &wl_key);
 
-                let mut current_enrollees = Self::load_enrollees(env, quest_id);
+                let mut current_enrollees = new_list;
                 current_enrollees.push_back(promoted.clone());
                 env.storage()
                     .persistent()

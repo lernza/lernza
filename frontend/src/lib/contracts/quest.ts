@@ -442,6 +442,62 @@ export class QuestClient {
     })
   }
 
+  /**
+   * Initiates a two-step transfer of quest ownership.
+   */
+  async transferQuestOwnership(
+    owner: string,
+    questId: number,
+    newOwner: string,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "transfer_quest_ownership", [
+        nativeToScVal(questId, { type: "u32" }),
+        new Address(newOwner).toScVal(),
+      ])
+      return signAndSubmitTracked(tx, "Transfer Quest Ownership", handlers)
+    })
+  }
+
+  async acceptTransfer(
+    nominee: string,
+    questId: number,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(nominee, "accept_transfer", [
+        nativeToScVal(questId, { type: "u32" }),
+      ])
+      return signAndSubmitTracked(tx, "Accept Quest Ownership Transfer", handlers)
+    })
+  }
+
+  async cancelTransfer(
+    owner: string,
+    questId: number,
+    handlers?: TransactionLifecycleHandlers
+  ) {
+    return safeContractCall(async () => {
+      const tx = await this.buildTx(owner, "cancel_transfer", [
+        nativeToScVal(questId, { type: "u32" }),
+      ])
+      return signAndSubmitTracked(tx, "Cancel Ownership Transfer", handlers)
+    })
+  }
+
+  async getPendingTransfer(questId: number): Promise<{ nominee: string; initiatedAt: number } | null> {
+    const result = await this.invokeRead("get_pending_transfer", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    if (!result) return null
+    const r = result as Record<string, unknown>
+    return {
+      nominee: String(r.nominee),
+      initiatedAt: Number(r.initiated_at),
+    }
+  }
+
   private async invokeRead(method: string, args: xdr.ScVal[]) {
     return withContractLogging("quest", method, {}, async () => {
       return simulateContractRead(this.getContract(), { method, args })

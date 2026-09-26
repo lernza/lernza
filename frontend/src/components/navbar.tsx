@@ -6,6 +6,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme"
 import { useTranslation } from "@/i18n"
 import { cn } from "@/lib/utils"
 import { NetworkIndicator, NetworkMismatchBanner } from "@/components/error-states"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 
 const NAV_ITEMS = [
   { key: "landing", labelKey: "nav.home" as const },
@@ -114,6 +115,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
         <div className="flex items-center gap-2">
           <NetworkIndicator />
           <ThemeToggle />
+          <NotificationCenter onNavigate={handleNavigate} />
 
           {/* Tutorial launch button */}
           {onLaunchTutorial && (
@@ -150,7 +152,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
             </>
           ) : (
             <Button
-              onClick={connect}
+              onClick={() => void connect()}
               disabled={loading}
               size="sm"
               className="shimmer-on-hover"

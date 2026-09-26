@@ -637,20 +637,23 @@ impl MilestoneContract {
             Self::validate_ms_input(&ms.title, &ms.description, ms.reward_amount)?;
         }
 
+        // Batch lookup NextMilestoneId and MilestoneCount upfront to minimize ledger access costs (#1641).
+        let next_key = DataKey::NextMilestoneId(quest_id);
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let (next_id_opt, count_opt): (Option<u32>, Option<u32>) =
+            common::get_persistent_pair(&env, &next_key, &count_key);
+        let base_id = next_id_opt.unwrap_or(0);
+        let mut current_count = count_opt.unwrap_or(0);
+
         // Step 1b: Reject any cycle in the effective prerequisite graph
         // (see validate_prerequisite_acyclic, #1630).
-        let base_id: u32 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
-            .unwrap_or(0);
         Self::validate_prerequisite_acyclic(&env, quest_id, base_id, &milestones)?;
 
         // Step 2: Create milestones
         let mut ids = Vec::new(&env);
+        let mut next_id = base_id;
         for ms in milestones {
-            let next_key = DataKey::NextMilestoneId(quest_id);
-            let id: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+            let id = next_id;
 
             if id == 0 && ms.requires_previous {
                 return Err(Error::InvalidInput);
@@ -671,15 +674,8 @@ impl MilestoneContract {
 
             let ms_key = DataKey::Milestone(quest_id, id);
             env.storage().persistent().set(&ms_key, &ms_info);
-            env.storage().persistent().set(&next_key, &(id.checked_add(1).ok_or(Error::Overflow)?));
-
-            // Increment explicit milestone count
-            let count_key = DataKey::MilestoneCount(quest_id);
-            let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-            env.storage()
-                .persistent()
-                .set(&count_key, &(current_count.checked_add(1).ok_or(Error::Overflow)?));
-            Self::bump_ms(&env, &count_key);
+            next_id = id.checked_add(1).ok_or(Error::Overflow)?;
+            current_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
 
             // Emit milestone creation event
             env.events().publish(
@@ -688,9 +684,14 @@ impl MilestoneContract {
             );
 
             Self::bump_ms(&env, &ms_key);
-            Self::bump_ms(&env, &next_key);
             ids.push_back(id);
         }
+
+        // Persist updated counters once after batch finishes
+        env.storage().persistent().set(&next_key, &next_id);
+        Self::bump_ms(&env, &next_key);
+        env.storage().persistent().set(&count_key, &current_count);
+        Self::bump_ms(&env, &count_key);
 
         extend_instance_ttl(&env);
         Ok(ids)
@@ -771,19 +772,16 @@ impl MilestoneContract {
         for id in 0..total {
             let mut deps = Vec::new(env);
             if id < base_id {
-                if let Some(stored) = env
-                    .storage()
-                    .persistent()
-                    .get::<_, Vec<u32>>(&DataKey::Prerequisites(quest_id, id))
-                {
+                let (stored, ms): (Option<Vec<u32>>, Option<MilestoneInfo>) = common::get_persistent_pair(
+                    env,
+                    &DataKey::Prerequisites(quest_id, id),
+                    &DataKey::Milestone(quest_id, id),
+                );
+                if let Some(stored) = stored {
                     for p in stored.iter() {
                         deps.push_back(p);
                     }
-                } else if let Some(ms) = env
-                    .storage()
-                    .persistent()
-                    .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, id))
-                {
+                } else if let Some(ms) = ms {
                     if ms.requires_previous && id > 0 {
                         deps.push_back(id - 1);
                     }
@@ -807,12 +805,12 @@ impl MilestoneContract {
         for id in 0..total {
             indegree.push_back(prerequisites.get(id).unwrap().len() as u32);
             for p in prerequisites.get(id).unwrap().iter() {
-                if *p >= total {
+                if p >= total {
                     return Err(Error::InvalidInput);
                 }
-                let mut targets = dependents.get(*p).unwrap();
+                let mut targets = dependents.get(p).unwrap();
                 targets.push_back(id);
-                dependents.set(*p, targets);
+                dependents.set(p, targets);
             }
         }
 
@@ -828,10 +826,10 @@ impl MilestoneContract {
             let id = queue.pop_back().unwrap();
             processed = processed.checked_add(1).ok_or(Error::Overflow)?;
             for dep in dependents.get(id).unwrap().iter() {
-                let remaining = indegree.get(*dep).unwrap() - 1;
-                indegree.set(*dep, remaining);
+                let remaining = indegree.get(dep).unwrap() - 1;
+                indegree.set(dep, remaining);
                 if remaining == 0 {
-                    queue.push_back(*dep);
+                    queue.push_back(dep);
                 }
             }
         }
@@ -1449,16 +1447,10 @@ impl MilestoneContract {
         // Snapshot the distribution-mode parameters at submission time so
         // the approval flow is paid under the rules the enrollee signed up
         // for. See issue #863.
-        let current_mode: DistributionMode = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Mode(quest_id))
-            .unwrap_or(DistributionMode::Custom);
-        let current_flat_reward: i128 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::FlatReward(quest_id))
-            .unwrap_or(0);
+        let (current_mode_opt, current_flat_opt): (Option<DistributionMode>, Option<i128>) =
+            common::get_persistent_pair(&env, &DataKey::Mode(quest_id), &DataKey::FlatReward(quest_id));
+        let current_mode = current_mode_opt.unwrap_or(DistributionMode::Custom);
+        let current_flat_reward = current_flat_opt.unwrap_or(0);
         let snapshot = PendingSubmissionSnapshot {
             distribution_mode: current_mode,
             reward_amount: milestone.reward_amount,

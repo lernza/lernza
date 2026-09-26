@@ -406,12 +406,19 @@ export function EmptyState(props: EmptyStateProps) {
 interface ContractUnavailableProps {
   message?: string
   contract?: string
+  contractName?: string
+  contractId?: string
 }
 
 export function ContractUnavailable({
   message = "Contract is unavailable",
-  contract = "this contract",
+  contract,
+  contractName,
+  contractId,
 }: ContractUnavailableProps) {
+  const displayContract =
+    contract || contractName || (contractId ? `Contract (${contractId})` : "this contract")
+
   return (
     <Card className="animate-fade-in-up">
       <CardContent className="flex flex-col items-center py-12 text-center">
@@ -420,7 +427,7 @@ export function ContractUnavailable({
         </div>
         <h3 className="mb-2 font-semibold">Contract unavailable</h3>
         <p className="text-muted-foreground max-w-md text-sm">
-          {message} {contract} is not configured or deployed on the current network.
+          {message} {displayContract} is not configured or deployed on the current network.
         </p>
       </CardContent>
     </Card>

@@ -35,25 +35,27 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
         "Build a strong foundation through guided lessons, practical exercises, and a final project.",
       category: "Education",
       tags: ["course", "learning", "project"],
+      referralBonus: 10,
     },
     step2: {
       milestones: [
-        {
-          title: "Learn the fundamentals",
-          description: "Complete the core lessons and explain the key concepts in your own words.",
-          rewardAmount: 25,
-        },
-        {
-          title: "Practice with exercises",
-          description:
-            "Submit solutions to the practical exercises and demonstrate your understanding.",
-          rewardAmount: 50,
-        },
-        {
-          title: "Build a final project",
-          description: "Create and submit a project that applies the skills from the course.",
-          rewardAmount: 100,
-        },
+        milestone(
+          "Learn the fundamentals",
+          "Complete the core lessons and explain the key concepts in your own words.",
+          25
+        ),
+        milestone(
+          "Practice with exercises",
+          "Submit solutions to the practical exercises and demonstrate your understanding.",
+          50,
+          [0]
+        ),
+        milestone(
+          "Build a final project",
+          "Create and submit a project that applies the skills from the course.",
+          100,
+          [1]
+        ),
       ],
     },
   },
@@ -68,30 +70,33 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
         "An intensive learning sprint with weekly deliverables, peer feedback, and a capstone project.",
       category: "Bootcamp",
       tags: ["bootcamp", "intensive", "capstone"],
+      referralBonus: 10,
     },
     step2: {
       milestones: [
-        {
-          title: "Week 1: Foundations",
-          description:
-            "Complete the onboarding material and submit your first hands-on assignment.",
-          rewardAmount: 50,
-        },
-        {
-          title: "Week 2: Build",
-          description: "Build a working feature using the techniques covered in the bootcamp.",
-          rewardAmount: 75,
-        },
-        {
-          title: "Week 3: Collaborate",
-          description: "Review a peer's work and improve your own project using the feedback.",
-          rewardAmount: 75,
-        },
-        {
-          title: "Week 4: Ship the capstone",
-          description: "Present and submit a polished capstone project for final review.",
-          rewardAmount: 150,
-        },
+        milestone(
+          "Week 1: Foundations",
+          "Complete the onboarding material and submit your first hands-on assignment.",
+          50
+        ),
+        milestone(
+          "Week 2: Build",
+          "Build a working feature using the techniques covered in the bootcamp.",
+          75,
+          [0]
+        ),
+        milestone(
+          "Week 3: Collaborate",
+          "Review a peer's work and improve your own project using the feedback.",
+          75,
+          [1]
+        ),
+        milestone(
+          "Week 4: Ship the capstone",
+          "Present and submit a polished capstone project for final review.",
+          150,
+          [2]
+        ),
       ],
     },
   },
@@ -107,19 +112,21 @@ export const QUEST_TEMPLATES: QuestTemplate[] = [
         "Complete a focused challenge and show what you can do with a practical submission.",
       category: "Skill Challenge",
       tags: ["challenge", "practice", "skills"],
+      referralBonus: 10,
     },
     step2: {
       milestones: [
-        {
-          title: "Study the brief",
-          description: "Review the challenge requirements and outline your approach.",
-          rewardAmount: 25,
-        },
-        {
-          title: "Complete the challenge",
-          description: "Submit a solution that meets the challenge requirements.",
-          rewardAmount: 75,
-        },
+        milestone(
+          "Study the brief",
+          "Review the challenge requirements and outline your approach.",
+          25
+        ),
+        milestone(
+          "Complete the challenge",
+          "Submit a solution that meets the challenge requirements.",
+          75,
+          [0]
+        ),
       ],
     },
   },

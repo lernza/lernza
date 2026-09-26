@@ -233,7 +233,7 @@ interface WalletRequiredProps {
  */
 export function WalletRequired({ message, onConnect }: WalletRequiredProps) {
   const { connect, loading, installed, installUrl, wrongNetwork, expectedNetworkName } = useWallet()
-  const handleConnect = onConnect ?? connect
+  const handleConnect = onConnect ?? (() => void connect())
 
   return (
     <div className="animate-fade-in-up border-border bg-background border p-8 text-center shadow-md">

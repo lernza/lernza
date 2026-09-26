@@ -30,7 +30,6 @@ export const LoadingInline: Story = {
 export const ErrorDefault: Story = {
   render: () => (
     <ErrorState
-      title="Failed to Load Milestones"
       message="The Stellar network returned an unexpected error. Please check your connection and try again."
       onRetry={() => alert("Retry clicked")}
     />
@@ -42,8 +41,10 @@ export const EmptyDefault: Story = {
     <EmptyState
       title="No Quests Found"
       description="You haven't enrolled in or created any quests yet. Browse available quests to start learning."
-      actionText="Explore Quests"
-      onAction={() => alert("Explore Quests clicked")}
+      action={{
+        label: "Explore Quests",
+        onClick: () => alert("Explore Quests clicked"),
+      }}
       icon={Target}
     />
   ),

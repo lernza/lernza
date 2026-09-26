@@ -30,6 +30,7 @@ import { batchClaimRewards } from "@/lib/contracts/batch-claims"
 import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
 import { LoadingState } from "@/components/ui/async-states"
+import { TransferOwnershipDialog } from "@/components/quest/transfer-ownership-dialog"
 import { storePendingReferral, recordReferralEnrollment } from "@/lib/referrals"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
 
@@ -40,6 +41,7 @@ interface QuestViewProps {
 
 export function QuestView({ questId, onBack }: QuestViewProps) {
   const [activeTab, setActiveTab] = useState<QuestTab>("milestones")
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const { toasts, addToast, removeToast } = useToast()
   const { address } = useWallet()
 
@@ -374,6 +376,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
           onBack={onBack}
           onAddEnrollee={handleAddEnrollee}
           onAddMilestone={handleAddMilestone}
+          onTransferOwnership={address && quest?.owner === address ? () => setIsTransferDialogOpen(true) : undefined}
           onToast={addToast}
         />
       </SectionErrorBoundary>
@@ -516,6 +519,16 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         questName={quest.name}
         onClose={() => setIsReportOpen(false)}
       />
+
+      {address && quest?.owner === address && (
+        <TransferOwnershipDialog
+          open={isTransferDialogOpen}
+          questId={questId}
+          questName={quest.name}
+          currentOwner={quest.owner}
+          onClose={() => setIsTransferDialogOpen(false)}
+        />
+      )}
     </div>
   )
 }

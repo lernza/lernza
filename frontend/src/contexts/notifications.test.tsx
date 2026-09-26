@@ -162,4 +162,45 @@ describe("Notification System Frontend Tests", () => {
     expect(screen.getByText("Deadline Reminders")).toBeDefined()
     expect(screen.getByText("Quest Cancellation & Archival")).toBeDefined()
   })
+
+  it("tracks persistent history, unread count, and supports markAsRead and clearHistory", () => {
+    localStorage.clear()
+    function HistoryConsumer() {
+      const { history, unreadCount, addToast, markAsRead, markAllAsRead, clearHistory } = useNotifications()
+      return (
+        <div>
+          <span data-testid="unread-count">{unreadCount}</span>
+          <span data-testid="history-count">{history.length}</span>
+          <button onClick={() => addToast("Test Notification")}>Add Notification</button>
+          {history.map(item => (
+            <div key={item.id} data-testid={`history-item-${item.id}`}>
+              <span data-testid={`read-status-${item.id}`}>{item.read ? "read" : "unread"}</span>
+              <button onClick={() => markAsRead(item.id)}>Mark {item.id} Read</button>
+            </div>
+          ))}
+          <button onClick={markAllAsRead}>Mark All Read</button>
+          <button onClick={clearHistory}>Clear History</button>
+        </div>
+      )
+    }
+
+    render(
+      <NotificationProvider>
+        <HistoryConsumer />
+      </NotificationProvider>
+    )
+
+    expect(screen.getByTestId("history-count").textContent).toBe("0")
+    expect(screen.getByTestId("unread-count").textContent).toBe("0")
+
+    fireEvent.click(screen.getByText("Add Notification"))
+    expect(screen.getByTestId("history-count").textContent).toBe("1")
+    expect(screen.getByTestId("unread-count").textContent).toBe("1")
+
+    fireEvent.click(screen.getByText("Mark All Read"))
+    expect(screen.getByTestId("unread-count").textContent).toBe("0")
+
+    fireEvent.click(screen.getByText("Clear History"))
+    expect(screen.getByTestId("history-count").textContent).toBe("0")
+  })
 })

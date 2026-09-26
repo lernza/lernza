@@ -66,6 +66,7 @@
         "set_visibility",
         "suspend_quest",
         "transfer_admin",
+        "transfer_quest_ownership",
         "undismiss_dashboard_guidance",
         "unpause",
         "update_quest",

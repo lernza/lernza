@@ -193,6 +193,36 @@ pub fn is_contract_address(addr: &Address) -> bool {
     true
 }
 
+/// Validate that an address is a valid Stellar address (account 'G' or contract 'C').
+///
+/// **What this function checks:**
+/// - Length is exactly 56 characters
+/// - First character is 'G' (account) or 'C' (contract)
+/// - All characters use valid base32 charset (A-Z, 2-7)
+pub fn is_valid_stellar_address(addr: &Address) -> bool {
+    let s = addr.to_string();
+
+    if s.len() != 56 {
+        return false;
+    }
+
+    let mut buf = [0u8; 56];
+    s.copy_into_slice(&mut buf);
+
+    if buf[0] != b'G' && buf[0] != b'C' {
+        return false;
+    }
+
+    for &c in buf[1..].iter() {
+        let valid = c.is_ascii_uppercase() || (b'2'..=b'7').contains(&c);
+        if !valid {
+            return false;
+        }
+    }
+
+    true
+}
+
 pub fn extend_instance_ttl(env: &Env) {
     env.storage().instance().extend_ttl(THRESHOLD, BUMP);
 }
@@ -323,6 +353,23 @@ pub fn get_persistent<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk:
     key: &K,
 ) -> Option<T> {
     env.storage().persistent().get(key)
+}
+
+/// Helper utility for batching persistent storage lookups of correlated key pairs (#1641).
+pub fn get_persistent_pair<K1, K2, T1, T2>(
+    env: &Env,
+    key1: &K1,
+    key2: &K2,
+) -> (Option<T1>, Option<T2>)
+where
+    K1: IsDataKey,
+    K2: IsDataKey,
+    T1: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    T2: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+{
+    let val1 = env.storage().persistent().get(key1);
+    let val2 = env.storage().persistent().get(key2);
+    (val1, val2)
 }
 
 /// Planning-only heuristic for rent-cost estimates: stroops charged per

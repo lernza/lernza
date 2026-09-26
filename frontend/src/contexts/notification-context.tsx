@@ -33,6 +33,7 @@ export interface NotificationToast {
     onClick: () => void
   }
   createdAt?: number
+  read?: boolean
 }
 
 export interface NotificationPreferences {
@@ -75,14 +76,19 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 }
 
 const PREFS_STORAGE_KEY = "lernza_notification_preferences"
+const NOTIFICATION_HISTORY_STORAGE_KEY = "lernza_notification_history"
 
 interface NotificationContextType {
   toasts: NotificationToast[]
   history: NotificationToast[]
+  unreadCount: number
   preferences: NotificationPreferences
   addToast: (toast: Omit<NotificationToast, "id" | "createdAt"> | string) => string
   removeToast: (id: string) => void
   clearAllToasts: () => void
+  markAsRead: (id: string) => void
+  markAllAsRead: () => void
+  clearHistory: () => void
   updatePreferences: (newPrefs: Partial<NotificationPreferences>) => void
   notifyEnrollment: (questName: string, learnerAddress: string, action?: "enrolled" | "added" | "invited") => void
   notifySubmission: (questName: string, milestoneTitle: string, submitter?: string) => void
@@ -98,7 +104,14 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<NotificationToast[]>([])
-  const [history, setHistory] = useState<NotificationToast[]>([])
+  const [history, setHistory] = useState<NotificationToast[]>(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATION_HISTORY_STORAGE_KEY)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [preferences, setPreferences] = useState<NotificationPreferences>(() => {
     try {
       const saved = localStorage.getItem(PREFS_STORAGE_KEY)
@@ -112,6 +125,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
+      localStorage.setItem(NOTIFICATION_HISTORY_STORAGE_KEY, JSON.stringify(history))
+    } catch {
+      // Ignore storage errors
+    }
+  }, [history])
+
+  useEffect(() => {
+    try {
       localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(preferences))
     } catch {
       // Ignore storage errors
@@ -121,6 +142,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const updatePreferences = useCallback((newPrefs: Partial<NotificationPreferences>) => {
     setPreferences(prev => ({ ...prev, ...newPrefs }))
   }, [])
+
+  const markAsRead = useCallback((id: string) => {
+    setHistory(prev =>
+      prev.map(item => (item.id === id ? { ...item, read: true } : item))
+    )
+  }, [])
+
+  const markAllAsRead = useCallback(() => {
+    setHistory(prev => prev.map(item => ({ ...item, read: true })))
+  }, [])
+
+  const clearHistory = useCallback(() => {
+    setHistory([])
+  }, [])
+
+  const unreadCount = history.filter(item => !item.read).length
 
   const addToast = useCallback(
     (input: Omit<NotificationToast, "id" | "createdAt"> | string): string => {
@@ -146,6 +183,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         id,
         type: "success",
         duration: 4000,
+        read: false,
         ...payload,
         createdAt: Date.now(),
       }
@@ -348,10 +386,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       value={{
         toasts,
         history,
+        unreadCount,
         preferences,
         addToast,
         removeToast,
         clearAllToasts,
+        markAsRead,
+        markAllAsRead,
+        clearHistory,
         updatePreferences,
         notifyEnrollment,
         notifySubmission,
@@ -375,3 +417,5 @@ export function useNotifications() {
   }
   return context
 }
+
+export const useNotification = useNotifications

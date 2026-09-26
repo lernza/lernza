@@ -2459,6 +2459,25 @@ fn test_initiate_transfer() {
 }
 
 #[test]
+fn test_transfer_quest_ownership() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let new_owner = Address::generate(&env);
+
+    client.transfer_quest_ownership(&quest_id, &new_owner);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, new_owner);
+
+    // Nominee accepts transfer
+    let r = client.try_accept_transfer(&quest_id, &new_owner);
+    assert!(r.is_ok());
+
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.owner, new_owner);
+}
+
+#[test]
 fn test_initiate_transfer_replaces_existing() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);

@@ -54,10 +54,11 @@ export class FreighterAdapter implements WalletAdapter {
   }
 
   async signTransaction(xdr: string, options?: SignTransactionOptions): Promise<{ signedTxXdr: string }> {
-    const signedTxXdr = await freighterSignTx(xdr, {
+    const result = await freighterSignTx(xdr, {
       networkPassphrase: options?.networkPassphrase,
-      accountToSign: options?.accountToSign,
+      address: options?.accountToSign,
     })
+    const signedTxXdr = typeof result === "string" ? result : (result as any)?.signedTxXdr ?? ""
     return { signedTxXdr }
   }
 }

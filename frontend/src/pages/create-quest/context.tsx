@@ -48,25 +48,16 @@ const DEFAULT_STEP1: Step1Values = {
   description: "",
   category: "",
   tags: [],
+  referralBonus: 10,
 }
 
 const DEFAULT_STEP2: Step2Values = {
-  milestones: [{ title: "", description: "", rewardAmount: 0 }],
+  milestones: [{ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] }],
 }
 
 export function QuestCreationProvider({ children }: { children: ReactNode }) {
   const [step1Data, setStep1Data] = useState<Step1Values>(DEFAULT_STEP1)
   const [step2Data, setStep2Data] = useState<Step2Values>(DEFAULT_STEP2)
-  const [step1Data, setStep1Data] = useState<Step1Values>({
-    name: "",
-    description: "",
-    category: "",
-    tags: [],
-    referralBonus: 10,
-  })
-  const [step2Data, setStep2Data] = useState<Step2Values>({
-    milestones: [{ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] }],
-  })
   const [currentStep, setCurrentStep] = useState<FormStep>(1)
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null)

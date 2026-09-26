@@ -1,5 +1,4 @@
 /** Certificate contract client — minting, querying, and verification */
-import { scValToNative } from "@stellar/stellar-sdk"
 import { server, withTimeout, RPC_TIMEOUT_MS } from "./client"
 
 export const CERTIFICATE_CONTRACT_ID: string =

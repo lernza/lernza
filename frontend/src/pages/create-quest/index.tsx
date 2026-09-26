@@ -1,7 +1,15 @@
-import { Suspense, lazy } from "react"
-import { ArrowLeft, Wallet, Clock, AlertTriangle, RefreshCw, Check } from "lucide-react"
 import { Suspense, lazy, useState } from "react"
-import { ArrowLeft, Wallet, Bookmark, LayoutTemplate, X } from "lucide-react"
+import {
+  ArrowLeft,
+  Wallet,
+  Clock,
+  AlertTriangle,
+  RefreshCw,
+  Check,
+  Bookmark,
+  LayoutTemplate,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { QuestCreationProvider, useQuestCreation } from "./context"
@@ -24,6 +32,9 @@ interface CreateQuestProps {
 function CreateQuestContent({ onBack }: CreateQuestProps) {
   const {
     currentStep,
+    step1Data,
+    step2Data,
+    loadDraft,
     lastSaved,
     hasConflict,
     hasDraftToRestore,
@@ -31,7 +42,6 @@ function CreateQuestContent({ onBack }: CreateQuestProps) {
     restoreDraft,
     dismissDraft,
   } = useQuestCreation()
-  const { currentStep, step1Data, step2Data, loadDraft } = useQuestCreation()
   const [showLibrary, setShowLibrary] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -202,7 +212,7 @@ export function CreateQuest({ onBack }: CreateQuestProps) {
               </p>
               <Button
                 size="lg"
-                onClick={connect}
+                onClick={() => void connect()}
                 disabled={loading}
                 className="shimmer-on-hover w-full"
               >

@@ -203,7 +203,7 @@ export function History() {
               </p>
               <Button
                 size="lg"
-                onClick={connect}
+                onClick={() => void connect()}
                 disabled={walletConnecting}
                 className="shimmer-on-hover animate-fade-in-up stagger-3"
               >

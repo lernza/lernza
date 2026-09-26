@@ -34,6 +34,12 @@ pub trait QuestContractTrait {
     ) -> Result<EnrolleeStatus, soroban_sdk::Val>;
 }
 
+// Rewards contract interface for cross-contract calls
+#[contractclient(name = "RewardsClient")]
+pub trait RewardsContractTrait {
+    fn get_pool_balance(env: Env, quest_id: u32) -> i128;
+}
+
 // Visibility, QuestStatus, and QuestInfo moved to common.
 
 // Milestone contract: define milestones per quest, track completions.
@@ -52,6 +58,8 @@ pub enum DataKey {
     QuestContract,
     // Certificate contract address for minting completion certificates
     CertificateContract,
+    // Rewards contract address for pool balance validation
+    RewardsContract,
     // Auto-incrementing milestone ID per quest
     NextMilestoneId(u32),
     // Explicit milestone count per quest (O(1) lookup, survives gaps from deletes)
@@ -868,6 +876,15 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .extend_ttl(&mode_key, THRESHOLD, BUMP);
+
+        // Emit a verification-mode-set event so indexers and frontends can
+        // detect mode changes and notify enrolled learners. See issue #1268.
+        // Topic: ("verification_mode_set",)
+        // Data: (quest_id, mode, actor, timestamp)
+        env.events().publish(
+            (Symbol::new(&env, "verification_mode_set"),),
+            (quest_id, mode, owner, env.ledger().timestamp()),
+        );
 
         Ok(())
     }

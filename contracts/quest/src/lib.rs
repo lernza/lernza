@@ -599,14 +599,22 @@ impl QuestContract {
             if quest.visibility == Visibility::Public {
                 Self::remove_id_from_index(
                     &env,
-                    DataKey::PublicCategoryQuests(old_category),
+                    DataKey::PublicCategoryQuests(old_category.clone()),
                     quest_id,
                 );
+                // Extend TTL on old category index to prevent expiry while quest is active.
+                // See issue #1284.
+                let old_cat_key = DataKey::PublicCategoryQuests(old_category);
+                common::extend_persistent_ttl(&env, &old_cat_key);
+
                 Self::add_id_to_index(
                     &env,
                     DataKey::PublicCategoryQuests(quest.category.clone()),
                     quest_id,
                 );
+                // Extend TTL on new category index. See issue #1284.
+                let new_cat_key = DataKey::PublicCategoryQuests(quest.category.clone());
+                common::extend_persistent_ttl(&env, &new_cat_key);
             }
         }
 

@@ -244,14 +244,40 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             <div className="bg-accent border-border mb-4 flex items-center justify-between border p-4 shadow-md">
               <div className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                <span className="font-semibold">
-                  Total {rewardToken?.symbol ?? "reward tokens"} needed
-                </span>
+                <div>
+                  <span className="font-semibold block">
+                    Total {rewardToken?.symbol ?? "reward tokens"} needed
+                  </span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    Wallet Balance:{" "}
+                    {isBalanceLoading ? (
+                      <span className="inline-flex items-center gap-1 font-bold">
+                        <Loader2 className="h-3 w-3 animate-spin" /> checking...
+                      </span>
+                    ) : (
+                      <span className={cn("font-bold", isInsufficient ? "text-destructive" : "text-foreground")}>
+                        {rewardBalance ?? "0.00"} {rewardToken?.symbol ?? "tokens"}
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
               <span className="text-xl font-semibold tabular-nums">
                 {formatTokens(totalReward)} {rewardToken?.symbol ?? "tokens"}
               </span>
             </div>
+
+            {isInsufficient && (
+              <div className="border-destructive bg-destructive/10 mb-4 flex items-start gap-2 border p-3">
+                <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="text-destructive font-semibold text-sm">Insufficient Wallet Balance</p>
+                  <p className="text-destructive/90 text-xs mt-0.5">
+                    You need {formatTokens(totalReward)} {rewardToken?.symbol ?? "tokens"} to fund this quest, but your wallet only has {rewardBalance ?? "0.00"}. Please acquire more tokens before proceeding.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <p className="text-muted-foreground mb-4 text-xs">
               {rewardToken ? (
@@ -315,7 +341,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             {/* Fund button */}
             <Button
               onClick={handleFund}
-              disabled={txPhase !== "created" || isBusy}
+              disabled={txPhase !== "created" || isBusy || isInsufficient}
               variant={txPhase === "funded" || txPhase === "done" ? "secondary" : "default"}
               className={cn(
                 "shimmer-on-hover mb-3 w-full",

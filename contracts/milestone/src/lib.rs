@@ -3074,12 +3074,7 @@ impl MilestoneContract {
     }
 
     /// True when a dispute is currently awaiting a ruling (Pending or Escalated).
-    pub fn has_open_dispute(
-        env: Env,
-        quest_id: u32,
-        milestone_id: u32,
-        enrollee: Address,
-    ) -> bool {
+    pub fn has_open_dispute(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool {
         matches!(
             Self::get_dispute_status(env, quest_id, milestone_id, enrollee),
             Some(DisputeStatus::Pending) | Some(DisputeStatus::Escalated)

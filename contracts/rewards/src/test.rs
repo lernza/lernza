@@ -3583,3 +3583,193 @@ fn test_refund_expired_pool_succeeds_when_distributed_exceeds_reserved() {
     assert_eq!(token_client.balance(&owner), balance_before + 3_000);
     assert_eq!(client.get_quest_refunded(&q_id), 3_000);
 }
+
+// ── issue #1732: PayoutRecord idempotency must be token-scoped ───────────────
+//
+// The idempotency key used to be (quest_id, milestone_id, enrollee) with no
+// token component, so `distribute_reward` (main staking token) and
+// `distribute_reward_with_token` (an arbitrary supported token) shared a
+// single slot for a given (quest, milestone, enrollee). Paying a milestone in
+// the main token therefore made a subsequent legitimate payout of the same
+// milestone in a second token return `AlreadyPaid`, so the enrollee could never
+// be paid in more than one token for the same milestone.
+
+/// Build a quest with one completed milestone, funded in the main staking token
+/// and in a second token, with `owner` as the quest authority.
+/// Returns (owner, second_token, quest_id, milestone_id, enrollee).
+#[allow(clippy::type_complexity)]
+fn setup_multi_token_quest(
+    env: &Env,
+    client: &RewardsContractClient<'static>,
+    quest_client: &QuestContractClient<'static>,
+    milestone_client: &MilestoneContractClient<'static>,
+    token_addr: &Address,
+    admin: &Address,
+) -> (Address, Address, u32, u32, Address) {
+    let owner = Address::generate(env);
+    let enrollee = Address::generate(env);
+
+    // A second, distinct token contract.
+    let token_b = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    StellarAssetClient::new(env, token_addr).mint(&owner, &10_000);
+    StellarAssetClient::new(env, &token_b).mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(env, "Multi Token Quest"),
+        &String::from_str(env, "Desc"),
+        &String::from_str(env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(env),
+        token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    // Fund the main token first — this also establishes `owner` as the
+    // quest authority that later distribution calls must be authorized by.
+    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest_with_token(&owner, &q_id, &token_b, &4_000);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(env, "MS1"),
+        &String::from_str(env, "Desc"),
+        &1_000,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    (owner, token_b, q_id, ms_id, enrollee)
+}
+
+/// The headline regression for #1732: the same milestone can be paid in two
+/// different tokens. Before the fix the second call returned `AlreadyPaid`
+/// because both payouts shared one tokenless idempotency slot.
+#[test]
+fn test_multi_token_payout_does_not_collide_with_main_token_payout() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Pay the milestone in the main staking token.
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+
+    // Then pay the same milestone in a second token. This used to fail.
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+
+    // Both legs actually settled.
+    let main = TokenClient::new(&env, &token_addr);
+    let second = TokenClient::new(&env, &token_b);
+    assert_eq!(main.balance(&enrollee), 1_000);
+    assert_eq!(second.balance(&enrollee), 1_000);
+    assert_eq!(client.get_pool_balance(&q_id), 4_000);
+    assert_eq!(client.get_pool_balance_with_token(&q_id, &token_b), 3_000);
+}
+
+/// Token-scoping must not weaken idempotency: the *same* token is still
+/// refused on a second attempt, in both the main-token and per-token paths.
+#[test]
+fn test_same_token_payout_is_still_rejected_as_duplicate() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+    assert_eq!(
+        client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+    assert_eq!(
+        client.try_distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+}
+
+/// Migration: a payout recorded *before* this upgrade used a tokenless key.
+/// A legacy record cannot be attributed to a particular token, so it must keep
+/// blocking the payout entirely rather than risk a double-pay. Paying that
+/// same milestone in a second token is refused too.
+#[test]
+fn test_legacy_payout_record_keeps_blocking_payouts() {
+    let (env, client, cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Simulate a pre-upgrade deployment: a tokenless record already exists.
+    env.as_contract(&cid, || {
+        env.storage().persistent().set(
+            &DataKey::LegacyPayoutRecord(q_id, ms_id, enrollee.clone()),
+            &1_000i128,
+        );
+    });
+
+    // The original main-token payout must stay refused — no double-pay.
+    assert_eq!(
+        client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+    // And a second token must not slip through the legacy record either.
+    assert_eq!(
+        client.try_distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+}
+
+/// A record written *after* the upgrade is token-scoped, so it does not block a
+/// payout of the same milestone in a different token.
+#[test]
+fn test_new_record_does_not_block_a_different_token() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Pay in the second token FIRST, then in the main token. Either order must
+    // work — the pre-fix collision was order-dependent on the main-token call
+    // happening first.
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+
+    let main = TokenClient::new(&env, &token_addr);
+    let second = TokenClient::new(&env, &token_b);
+    assert_eq!(main.balance(&enrollee), 1_000);
+    assert_eq!(second.balance(&enrollee), 1_000);
+}

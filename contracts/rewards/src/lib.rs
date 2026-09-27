@@ -1055,17 +1055,13 @@ impl RewardsContract {
             .get(&DataKey::QuestDistributed(quest_id))
             .unwrap_or(0);
 
-        let obligations = total_reserved
-            .checked_sub(quest_distributed)
-            .ok_or(Error::ArithmeticOverflow)?;
-
         // Check pool has sufficient balance after reserving obligations
         let pool_key = DataKey::QuestPool(quest_id);
         let pool: i128 = env.storage().persistent().get(&pool_key).unwrap_or(0);
 
-        let refundable = pool
-            .checked_sub(obligations)
-            .ok_or(Error::ArithmeticOverflow)?;
+        // Saturating — see `refundable_amount` for why the reservation and
+        // distribution counters may legitimately disagree.
+        let refundable = Self::refundable_amount(total_reserved, quest_distributed, pool);
 
         if amount > refundable {
             return Err(Error::InsufficientPool);
@@ -1100,6 +1096,44 @@ impl RewardsContract {
         );
 
         Ok(())
+    }
+
+    /// Compute the refundable remainder of a quest pool: the funded balance
+    /// minus any reserved-but-unpaid milestone obligations.
+    ///
+    /// Both subtractions saturate rather than returning `ArithmeticOverflow` —
+    /// issue #1733.
+    ///
+    /// `distributed` can legitimately exceed `total_reserved`:
+    ///
+    /// * `get_total_reserved_reward` is a *reservation* on the milestone
+    ///   contract, not a hard cap. A quest that switches to a partial-credit
+    ///   distribution model, or whose reservation was computed before the
+    ///   milestone set changed, can distribute more than was reserved.
+    /// * The aggregate `QuestDistributed` is also incremented by refunds of
+    ///   already-paid amounts in some flows, so the two counters can drift.
+    ///
+    /// A `checked_sub` here turned that drift into a permanent failure: every
+    /// call to `refund_pool` (and to the three sibling refund paths) returned
+    /// `ArithmeticOverflow` and no amount of retrying or re-parameterising could
+    /// recover it, because the underflow condition was itself the stored state.
+    /// The quest owner's deposit was locked for the life of the deployment.
+    ///
+    /// Saturating means an over-distributed quest reports zero outstanding
+    /// obligations and the full remaining pool balance becomes refundable, which
+    /// is the correct outcome: everything reserved has already been paid out, so
+    /// nothing is still owed to a milestone participant.
+    fn refundable_amount(total_reserved: i128, distributed: i128, pool: i128) -> i128 {
+        // `saturating_sub` alone is not enough on either side: it clamps at
+        // `i128::MIN`, not at zero. An over-distributed quest would otherwise
+        // yield a *negative* obligation, and `pool - (negative)` would report
+        // more than the pool holds. Likewise, obligations larger than the pool
+        // would produce a negative refundable, and the caller's
+        // `pool.checked_sub(refundable)` would then *add* to the pool instead
+        // of draining it. Clamp both to zero so the result is always a genuine
+        // "at most the remaining balance" figure.
+        let obligations = core::cmp::max(0, total_reserved.saturating_sub(distributed));
+        core::cmp::max(0, pool.saturating_sub(obligations))
     }
 
     /// Decrement the instance-storage `TotalFunded` counter and bump
@@ -1522,17 +1556,14 @@ impl RewardsContract {
             .persistent()
             .get(&DataKey::QuestDistributed(quest_id))
             .unwrap_or(0_i128);
-        let obligations = total_reserved
-            .checked_sub(distributed)
-            .ok_or(Error::ArithmeticOverflow)?;
         let pool: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::QuestPool(quest_id))
             .unwrap_or(0);
-        let refundable = pool
-            .checked_sub(obligations)
-            .ok_or(Error::ArithmeticOverflow)?;
+        // Saturating — see `refundable_amount` for why the reservation and
+        // distribution counters may legitimately disagree (issue #1733).
+        let refundable = Self::refundable_amount(total_reserved, distributed, pool);
 
         if refundable <= 0 {
             return Ok(0);
@@ -1657,17 +1688,14 @@ impl RewardsContract {
             .persistent()
             .get(&DataKey::QuestDistributed(quest_id))
             .unwrap_or(0_i128);
-        let obligations = total_reserved
-            .checked_sub(distributed)
-            .ok_or(Error::ArithmeticOverflow)?;
         let pool: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::QuestPool(quest_id))
             .unwrap_or(0);
-        let refundable = pool
-            .checked_sub(obligations)
-            .ok_or(Error::ArithmeticOverflow)?;
+        // Saturating — see `refundable_amount` for why the reservation and
+        // distribution counters may legitimately disagree (issue #1733).
+        let refundable = Self::refundable_amount(total_reserved, distributed, pool);
 
         if refundable <= 0 {
             return Ok(0);
@@ -1775,17 +1803,14 @@ impl RewardsContract {
             .persistent()
             .get(&DataKey::QuestDistributed(quest_id))
             .unwrap_or(0_i128);
-        let obligations = total_reserved
-            .checked_sub(distributed)
-            .ok_or(Error::ArithmeticOverflow)?;
         let pool: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::QuestPool(quest_id))
             .unwrap_or(0);
-        let refundable = pool
-            .checked_sub(obligations)
-            .ok_or(Error::ArithmeticOverflow)?;
+        // Saturating — see `refundable_amount` for why the reservation and
+        // distribution counters may legitimately disagree (issue #1733).
+        let refundable = Self::refundable_amount(total_reserved, distributed, pool);
 
         if refundable <= 0 {
             return Ok(0);

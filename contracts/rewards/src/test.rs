@@ -3325,3 +3325,261 @@ fn test_pool_cannot_go_negative() {
     assert_eq!(r, Err(Ok(Error::InsufficientPool)));
 }
 
+// --- issue #1733: over-distribution must not permanently lock a quest pool ---
+//
+// `refund_pool`, `refund_unused_pool`, `refund_remaining_funds` and
+// `refund_expired_pool` all computed
+//
+//     obligations = total_reserved.checked_sub(distributed)
+//     refundable  = pool.checked_sub(obligations)
+//
+// so any quest whose `QuestDistributed` aggregate exceeded the milestone
+// contract's `total_reserved` returned `ArithmeticOverflow` from *every* refund
+// entry point, forever. The underflow was itself the persisted state, so no
+// retry or parameter change could recover the owner's deposit.
+//
+// These tests drive `QuestDistributed` past the reservation and assert each
+// refund path now succeeds and returns the full remaining balance.
+
+/// Force `QuestDistributed` above the milestone contract's reservation, which is
+/// the exact state that used to wedge every refund path.
+fn over_distribute(env: &Env, cid: &Address, quest_id: u32) {
+    env.as_contract(cid, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestDistributed(quest_id), &9_999_i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestPool(quest_id), &3_000_i128);
+    });
+}
+
+#[test]
+fn test_refundable_amount_saturates_instead_of_erroring() {
+    // distributed > reserved: everything reserved was already paid, so there
+    // are no outstanding obligations and the whole pool is refundable.
+    assert_eq!(
+        RewardsContract::refundable_amount(1_000, 1_500, 3_000),
+        3_000
+    );
+    // distributed == reserved: obligations are exactly zero, so nothing is held back.
+    assert_eq!(
+        RewardsContract::refundable_amount(1_000, 1_000, 3_000),
+        3_000
+    );
+    // Normal case: reserved obligations still outstanding are withheld.
+    assert_eq!(
+        RewardsContract::refundable_amount(4_000, 1_000, 10_000),
+        7_000
+    );
+    // obligations exceed the pool: nothing is refundable, no error.
+    assert_eq!(RewardsContract::refundable_amount(9_000, 0, 3_000), 0);
+    // A negative reservation must not become a negative obligation and inflate
+    // the refundable amount past the pool balance.
+    assert_eq!(
+        RewardsContract::refundable_amount(-5_000, 9_999, 3_000),
+        3_000
+    );
+    // Degenerate zero case.
+    assert_eq!(RewardsContract::refundable_amount(0, 0, 0), 0);
+}
+
+#[test]
+fn test_refund_pool_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    // Precondition: this is the state that previously wedged refund_pool.
+    over_distribute(&env, &cid, q_id);
+    // The old code would have returned Err(ArithmeticOverflow) here.
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    client.refund_pool(&owner, &q_id, &3_000);
+
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}
+
+#[test]
+fn test_refund_pool_rejects_amount_above_refundable_when_over_distributed() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    // Refundable is the full remaining pool (3_000), so 3_001 must be refused
+    // with the ordinary InsufficientPool error rather than an overflow error.
+    let result = client.try_refund_pool(&owner, &q_id, &3_001);
+    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+
+    // And the boundary value still succeeds.
+    client.refund_pool(&owner, &q_id, &3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_remaining_funds_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}
+
+#[test]
+fn test_refund_expired_pool_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_expired_pool(&owner, &q_id);
+
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}

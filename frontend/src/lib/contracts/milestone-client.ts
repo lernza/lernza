@@ -634,9 +634,6 @@ export class MilestoneClient {
       estimatedDuration: record.estimated_duration ? Number(record.estimated_duration) : undefined,
       prerequisitesKnowledge: record.prerequisites_knowledge ? String(record.prerequisites_knowledge) : undefined,
       deadline: record.deadline ? Number(record.deadline) : undefined,
-      prerequisiteIds: Array.isArray(record.prerequisite_ids)
-        ? record.prerequisite_ids.map(Number)
-        : [],
     }
   }
 

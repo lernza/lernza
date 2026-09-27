@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://lernza.vercel.app/sitemap.xml

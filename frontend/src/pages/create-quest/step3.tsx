@@ -30,6 +30,8 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
   const [txError, setTxError] = useState<string | null>(null)
   const [createdQuestId, setCreatedQuestId] = useState<number | null>(null)
+  const [createdMilestoneCount, setCreatedMilestoneCount] = useState(0)
+  const [questCreated, setQuestCreated] = useState(false)
 
   const totalReward = step2Data.milestones.reduce(
     (sum: number, m: z.infer<typeof milestoneSchema>) => sum + m.rewardAmount,
@@ -99,19 +101,35 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
       }
 
       setCreatedQuestId(questId)
+      setQuestCreated(true)
 
-      // Create milestones on-chain
-      for (let i = 0; i < step2Data.milestones.length; i++) {
-        const m = step2Data.milestones[i]
-        const rewardAmount = BigInt(m.rewardAmount) * BigInt(1_000_000)
-        await milestoneClient.createMilestoneWithPrerequisites(
-          address,
-          questId,
-          m.title,
-          m.description,
-          rewardAmount,
-          m.prerequisiteIds
+      // Create milestones on-chain with progress tracking (#1721)
+      let milestonesCreated = 0
+      const totalMilestones = step2Data.milestones.length
+      try {
+        for (let i = 0; i < totalMilestones; i++) {
+          const m = step2Data.milestones[i]
+          const rewardAmount = BigInt(m.rewardAmount) * BigInt(1_000_000)
+          await milestoneClient.createMilestoneWithPrerequisites(
+            address,
+            questId,
+            m.title,
+            m.description,
+            rewardAmount,
+            m.prerequisiteIds
+          )
+          milestonesCreated = i + 1
+          setCreatedMilestoneCount(milestonesCreated)
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Milestone creation failed"
+        setTxError(
+          milestonesCreated < totalMilestones
+            ? `Created ${milestonesCreated} of ${totalMilestones} milestones. Milestone ${milestonesCreated + 1} failed: ${message}`
+            : message,
         )
+        setCreatedMilestoneCount(milestonesCreated)
+        return
       }
 
       await invalidateQuestQueries(queryClient, questId)
@@ -274,7 +292,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
             {/* Create quest button */}
             <Button
               onClick={handleCreate}
-              disabled={txPhase !== "idle" || isBusy}
+              disabled={(txPhase !== "idle" && !questCreated) || isBusy || (questCreated && txPhase === "created")}
               variant={
                 txPhase === "created" || txPhase === "funded" || txPhase === "done"
                   ? "secondary"
@@ -287,6 +305,16 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               )}
             >
               {txPhase === "creating" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating quest on-chain...
+                </>
+              ) : questCreated && txError !== null ? (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  {`Retry remaining ${step2Data.milestones.length - createdMilestoneCount} milestone${step2Data.milestones.length - createdMilestoneCount !== 1 ? "s" : ""}`}
+                </>
+              ) : txPhase === "created" || txPhase === "funded" || txPhase === "done" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Creating quest on-chain...

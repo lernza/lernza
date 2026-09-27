@@ -1,8 +1,9 @@
 import { useEffect, useCallback, useRef } from "react"
 import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
 import { useAsyncData } from "@/hooks/use-async-data"
-import { LoadingState, EmptyState } from "@/components/ui/async-states"
+import { EmptyState } from "@/components/ui/async-states"
 import { SmartError } from "@/components/error-states"
+import { Skeleton } from "@/components/ui/skeleton"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
 import { formatTokens, shortenAddress } from "@/lib/utils"
@@ -28,6 +29,22 @@ interface ActiveQuestEntry {
 }
 
 const PAGE_SIZE = 50
+
+// Skeleton for leaderboard loading state (#1720)
+function LeaderboardSkeleton() {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md">
+          <Skeleton className="h-8 w-8 flex-shrink-0" />
+          <Skeleton className="h-4 flex-1" />
+          <Skeleton className="h-6 w-24" />
+        </div>
+      ))}
+      <span className="sr-only">Loading leaderboard data…</span>
+    </div>
+  )
+}
 
 export async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
@@ -283,7 +300,7 @@ export function Leaderboard() {
       </div>
 
       {/* Content */}
-      {isLoading && <LoadingState message="Fetching on-chain data…" />}
+      {isLoading && <LeaderboardSkeleton />}
       {!isLoading && error && <SmartError message={error} onRetry={refetchActive} />}
       {!isLoading && !error && isEmpty && (
         <EmptyState
@@ -316,7 +333,12 @@ export function Leaderboard() {
             ))}
           </ol>
           <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more earners…" />}
+            {isLoadingMore && (
+              <div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm">
+                <Skeleton className="h-4 w-4" />
+                <span>Loading more…</span>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -341,7 +363,12 @@ export function Leaderboard() {
             ))}
           </ol>
           <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more quests…" />}
+            {isLoadingMore && (
+              <div role="status" aria-live="polite" aria-busy="true" className="flex items-center gap-2 text-sm">
+                <Skeleton className="h-4 w-4" />
+                <span>Loading more…</span>
+              </div>
+            )}
           </div>
         </>
       )}

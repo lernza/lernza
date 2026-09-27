@@ -1,5 +1,8 @@
 import { milestoneSchema } from "./types"
 
+/** A quest accepts at most this many milestones (#1617). */
+export const MAX_MILESTONES_PER_QUEST = 50
+
 export interface ParsedMilestone {
   title: string
   description: string
@@ -109,6 +112,21 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
           message: issue.message,
         })
       })
+    }
+  }
+
+  // Reject files that would push the quest past the on-chain milestone cap.
+  if (milestones.length + errors.length > MAX_MILESTONES_PER_QUEST) {
+    return {
+      milestones: [],
+      errors: [
+        ...errors,
+        {
+          row: 0,
+          field: "file",
+          message: `A quest accepts at most ${MAX_MILESTONES_PER_QUEST} milestones.`
+        }
+      ]
     }
   }
 

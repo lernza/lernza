@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from "react"
 import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
 import { useAsyncData } from "@/hooks/use-async-data"
 import { LoadingState, EmptyState } from "@/components/ui/async-states"
+import { VirtualList } from "@/components/ui/virtual-list"
 import { SmartError } from "@/components/error-states"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -116,7 +117,6 @@ export function Leaderboard() {
   const [allEarners, setAllEarners] = useState<EarnerEntry[]>([])
   const [allQuests, setAllQuests] = useState<ActiveQuestEntry[]>([])
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const observerTarget = useRef<HTMLDivElement>(null)
 
   const {
     data: earnersData,
@@ -186,22 +186,16 @@ export function Leaderboard() {
     }
   }, [questsOffset, allQuests.length])
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0]?.isIntersecting && !isLoadingMore) {
-        if (activeTab === "earners") {
-          void loadMoreEarners()
-        } else {
-          void loadMoreQuests()
-        }
-      }
-    })
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+  // Rows are windowed by `VirtualList`, which invokes `onEndReached` when the
+  // tail of the list scrolls into the overscan buffer — this replaces the
+  // previous IntersectionObserver sentinel.
+  const handleEndReached = useCallback(() => {
+    if (isLoadingMore) return
+    if (activeTab === "earners") {
+      void loadMoreEarners()
+    } else {
+      void loadMoreQuests()
     }
-
-    return () => observer.disconnect()
   }, [activeTab, isLoadingMore, loadMoreEarners, loadMoreQuests])
 
   const refetchActive = useCallback(() => {
@@ -295,55 +289,63 @@ export function Leaderboard() {
 
       {/* Top Earners list */}
       {!isLoading && !error && !isEmpty && activeTab === "earners" && (
-        <>
-          <ol className="space-y-2">
-            {allEarners.map(entry => (
-              <li
-                key={entry.address}
-                className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md"
+        <VirtualList
+          as="ol"
+          items={allEarners}
+          getKey={entry => entry.address}
+          estimateSize={() => 68}
+          onEndReached={handleEndReached}
+          aria-label="Top earners"
+          itemClassName="py-1"
+          renderItem={entry => (
+            <div className="border-border bg-card flex h-full items-center gap-4 border px-4 py-3 shadow-md">
+              <RankBadge rank={entry.rank} />
+              <PrefetchLink
+                to={`/creator/${entry.address}`}
+                className="hover:text-accent flex-1 font-mono text-sm font-bold transition-colors"
               >
-                <RankBadge rank={entry.rank} />
-                <PrefetchLink
-                  to={`/creator/${entry.address}`}
-                  className="hover:text-accent flex-1 font-mono text-sm font-bold transition-colors"
-                >
-                  {shortenAddress(entry.address, 6)}
-                </PrefetchLink>
-                <span className="border-border bg-background border px-2 py-1 text-xs font-semibold shadow-sm">
-                  {formatTokens(entry.totalEarned)}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more earners…" />}
-          </div>
-        </>
+                {shortenAddress(entry.address, 6)}
+              </PrefetchLink>
+              <span className="border-border bg-background border px-2 py-1 text-xs font-semibold shadow-sm">
+                {formatTokens(entry.totalEarned)}
+              </span>
+            </div>
+          )}
+        />
       )}
 
       {/* Most Active Quests list */}
       {!isLoading && !error && !isEmpty && activeTab === "quests" && (
-        <>
-          <ol className="space-y-2">
-            {allQuests.map(entry => (
-              <PrefetchLink
-                key={entry.id}
-                to={`/quest/${entry.id}`}
-                className="border-border bg-card flex cursor-pointer items-center gap-4 border px-4 py-3 shadow-md transition-transform hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <RankBadge rank={entry.rank} />
-                <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
-                <span className="border-border bg-background flex items-center gap-1 border px-2 py-1 text-xs font-semibold shadow-sm">
-                  <Users className="h-3 w-3" />
-                  {entry.enrolleeCount}
-                </span>
-              </PrefetchLink>
-            ))}
-          </ol>
-          <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more quests…" />}
-          </div>
-        </>
+        <VirtualList
+          as="ol"
+          items={allQuests}
+          getKey={entry => String(entry.id)}
+          estimateSize={() => 68}
+          onEndReached={handleEndReached}
+          aria-label="Most active quests"
+          itemClassName="py-1"
+          renderItem={entry => (
+            <PrefetchLink
+              to={`/quest/${entry.id}`}
+              className="border-border bg-card flex h-full cursor-pointer items-center gap-4 border px-4 py-3 shadow-md transition-transform hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <RankBadge rank={entry.rank} />
+              <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
+              <span className="border-border bg-background flex items-center gap-1 border px-2 py-1 text-xs font-semibold shadow-sm">
+                <Users className="h-3 w-3" />
+                {entry.enrolleeCount}
+              </span>
+            </PrefetchLink>
+          )}
+        />
+      )}
+
+      {isLoadingMore && (
+        <div className="mt-4 py-4 text-center">
+          <LoadingState
+            message={activeTab === "earners" ? "Loading more earners…" : "Loading more quests…"}
+          />
+        </div>
       )}
     </PageContainer>
   )

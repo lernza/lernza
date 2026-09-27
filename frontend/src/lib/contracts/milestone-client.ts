@@ -20,7 +20,15 @@ const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
   8: "Milestone contract is not configured.",
   12: "This learner is not enrolled in the quest.",
   14: "Complete the previous milestone first.",
+  23: "No dispute has been opened for this submission.",
+  24: "This dispute has already been resolved and cannot be reopened.",
+  25: "This submission is not eligible for a dispute. It must have been rejected first.",
   26: "A milestone deadline cannot be later than the quest's own deadline.",
+  27: "A dispute for this submission was opened recently. Try again after the cooldown.",
+  28: "A dispute is already open for this submission.",
+  29: "The dispute reason is too long.",
+  30: "That outcome is not valid for a dispute in its current state.",
+  31: "The dispute page size is out of range.",
 }
 
 export interface MilestoneInfo {
@@ -49,6 +57,66 @@ export interface MilestoneFeedback {
 
 export interface VerifyCompletionResult extends TransactionResult {
   rewardAmount?: bigint
+}
+
+/**
+ * Lifecycle of a milestone dispute, mirroring the contract's `DisputeStatus`
+ * enum. `Escalated` means the quest owner handed the dispute to the contract
+ * administrator for arbitration. See issue #1614.
+ */
+export const DisputeStatus = {
+  Pending: 0,
+  Upheld: 1,
+  Overturned: 2,
+  Escalated: 3,
+} as const
+export type DisputeStatus = (typeof DisputeStatus)[keyof typeof DisputeStatus]
+
+/** Ruling a resolver can issue on a dispute. See issue #1614. */
+export type DisputeOutcome = "upheld" | "overturned" | "escalated"
+
+export interface DisputeRecord {
+  status: DisputeStatus
+  reason: string
+  openedAt: number
+  rewardAmount: bigint
+  resolver?: string
+  resolvedAt?: number
+  resolutionNote?: string
+}
+
+export interface DisputeEntry {
+  questId: number
+  milestoneId: number
+  enrollee: string
+  record: DisputeRecord
+}
+
+/** Maximum reason length accepted by `open_dispute` (mirrors the contract). */
+export const MAX_DISPUTE_REASON_LEN = 500
+/** Upper bound on the page size accepted by the dispute queries. */
+export const MAX_DISPUTE_PAGE = 100
+
+function parseDisputeStatus(raw: unknown): DisputeStatus {
+  if (typeof raw === "number") {
+    if (raw === 1) return DisputeStatus.Upheld
+    if (raw === 2) return DisputeStatus.Overturned
+    if (raw === 3) return DisputeStatus.Escalated
+    return DisputeStatus.Pending
+  }
+  if (raw && typeof raw === "object") {
+    const name = Object.keys(raw as Record<string, unknown>)[0]
+    if (name === "Upheld") return DisputeStatus.Upheld
+    if (name === "Overturned") return DisputeStatus.Overturned
+    if (name === "Escalated") return DisputeStatus.Escalated
+  }
+  return DisputeStatus.Pending
+}
+
+const OUTCOME_TO_SCV: Record<DisputeOutcome, number> = {
+  upheld: 0,
+  overturned: 1,
+  escalated: 2,
 }
 
 function toBigInt(value: unknown): bigint {
@@ -364,6 +432,144 @@ export class MilestoneClient {
         createdAt: Number(rec.created_at || 0),
       }
     })
+  }
+
+  /**
+   * Open a dispute against a rejected submission. The learner supplies a short
+   * justification which the quest owner (or contract admin) sees when ruling.
+   * See issue #1614.
+   */
+  async openDispute(
+    enrollee: string,
+    questId: number,
+    milestoneId: number,
+    reason: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult> {
+    const tx = await this.buildTx(enrollee, "open_dispute", [
+      new Address(enrollee).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      nativeToScVal(reason, { type: "string" }),
+    ])
+    return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Open Dispute", handlers))
+  }
+
+  /**
+   * Rule on an open dispute. Only the quest owner or the contract admin may
+   * call this, and never for a dispute they opened themselves.
+   * See issue #1614.
+   */
+  async resolveDispute(
+    resolver: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    outcome: DisputeOutcome,
+    note?: string,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<TransactionResult> {
+    const tx = await this.buildTx(resolver, "resolve_dispute", [
+      new Address(resolver).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(OUTCOME_TO_SCV[outcome], { type: "u32" }),
+      nativeToScVal(note || null),
+    ])
+    return this.normalizeTransactionResult(
+      await signAndSubmitTracked(tx, "Resolve Dispute", handlers)
+    )
+  }
+
+  /** Current status of a single dispute, or `null` when none was opened. */
+  async getDisputeStatus(
+    questId: number,
+    milestoneId: number,
+    enrollee: string
+  ): Promise<DisputeStatus | null> {
+    const result = await this.invokeRead("get_dispute_status", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+    ])
+    if (result === null || result === undefined) return null
+    return parseDisputeStatus(result)
+  }
+
+  /** True while a dispute is awaiting a ruling. */
+  async hasOpenDispute(questId: number, milestoneId: number, enrollee: string): Promise<boolean> {
+    return (await this.invokeRead("has_open_dispute", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+    ])) === true
+  }
+
+  /** Seconds remaining before another dispute can be opened, or 0. */
+  async getDisputeCooldownRemaining(
+    questId: number,
+    milestoneId: number,
+    enrollee: string
+  ): Promise<number> {
+    const result = await this.invokeRead("dispute_cooldown_remaining", [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+    ])
+    return result ? Number(result) : 0
+  }
+
+  /** Page through every dispute opened on a quest, oldest first. */
+  async getDisputes(
+    questId: number,
+    offset = 0,
+    limit = MAX_DISPUTE_PAGE
+  ): Promise<DisputeEntry[]> {
+    return this.fetchDisputes("get_disputes", questId, offset, limit)
+  }
+
+  /** Page through the disputes on a quest still awaiting a ruling. */
+  async getOpenDisputes(
+    questId: number,
+    offset = 0,
+    limit = MAX_DISPUTE_PAGE
+  ): Promise<DisputeEntry[]> {
+    return this.fetchDisputes("get_open_disputes", questId, offset, limit)
+  }
+
+  private async fetchDisputes(
+    method: string,
+    questId: number,
+    offset: number,
+    limit: number
+  ): Promise<DisputeEntry[]> {
+    const result = await this.invokeRead(method, [
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(offset, { type: "u32" }),
+      nativeToScVal(Math.min(limit, MAX_DISPUTE_PAGE), { type: "u32" }),
+    ])
+    if (!Array.isArray(result)) return []
+    return result.map(raw => this.parseDisputeEntry(raw))
+  }
+
+  private parseDisputeEntry(raw: unknown): DisputeEntry {
+    const entry = raw as Record<string, unknown>
+    const record = (entry.record ?? {}) as Record<string, unknown>
+    return {
+      questId: Number(entry.quest_id ?? 0),
+      milestoneId: Number(entry.milestone_id ?? 0),
+      enrollee: String(entry.enrollee ?? ""),
+      record: {
+        status: parseDisputeStatus(record.status),
+        reason: String(record.reason ?? ""),
+        openedAt: Number(record.opened_at ?? 0),
+        rewardAmount: toBigInt(record.reward_amount),
+        resolver: record.resolver ? String(record.resolver) : undefined,
+        resolvedAt: record.resolved_at ? Number(record.resolved_at) : undefined,
+        resolutionNote: record.resolution_note ? String(record.resolution_note) : undefined,
+      },
+    }
   }
 
   private normalizeTransactionResult(result: TransactionResult): TransactionResult {

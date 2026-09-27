@@ -1,17 +1,23 @@
 import { useEffect, useState, type KeyboardEvent } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowRight, FileText, Plus, X } from "lucide-react"
+import { ArrowRight, FileText, Plus, X, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "@/i18n"
 import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
 import { QUEST_TEMPLATES, type QuestTemplate } from "./templates"
+import { CsvImportDialog } from "./csv-import-dialog"
+import type { ParsedMilestone } from "./csv-parser"
 
 export function Step1Form() {
-  const { step1Data, setStep1Data, goToNext, applyTemplate } = useQuestCreation()
+  const { step1Data, setStep1Data, step2Data, setStep2Data, goToNext, setCurrentStep, applyTemplate } =
+    useQuestCreation()
+  const { t } = useTranslation()
   const [tagInput, setTagInput] = useState("")
   const [tagError, setTagError] = useState<string | null>(null)
+  const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false)
 
   const {
     register,
@@ -101,13 +107,49 @@ export function Step1Form() {
     goToNext()
   }
 
+  /**
+   * CSV import is reachable from the basics step so creators can bring an
+   * existing milestone list without first navigating to step 2. Imported rows
+   * land in the step-2 context and we jump straight to review them. #1617
+   */
+  const handleCsvImport = (imported: ParsedMilestone[], mode: "append" | "replace") => {
+    const converted = imported.map(m => ({
+      title: m.title,
+      description: m.description,
+      rewardAmount: m.rewardAmount,
+      prerequisiteIds: [] as number[]
+    }))
+
+    const hasExisting = step2Data.milestones.some(m => m.title.trim().length > 0)
+    const base =
+      mode === "replace" || !hasExisting
+        ? converted
+        : [
+            ...step2Data.milestones.filter(m => m.title.trim().length > 0),
+            ...converted
+          ]
+
+    setStep2Data({ ...step2Data, milestones: base })
+    setIsCsvDialogOpen(false)
+    setCurrentStep(2)
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <div>
-        <div className="bg-accent border-border border-b px-6 py-3">
+        <div className="bg-accent border-border flex flex-wrap items-center justify-between gap-2 border-b px-6 py-3">
           <span className="text-sm font-semibold tracking-wider uppercase">
-            Start with a template
+            {t("create.startTemplate")}
           </span>
+          <button
+            type="button"
+            onClick={() => setIsCsvDialogOpen(true)}
+            data-onboarding="import-csv"
+            className="hover:bg-secondary flex cursor-pointer items-center gap-1.5 border border-black/20 px-2.5 py-1 text-xs font-bold transition-colors"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {t("create.importCsv")}
+          </button>
         </div>
         <div className="border-border bg-background grid gap-3 border border-t-0 p-4 sm:grid-cols-3">
           {QUEST_TEMPLATES.map(template => (
@@ -321,10 +363,17 @@ export function Step1Form() {
 
       <div className="flex justify-end">
         <Button type="submit" className="shimmer-on-hover" disabled={!isValid}>
-          Next: Add Milestones
+          {t("create.nextMilestones")}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* CSV import reachable from the basics step (#1617) */}
+      <CsvImportDialog
+        isOpen={isCsvDialogOpen}
+        onClose={() => setIsCsvDialogOpen(false)}
+        onImport={handleCsvImport}
+      />
     </form>
   )
 }

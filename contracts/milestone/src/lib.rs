@@ -98,6 +98,13 @@ pub enum DataKey {
     MilestoneFeedbackHistory(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Dispute tracking per enrollee per milestone submission
     Dispute(u32, u32, Address), // (quest_id, milestone_id, enrollee) stores DisputeRecord
+    // Per-quest index of every dispute that was ever opened: (milestone_id, enrollee).
+    // Backs `get_disputes` / `get_open_disputes` so the admin can enumerate disputes
+    // without an unbounded storage scan. See issue #1614.
+    DisputeIndex(u32),
+    // Timestamp of the last dispute opened for a submission, used to enforce the
+    // re-dispute cooldown after a previous dispute was resolved. See issue #1614.
+    LastDisputeAt(u32, u32, Address),
     // Pending submission snapshot stored at dispute initiation, for restoration on overturn
     DisputeSubmissionSnapshot(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Verification state: who verified a completion and when.
@@ -121,14 +128,24 @@ pub enum DisputeStatus {
     Pending = 0,
     Upheld = 1,
     Overturned = 2,
+    /// The quest owner declined to rule and handed the dispute to the contract
+    /// administrator for arbitration. Only reachable via `DisputeOutcome::Escalated`.
+    Escalated = 3,
 }
 
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum DisputeOutcome {
+    /// The original rejection stands and the dispute is final.
     Upheld = 0,
+    /// The rejection is reversed: the pending submission is restored and the
+    /// learner re-enters the review flow. Final.
     Overturned = 1,
+    /// Hand the dispute to the contract administrator for arbitration. The
+    /// dispute stays open (no final ruling) and can only be settled once the
+    /// administrator issues Upheld or Overturned.
+    Escalated = 2,
 }
 
 #[contracttype]
@@ -141,6 +158,36 @@ pub struct DisputeRecord {
     pub reward_amount: i128,
     /// Flat reward at dispute initiation (only meaningful if distribution_mode == Flat)
     pub flat_reward: i128,
+    /// Learner-supplied justification, capped at `MAX_DISPUTE_REASON_LEN`.
+    pub reason: String,
+    /// Ledger timestamp when the dispute was opened.
+    pub opened_at: u64,
+    /// Who ruled on the dispute, once resolved or escalated.
+    pub resolver: Option<Address>,
+    /// Ledger timestamp of the ruling, once resolved or escalated.
+    pub resolved_at: Option<u64>,
+    /// Optional note attached to the ruling.
+    pub resolution_note: Option<String>,
+}
+
+/// A dispute plus the coordinates needed to act on it. Returned by the
+/// `get_dispute*` queries so callers never have to reassemble the storage key.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct DisputeEntry {
+    pub quest_id: u32,
+    pub milestone_id: u32,
+    pub enrollee: Address,
+    pub record: DisputeRecord,
+}
+
+/// One slot of a quest's dispute index. Stored as a struct rather than a tuple
+/// because Soroban has no `IntoVal` for tuples. Issue #1614.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct DisputeRef {
+    pub milestone_id: u32,
+    pub enrollee: Address,
 }
 
 #[contracttype]
@@ -162,10 +209,10 @@ pub enum VerificationMode {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub enum DistributionMode {
-    Custom,           // per-milestone reward_amount (default)
-    Flat,             // equal reward for all milestones
-    Competitive(u32), // max_winners: first N completers rewarded; rest get 0
-    Percentage(u32),  // percent (1..=100) of milestone.reward_amount, rounded to nearest
+    Custom,             // per-milestone reward_amount (default)
+    Flat,               // equal reward for all milestones
+    Competitive(u32),   // max_winners: first N completers rewarded; rest get 0
+    Percentage(u32),    // percent (1..=100) of milestone.reward_amount, rounded to nearest
     PartialCredit(u32), // max_criteria: reward = reward_amount * criteria_met / max_criteria
 }
 
@@ -293,6 +340,21 @@ pub enum Error {
     NotEligibleForDispute = 25,
     /// A milestone deadline was set later than the quest's own deadline (#1652).
     MilestoneDeadlineExceedsQuest = 26,
+    /// A dispute for this submission was opened too recently. Enforces
+    /// `DISPUTE_COOLDOWN_SECONDS` between successive disputes on the same
+    /// milestone + enrollee after a previous dispute was ruled on (#1614).
+    DisputeCooldownActive = 27,
+    /// A dispute already exists for this milestone + enrollee and has not been
+    /// ruled on yet, so a duplicate must not be opened (#1614).
+    DisputeAlreadyOpen = 28,
+    /// The supplied dispute reason exceeded `MAX_DISPUTE_REASON_LEN` (#1614).
+    DisputeReasonTooLong = 29,
+    /// The dispute outcome is not legal for the dispute's current status
+    /// (e.g. escalating an already-escalated dispute, or escalating without
+    /// holding the required role) (#1614).
+    InvalidDisputeOutcome = 30,
+    /// A query window over an indexed collection exceeded `MAX_DISPUTE_PAGE` (#1614).
+    DisputePageTooLarge = 31,
     /// Contract is administratively paused (shared code 400).
     Paused = 400,
 }
@@ -315,6 +377,18 @@ pub const MAX_MILESTONE_DESCRIPTION_LEN: u32 = 1000;
 pub const MAX_FEEDBACK_LEN: u32 = 1000;
 pub const MAX_BATCH_SIZE: u32 = 20;
 pub const MAX_MILESTONES: u32 = 50;
+/// Maximum length of the learner-supplied dispute justification (#1614).
+pub const MAX_DISPUTE_REASON_LEN: u32 = 500;
+/// Maximum length of a resolver's note attached to a dispute ruling (#1614).
+pub const MAX_DISPUTE_NOTE_LEN: u32 = 500;
+/// Minimum number of seconds that must elapse between two disputes on the same
+/// (quest, milestone, enrollee) once the previous dispute has been ruled on.
+/// Stops a learner from spamming a reviewer with re-disputes after every
+/// rejection. Issue #1614.
+pub const DISPUTE_COOLDOWN_SECONDS: u64 = 3_600; // 1 hour
+/// Upper bound on the page size accepted by the indexed dispute queries, so a
+/// single call can never iterate an unbounded number of disputes. Issue #1614.
+pub const MAX_DISPUTE_PAGE: u32 = 100;
 /// Maximum window size accepted by `get_quest_completion_rate`. Callers must
 /// supply an explicit `limit <= MAX_COMPLETION_RATE_PAGE` so a single call
 /// can never iterate an unbounded enrollee set. See issue #865.
@@ -482,9 +556,7 @@ impl MilestoneContract {
         let count_key = DataKey::MilestoneCount(quest_id);
         let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
         let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
-        env.storage()
-            .persistent()
-            .set(&count_key, &next_count);
+        env.storage().persistent().set(&count_key, &next_count);
         Self::bump_ms(&env, &count_key);
 
         // Emit milestone creation event
@@ -584,9 +656,7 @@ impl MilestoneContract {
         let count_key = DataKey::MilestoneCount(quest_id);
         let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
         let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
-        env.storage()
-            .persistent()
-            .set(&count_key, &next_count);
+        env.storage().persistent().set(&count_key, &next_count);
         Self::bump_ms(&env, &count_key);
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
@@ -772,11 +842,12 @@ impl MilestoneContract {
         for id in 0..total {
             let mut deps = Vec::new(env);
             if id < base_id {
-                let (stored, ms): (Option<Vec<u32>>, Option<MilestoneInfo>) = common::get_persistent_pair(
-                    env,
-                    &DataKey::Prerequisites(quest_id, id),
-                    &DataKey::Milestone(quest_id, id),
-                );
+                let (stored, ms): (Option<Vec<u32>>, Option<MilestoneInfo>) =
+                    common::get_persistent_pair(
+                        env,
+                        &DataKey::Prerequisites(quest_id, id),
+                        &DataKey::Milestone(quest_id, id),
+                    );
                 if let Some(stored) = stored {
                     for p in stored.iter() {
                         deps.push_back(p);
@@ -1346,7 +1417,14 @@ impl MilestoneContract {
 
         env.events().publish(
             (Symbol::new(&env, "milestone_partial"),),
-            (quest_id, milestone_id, enrollee, criteria_met, max_criteria, reward),
+            (
+                quest_id,
+                milestone_id,
+                enrollee,
+                criteria_met,
+                max_criteria,
+                reward,
+            ),
         );
 
         Ok(reward)
@@ -1448,7 +1526,11 @@ impl MilestoneContract {
         // the approval flow is paid under the rules the enrollee signed up
         // for. See issue #863.
         let (current_mode_opt, current_flat_opt): (Option<DistributionMode>, Option<i128>) =
-            common::get_persistent_pair(&env, &DataKey::Mode(quest_id), &DataKey::FlatReward(quest_id));
+            common::get_persistent_pair(
+                &env,
+                &DataKey::Mode(quest_id),
+                &DataKey::FlatReward(quest_id),
+            );
         let current_mode = current_mode_opt.unwrap_or(DistributionMode::Custom);
         let current_flat_reward = current_flat_opt.unwrap_or(0);
         let snapshot = PendingSubmissionSnapshot {
@@ -1716,7 +1798,15 @@ impl MilestoneContract {
             // Event data: (milestone_id, quest_id, enrollee, peer, reward_amount, verification_mode, approval_count)
             env.events().publish(
                 (Symbol::new(&env, "peer_approved"),),
-                (milestone_id, quest_id, enrollee.clone(), peer, reward, verification_mode, new_approvals),
+                (
+                    milestone_id,
+                    quest_id,
+                    enrollee.clone(),
+                    peer,
+                    reward,
+                    verification_mode,
+                    new_approvals,
+                ),
             );
 
             Ok(Some(reward))
@@ -1955,6 +2045,36 @@ impl MilestoneContract {
             .unwrap_or(0)
     }
 
+    /// The pending submission snapshot for a learner on a milestone, if one is
+    /// currently awaiting review. Returns `None` once the submission has been
+    /// approved, rejected, or withdrawn. The dispute UI relies on this to tell
+    /// "still in review" apart from "rejected and disputable" (issue #1614).
+    pub fn get_pending_submission(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> Option<PendingSubmissionSnapshot> {
+        env.storage().persistent().get(&DataKey::PendingSubmission(
+            quest_id,
+            milestone_id,
+            enrollee,
+        ))
+    }
+
+    /// Number of peer approvals a pending submission has accumulated.
+    pub fn get_approval_count(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> u32 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::ApprovalCount(quest_id, milestone_id, enrollee))
+            .unwrap_or(0)
+    }
+
     /// Get full progress details for an enrollee in a quest.
     pub fn get_enrollee_progress(
         env: Env,
@@ -2115,6 +2235,74 @@ impl MilestoneContract {
 
     fn bump_ms(env: &Env, key: &DataKey) {
         common::extend_persistent_ttl(env, key);
+    }
+
+    /// Shared paging logic behind `get_disputes` / `get_open_disputes`.
+    ///
+    /// Walks the per-quest `DisputeIndex` and materialises the matching records.
+    /// `offset`/`limit` are validated against `MAX_DISPUTE_PAGE` so the loop is
+    /// always bounded, and stale index entries whose record has expired are
+    fn query_disputes(
+        env: &Env,
+        quest_id: u32,
+        offset: u32,
+        limit: u32,
+        only_open: bool,
+    ) -> Result<Vec<DisputeEntry>, Error> {
+        if limit == 0 || limit > MAX_DISPUTE_PAGE {
+            return Err(Error::DisputePageTooLarge);
+        }
+
+        let index_key = DataKey::DisputeIndex(quest_id);
+        let index: Vec<DisputeRef> = match env.storage().persistent().get(&index_key) {
+            Some(value) => value,
+            None => return Ok(Vec::new(env)),
+        };
+        env.storage()
+            .persistent()
+            .extend_ttl(&index_key, THRESHOLD, BUMP);
+
+        let mut out: Vec<DisputeEntry> = Vec::new(env);
+        // Number of index entries that passed the `only_open` filter and have
+        // been either skipped (offset) or emitted — drives paging.
+        let mut matched: u32 = 0;
+
+        for entry in index.iter() {
+            let record: DisputeRecord = match env.storage().persistent().get(&DataKey::Dispute(
+                quest_id,
+                entry.milestone_id,
+                entry.enrollee.clone(),
+            )) {
+                Some(value) => value,
+                // The record expired but its index entry survived; skip it.
+                None => continue,
+            };
+
+            let is_open = record.status == DisputeStatus::Pending
+                || record.status == DisputeStatus::Escalated;
+            if only_open && !is_open {
+                continue;
+            }
+
+            if matched < offset {
+                matched = matched.saturating_add(1);
+                continue;
+            }
+            matched = matched.saturating_add(1);
+
+            if out.len() >= limit {
+                break;
+            }
+
+            out.push_back(DisputeEntry {
+                quest_id,
+                milestone_id: entry.milestone_id,
+                enrollee: entry.enrollee,
+                record,
+            });
+        }
+
+        Ok(out)
     }
 
     fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
@@ -2446,7 +2634,7 @@ impl MilestoneContract {
             .persistent()
             .extend_ttl(&reserved_key, THRESHOLD, BUMP);
 
-// Record feedback
+        // Record feedback
         Self::record_feedback(
             &env,
             quest_id,
@@ -2459,19 +2647,39 @@ impl MilestoneContract {
         Ok(())
     }
 
-    /// Learner initiates a dispute for a rejected milestone submission.
-    /// Eligibility: (a) submission must have been rejected (no pending submission key),
-    /// (b) feedback history must contain FeedbackAction::Reject, (c) no existing dispute
-    /// with status Upheld or Overturned.
-    pub fn initiate_dispute(
+    /// Learner opens a dispute against a rejected milestone submission.
+    ///
+    /// Eligibility (issue #1614):
+    ///  - the caller is the quest owner or an enrolled learner of the quest;
+    ///  - the submission was rejected: no `PendingSubmission` key remains and the
+    ///    feedback history contains a `FeedbackAction::Reject` entry;
+    ///  - the reason is non-blank and at most `MAX_DISPUTE_REASON_LEN` characters;
+    ///  - no dispute is currently open (Pending or Escalated) for the same
+    ///    milestone + enrollee — duplicates are rejected with
+    ///    `Error::DisputeAlreadyOpen`;
+    ///  - if the previous dispute was already ruled on, at least
+    ///    `DISPUTE_COOLDOWN_SECONDS` must have elapsed, otherwise
+    ///    `Error::DisputeCooldownActive` is returned.
+    ///
+    /// Emits `dispute_initiated` with `(quest_id, milestone_id, enrollee)`.
+    pub fn open_dispute(
         env: Env,
         enrollee: Address,
         quest_id: u32,
         milestone_id: u32,
+        reason: String,
     ) -> Result<(), Error> {
         enrollee.require_auth();
-
         Self::require_not_paused(&env)?;
+
+        let now = env.ledger().timestamp();
+
+        if reason.len() > MAX_DISPUTE_REASON_LEN {
+            return Err(Error::DisputeReasonTooLong);
+        }
+        if reason.len() == 0 {
+            return Err(Error::InvalidInput);
+        }
 
         let quest_contract_addr: Address = env
             .storage()
@@ -2485,34 +2693,69 @@ impl MilestoneContract {
             return Err(Error::Unauthorized);
         }
 
-        // Check that a pending submission does NOT exist (i.e., was rejected)
+        // The submission must have been rejected: a pending submission means the
+        // work is still in the review flow, so there is nothing to dispute yet.
         let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
         if env.storage().persistent().has(&submit_key) {
             return Err(Error::NotEligibleForDispute);
         }
 
-        // Check that feedback history contains a Reject action
-        let feedback_key = DataKey::MilestoneFeedbackHistory(quest_id, milestone_id, enrollee.clone());
+        // A completed milestone is final — there is no rejection to appeal.
+        let completed_key = DataKey::Completed(quest_id, milestone_id, enrollee.clone());
+        if env.storage().persistent().has(&completed_key) {
+            return Err(Error::NotEligibleForDispute);
+        }
+
+        // The milestone must exist, otherwise a learner could spam disputes for
+        // milestones that were never created.
+        let milestone_key = DataKey::Milestone(quest_id, milestone_id);
+        let milestone: MilestoneInfo = env
+            .storage()
+            .persistent()
+            .get(&milestone_key)
+            .ok_or(Error::NotFound)?;
+
+        // Feedback history must contain a Reject action.
+        let feedback_key =
+            DataKey::MilestoneFeedbackHistory(quest_id, milestone_id, enrollee.clone());
         let feedback_history: Vec<MilestoneFeedback> = env
             .storage()
             .persistent()
             .get(&feedback_key)
             .unwrap_or_else(|| Vec::new(&env));
-        let has_reject = feedback_history.iter().any(|f| f.action == FeedbackAction::Reject);
+        let has_reject = feedback_history
+            .iter()
+            .any(|f| f.action == FeedbackAction::Reject);
         if !has_reject {
             return Err(Error::NotEligibleForDispute);
         }
 
-        // Check that no dispute already exists with a final status
         let dispute_key = DataKey::Dispute(quest_id, milestone_id, enrollee.clone());
+
         if env.storage().persistent().has(&dispute_key) {
-            let dispute_status: DisputeStatus = env
+            let existing: DisputeRecord = env
                 .storage()
                 .persistent()
                 .get(&dispute_key)
-                .unwrap();
-            if dispute_status == DisputeStatus::Upheld || dispute_status == DisputeStatus::Overturned {
-                return Err(Error::DisputeAlreadyResolved);
+                .ok_or(Error::DisputeNotFound)?;
+
+            if existing.status == DisputeStatus::Pending
+                || existing.status == DisputeStatus::Escalated
+            {
+                // An unresolved dispute is already on record for this submission.
+                return Err(Error::DisputeAlreadyOpen);
+            }
+
+            // Previous dispute was ruled on: enforce the re-dispute cooldown so a
+            // learner cannot spam the reviewer with fresh disputes every minute.
+            let last_key = DataKey::LastDisputeAt(quest_id, milestone_id, enrollee.clone());
+            let last: u64 = env
+                .storage()
+                .persistent()
+                .get(&last_key)
+                .unwrap_or(existing.opened_at);
+            if now < last.saturating_add(DISPUTE_COOLDOWN_SECONDS) {
+                return Err(Error::DisputeCooldownActive);
             }
         }
 
@@ -2527,25 +2770,54 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::FlatReward(quest_id))
             .unwrap_or(0);
-        let milestone_key = DataKey::Milestone(quest_id, milestone_id);
-        let milestone: MilestoneInfo = env
-            .storage()
-            .persistent()
-            .get(&milestone_key)
-            .ok_or(Error::NotFound)?;
 
         let dispute_record = DisputeRecord {
             status: DisputeStatus::Pending,
             distribution_mode: mode,
             reward_amount: milestone.reward_amount,
             flat_reward,
+            reason,
+            opened_at: now,
+            resolver: None,
+            resolved_at: None,
+            resolution_note: None,
         };
 
-        // Store dispute record with snapshot parameters for restoration on overturn
-        env.storage().persistent().set(&dispute_key, &dispute_record);
-        env.storage().persistent().extend_ttl(&dispute_key, THRESHOLD, BUMP);
+        env.storage()
+            .persistent()
+            .set(&dispute_key, &dispute_record);
+        env.storage()
+            .persistent()
+            .extend_ttl(&dispute_key, THRESHOLD, BUMP);
 
-        // Emit dispute initiated event
+        let last_key = DataKey::LastDisputeAt(quest_id, milestone_id, enrollee.clone());
+        env.storage().persistent().set(&last_key, &now);
+        env.storage()
+            .persistent()
+            .extend_ttl(&last_key, THRESHOLD, BUMP);
+
+        // Index the dispute so `get_disputes` / `get_open_disputes` can page
+        // through a quest's disputes without a full storage scan.
+        let index_key = DataKey::DisputeIndex(quest_id);
+        let mut index: Vec<DisputeRef> = env
+            .storage()
+            .persistent()
+            .get(&index_key)
+            .unwrap_or_else(|| Vec::new(&env));
+        let already_indexed = index
+            .iter()
+            .any(|slot| slot.milestone_id == milestone_id && slot.enrollee == enrollee);
+        if !already_indexed {
+            index.push_back(DisputeRef {
+                milestone_id,
+                enrollee: enrollee.clone(),
+            });
+            env.storage().persistent().set(&index_key, &index);
+        }
+        env.storage()
+            .persistent()
+            .extend_ttl(&index_key, THRESHOLD, BUMP);
+
         // Topics: (dispute_initiated,)
         // Data: (quest_id, milestone_id, enrollee)
         env.events().publish(
@@ -2556,11 +2828,38 @@ impl MilestoneContract {
         Ok(())
     }
 
-    /// Resolve a dispute for a milestone submission.
-    /// Only the quest owner or an enrolled peer reviewer may resolve.
-    /// If outcome is Upheld, the rejection stands and the dispute is final.
-    /// If outcome is Overturned, the pending submission is restored and the
-    /// enrollee may proceed through the review flow again.
+    /// Backwards-compatible alias for `open_dispute` kept so existing clients
+    /// compiled against the original ABI keep working. Equivalent to opening a
+    /// dispute with a blank reason, which `open_dispute` rejects — callers must
+    /// migrate to `open_dispute` and supply a justification.
+    pub fn initiate_dispute(
+        env: Env,
+        enrollee: Address,
+        quest_id: u32,
+        milestone_id: u32,
+    ) -> Result<(), Error> {
+        let reason = String::from_str(&env, "n/a");
+        Self::open_dispute(env, enrollee, quest_id, milestone_id, reason)
+    }
+
+    /// Rule on an open dispute.
+    ///
+    /// Authorisation (issue #1614): only the quest owner or the contract
+    /// administrator may rule. Arbitrary enrolled peers can no longer settle a
+    /// dispute — previously any enrolled address could, which let a peer
+    /// competitor overturn a rejection against a fellow learner. The disputing
+    /// learner may never rule on their own dispute.
+    ///
+    /// Legal transitions:
+    ///  - `Pending`   + Upheld     -> Upheld (final)
+    ///  - `Pending`   + Overturned -> Overturned (final; restores the submission)
+    ///  - `Pending`   + Escalated  -> Escalated (administrator arbitration;
+    ///                                    only the contract administrator)
+    ///  - `Escalated` + Upheld     -> Upheld (final)
+    ///  - `Escalated` + Overturned -> Overturned (final; restores the submission)
+    ///
+    /// Emits `dispute_resolved` with `(quest_id, milestone_id, enrollee, outcome)`
+    /// for a final ruling and `dispute_escalated` for an escalation.
     pub fn resolve_dispute(
         env: Env,
         resolver: Address,
@@ -2568,9 +2867,16 @@ impl MilestoneContract {
         milestone_id: u32,
         enrollee: Address,
         outcome: DisputeOutcome,
+        note: Option<String>,
     ) -> Result<(), Error> {
         resolver.require_auth();
         Self::require_not_paused(&env)?;
+
+        if let Some(ref text) = note {
+            if text.len() > MAX_DISPUTE_NOTE_LEN {
+                return Err(Error::InvalidInput);
+            }
+        }
 
         let quest_contract_addr: Address = env
             .storage()
@@ -2580,33 +2886,56 @@ impl MilestoneContract {
         let quest_client = QuestClient::new(&env, &quest_contract_addr);
         let quest_info = quest_client.get_quest(&quest_id);
 
+        let stored_admin: Option<Address> = env.storage().instance().get(&DataKey::Admin);
+        let is_admin = stored_admin.as_ref() == Some(&resolver);
         let is_owner = quest_info.owner == resolver;
-        if !is_owner && !Self::is_enrolled(&env, quest_id, &resolver)? {
+
+        if !is_owner && !is_admin {
             return Err(Error::Unauthorized);
         }
+        // A learner must not rule on their own dispute.
         if resolver == enrollee {
             return Err(Error::InvalidApprover);
         }
 
         let dispute_key = DataKey::Dispute(quest_id, milestone_id, enrollee.clone());
-        let dispute_status: DisputeStatus = env
+        let mut record: DisputeRecord = env
             .storage()
             .persistent()
             .get(&dispute_key)
             .ok_or(Error::DisputeNotFound)?;
 
-        // Dispute must be in Pending state to resolve
-        if dispute_status != DisputeStatus::Pending {
+        // A final ruling cannot be revisited; an escalation must be settled.
+        if record.status == DisputeStatus::Upheld || record.status == DisputeStatus::Overturned {
             return Err(Error::DisputeAlreadyResolved);
         }
+
+        // Escalating hands the dispute to the contract administrator, so only
+        // that role may do it. An already-escalated dispute cannot be escalated
+        // again — it must be ruled on.
+        if outcome == DisputeOutcome::Escalated {
+            if !is_admin {
+                return Err(Error::Unauthorized);
+            }
+            if record.status == DisputeStatus::Escalated {
+                return Err(Error::InvalidDisputeOutcome);
+            }
+        }
+
+        let now = env.ledger().timestamp();
+        record.resolver = Some(resolver.clone());
+        record.resolved_at = Some(now);
+        record.resolution_note = note;
 
         match outcome {
             DisputeOutcome::Upheld => {
                 // Rejection stands — mark dispute as Upheld (final)
-                env.storage().persistent().set(&dispute_key, &DisputeStatus::Upheld);
-                env.storage().persistent().extend_ttl(&dispute_key, THRESHOLD, BUMP);
+                record.status = DisputeStatus::Upheld;
+                env.storage().persistent().set(&dispute_key, &record);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&dispute_key, THRESHOLD, BUMP);
 
-                // Emit dispute resolved event
                 // Topics: (dispute_resolved,)
                 // Data: (quest_id, milestone_id, enrollee, outcome)
                 env.events().publish(
@@ -2618,21 +2947,18 @@ impl MilestoneContract {
             }
             DisputeOutcome::Overturned => {
                 // Restore the pending submission using parameters stored at dispute initiation
-                let dispute_record: DisputeRecord = env
-                    .storage()
-                    .persistent()
-                    .get(&dispute_key)
-                    .unwrap();
-
-                let submit_key = DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
+                let submit_key =
+                    DataKey::PendingSubmission(quest_id, milestone_id, enrollee.clone());
                 let snapshot = PendingSubmissionSnapshot {
-                    distribution_mode: dispute_record.distribution_mode,
-                    reward_amount: dispute_record.reward_amount,
-                    flat_reward: dispute_record.flat_reward,
-                    submitted_at: env.ledger().timestamp(),
+                    distribution_mode: record.distribution_mode.clone(),
+                    reward_amount: record.reward_amount,
+                    flat_reward: record.flat_reward,
+                    submitted_at: now,
                 };
                 env.storage().persistent().set(&submit_key, &snapshot);
-                env.storage().persistent().extend_ttl(&submit_key, THRESHOLD, BUMP);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&submit_key, THRESHOLD, BUMP);
 
                 // Initialize approval tracking so the enrollee can start the review flow anew
                 let approval_key = DataKey::ApprovalCount(quest_id, milestone_id, enrollee.clone());
@@ -2643,13 +2969,16 @@ impl MilestoneContract {
 
                 // Initialize empty approvers list
                 let approvers_key = DataKey::Approvers(quest_id, milestone_id, enrollee.clone());
-                env.storage().persistent().set(&approvers_key, &Vec::<Address>::new(&env));
+                env.storage()
+                    .persistent()
+                    .set(&approvers_key, &Vec::<Address>::new(&env));
 
                 // Restore reserved reward by the snapshotted amount
                 let reserved_key = DataKey::TotalReservedReward(quest_id);
-                let current_reserved: i128 = env.storage().persistent().get(&reserved_key).unwrap_or(0);
+                let current_reserved: i128 =
+                    env.storage().persistent().get(&reserved_key).unwrap_or(0);
                 let new_reserved = current_reserved
-                    .checked_add(dispute_record.reward_amount)
+                    .checked_add(record.reward_amount)
                     .ok_or(Error::Overflow)?;
                 env.storage().persistent().set(&reserved_key, &new_reserved);
                 env.storage()
@@ -2657,10 +2986,12 @@ impl MilestoneContract {
                     .extend_ttl(&reserved_key, THRESHOLD, BUMP);
 
                 // Mark dispute as Overturned (final)
-                env.storage().persistent().set(&dispute_key, &DisputeStatus::Overturned);
-                env.storage().persistent().extend_ttl(&dispute_key, THRESHOLD, BUMP);
+                record.status = DisputeStatus::Overturned;
+                env.storage().persistent().set(&dispute_key, &record);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&dispute_key, THRESHOLD, BUMP);
 
-                // Emit dispute resolved event
                 // Topics: (dispute_resolved,)
                 // Data: (quest_id, milestone_id, enrollee, outcome)
                 env.events().publish(
@@ -2670,11 +3001,45 @@ impl MilestoneContract {
                 extend_instance_ttl(&env);
                 Ok(())
             }
+            DisputeOutcome::Escalated => {
+                record.status = DisputeStatus::Escalated;
+                env.storage().persistent().set(&dispute_key, &record);
+                env.storage()
+                    .persistent()
+                    .extend_ttl(&dispute_key, THRESHOLD, BUMP);
+
+                // Topics: (dispute_escalated,)
+                // Data: (quest_id, milestone_id, enrollee)
+                env.events().publish(
+                    (Symbol::new(&env, "dispute_escalated"),),
+                    (quest_id, milestone_id, enrollee),
+                );
+                extend_instance_ttl(&env);
+                Ok(())
+            }
         }
     }
 
-    /// Query the current dispute status for a milestone submission.
-    /// Returns None if no dispute has been initiated for this (quest, milestone, enrollee).
+    /// Full record for a single dispute, including the coordinates needed to
+    /// rule on it. Returns `None` when no dispute was ever opened.
+    pub fn get_dispute(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> Option<DisputeEntry> {
+        let dispute_key = DataKey::Dispute(quest_id, milestone_id, enrollee.clone());
+        let record: DisputeRecord = env.storage().persistent().get(&dispute_key)?;
+        Some(DisputeEntry {
+            quest_id,
+            milestone_id,
+            enrollee,
+            record,
+        })
+    }
+
+    /// Current status of a single dispute. Returns `None` when no dispute was
+    /// ever opened for this (quest, milestone, enrollee) triple.
     pub fn get_dispute_status(
         env: Env,
         quest_id: u32,
@@ -2682,7 +3047,67 @@ impl MilestoneContract {
         enrollee: Address,
     ) -> Option<DisputeStatus> {
         let dispute_key = DataKey::Dispute(quest_id, milestone_id, enrollee);
-        env.storage().persistent().get(&dispute_key)
+        let record: DisputeRecord = env.storage().persistent().get(&dispute_key)?;
+        Some(record.status)
+    }
+
+    /// True when a dispute is currently awaiting a ruling (Pending or Escalated).
+    pub fn has_open_dispute(env: Env, quest_id: u32, milestone_id: u32, enrollee: Address) -> bool {
+        match Self::get_dispute_status(env, quest_id, milestone_id, enrollee) {
+            Some(DisputeStatus::Pending) | Some(DisputeStatus::Escalated) => true,
+            _ => false,
+        }
+    }
+
+    /// Remaining cooldown, in seconds, before `enrollee` may open another
+    /// dispute on the same milestone. Returns `0` when no cooldown applies —
+    /// either because no dispute was ever opened or because a prior dispute is
+    /// still open (in which case the caller is blocked by
+    /// `Error::DisputeAlreadyOpen` instead).
+    pub fn dispute_cooldown_remaining(
+        env: Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: Address,
+    ) -> u64 {
+        let last_key = DataKey::LastDisputeAt(quest_id, milestone_id, enrollee);
+        let last: Option<u64> = env.storage().persistent().get(&last_key);
+        let last = match last {
+            Some(value) => value,
+            None => return 0,
+        };
+
+        let now = env.ledger().timestamp();
+        let eligible_at = last.saturating_add(DISPUTE_COOLDOWN_SECONDS);
+        if now >= eligible_at {
+            0
+        } else {
+            eligible_at - now
+        }
+    }
+
+    /// Page through every dispute ever opened on a quest, oldest first.
+    ///
+    /// `limit` must be in `1..=MAX_DISPUTE_PAGE` so a single invocation can never
+    /// iterate an unbounded number of records. Issue #1614.
+    pub fn get_disputes(
+        env: Env,
+        quest_id: u32,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<DisputeEntry>, Error> {
+        Self::query_disputes(&env, quest_id, offset, limit, false)
+    }
+
+    /// Page through the disputes on a quest that are still awaiting a ruling
+    /// (Pending or Escalated). Same paging bounds as `get_disputes`.
+    pub fn get_open_disputes(
+        env: Env,
+        quest_id: u32,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<DisputeEntry>, Error> {
+        Self::query_disputes(&env, quest_id, offset, limit, true)
     }
 
     /// Request changes on a pending milestone submission with written feedback.

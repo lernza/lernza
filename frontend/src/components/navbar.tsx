@@ -7,6 +7,7 @@ import { useTranslation } from "@/i18n"
 import { cn } from "@/lib/utils"
 import { NetworkIndicator, NetworkMismatchBanner } from "@/components/error-states"
 import { NotificationCenter } from "@/components/notifications/notification-center"
+import { LanguageSelector } from "@/components/language-selector"
 
 const NAV_ITEMS = [
   { key: "landing", labelKey: "nav.home" as const },
@@ -114,6 +115,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
         {/* Right side: theme toggle + tutorial + wallet + mobile menu */}
         <div className="flex items-center gap-2">
           <NetworkIndicator />
+          <LanguageSelector />
           <ThemeToggle />
           <NotificationCenter onNavigate={handleNavigate} />
 

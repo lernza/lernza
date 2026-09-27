@@ -442,6 +442,9 @@ fn test_distribute_reward_earnings_overflow() {
         &String::from_str(&env, "Desc"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -494,6 +497,9 @@ fn test_zero_amount_edge_cases() {
         &String::from_str(&env, "Desc"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -587,6 +593,9 @@ fn test_distribute_reward() {
         &String::from_str(&env, "Description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -649,6 +658,9 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     let ms2_id = milestone_client.create_milestone(
         &owner,
@@ -657,6 +669,9 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Description"),
         &200,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     quest_client.add_enrollee(&q_id, &e1);
@@ -3309,3 +3324,4 @@ fn test_pool_cannot_go_negative() {
     let r = client.try_distribute_reward(&owner, &q_id, &m_id, &enrollee, &2_000);
     assert_eq!(r, Err(Ok(Error::InsufficientPool)));
 }
+

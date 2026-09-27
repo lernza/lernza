@@ -65,8 +65,22 @@ pub enum DataKey {
     // refund_remaining_funds / refund_expired_pool so the instance
     // counter `TotalDistributed` stays consistent — issue #864.
     QuestRefunded(u32),
-    // Idempotency: tracks whether a (quest, milestone, enrollee) payout was already made
-    PayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
+    // Idempotency: tracks whether a (quest, milestone, enrollee, token) payout
+    // was already made.
+    //
+    // The token component was added for issue #1732. The key used to be
+    // (quest, milestone, enrollee) with no token, so `distribute_reward` and
+    // `distribute_reward_with_token` shared one idempotency slot: paying a
+    // milestone in the main token made a subsequent bonus payout in a second
+    // token for the same milestone and enrollee return `AlreadyPaid`, so
+    // multi-token quests could never pay more than one token per milestone.
+    PayoutRecord(u32, u32, Address, Address), // (quest_id, milestone_id, enrollee, token)
+    // Pre-#1732 key shape, retained read-only so payouts recorded before the
+    // upgrade keep their idempotency guarantee. These records carry no token,
+    // so they cannot be attributed to a specific token and are treated as
+    // blocking every token for that (quest, milestone, enrollee) triple. All
+    // newly written records are token-scoped.
+    LegacyPayoutRecord(u32, u32, Address), // (quest_id, milestone_id, enrollee)
     // Configurable refund grace period in seconds — Issue #882
     RefundGracePeriod,
     // Admin address for configuration updates
@@ -496,11 +510,19 @@ impl RewardsContract {
             return Err(Error::QuestNotFunded);
         }
 
-        // Idempotency check: reject duplicate payouts for (quest, milestone, enrollee)
-        let payout_key = DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone());
-        if env.storage().persistent().has(&payout_key) {
+        // Resolve the main staking token up front: the idempotency record is
+        // now token-scoped (issue #1732), so the check needs to know which
+        // token this payout is in.
+        let token_addr = Self::get_token(&env)?;
+
+        // Idempotency check: reject a duplicate payout of the same
+        // (quest, milestone, enrollee, token). A payout of the same milestone
+        // in a *different* token is a separate, legitimate payout.
+        if Self::payout_already_recorded(&env, quest_id, milestone_id, &enrollee, &token_addr) {
             return Err(Error::AlreadyPaid);
         }
+        let payout_key =
+            DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone(), token_addr.clone());
 
         // Verify caller is the quest authority
         let auth_key = DataKey::QuestAuthority(quest_id);
@@ -598,7 +620,8 @@ impl RewardsContract {
 
         // Transfer tokens to enrollee. A panic here reverts the whole tx
         // including the PayoutRecord + pool writes above.
-        let token_addr = Self::get_token(&env)?;
+        // `token_addr` was already resolved above for the token-scoped
+        // idempotency check (issue #1732).
         let client = token::Client::new(&env, &token_addr);
         client.transfer(&env.current_contract_address(), &enrollee, &amount);
 
@@ -681,11 +704,13 @@ impl RewardsContract {
             return Err(Error::QuestNotFunded);
         }
 
-        // Idempotency check
-        let payout_key = DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone());
-        if env.storage().persistent().has(&payout_key) {
+        // Idempotency check — token-scoped so the same milestone can be paid in
+        // more than one token (issue #1732).
+        if Self::payout_already_recorded(&env, quest_id, milestone_id, &enrollee, &token_addr) {
             return Err(Error::AlreadyPaid);
         }
+        let payout_key =
+            DataKey::PayoutRecord(quest_id, milestone_id, enrollee.clone(), token_addr.clone());
 
         // Verify caller is the quest authority
         let auth_key = DataKey::QuestAuthority(quest_id);
@@ -881,9 +906,9 @@ impl RewardsContract {
                 return Err(Error::MilestoneNotCompleted);
             }
 
-            // Verify this payout hasn't already been made (idempotency).
-            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
-            if env.storage().persistent().has(&payout_key) {
+            // Verify this payout hasn't already been made (idempotency,
+            // token-scoped per issue #1732).
+            if Self::payout_already_recorded(&env, quest_id, ms_id, &claimant, &token_addr) {
                 return Err(Error::AlreadyPaid);
             }
 
@@ -919,8 +944,11 @@ impl RewardsContract {
             let ms_id = milestone_ids.get(i).ok_or(Error::InvalidInput)?;
             let amount = amounts.get(i).ok_or(Error::InvalidInput)?;
 
-            // Record payout for idempotency BEFORE the token transfer.
-            let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());
+            // Record payout for idempotency BEFORE the token transfer. The
+            // token component scopes the record so a later payout of the same
+            // milestone in a different token is not blocked (issue #1732).
+            let payout_key =
+                DataKey::PayoutRecord(quest_id, ms_id, claimant.clone(), token_addr.clone());
             env.storage().persistent().set(&payout_key, &amount);
             common::extend_persistent_ttl(&env, &payout_key);
 
@@ -1134,6 +1162,34 @@ impl RewardsContract {
         // "at most the remaining balance" figure.
         let obligations = core::cmp::max(0, total_reserved.saturating_sub(distributed));
         core::cmp::max(0, pool.saturating_sub(obligations))
+    }
+
+    /// Returns true if a payout for this (quest, milestone, enrollee, token) has
+    /// already been recorded — issue #1732.
+    ///
+    /// Also honours the pre-#1732 three-field key. A legacy record has no token
+    /// component, so it cannot be attributed to a particular token; it is
+    /// therefore treated as blocking *every* token for that triple. That keeps
+    /// the pre-upgrade idempotency guarantee intact — no payout that used to be
+    /// refused can now succeed — while fully token-scoping every record written
+    /// after the upgrade.
+    fn payout_already_recorded(
+        env: &Env,
+        quest_id: u32,
+        milestone_id: u32,
+        enrollee: &Address,
+        token: &Address,
+    ) -> bool {
+        env.storage().persistent().has(&DataKey::PayoutRecord(
+            quest_id,
+            milestone_id,
+            enrollee.clone(),
+            token.clone(),
+        )) || env.storage().persistent().has(&DataKey::LegacyPayoutRecord(
+            quest_id,
+            milestone_id,
+            enrollee.clone(),
+        ))
     }
 
     /// Decrement the instance-storage `TotalFunded` counter and bump

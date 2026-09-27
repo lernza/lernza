@@ -100,8 +100,17 @@ export function QuestProgressTracker({
         </div>
 
         <div className="mb-4 flex items-center gap-4">
-          <Progress value={completedCount} max={milestones.length} className="flex-1" />
-          <span className="text-sm font-semibold tabular-nums">
+          <Progress
+            value={completedCount}
+            max={milestones.length}
+            className="flex-1"
+            role="progressbar"
+            aria-valuenow={completedCount}
+            aria-valuemin={0}
+            aria-valuemax={milestones.length}
+            aria-label={`Quest progress: ${completedCount} of ${milestones.length} milestones completed`}
+          />
+          <span className="text-sm font-semibold tabular-nums" aria-hidden="true">
             {completedCount}/{milestones.length}
           </span>
         </div>
@@ -143,10 +152,18 @@ export function QuestProgressTracker({
                     state === "pending" && "bg-background hover:bg-secondary cursor-pointer",
                     state === "locked" && "bg-muted"
                   )}
+                  role="img"
+                  aria-label={
+                    state === "completed"
+                      ? "Milestone completed"
+                      : state === "pending"
+                        ? "Milestone pending"
+                        : "Milestone locked"
+                  }
                 >
-                  {state === "completed" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {state === "pending" && <Circle className="text-muted-foreground h-3.5 w-3.5" />}
-                  {state === "locked" && <Lock className="text-muted-foreground h-3 w-3" />}
+                  {state === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {state === "pending" && <Circle className="text-muted-foreground h-3.5 w-3.5" aria-hidden="true" />}
+                  {state === "locked" && <Lock className="text-muted-foreground h-3 w-3" aria-hidden="true" />}
                 </div>
                 <span
                   className={cn(

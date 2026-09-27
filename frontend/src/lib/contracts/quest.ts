@@ -408,7 +408,7 @@ export class QuestClient {
 
   async joinQuestWithInvite(learner: string, questId: number, code: string) {
     return safeContractCall(async () => {
-      const tx = await this.buildTx(learner, "join_with_invite", [
+      const tx = await this.buildTx(learner, "join_quest_with_invite", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(code, { type: "string" }),
       ])

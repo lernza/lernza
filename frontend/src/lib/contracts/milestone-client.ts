@@ -323,6 +323,30 @@ export class MilestoneClient {
     }
   }
 
+  async verifyPartialCompletion(
+    owner: string,
+    questId: number,
+    milestoneId: number,
+    enrollee: string,
+    criteriaMet: number,
+    handlers?: TransactionLifecycleHandlers
+  ): Promise<VerifyCompletionResult> {
+    const tx = await this.buildTx(owner, "verify_partial_completion", [
+      new Address(owner).toScVal(),
+      nativeToScVal(questId, { type: "u32" }),
+      nativeToScVal(milestoneId, { type: "u32" }),
+      new Address(enrollee).toScVal(),
+      nativeToScVal(criteriaMet, { type: "u32" }),
+    ])
+    const result = this.normalizeTransactionResult(
+      await signAndSubmitTracked(tx, "Verify Partial Completion", handlers)
+    )
+    return {
+      ...result,
+      rewardAmount: this.parseNumericResult(result.resultXdr),
+    }
+  }
+
   async verifyCompletionWithFeedback(
     owner: string,
     questId: number,

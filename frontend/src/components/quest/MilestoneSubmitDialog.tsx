@@ -12,6 +12,7 @@ import {
 export interface SubmissionEvidence {
   url: string
   note: string
+  criteriaMet?: number
 }
 
 interface MilestoneSubmitDialogProps {
@@ -20,6 +21,7 @@ interface MilestoneSubmitDialogProps {
   onConfirm: (evidence: SubmissionEvidence) => void
   onCancel: () => void
   isPending?: boolean
+  maxCriteria?: number
 }
 
 /**
@@ -42,7 +44,7 @@ export function isValidEvidenceUrl(url: string): boolean {
  * a milestone as complete. Evidence is passed to the caller via onConfirm so it
  * can be stored alongside the milestone completion record.
  *
- * Resolves issue #1448 and #1677.
+ * Resolves issue #1448, #1677, and #1613.
  */
 export function MilestoneSubmitDialog({
   open,
@@ -50,17 +52,29 @@ export function MilestoneSubmitDialog({
   onConfirm,
   onCancel,
   isPending = false,
+  maxCriteria,
 }: MilestoneSubmitDialogProps) {
   const [url, setUrl] = useState("")
   const [note, setNote] = useState("")
+  const [criteriaMet, setCriteriaMet] = useState<number | "">(maxCriteria || "")
   const [touched, setTouched] = useState(false)
 
   const isUrlValid = useMemo(() => isValidEvidenceUrl(url), [url])
+  const isCriteriaValid = useMemo(() => {
+    if (maxCriteria === undefined || maxCriteria <= 0) return true
+    if (typeof criteriaMet !== "number" || isNaN(criteriaMet)) return false
+    return criteriaMet >= 1 && criteriaMet <= maxCriteria
+  }, [criteriaMet, maxCriteria])
+
   const showError = touched && url.trim().length > 0 && !isUrlValid
 
   function handleConfirm() {
-    if (!isUrlValid) return
-    onConfirm({ url: url.trim(), note: note.trim() })
+    if (!isUrlValid || !isCriteriaValid) return
+    onConfirm({
+      url: url.trim(),
+      note: note.trim(),
+      criteriaMet: typeof criteriaMet === "number" ? criteriaMet : undefined,
+    })
   }
 
   function handleOpenChange(isOpen: boolean) {
@@ -82,6 +96,27 @@ export function MilestoneSubmitDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {maxCriteria !== undefined && maxCriteria > 0 && (
+            <div className="space-y-1">
+              <label htmlFor="criteria-met" className="text-sm font-medium">
+                Criteria Met (1 to {maxCriteria})
+              </label>
+              <input
+                id="criteria-met"
+                type="number"
+                min={1}
+                max={maxCriteria}
+                value={criteriaMet}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10)
+                  setCriteriaMet(isNaN(val) ? "" : val)
+                }}
+                className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isPending}
+              />
+            </div>
+          )}
+
           <div className="space-y-1">
             <label htmlFor="evidence-url" className="text-sm font-medium">
               Evidence URL
@@ -132,7 +167,7 @@ export function MilestoneSubmitDialog({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={isPending || !isUrlValid}
+            disabled={isPending || !isUrlValid || !isCriteriaValid}
           >
             {isPending ? "Submitting…" : "Submit"}
           </Button>

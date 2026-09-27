@@ -1415,7 +1415,7 @@ impl MilestoneContract {
             .extend_ttl(&earnings_key, THRESHOLD, BUMP);
 
         env.events().publish(
-            (Symbol::new(&env, "milestone_partial"),),
+            (Symbol::new(&env, "partial_completion"),),
             (
                 quest_id,
                 milestone_id,

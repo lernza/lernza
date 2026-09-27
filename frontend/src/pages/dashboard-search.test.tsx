@@ -234,4 +234,59 @@ describe("Dashboard quest search, category filter, and sort", () => {
 
     expect(await screen.findByText(/no matching quests/i)).toBeInTheDocument()
   })
+
+  it("filters quests by a single tag using tag autocomplete", async () => {
+    render(<Dashboard />)
+    // Wait for quests to appear
+    await screen.findByText("Smart Contract Basics")
+
+    const tagInput = screen.getByPlaceholderText(/filter by tag/i)
+    fireEvent.change(tagInput, { target: { value: "rust" } })
+
+    // Suggestion should appear
+    const suggestion = await screen.findByRole("option", { name: /rust/i })
+    fireEvent.mouseDown(suggestion)
+
+    // Only the quest with the "rust" tag should remain
+    expect(screen.getByText("Smart Contract Basics")).toBeInTheDocument()
+    expect(screen.queryByText("Design Fundamentals")).not.toBeInTheDocument()
+  })
+
+  it("shows active tag chip and allows removal", async () => {
+    render(<Dashboard />)
+    await screen.findByText("Smart Contract Basics")
+
+    const tagInput = screen.getByPlaceholderText(/filter by tag/i)
+    fireEvent.change(tagInput, { target: { value: "rust" } })
+    const suggestion = await screen.findByRole("option", { name: /rust/i })
+    fireEvent.mouseDown(suggestion)
+
+    // Chip should appear
+    expect(screen.getByLabelText("Remove tag rust")).toBeInTheDocument()
+
+    // Removing chip restores all quests
+    fireEvent.click(screen.getByLabelText("Remove tag rust"))
+    expect(await screen.findByText("Design Fundamentals")).toBeInTheDocument()
+  })
+
+  it("filters quests by multiple tags with OR mode (default)", async () => {
+    render(<Dashboard />)
+    await screen.findByText("Smart Contract Basics")
+
+    const tagInput = screen.getByPlaceholderText(/filter by tag/i)
+
+    // Add "rust"
+    fireEvent.change(tagInput, { target: { value: "rust" } })
+    const rustSuggestion = await screen.findByRole("option", { name: /rust/i })
+    fireEvent.mouseDown(rustSuggestion)
+
+    // Add "ui"
+    fireEvent.change(tagInput, { target: { value: "ui" } })
+    const uiSuggestion = await screen.findByRole("option", { name: /^ui$/i })
+    fireEvent.mouseDown(uiSuggestion)
+
+    // OR mode: quests with either "rust" or "ui" should show
+    expect(screen.getByText("Smart Contract Basics")).toBeInTheDocument()
+    expect(screen.getByText("Design Fundamentals")).toBeInTheDocument()
+  })
 })

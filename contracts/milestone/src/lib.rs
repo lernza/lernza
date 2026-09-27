@@ -489,11 +489,8 @@ impl MilestoneContract {
 
         // Emit milestone creation event
         // Event topics: (milestone_created,)
-        // Event data: (milestone_id, quest_id, reward_amount)
-        env.events().publish(
-            (Symbol::new(&env, "milestone_created"),),
-            (id, quest_id, milestone.reward_amount),
-        );
+        // Event data: (milestone_id, quest_id, reward_amount, actor, timestamp)
+        common::emit_milestone_created(&env, id, quest_id, milestone.reward_amount, &owner);
 
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
@@ -591,10 +588,7 @@ impl MilestoneContract {
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
         Self::bump_ms(&env, &next_key);
-        env.events().publish(
-            (Symbol::new(&env, "milestone_created"),),
-            (id, quest_id, milestone.reward_amount),
-        );
+        common::emit_milestone_created(&env, id, quest_id, milestone.reward_amount, &owner);
         extend_instance_ttl(&env);
         Ok(id)
     }
@@ -678,10 +672,7 @@ impl MilestoneContract {
             current_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
 
             // Emit milestone creation event
-            env.events().publish(
-                (Symbol::new(&env, "milestone_created"),),
-                (id, quest_id, ms_info.reward_amount),
-            );
+            common::emit_milestone_created(&env, id, quest_id, ms_info.reward_amount, &owner);
 
             Self::bump_ms(&env, &ms_key);
             ids.push_back(id);
@@ -1197,11 +1188,8 @@ impl MilestoneContract {
 
         // Emit milestone completion event
         // Event topics: (milestone_completed,)
-        // Event data: (quest_id, milestone_id, enrollee, reward, distribution_mode)
-        env.events().publish(
-            (Symbol::new(&env, "milestone_completed"),),
-            (quest_id, milestone_id, enrollee.clone(), reward, mode),
-        );
+        // Event data: (quest_id, milestone_id, enrollee, reward, actor, timestamp)
+        common::emit_milestone_completed(&env, quest_id, milestone_id, &enrollee, reward, &owner);
 
         Ok(reward)
     }

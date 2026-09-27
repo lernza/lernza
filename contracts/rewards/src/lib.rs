@@ -913,8 +913,11 @@ impl RewardsContract {
         // panic-revert the whole transaction) and token transfer failure.
         let mut running_pool = pool;
         for i in 0..milestone_ids.len() {
-            let ms_id = milestone_ids.get(i).unwrap();
-            let amount = amounts.get(i).unwrap();
+            // Safety: `i` is within bounds of `milestone_ids` by construction.
+            // Explicit ok_or here instead of .unwrap() so any unexpected
+            // deserialization failure surfaces as InvalidInput rather than a panic.
+            let ms_id = milestone_ids.get(i).ok_or(Error::InvalidInput)?;
+            let amount = amounts.get(i).ok_or(Error::InvalidInput)?;
 
             // Record payout for idempotency BEFORE the token transfer.
             let payout_key = DataKey::PayoutRecord(quest_id, ms_id, claimant.clone());

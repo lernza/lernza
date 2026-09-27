@@ -75,6 +75,9 @@ export function Dashboard(
   const [statusFilter, setStatusFilter] = useState<QuestDiscoveryStatus>("all")
   const [rewardMin, setRewardMin] = useState<string>("")
   const [rewardMax, setRewardMax] = useState<string>("")
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [tagFilterMode, setTagFilterMode] = useState<"AND" | "OR">("OR")
+  const [tagInput, setTagInput] = useState("")
   const [displayCount, setDisplayCount] = useState(DASHBOARD_QUEST_PAGE_SIZE)
   // Live clock: deadline filters and derived lifecycle status must reflect the
   // real time, not the value sampled on first render — a tab left open in the
@@ -344,7 +347,26 @@ export function Dashboard(
       })
     : rewardFilteredQuests
 
-  const sortedQuests = [...searchedQuests].sort((a, b) => {
+  // Tag filter — multi-tag AND/OR (issue #1635)
+  const allKnownTags = Array.from(
+    new Set(filteredQuests.flatMap(q => q.tags ?? []))
+  ).sort()
+  const tagSuggestions = tagInput.trim()
+    ? allKnownTags.filter(
+        t => t.toLowerCase().includes(tagInput.trim().toLowerCase()) && !selectedTags.includes(t)
+      )
+    : []
+  const tagFilteredQuests =
+    selectedTags.length === 0
+      ? searchedQuests
+      : searchedQuests.filter(q => {
+          const qtags = q.tags ?? []
+          return tagFilterMode === "AND"
+            ? selectedTags.every(t => qtags.includes(t))
+            : selectedTags.some(t => qtags.includes(t))
+        })
+
+  const sortedQuests = [...tagFilteredQuests].sort((a, b) => {
     const statsA = questStats[a.id]
     const statsB = questStats[b.id]
 
@@ -629,6 +651,108 @@ export function Dashboard(
                   <option value="most-enrolled">Most enrolled</option>
                   <option value="highest-reward">Highest reward</option>
                 </select>
+              </div>
+
+              {/* Tag search with autocomplete (issue #1635) */}
+              <div className="mb-4">
+                <div className="relative flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={tagInput}
+                      onChange={e => setTagInput(e.target.value)}
+                      onKeyDown={e => {
+                        if ((e.key === "Enter" || e.key === ",") && tagInput.trim()) {
+                          e.preventDefault()
+                          const t = tagInput.trim().replace(/,$/, "")
+                          if (t && !selectedTags.includes(t)) {
+                            setSelectedTags(prev => [...prev, t])
+                          }
+                          setTagInput("")
+                        }
+                      }}
+                      placeholder="Filter by tag (type and press Enter)"
+                      aria-label="Filter by tag"
+                      aria-autocomplete="list"
+                      aria-controls="tag-suggestions"
+                      className="border-border bg-background w-full border py-2 pr-3 pl-3 text-sm font-medium focus:outline-none"
+                    />
+                    {tagSuggestions.length > 0 && (
+                      <ul
+                        id="tag-suggestions"
+                        role="listbox"
+                        aria-label="Tag suggestions"
+                        className="border-border bg-background absolute top-full left-0 z-20 mt-0.5 w-full border shadow-lg"
+                      >
+                        {tagSuggestions.slice(0, 8).map(t => (
+                          <li key={t} role="option" aria-selected={false}>
+                            <button
+                              type="button"
+                              className="hover:bg-accent w-full px-3 py-1.5 text-left text-xs font-medium"
+                              onMouseDown={e => {
+                                e.preventDefault()
+                                setSelectedTags(prev => [...prev, t])
+                                setTagInput("")
+                              }}
+                            >
+                              {t}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {/* AND / OR toggle */}
+                  {selectedTags.length > 1 && (
+                    <div
+                      className="border-border flex border shadow-sm"
+                      role="group"
+                      aria-label="Tag filter mode"
+                    >
+                      {(["OR", "AND"] as const).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setTagFilterMode(m)}
+                          aria-pressed={tagFilterMode === m}
+                          className={`px-3 py-2 text-xs font-bold transition-colors ${
+                            tagFilterMode === m ? "bg-accent" : "bg-background hover:bg-secondary"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* Active tag chips */}
+                {selectedTags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Active tag filters">
+                    {selectedTags.map(t => (
+                      <span
+                        key={t}
+                        className="bg-accent border-border flex items-center gap-1 border px-2 py-0.5 text-xs font-bold"
+                      >
+                        {t}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTags(prev => prev.filter(x => x !== t))}
+                          aria-label={`Remove tag ${t}`}
+                          className="hover:text-destructive ml-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTags([])}
+                      className="text-muted-foreground hover:text-foreground text-xs underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
               </div>
 
               {categoryInfo && (

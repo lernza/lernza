@@ -1215,7 +1215,7 @@ impl QuestContract {
 
         env.events().publish(
             (Symbol::new(&env, "enrollee_added"),),
-            (quest_id, enrollee.clone()),
+            (quest_id, enrollee.clone(), quest.owner.clone(), env.ledger().timestamp(), Symbol::new(&env, "invite")),
         );
 
         Self::bump(&env, quest_id);
@@ -1246,14 +1246,77 @@ impl QuestContract {
 
         // Emit enrollee removed event
         // Event topics: (enrollee_removed,)
-        // Event data: (quest_id, enrollee_address)
+        // Event data: (quest_id, enrollee_address, actor, timestamp)
+        let timestamp = env.ledger().timestamp();
         env.events().publish(
             (Symbol::new(&env, "enrollee_removed"),),
-            (quest_id, &enrollee),
+            (quest_id, enrollee.clone(), quest.owner.clone(), timestamp),
         );
 
         Self::bump(&env, quest_id);
         Ok(())
+    }
+
+    /// Batch remove multiple enrollees from a quest. Owner only.
+    ///
+    /// Removes each enrollee in `enrollees` from the quest in a single transaction.
+    /// Each removal:
+    ///   - Skips enrollees blocked by a leave-hold (`RemovalBlockedByPendingApproval`) and
+    ///     records them in the returned error list instead of aborting the whole batch.
+    ///   - Skips enrollees not currently enrolled (no error, idempotent).
+    ///   - Emits an individual `enrollee_removed` event for each successfully removed enrollee.
+    ///   - Auto-promotes the next waitlisted person when a slot opens (via `internal_remove_enrollee`).
+    ///
+    /// Returns a `Vec<Address>` of enrollees that **could not** be removed (blocked by hold).
+    /// The rest are successfully removed. This is deliberately not all-or-nothing so a batch
+    /// with a few held enrollees does not stall cleanup of dozens of inactive ones.
+    pub fn batch_remove_enrollees(
+        env: Env,
+        quest_id: u32,
+        enrollees: Vec<Address>,
+    ) -> Result<Vec<Address>, Error> {
+        Self::require_not_paused(&env)?;
+        let quest = Self::load_quest(&env, quest_id)?;
+        quest.owner.require_auth();
+
+        if quest.status != QuestStatus::Active {
+            return Err(Error::EnrollmentClosed);
+        }
+
+        let mut blocked: Vec<Address> = Vec::new(&env);
+        let timestamp = env.ledger().timestamp();
+
+        for i in 0..enrollees.len() {
+            let enrollee = enrollees.get(i).ok_or(Error::InvalidInput)?;
+
+            // Skip if not currently enrolled — idempotent.
+            let current_enrollees = Self::load_enrollees(&env, quest_id);
+            if !current_enrollees.contains(&enrollee) {
+                continue;
+            }
+
+            // Respect leave-hold: record as blocked, do not remove.
+            if env
+                .storage()
+                .persistent()
+                .has(&DataKey::LeaveHold(quest_id, enrollee.clone()))
+            {
+                blocked.push_back(enrollee);
+                continue;
+            }
+
+            // Remove (also handles auto-promotion from waitlist).
+            Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
+
+            // Emit per-enrollee event for indexers.
+            env.events().publish(
+                (Symbol::new(&env, "enrollee_removed"),),
+                (quest_id, enrollee.clone(), quest.owner.clone(), timestamp),
+            );
+        }
+
+        Self::bump(&env, quest_id);
+        Ok(blocked)
     }
 
     /// Allow an enrollee to unenroll themselves from a quest. Enrollee only.
@@ -1276,9 +1339,10 @@ impl QuestContract {
         }
 
         Self::internal_remove_enrollee(&env, quest_id, enrollee.clone())?;
+        let timestamp = env.ledger().timestamp();
         env.events().publish(
             (Symbol::new(&env, "enrollee_removed"),),
-            (quest_id, enrollee),
+            (quest_id, enrollee.clone(), enrollee.clone(), timestamp),
         );
         Self::bump(&env, quest_id);
         Ok(())

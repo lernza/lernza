@@ -330,6 +330,67 @@ fn test_remove_enrollee() {
 }
 
 #[test]
+fn test_batch_remove_enrollees() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+    client.add_enrollee(&0, &e2);
+    client.add_enrollee(&0, &e3);
+
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), e2.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+
+    // No holds set, so no blocked addresses
+    assert_eq!(blocked.len(), 0);
+    // e1 and e2 removed; e3 remains
+    assert!(!client.is_enrollee(&0, &e1));
+    assert!(!client.is_enrollee(&0, &e2));
+    assert!(client.is_enrollee(&0, &e3));
+    assert_eq!(client.get_enrollees(&0).len(), 1);
+}
+
+#[test]
+fn test_batch_remove_enrollees_respects_leave_hold() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+    client.add_enrollee(&0, &e2);
+
+    // Place hold on e1
+    client.place_leave_hold(&0, &owner, &e1);
+
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), e2.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+
+    // e1 is blocked
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked.get(0).unwrap(), e1);
+    // e1 still enrolled; e2 removed
+    assert!(client.is_enrollee(&0, &e1));
+    assert!(!client.is_enrollee(&0, &e2));
+}
+
+#[test]
+fn test_batch_remove_enrollees_idempotent_for_non_enrolled() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let not_enrolled = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+
+    // not_enrolled is silently skipped, no error
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), not_enrolled.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+    assert_eq!(blocked.len(), 0);
+    assert!(!client.is_enrollee(&0, &e1));
+}
+
+#[test]
 fn test_remove_enrollee_not_found() {
     let (env, client, owner, token) = setup();
     create_quest_helper(&env, &client, &owner, &token);

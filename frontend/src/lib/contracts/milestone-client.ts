@@ -140,6 +140,17 @@ function normalizeMilestoneError(message?: string): string | undefined {
 
 export class MilestoneClient {
   private contract: Contract | null
+  /**
+   * Prerequisite ids by `${questId}:${milestoneId}` (issue #1731).
+   *
+   * A milestone list cost one `get_milestone_prerequisites` RPC call per
+   * milestone, every render pass, even though prerequisites are written once at
+   * milestone-creation time and never change afterwards. A 20-milestone quest
+   * paid 20 extra round-trips to re-read data that cannot have moved.
+   */
+  private prereqCache = new Map<string, number[]>()
+  /** In-flight prerequisite reads, so concurrent callers share one request. */
+  private prereqInFlight = new Map<string, Promise<number[]>>()
 
   constructor() {
     if (CONTRACT_ID) {
@@ -175,7 +186,9 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
     ])
     if (!Array.isArray(result)) return []
-    return Promise.all(result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId)))
+    return Promise.all(
+      result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId))
+    )
   }
 
   async getMilestones(questId: number): Promise<MilestoneInfo[]> {
@@ -183,7 +196,9 @@ export class MilestoneClient {
       nativeToScVal(questId, { type: "u32" }),
     ])
     if (!Array.isArray(result)) return []
-    return Promise.all(result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId)))
+    return Promise.all(
+      result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId))
+    )
   }
 
   async getMilestoneCount(questId: number): Promise<number> {
@@ -201,11 +216,62 @@ export class MilestoneClient {
   }
 
   async getMilestonePrerequisites(questId: number, milestoneId: number): Promise<number[]> {
-    const result = await this.invokeRead("get_milestone_prerequisites", [
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(milestoneId, { type: "u32" }),
-    ])
-    return Array.isArray(result) ? result.map(Number) : []
+    const key = `${questId}:${milestoneId}`
+
+    const cached = this.prereqCache.get(key)
+    if (cached) return cached
+
+    // Single-flight: `getMilestone`, `listMilestones` and `getMilestones` can
+    // all reach the same milestone in the same tick, and a page can mount more
+    // than one consumer. Without this, N callers meant N identical RPC calls.
+    const inFlight = this.prereqInFlight.get(key)
+    if (inFlight) return inFlight
+
+    const request = (async () => {
+      const result = await this.invokeRead("get_milestone_prerequisites", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(milestoneId, { type: "u32" }),
+      ])
+      const prerequisiteIds = Array.isArray(result) ? result.map(Number) : []
+      this.prereqCache.set(key, prerequisiteIds)
+      return prerequisiteIds
+    })()
+
+    this.prereqInFlight.set(key, request)
+
+    try {
+      return await request
+    } finally {
+      this.prereqInFlight.delete(key)
+    }
+  }
+
+  /**
+   * Drop cached prerequisite data so the next read refetches.
+   *
+   * Prerequisites are immutable once a milestone exists — they are only written
+   * by `create_milestone_with_prerequisites` — so a cache miss is rare. But a
+   * newly created milestone has no cached entry to begin with, and a
+   * caller-supplied `milestoneId` is not enough to reason about, so this is
+   * exposed for the rare caller that has just changed or replaced milestones
+   * behind the client's back (e.g. a different tab, or a direct contract call).
+   *
+   * With no `milestoneId`, every milestone in the quest is invalidated.
+   */
+  invalidatePrerequisites(questId: number, milestoneId?: number): void {
+    if (milestoneId === undefined) {
+      const prefix = `${questId}:`
+      for (const key of this.prereqCache.keys()) {
+        if (key.startsWith(prefix)) this.prereqCache.delete(key)
+      }
+      return
+    }
+    this.prereqCache.delete(`${questId}:${milestoneId}`)
+  }
+
+  /** Drop all cached prerequisite data. */
+  clearPrerequisiteCache(): void {
+    this.prereqCache.clear()
   }
 
   async isCompleted(questId: number, milestoneId: number, user: string): Promise<boolean> {
@@ -290,7 +356,11 @@ export class MilestoneClient {
       nativeToScVal(estimatedDuration || null, { type: "u32" }),
       nativeToScVal(prerequisitesKnowledge || null),
     ])
-    return this.normalizeTransactionResult(await signAndSubmitTracked(tx, "Create Milestone", handlers))
+    const result = await signAndSubmitTracked(tx, "Create Milestone", handlers)
+    // A read for this id may have been cached as "no prerequisites" before the
+    // milestone existed, so drop it rather than serve a stale empty answer.
+    this.invalidatePrerequisites(questId)
+    return this.normalizeTransactionResult(result)
   }
 
   /**
@@ -537,11 +607,13 @@ export class MilestoneClient {
 
   /** True while a dispute is awaiting a ruling. */
   async hasOpenDispute(questId: number, milestoneId: number, enrollee: string): Promise<boolean> {
-    return (await this.invokeRead("has_open_dispute", [
-      nativeToScVal(questId, { type: "u32" }),
-      nativeToScVal(milestoneId, { type: "u32" }),
-      new Address(enrollee).toScVal(),
-    ])) === true
+    return (
+      (await this.invokeRead("has_open_dispute", [
+        nativeToScVal(questId, { type: "u32" }),
+        nativeToScVal(milestoneId, { type: "u32" }),
+        new Address(enrollee).toScVal(),
+      ])) === true
+    )
   }
 
   /** Seconds remaining before another dispute can be opened, or 0. */
@@ -632,12 +704,17 @@ export class MilestoneClient {
       requiresPrevious: Boolean(record.requires_previous),
       difficulty: record.difficulty ? String(record.difficulty) : undefined,
       estimatedDuration: record.estimated_duration ? Number(record.estimated_duration) : undefined,
-      prerequisitesKnowledge: record.prerequisites_knowledge ? String(record.prerequisites_knowledge) : undefined,
+      prerequisitesKnowledge: record.prerequisites_knowledge
+        ? String(record.prerequisites_knowledge)
+        : undefined,
       deadline: record.deadline ? Number(record.deadline) : undefined,
     }
   }
 
-  private async withPrerequisites(milestone: MilestoneInfo, questId: number): Promise<MilestoneInfo> {
+  private async withPrerequisites(
+    milestone: MilestoneInfo,
+    questId: number
+  ): Promise<MilestoneInfo> {
     const prerequisiteIds = await this.getMilestonePrerequisites(questId, milestone.id)
     return { ...milestone, prerequisiteIds }
   }

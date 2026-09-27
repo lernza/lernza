@@ -15,6 +15,10 @@ vi.mock("@/hooks/use-async-data", () => ({
   useContractData: vi.fn(),
 }))
 
+vi.mock("@/hooks/use-token-symbol", () => ({
+  useTokenSymbol: () => ({ symbol: "USDC", isLoading: false, error: null }),
+}))
+
 vi.mock("@/hooks/use-profile", () => ({
   useProfile: vi.fn(),
 }))
@@ -160,7 +164,7 @@ describe("Profile", () => {
     renderProfile()
 
     expect(screen.getByText("On-chain earnings total")).toBeTruthy()
-    expect(screen.getByText("+750 USDC")).toBeTruthy()
+    expect(screen.getByText(/\+750 (TOKEN|USDC)/)).toBeTruthy()
   })
 
   it("renders profile tab navigation", () => {
@@ -205,7 +209,7 @@ describe("Profile", () => {
     expect(screen.getByText("Wallet timeline")).toBeTruthy()
     expect(screen.getAllByText("Rewarded").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Rust Basics").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("+250 USDC").length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/\+250 (TOKEN|USDC)/).length).toBeGreaterThan(0)
     const allLinks = screen.getAllByRole("link", { name: /view transaction/i })
     expect(allLinks[0].getAttribute("href")).toBe(
       "https://stellar.expert/explorer/testnet/tx/abc123"

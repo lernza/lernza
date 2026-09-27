@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 export interface ImportedQuest {
   name: string
@@ -25,6 +26,7 @@ interface ImportQuestDialogProps {
 }
 
 export function ImportQuestDialog({ isOpen, onClose, onConfirm, data }: ImportQuestDialogProps) {
+  const { symbol } = useTokenSymbol()
   const dialogRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
@@ -150,7 +152,7 @@ export function ImportQuestDialog({ isOpen, onClose, onConfirm, data }: ImportQu
                           </Badge>
                         )}
                         <Badge variant="secondary" className="text-[10px] tabular-nums">
-                          {formatTokens(ms.rewardAmount)} USDC
+                          {formatTokens(ms.rewardAmount, 7, symbol)}
                         </Badge>
                       </div>
                     </div>

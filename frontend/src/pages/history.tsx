@@ -22,6 +22,7 @@ import {
   type TransactionExportFormat,
 } from "@/lib/transaction-export"
 import { formatTokens } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 function formatHistoryDate(timestamp: number) {
   return new Date(timestamp).toLocaleString([], {
@@ -81,6 +82,7 @@ function getActivityDescription(item: WalletActivityItem) {
 }
 
 export function History() {
+  const { symbol } = useTokenSymbol()
   const { connected, connect, address, loading: walletConnecting } = useWallet()
   const [historyItems, setHistoryItems] = useState<WalletActivityItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -373,7 +375,7 @@ export function History() {
                     <div className="flex items-center gap-3 sm:flex-col sm:items-end">
                       {item.amount !== undefined && (
                         <Badge variant="success" className="tabular-nums">
-                          +{formatTokens(item.amount, 7, "USDC")}
+                          +{formatTokens(item.amount, 7, symbol)}
                         </Badge>
                       )}
                       <a

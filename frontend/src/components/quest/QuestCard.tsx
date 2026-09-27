@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { formatTokens } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 export interface QuestCardProps {
   quest: {
@@ -30,6 +31,7 @@ export function QuestCard({
   isOwned = false,
   onClick,
 }: QuestCardProps) {
+  const { symbol } = useTokenSymbol()
   const totalMilestones = stats.milestoneCount
   const hasCompletion = typeof completedCount === "number" && Number.isFinite(completedCount)
   const startedCount = hasCompletion ? completedCount : 0
@@ -88,7 +90,7 @@ export function QuestCard({
             </Badge>
             <Badge variant="default" className="gap-1">
               <Coins className="h-3 w-3" />
-              {formatTokens(stats.poolBalance)} USDC
+              {formatTokens(stats.poolBalance, 7, symbol)}
             </Badge>
             {quest.category && (
               <Badge variant="outline" className="text-[10px]">

@@ -20,7 +20,7 @@ describe("PersonalProgress component (#1675)", () => {
     expect(screen.getByText("3")).toBeInTheDocument()
     expect(screen.getByText("Owned")).toBeInTheDocument()
     expect(screen.getByText("2")).toBeInTheDocument()
-    expect(screen.getByText(/USDC/)).toBeInTheDocument()
+    expect(screen.getByText(/TOKEN|USDC/)).toBeInTheDocument()
   })
 
   it("safely handles large bigint values near and exceeding Number.MAX_SAFE_INTEGER without precision loss", () => {
@@ -35,8 +35,8 @@ describe("PersonalProgress component (#1675)", () => {
 
     render(<PersonalProgress stats={stats} />)
 
-    expect(screen.getByText(/USDC/)).toBeInTheDocument()
-    const earningsEl = screen.getByText(/USDC/)
+    expect(screen.getByText(/TOKEN|USDC/)).toBeInTheDocument()
+    const earningsEl = screen.getByText(/TOKEN|USDC/)
     expect(earningsEl.textContent).toContain("9,007,199,254,740,991")
   })
 })

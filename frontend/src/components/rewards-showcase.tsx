@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { formatTokens } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { TransactionLink } from "@/components/TransactionLink"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface RewardsShowcaseProps {
   rewards: RewardShowcase[]
@@ -33,12 +34,13 @@ export function RewardsShowcase({
   onDeleteReward,
   onChangeRewardPrivacy,
 }: RewardsShowcaseProps) {
+  const { symbol } = useTokenSymbol()
   const visibleRewards = viewerIsOwner ? rewards : rewards.filter(r => r.privacy === PL.Public)
 
   const sortedRewards = [...visibleRewards].sort((a, b) => b.earnedAt - a.earnedAt)
 
   const totalAmount = visibleRewards.reduce((sum, r) => sum + r.amount, 0n)
-  const formattedTotal = formatTokens(Number(totalAmount), 7, "USDC")
+  const formattedTotal = formatTokens(Number(totalAmount), 7, symbol)
 
   return (
     <Card className="border-border shadow-lg">
@@ -169,7 +171,7 @@ export function RewardsShowcase({
 
             <div className="space-y-2">
               {sortedRewards.map(reward => {
-                const formattedAmount = formatTokens(Number(reward.amount), 7, "USDC")
+                const formattedAmount = formatTokens(Number(reward.amount), 7, symbol)
                 return (
                   <div
                     key={reward.id}

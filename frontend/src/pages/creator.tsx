@@ -11,12 +11,14 @@ import { formatTokens, shortenAddress } from "@/lib/utils"
 import { PageContainer } from "@/components/page-container"
 import { PageHeader } from "@/components/page-header"
 import { navigateToPath } from "@/lib/navigation"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface CreatorProfileProps {
   address?: string | null
 }
 
 export function CreatorProfile({ address }: CreatorProfileProps) {
+  const { symbol } = useTokenSymbol()
   const {
     data: profileData,
     isLoading,
@@ -140,7 +142,7 @@ export function CreatorProfile({ address }: CreatorProfileProps) {
                   Total Distributed
                 </p>
                 <p className="text-xl font-semibold">
-                  {formatTokens(profileData.totalDistributed)} USDC
+                  {formatTokens(profileData.totalDistributed, 7, symbol)}
                 </p>
               </div>
             </div>
@@ -222,7 +224,7 @@ export function CreatorProfile({ address }: CreatorProfileProps) {
                       </Badge>
                       <Badge variant="default" className="gap-1">
                         <Sparkles className="h-3 w-3" />
-                        {formatTokens(ws.poolBalance)} USDC Pool
+                        {formatTokens(ws.poolBalance, 7, symbol)} Pool
                       </Badge>
                     </div>
                   </CardContent>

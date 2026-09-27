@@ -33,6 +33,7 @@ import type { QuestInfo, CategoryInfo } from "@/lib/contract-types"
 import { useQuestStatsMap } from "@/hooks/use-quest-stats"
 import { prefetchQuestData } from "@/hooks/use-quest-data"
 import { queryClient } from "@/lib/query-client"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import { useNowSeconds } from "@/hooks/use-now"
 import { formatTokens, getQuestLifecycleStatus } from "@/lib/utils"
 import { navigateToPath } from "@/lib/navigation"
@@ -64,6 +65,7 @@ interface DashboardProps {
 export function Dashboard(
   { onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps
 ) {
+  const { symbol } = useTokenSymbol()
   const { connected, connect, shortAddress, address } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<
@@ -501,7 +503,7 @@ export function Dashboard(
               </Badge>
               <Badge variant="default" className="gap-1">
                 <Coins className="h-3 w-3" />
-                {formatTokens(stats.poolBalance)} USDC
+                {formatTokens(stats.poolBalance, 7, symbol)}
               </Badge>
               {ws.category && (
                 <Badge variant="outline" className="text-[10px]">
@@ -531,7 +533,7 @@ export function Dashboard(
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground text-xs font-bold">Earned so far</span>
                     <span className="text-xs font-semibold text-green-700">
-                      +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
+                      +{formatTokens(earnedReward, 7, symbol)} / {formatTokens(totalReward, 7, symbol)}
                     </span>
                   </div>
                 )}
@@ -926,7 +928,7 @@ export function Dashboard(
                     type="number"
                     value={rewardMin}
                     onChange={e => setRewardMin(e.target.value)}
-                    placeholder="Min USDC"
+                    placeholder={`Min ${symbol}`}
                     aria-label="Minimum reward amount"
                     min="0"
                     className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"
@@ -936,7 +938,7 @@ export function Dashboard(
                     type="number"
                     value={rewardMax}
                     onChange={e => setRewardMax(e.target.value)}
-                    placeholder="Max USDC"
+                    placeholder={`Max ${symbol}`}
                     aria-label="Maximum reward amount"
                     min="0"
                     className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"

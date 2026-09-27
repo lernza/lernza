@@ -28,7 +28,7 @@ interface Step3ReviewProps {
 export function Step3Review({ onComplete }: Step3ReviewProps) {
   const { step1Data, step2Data, goToBack } = useQuestCreation()
   const { address, networkName } = useWallet()
-  const { xlmBalance, rewardBalance, isLoading: balanceLoading, error: balanceError } = useWalletBalance(address, networkName)
+  const { rewardBalance, isLoading: balanceLoading, error: balanceError } = useWalletBalance(address, networkName)
   const queryClient = useQueryClient()
   const [txPhase, setTxPhase] = useState<TxPhase>("idle")
   const [txError, setTxError] = useState<string | null>(null)
@@ -254,12 +254,12 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                   </span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                     Wallet Balance:{" "}
-                    {isBalanceLoading ? (
+                    {balanceLoading ? (
                       <span className="inline-flex items-center gap-1 font-bold">
                         <Loader2 className="h-3 w-3 animate-spin" /> checking...
                       </span>
                     ) : (
-                      <span className={cn("font-bold", isInsufficient ? "text-destructive" : "text-foreground")}>
+                      <span className={cn("font-bold", hasInsufficientBalance ? "text-destructive" : "text-foreground")}>
                         {rewardBalance ?? "0.00"} {rewardToken?.symbol ?? "tokens"}
                       </span>
                     )}
@@ -271,7 +271,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
               </span>
             </div>
 
-            {isInsufficient && (
+            {hasInsufficientBalance && (
               <div className="border-destructive bg-destructive/10 mb-4 flex items-start gap-2 border p-3">
                 <AlertCircle className="text-destructive mt-0.5 h-4 w-4 flex-shrink-0" />
                 <div>

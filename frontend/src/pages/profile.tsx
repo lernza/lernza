@@ -28,6 +28,7 @@ import { milestoneClient } from "@/lib/contracts/milestone-client"
 import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
 import { navigateToPath } from "@/lib/navigation"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import { NotificationPreferencesCard } from "@/components/notification-preferences"
 import { ProfileEditor } from "@/components/profile-editor"
 import { CompletedQuestsShowcase } from "@/components/quests-showcase"
@@ -79,6 +80,7 @@ function getActivityDescription(item: WalletActivityItem) {
 }
 
 export function Profile() {
+  const { symbol: tokenSymbol } = useTokenSymbol()
   const { connected, connect, address, loading: walletConnecting } = useWallet()
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")
   const [activityItems, setActivityItems] = useState<WalletActivityItem[]>([])
@@ -295,7 +297,7 @@ export function Profile() {
       ? "Unavailable"
       : totalEarned > BigInt(Number.MAX_SAFE_INTEGER)
         ? totalEarned.toString()
-        : formatTokens(Number(totalEarned), 7, "USDC")
+        : formatTokens(Number(totalEarned), 7, tokenSymbol)
 
   const handleSaveProfile = (metadata: ProfileMetadata, privacy: ProfileFieldPrivacy) => {
     profile.setMetadata(metadata)
@@ -654,7 +656,7 @@ export function Profile() {
                           </div>
                           {quest.totalRewardsEarned > 0n && (
                             <Badge variant="success" className="font-bold tabular-nums">
-                              +{formatTokens(Number(quest.totalRewardsEarned), 7, "USDC")}
+                              +{formatTokens(Number(quest.totalRewardsEarned), 7, tokenSymbol)}
                             </Badge>
                           )}
                         </div>
@@ -794,7 +796,7 @@ export function Profile() {
                         <div className="flex items-center gap-3 sm:flex-col sm:items-end">
                           {item.amount !== undefined && (
                             <Badge variant="success" className="tabular-nums">
-                              +{formatTokens(item.amount, 7, "USDC")}
+                              +{formatTokens(item.amount, 7, tokenSymbol)}
                             </Badge>
                           )}
                           <a
@@ -1073,7 +1075,7 @@ export function Profile() {
                         <div className="bg-background border-border flex min-w-[100px] items-center gap-2 border px-3 py-1.5">
                           <Coins className="text-success h-3.5 w-3.5" />
                           <span className="text-sm font-bold tabular-nums">
-                            {formatTokens(Number(quest.poolBalance))} USDC
+                            {formatTokens(Number(quest.poolBalance), 7, tokenSymbol)}
                           </span>
                         </div>
                         <Button

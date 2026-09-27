@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn, formatDeadlineLabel, isExpiredDeadline, isExpiringSoon } from "@/lib/utils"
 import { useNow } from "@/hooks/use-now"
 import { useTranslation } from "@/i18n"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import { MilestoneSubmitDialog, type SubmissionEvidence } from "./MilestoneSubmitDialog"
 import { OpenDisputeDialog, ResolveDisputeDialog } from "./DisputeDialog"
 import type { DisputeOutcome, DisputeStatus } from "@/lib/contracts/milestone-client"
@@ -114,6 +115,7 @@ export function MilestonesSection({
   isDisputePending = false,
 }: MilestonesSectionProps) {
   const { t } = useTranslation()
+  const { symbol } = useTokenSymbol()
   const completedSet = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
   const evidenceMap = new Map(
     completions.filter(c => c.evidence).map(c => [c.milestoneId, c.evidence!])
@@ -271,7 +273,7 @@ export function MilestonesSection({
                     </Badge>
                   )}
                   <span className="text-muted-foreground flex items-center gap-1 text-xs font-semibold">
-                    <Coins className="h-3 w-3" /> {milestone.rewardAmount} USDC
+                    <Coins className="h-3 w-3" /> {milestone.rewardAmount} {symbol}
                   </span>
                   {!isCompleted && milestone.deadline !== undefined && milestone.deadline > 0 && (
                     <MilestoneCountdown deadline={milestone.deadline} />

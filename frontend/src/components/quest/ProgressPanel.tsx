@@ -1,6 +1,7 @@
 import { CheckCircle2, Sparkles } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface ProgressPanelProps {
   completedMilestones: number
@@ -13,6 +14,7 @@ export function ProgressPanel({
   totalMilestones,
   earnedReward,
 }: ProgressPanelProps) {
+  const { symbol } = useTokenSymbol()
   const isComplete = completedMilestones === totalMilestones && totalMilestones > 0
   const progressPercent = totalMilestones > 0 ? (completedMilestones / totalMilestones) * 100 : 0
 
@@ -41,7 +43,7 @@ export function ProgressPanel({
           <p className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
             Earned Reward
           </p>
-          <p className="text-lg font-bold text-green-700">+{earnedReward} USDC</p>
+          <p className="text-lg font-bold text-green-700">+{earnedReward} {symbol}</p>
         </div>
       </div>
     </div>

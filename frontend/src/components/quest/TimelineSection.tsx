@@ -3,13 +3,15 @@ import { Loader2, Activity, UserPlus, Trophy, Coins, Award } from "lucide-react"
 import { fetchQuestHistory, shortenAddress, type ParsedEvent } from "@/hooks/use-quest-events"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
-function formatAmount(amount: bigint): string {
+function formatAmount(amount: bigint, symbol: string): string {
   const whole = Number(amount / 10_000_000n)
-  return `${whole.toLocaleString()} USDC`
+  return `${whole.toLocaleString()} ${symbol}`
 }
 
 export function TimelineSection({ questId }: { questId: number }) {
+  const { symbol } = useTokenSymbol()
   const [events, setEvents] = useState<ParsedEvent[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -71,13 +73,13 @@ export function TimelineSection({ questId }: { questId: number }) {
             Icon = Coins
             title = "Pool Funded"
             description = `Reward pool received funding.`
-            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount)}</Badge>
+            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount, symbol)}</Badge>
             break
           case "reward_distributed":
             Icon = Coins
             title = "Reward Distributed"
             description = `Reward claimed by ${shortenAddress(event.enrollee!)}.`
-            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount)}</Badge>
+            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount, symbol)}</Badge>
             break
           case "certificate_minted":
             Icon = Award

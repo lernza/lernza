@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatTokens } from "@/lib/utils"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
 
 interface BatchClaimResultDialogProps {
@@ -23,6 +24,7 @@ export function BatchClaimResultDialog({
   onRetryFailed,
   isRetrying = false,
 }: BatchClaimResultDialogProps) {
+  const { symbol } = useTokenSymbol()
   const [isClosing, setIsClosing] = useState(false)
 
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -189,7 +191,7 @@ export function BatchClaimResultDialog({
                 {summary.totalAmount > 0n && (
                   <div className="mt-2 flex items-center gap-2">
                     <Badge variant="success" className="gap-1.5">
-                      <Coins className="h-3 w-3" />+{formatTokens(Number(summary.totalAmount))} USDC
+                      <Coins className="h-3 w-3" />+{formatTokens(Number(summary.totalAmount), 7, symbol)}{" "}
                       claimed
                     </Badge>
                   </div>
@@ -230,7 +232,7 @@ export function BatchClaimResultDialog({
                           {result.status === "success" && result.rewardAmount !== undefined && (
                             <Badge variant="success" className="shrink-0 gap-1 text-xs">
                               <Coins className="h-3 w-3" />+
-                              {formatTokens(Number(result.rewardAmount))} USDC
+                              {formatTokens(Number(result.rewardAmount), 7, symbol)}
                             </Badge>
                           )}
                         </div>

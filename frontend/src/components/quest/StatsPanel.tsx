@@ -1,5 +1,6 @@
 import { Users, Target, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface StatsPanelProps {
   enrolleesCount: number
@@ -10,6 +11,7 @@ interface StatsPanelProps {
 }
 
 export function StatsPanel({ enrolleesCount, milestonesCount, poolBalance, reservedReward, totalReward }: StatsPanelProps) {
+  const { symbol } = useTokenSymbol()
   const stats = [
     {
       label: "Enrollees",
@@ -23,12 +25,12 @@ export function StatsPanel({ enrolleesCount, milestonesCount, poolBalance, reser
     },
     {
       label: "Reserved Reward",
-      value: `${reservedReward} USDC`,
+      value: `${reservedReward} ${symbol}`,
       Icon: Coins,
     },
     {
       label: "Uncommitted Reward",
-      value: `${Math.max(0, poolBalance - reservedReward)} USDC`,
+      value: `${Math.max(0, poolBalance - reservedReward)} ${symbol}`,
       Icon: Coins,
     },
   ]

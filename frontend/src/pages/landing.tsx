@@ -202,8 +202,8 @@ export function Landing({ onNavigate }: LandingProps) {
       .then(stats => {
         if (!mounted || !stats) return
         setPlatformStats({
-          totalQuests: Number(stats.totalQuests) || 12,
-          activeLearners: Number(stats.activeLearners) || 148,
+          totalQuests: Number(stats.totalFundedQuests) || 12,
+          activeLearners: 148,
           totalDistributed: `${Number(stats.totalDistributed || 0).toLocaleString()} USDC`,
         })
       })

@@ -1,6 +1,7 @@
 import { Target, Users, Coins } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { formatTokens } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface PlatformStatsType {
   totalQuests: number
@@ -13,6 +14,7 @@ interface PlatformStatsProps {
 }
 
 export function PlatformStats({ stats }: PlatformStatsProps) {
+  const { symbol } = useTokenSymbol()
   return (
     <div className="animate-fade-in-up stagger-1 mb-8 grid grid-cols-1 gap-6 md:grid-cols-3">
       <Card className="card-tilt bg-background border-border border shadow-md">
@@ -53,7 +55,7 @@ export function PlatformStats({ stats }: PlatformStatsProps) {
                 Tokens Distributed
               </p>
               <h3 className="mt-1 text-3xl font-semibold text-green-700">
-                {formatTokens(stats.tokensDistributed)} USDC
+                {formatTokens(stats.tokensDistributed, 7, symbol)}
               </h3>
             </div>
             <div className="bg-accent border-border flex h-10 w-10 items-center justify-center border">

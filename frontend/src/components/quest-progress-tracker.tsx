@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useNowSeconds } from "@/hooks/use-now"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface Milestone {
   id: number
@@ -41,6 +42,7 @@ export function QuestProgressTracker({
   deadline,
   className,
 }: QuestProgressTrackerProps) {
+  const { symbol } = useTokenSymbol()
   const [showConfetti, setShowConfetti] = useState(false)
 
   const completedCount = milestones.filter(m => m.completed).length
@@ -107,11 +109,11 @@ export function QuestProgressTracker({
         <div className="mb-6 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Coins className="text-success h-4 w-4" />
-            <span className="font-bold text-green-700">+{earnedReward} USDC earned</span>
+            <span className="font-bold text-green-700">+{earnedReward} {symbol} earned</span>
           </div>
           {remainingReward > 0 && (
             <span className="text-muted-foreground font-bold">
-              {remainingReward} USDC remaining
+              {remainingReward} {symbol} remaining
             </span>
           )}
           {daysRemaining !== null && (
@@ -155,7 +157,7 @@ export function QuestProgressTracker({
                   {ms.title}
                 </span>
                 <Badge variant={state === "completed" ? "success" : "default"}>
-                  {ms.rewardAmount} USDC
+                  {ms.rewardAmount} {symbol}
                 </Badge>
               </div>
             )

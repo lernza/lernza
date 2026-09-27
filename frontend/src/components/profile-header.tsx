@@ -7,6 +7,7 @@ import type { ReputationSummary } from "@/lib/reputation"
 import type { ProfileMetadata } from "@/lib/profile-types"
 import { PrivacyLevel as PL } from "@/lib/profile-types"
 import type { ProfileFieldPrivacy } from "@/lib/profile-types"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface ProfileHeaderDisplayProps {
   walletAddress: string
@@ -64,6 +65,7 @@ export function ProfileHeaderDisplay({
   reputation,
   onEditProfile,
 }: ProfileHeaderDisplayProps) {
+  const { symbol } = useTokenSymbol()
   const [copied, setCopied] = useState(false)
   const hasAvatar = !!metadata.avatarUrl
 
@@ -234,7 +236,7 @@ export function ProfileHeaderDisplay({
                   <span className="text-2xl font-semibold tabular-nums">{formattedEarnings}</span>
                 </div>
                 <p className="text-xs font-bold">
-                  {earningsLoading ? "Loading on-chain earnings" : "USDC earned on-chain"}
+                  {earningsLoading ? "Loading on-chain earnings" : `${symbol} earned on-chain`}
                 </p>
               </div>
             )}

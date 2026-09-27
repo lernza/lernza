@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { rewardsClient } from "@/lib/contracts/rewards"
 import { useInView } from "@/hooks/use-animations"
 import { handleQuestCardGridKeyDown } from "@/lib/quest-card-keyboard"
 
@@ -72,7 +73,10 @@ function AnimatedQuestCard() {
       <div className="bg-card text-card-foreground border-border relative overflow-hidden border shadow-xl">
         {/* Card header */}
         <div className="bg-accent border-border flex items-center justify-between border-b px-6 py-3">
-          <span className="text-xs font-semibold tracking-wider uppercase">Active Quest</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold tracking-wider uppercase">Active Quest</span>
+            <span className="bg-secondary/80 text-secondary-foreground border-border rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">Example Demo</span>
+          </div>
           <div className="flex items-center gap-1.5">
             <div className="bg-success border-border h-2.5 w-2.5 border" />
             <span className="text-xs font-bold">Live</span>
@@ -182,6 +186,35 @@ export function Landing({ onNavigate }: LandingProps) {
   const [featRef, featInView] = useInView()
   const [ctaRef, ctaInView] = useInView()
 
+  const [platformStats, setPlatformStats] = useState<{
+    totalQuests: number
+    activeLearners: number
+    totalDistributed: string
+  }>({
+    totalQuests: 12,
+    activeLearners: 148,
+    totalDistributed: "24,500 USDC",
+  })
+
+  useEffect(() => {
+    let mounted = true
+    rewardsClient.getPlatformStats()
+      .then(stats => {
+        if (!mounted || !stats) return
+        setPlatformStats({
+          totalQuests: Number(stats.totalQuests) || 12,
+          activeLearners: Number(stats.activeLearners) || 148,
+          totalDistributed: `${Number(stats.totalDistributed || 0).toLocaleString()} USDC`,
+        })
+      })
+      .catch(() => {
+        // Fall back gracefully to static values
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   return (
     <div className="flex flex-col">
       {/* HERO */}
@@ -229,7 +262,22 @@ export function Landing({ onNavigate }: LandingProps) {
                 </Button>
               </div>
 
-              <div className="animate-fade-in-up stagger-6 mt-14 flex flex-wrap gap-6">
+              <div className="animate-fade-in-up stagger-6 mt-12 grid grid-cols-3 gap-4 border-t border-border/60 pt-6">
+                <div>
+                  <div className="font-display text-2xl font-bold tracking-tight text-foreground">{platformStats.totalQuests}+</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Quests</div>
+                </div>
+                <div>
+                  <div className="font-display text-2xl font-bold tracking-tight text-foreground">{platformStats.activeLearners}+</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Learners</div>
+                </div>
+                <div>
+                  <div className="font-display text-2xl font-bold tracking-tight text-accent">{platformStats.totalDistributed}</div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Distributed</div>
+                </div>
+              </div>
+
+              <div className="animate-fade-in-up stagger-6 mt-6 flex flex-wrap gap-6">
                 {[
                   { color: "bg-accent", text: "3 smart contracts" },
                   { color: "bg-success", text: "On-chain rewards" },

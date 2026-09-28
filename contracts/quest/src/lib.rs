@@ -510,7 +510,7 @@ impl QuestContract {
             status: QuestStatus::Active,
             deadline,
             archived_at: 0,
-            max_enrollees,
+            max_enrollees: Some(max_enrollees.unwrap_or(1000)),
             cooldown_period: None,
             verified,
             version: 1,
@@ -957,12 +957,16 @@ impl QuestContract {
             return Err(Error::DeadlineExpired);
         }
 
-        // Owner can force-add even when full (bypasses cap).
-        // For self-enrollment, see join_quest which waitlists when full.
-
         // Check not already enrolled
         if enrollees.contains(&enrollee) {
             return Err(Error::AlreadyEnrolled);
+        }
+
+        // Check enrollment cap
+        if let Some(max) = quest.max_enrollees {
+            if enrollees.len() >= max {
+                return Err(Error::QuestFull);
+            }
         }
 
         Self::require_reenroll_allowed(&env, quest_id, &enrollee, quest.cooldown_period)?;

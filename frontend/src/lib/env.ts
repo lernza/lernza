@@ -35,25 +35,25 @@ const schema = z.object({
     .preprocess(emptyToUndefined, z.coerce.number().positive().optional())
     .default(10),
 
-  VITE_SENTRY_DSN: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_SENTRY_DSN: z.preprocess(emptyToUndefined, z.string().url().optional()),
 
-  VITE_QUEST_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_QUEST_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
 
-  VITE_MILESTONE_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_MILESTONE_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
 
-  VITE_REWARDS_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_REWARDS_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
 
-  VITE_CERTIFICATE_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_CERTIFICATE_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
 
-  VITE_REWARDS_TOKEN_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_REWARDS_TOKEN_CONTRACT_ID: z.preprocess(emptyToUndefined, z.string().optional()),
 
-  VITE_USDC_TOKEN_ADDRESS: z.preprocess(emptyToUndefined, z.string().optional()).default(""),
+  VITE_USDC_TOKEN_ADDRESS: z.preprocess(emptyToUndefined, z.string().optional()),
 
   VITE_ENVIRONMENT: z
     .preprocess(emptyToUndefined, z.enum(["development", "staging", "production"]).optional())
     .default("development"),
 
-  VITE_APP_URL: z.preprocess(emptyToUndefined, z.string().url().optional()).default(""),
+  VITE_APP_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
 })
 
 export const env = schema.parse({

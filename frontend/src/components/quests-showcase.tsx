@@ -1,3 +1,4 @@
+import { useState } from "react"
 import {
   Trophy,
   Calendar,
@@ -21,6 +22,8 @@ import type { CompletedQuestShowcase, PrivacyLevel, ShowcaseSettings } from "@/l
 import { PrivacyLevel as PL } from "@/lib/profile-types"
 import { formatTokens } from "@/lib/utils"
 import { cn } from "@/lib/utils"
+
+const QUESTS_PER_PAGE = 20
 
 interface QuestShowcaseCardProps {
   quest: CompletedQuestShowcase
@@ -248,12 +251,16 @@ export function CompletedQuestsShowcase({
   onAddQuest,
   onViewQuest,
 }: CompletedQuestsShowcaseProps) {
+  const [displayCount, setDisplayCount] = useState(QUESTS_PER_PAGE)
   const visibleQuests = viewerIsOwner ? quests : quests.filter(q => q.privacy === PL.Public)
 
   const sortedQuests = [...visibleQuests].sort((a, b) => {
     if (a.highlighted !== b.highlighted) return a.highlighted ? -1 : 1
     return b.completionDate - a.completionDate
   })
+
+  const displayedQuests = sortedQuests.slice(0, displayCount)
+  const hasMore = displayCount < sortedQuests.length
 
   return (
     <Card className="border-border shadow-lg">
@@ -372,7 +379,7 @@ export function CompletedQuestsShowcase({
           </div>
         ) : (
           <div className="space-y-3">
-            {sortedQuests.map(quest => (
+            {displayedQuests.map(quest => (
               <QuestShowcaseCard
                 key={quest.questId}
                 quest={quest}
@@ -389,6 +396,18 @@ export function CompletedQuestsShowcase({
                 onViewQuest={onViewQuest ? () => onViewQuest(quest.questId) : undefined}
               />
             ))}
+            {hasMore && (
+              <div className="flex justify-center pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDisplayCount(c => c + QUESTS_PER_PAGE)}
+                  className="gap-2"
+                >
+                  Show More ({sortedQuests.length - displayCount} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

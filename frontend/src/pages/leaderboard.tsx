@@ -36,7 +36,10 @@ function LeaderboardSkeleton() {
   return (
     <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md">
+        <div
+          key={i}
+          className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md"
+        >
           <Skeleton className="h-8 w-8 flex-shrink-0" />
           <Skeleton className="h-4 flex-1" />
           <Skeleton className="h-6 w-24" />
@@ -46,7 +49,6 @@ function LeaderboardSkeleton() {
     </div>
   )
 }
-
 
 interface CacheEntry {
   totalEarned: bigint
@@ -310,7 +312,9 @@ export function Leaderboard() {
           onClick={() => setActiveTab("earners")}
           className={cn(
             "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "earners" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-secondary"
+            activeTab === "earners"
+              ? "bg-accent text-accent-foreground"
+              : "bg-background hover:bg-secondary"
           )}
         >
           <Coins className="h-4 w-4" />
@@ -322,7 +326,9 @@ export function Leaderboard() {
           onClick={() => setActiveTab("quests")}
           className={cn(
             "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "quests" ? "bg-accent text-accent-foreground" : "bg-background hover:bg-secondary"
+            activeTab === "quests"
+              ? "bg-accent text-accent-foreground"
+              : "bg-background hover:bg-secondary"
           )}
         >
           <Users className="h-4 w-4" />
@@ -407,10 +413,14 @@ export function Leaderboard() {
       )}
 
       {isLoadingMore && (
-        <div role="status" aria-live="polite" aria-busy="true" className="mt-4 flex items-center justify-center gap-2 py-4 text-sm">
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="mt-4 flex items-center justify-center gap-2 py-4 text-sm"
+        >
           <Skeleton className="h-4 w-4" />
           <span>Loading more…</span>
-        </div>
         </div>
       )}
     </PageContainer>

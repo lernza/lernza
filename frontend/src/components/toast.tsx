@@ -93,21 +93,60 @@ interface ToastContainerProps {
   onRemove?: (id: string) => void
 }
 
-export function ToastContainer({ toasts: explicitToasts, onRemove: explicitOnRemove }: ToastContainerProps) {
+/**
+ * Renders both toast stores.
+ *
+ * There are two of them: the notification context (`useNotifications`), which
+ * owns preferences, categories and history, and the older `useToast` hook, which
+ * is still called directly by a number of components. This component used to
+ * resolve them as `explicitToasts ?? context.toasts`, which meant that any
+ * caller passing the `useToast` list — as both `App.tsx` and `pages/quest.tsx`
+ * did — permanently shadowed every notification raised through the context. The
+ * notification preferences, the verification results from the event stream and
+ * the deadline reminders all produced toasts that could not be seen, while the
+ * caller looked correctly wired.
+ *
+ * Rendering the union means the two stores coexist. Dismissal is routed to
+ * whichever store actually holds the id, so neither is left with a toast that
+ * has already been closed on screen.
+ */
+export function ToastContainer({
+  toasts: explicitToasts,
+  onRemove: explicitOnRemove,
+}: ToastContainerProps) {
   const context = useNotifications()
-  const activeToasts = explicitToasts ?? context.toasts
-  const removeFn = explicitOnRemove ?? context.removeToast
 
-  if (!activeToasts || activeToasts.length === 0) return null
+  // The legacy `useToast` store omits `title`/`category`; the shape is
+  // structurally a subset of `NotificationToast`, so the two lists concatenate
+  // without conversion.
+  const legacyToasts = explicitToasts ?? []
+  const contextToasts = context.toasts ?? []
+  const legacyIds = new Set(legacyToasts.map(toast => toast.id))
+
+  const merged: NotificationToast[] = [...contextToasts, ...legacyToasts]
+
+  // Dismissal has to reach the store that actually holds the toast: calling
+  // only one of them would leave the other with an entry that is already gone
+  // from the screen. The stores mint ids from different schemes
+  // (`toast-<ts>-<n>` vs `toast-<n>`), so an id identifies exactly one store.
+  const remove = (id: string) => {
+    if (legacyIds.has(id)) {
+      explicitOnRemove?.(id)
+      return
+    }
+    context.removeToast(id)
+  }
+
+  if (merged.length === 0) return null
 
   return (
     <div
       className="pointer-events-none fixed inset-x-4 bottom-6 z-[100] flex flex-col items-stretch gap-3 sm:inset-x-auto sm:right-6 sm:items-end"
       aria-label="Notifications"
     >
-      {activeToasts.map(toast => (
+      {merged.map(toast => (
         <div key={toast.id} className="pointer-events-auto w-full sm:w-auto">
-          <ToastItem toast={toast} onRemove={removeFn} />
+          <ToastItem toast={toast} onRemove={remove} />
         </div>
       ))}
     </div>

@@ -1,150 +1,175 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, act } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { ToastContainer } from "./toast"
-import { useToast } from "@/hooks/use-toast"
+import { NotificationProvider, useNotifications } from "@/contexts/notification-context"
+import type { NotificationToast } from "@/contexts/notification-context"
 
-vi.mock("@/hooks/use-toast", () => ({
-  useToast: vi.fn(),
-}))
+/**
+ * Drives the notification context directly, so these tests exercise the store
+ * `ToastContainer` actually reads.
+ *
+ * This file previously mocked `useToast` — a hook the component has never used
+ * — and asserted Tailwind classes (`bg-green-100`, `bg-red-100`) that the
+ * component has never applied, so all of it passed nothing and failed outright.
+ * The component is rendered here through its real provider instead.
+ */
+function ContextSeeder({ toasts }: { toasts: Omit<NotificationToast, "id" | "createdAt">[] }) {
+  const { addToast } = useNotifications()
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        for (const toast of toasts) addToast(toast)
+      }}
+    >
+      Add test toasts
+    </button>
+  )
+}
 
-const mockUseToast = vi.mocked(useToast)
+function renderWithContext(
+  ui: ReactNode,
+  contextToasts: Omit<NotificationToast, "id" | "createdAt">[] = []
+) {
+  return render(
+    <NotificationProvider>
+      {ui}
+      <ContextSeeder toasts={contextToasts} />
+    </NotificationProvider>
+  )
+}
+
+/**
+ * Adds the seeded toasts to the context store. They have to be handed to
+ * `renderWithContext` first — the seeder reads them from a prop, so passing
+ * them after render would seed whatever array it closed over instead.
+ */
+function seed() {
+  act(() => {
+    screen.getByRole("button", { name: "Add test toasts" }).click()
+  })
+}
 
 describe("ToastContainer", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.localStorage.clear()
   })
 
-  it("renders empty container when no toasts", () => {
-    mockUseToast.mockReturnValue({
-      toasts: [],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
-
-    const { container } = render(<ToastContainer />)
-    expect(container.firstChild).toBeEmptyDOMElement()
+  it("renders nothing when both stores are empty", () => {
+    renderWithContext(<ToastContainer />)
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Notifications")).not.toBeInTheDocument()
   })
 
-  it("renders all toasts", () => {
-    mockUseToast.mockReturnValue({
-      toasts: [
-        { id: "1", message: "Success!", type: "success" },
-        { id: "2", message: "Warning", type: "warning" },
-      ],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
+  it("renders toasts from the notification context", () => {
+    renderWithContext(<ToastContainer />, [{ message: "Milestone verified", type: "success" }])
+    seed()
 
-    render(<ToastContainer />)
-    expect(screen.getByText("Success!")).toBeInTheDocument()
-    expect(screen.getByText("Warning")).toBeInTheDocument()
+    expect(screen.getByText("Milestone verified")).toBeInTheDocument()
   })
 
-  it("removes toast when close button clicked", () => {
-    const removeToast = vi.fn()
-    mockUseToast.mockReturnValue({
-      toasts: [{ id: "1", message: "Test", type: "success" }],
-      addToast: vi.fn(),
-      removeToast,
-    })
+  it("renders a toast's title alongside its message", () => {
+    renderWithContext(<ToastContainer />, [
+      { title: "Reward Distributed!", message: "500 XLM paid out" },
+    ])
+    seed()
 
-    render(<ToastContainer />)
-    const closeButton = screen.getByRole("button")
-    fireEvent.click(closeButton)
-    expect(removeToast).toHaveBeenCalledWith("1")
+    expect(screen.getByText("Reward Distributed!")).toBeInTheDocument()
+    expect(screen.getByText("500 XLM paid out")).toBeInTheDocument()
   })
 
-  it("auto-removes success toasts after delay", async () => {
-    const removeToast = vi.fn()
-    mockUseToast.mockReturnValue({
-      toasts: [{ id: "1", message: "Success", type: "success" }],
-      addToast: vi.fn(),
-      removeToast,
-    })
+  /**
+   * The regression this file guards. `App.tsx` and `pages/quest.tsx` both pass
+   * the legacy `useToast` list, and the component used to resolve
+   * `explicitToasts ?? context.toasts` — so every notification raised through
+   * the context was shadowed and never appeared.
+   */
+  it("renders context toasts even when legacy toasts are passed explicitly", () => {
+    renderWithContext(
+      <ToastContainer
+        toasts={[{ id: "legacy-1", message: "Legacy message" }]}
+        onRemove={vi.fn()}
+      />,
+      [{ message: "Context message" }]
+    )
+    seed()
+
+    expect(screen.getByText("Context message")).toBeInTheDocument()
+    expect(screen.getByText("Legacy message")).toBeInTheDocument()
+  })
+
+  it("renders context toasts when passed an empty legacy list", () => {
+    renderWithContext(<ToastContainer toasts={[]} onRemove={vi.fn()} />, [
+      { message: "Context message" },
+    ])
+    seed()
+
+    expect(screen.getByText("Context message")).toBeInTheDocument()
+  })
+
+  it("dispatches dismissal to the legacy store for a legacy toast", () => {
+    const legacyRemove = vi.fn()
+    renderWithContext(
+      <ToastContainer
+        toasts={[{ id: "legacy-1", message: "Legacy message" }]}
+        onRemove={legacyRemove}
+      />,
+      [{ message: "Context message" }]
+    )
+    seed()
 
     vi.useFakeTimers()
-    render(<ToastContainer />)
-
-    vi.advanceTimersByTime(5000)
-    expect(removeToast).toHaveBeenCalledWith("1")
-
+    act(() => {
+      fireEvent.click(screen.getAllByRole("button", { name: /dismiss/i })[1])
+      vi.advanceTimersByTime(400)
+    })
     vi.useRealTimers()
+
+    // Context toasts are merged ahead of legacy ones, so the second dismiss
+    // button is the legacy toast. Routing it to the context instead would leave
+    // the legacy entry on screen with nothing left to close it.
+    expect(legacyRemove).toHaveBeenCalledWith("legacy-1")
   })
 
-  it("does not auto-remove error toasts", () => {
-    const removeToast = vi.fn()
-    mockUseToast.mockReturnValue({
-      toasts: [{ id: "1", message: "Error", type: "error" }],
-      addToast: vi.fn(),
-      removeToast,
-    })
+  it("dispatches dismissal to the context for a context toast", () => {
+    const legacyRemove = vi.fn()
+    renderWithContext(
+      <ToastContainer
+        toasts={[{ id: "legacy-1", message: "Legacy message" }]}
+        onRemove={legacyRemove}
+      />,
+      [{ message: "Context message" }]
+    )
+    seed()
 
     vi.useFakeTimers()
-    render(<ToastContainer />)
-
-    vi.advanceTimersByTime(5000)
-    expect(removeToast).not.toHaveBeenCalled()
-
+    act(() => {
+      fireEvent.click(screen.getAllByRole("button", { name: /dismiss/i })[0])
+      vi.advanceTimersByTime(400)
+    })
     vi.useRealTimers()
+
+    expect(legacyRemove).not.toHaveBeenCalled()
   })
 
-  it("applies correct styles for different toast types", () => {
-    mockUseToast.mockReturnValue({
-      toasts: [
-        { id: "1", message: "Success", type: "success" },
-        { id: "2", message: "Error", type: "error" },
-        { id: "3", message: "Info", type: "info" },
-      ],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
+  it("applies a type-specific accent", () => {
+    renderWithContext(<ToastContainer />, [
+      { message: "All good", type: "success" },
+      { message: "Something broke", type: "error" },
+    ])
+    seed()
 
-    render(<ToastContainer />)
-
-    const successToast = screen.getByText("Success").closest("div")
-    const errorToast = screen.getByText("Error").closest("div")
-
-    expect(successToast).toHaveClass("bg-green-100")
-    expect(errorToast).toHaveClass("bg-red-100")
+    const alerts = screen.getAllByRole("alert")
+    expect(alerts[0]).toHaveClass("bg-success")
+    expect(alerts[1]).toHaveClass("bg-destructive")
   })
 
-  it("handles multiple toasts correctly", () => {
-    mockUseToast.mockReturnValue({
-      toasts: [
-        { id: "1", message: "First", type: "success" },
-        { id: "2", message: "Second", type: "warning" },
-        { id: "3", message: "Third", type: "error" },
-      ],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
+  it("exposes toasts to assistive technology as alerts", () => {
+    renderWithContext(<ToastContainer />, [{ message: "Accessible message" }])
+    seed()
 
-    render(<ToastContainer />)
-
-    expect(screen.getByText("First")).toBeInTheDocument()
-    expect(screen.getByText("Second")).toBeInTheDocument()
-    expect(screen.getByText("Third")).toBeInTheDocument()
-  })
-
-  it("updates toast content when props change", () => {
-    const { rerender } = render(<ToastContainer />)
-
-    mockUseToast.mockReturnValue({
-      toasts: [{ id: "1", message: "First message", type: "success" }],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
-
-    rerender(<ToastContainer />)
-    expect(screen.getByText("First message")).toBeInTheDocument()
-
-    mockUseToast.mockReturnValue({
-      toasts: [{ id: "1", message: "Updated message", type: "success" }],
-      addToast: vi.fn(),
-      removeToast: vi.fn(),
-    })
-
-    rerender(<ToastContainer />)
-    expect(screen.getByText("Updated message")).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent("Accessible message")
   })
 })

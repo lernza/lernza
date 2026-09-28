@@ -32,6 +32,7 @@ const NotificationsPage = lazy(() => import("@/pages/notifications").then((m) =>
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
+import { useDeadlineReminders } from "@/hooks/use-deadline-reminders"
 import { OfflineBanner } from "@/components/offline-banner"
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
@@ -138,6 +139,10 @@ function App() {
   const onboarding = useOnboarding()
   const { connected } = useWallet()
   useQuestEventStream(connected)
+  // 24-hour deadline reminders. These come from quest state rather than the
+  // event stream, because a deadline entering its final day emits no contract
+  // event to poll for.
+  useDeadlineReminders(connected)
 
   // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
   useEffect(() => {

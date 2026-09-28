@@ -23,7 +23,6 @@ async function fetchWithConcurrency<T, R>(
 
 // frontend/src/pages/quest.tsx (wired to on-chain data)
 import { useState, useMemo, useCallback, useEffect } from "react"
-import { ToastContainer } from "@/components/toast"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
 import {
@@ -70,7 +69,7 @@ interface QuestViewProps {
 export function QuestView({ questId, onBack }: QuestViewProps) {
   const [activeTab, setActiveTab] = useState<QuestTab>("milestones")
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
-  const { toasts, addToast, removeToast } = useToast()
+  const { addToast } = useToast()
   const { address } = useWallet()
 
   useEffect(() => {
@@ -696,7 +695,9 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
       </div>
 
       {quest && <PageMetadata {...buildQuestMetadata(quest as unknown as QuestInfo, questId)} />}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      {/* No ToastContainer here: `App.tsx` already renders a single app-level
+          container. A second one produced duplicate containers competing over
+          the same toast state. */}
 
       <BatchClaimResultDialog
         isOpen={isClaimDialogOpen}

@@ -1,9 +1,16 @@
-import { useEffect, useRef, useCallback } from "react"
+import { useEffect, useRef, useCallback, useMemo } from "react"
 import * as rpc from "@stellar/stellar-sdk/rpc"
 import { xdr } from "@stellar/stellar-sdk"
 import { server, withRpcReadThrottle, withTimeout, RPC_TIMEOUT_MS } from "@/lib/contracts/client"
 import { queryClient } from "@/lib/query-client"
 import { useNotifications } from "@/contexts/notification-context"
+import { useUserRole } from "@/hooks/use-user-role"
+import { useWallet } from "@/hooks/use-wallet"
+import {
+  isLearnerSubject,
+  resolveViewerRole,
+  type ViewerParticipation,
+} from "@/lib/notification-audience"
 import { contractAddresses } from "@/lib/contracts/config"
 
 /**
@@ -27,7 +34,7 @@ type EventTopicKey =
   | "quest_ttl_extended"
   | "distribution_mode_set"
   | "reward_refunded"
-  | "milestone_partial"
+  | "partial_completion"
   | "pending_reward_released"
   | "certificate_mint_failed"
   | "milestone_feedback"
@@ -52,17 +59,49 @@ function decodeScValAddress(val: xdr.ScVal | undefined): string {
   }
 }
 
+/**
+ * A 32-bit limb of an `i128`, as the SDK has exposed it: either a plain
+ * `{ low, high }` record or an accessor-bearing object exposing them as
+ * methods. The shape has differed across SDK versions, and guessing wrong
+ * previously cost every amount in the event stream (see below).
+ */
+type Int32Limb = { low: number; high: number }
+
+function readLimb(limb: Int32Limb | { low(): number; high(): number }): Int32Limb {
+  if (typeof (limb as { low(): number }).low === "function") {
+    const accessor = limb as { low(): number; high(): number }
+    return { low: accessor.low(), high: accessor.high() }
+  }
+  return limb as Int32Limb
+}
+
+/**
+ * Decode a contract `i128` amount.
+ *
+ * This previously read `parts.hi()` and `parts.lo()` as methods. The SDK
+ * returns `{ lo, hi }` as plain records, so every call threw a `TypeError` that
+ * the surrounding `try/catch` swallowed and turned into `0n`. The visible effect
+ * was that every reward notification — funded, distributed, refunded, and the
+ * reward released on a partial completion — reported no amount and fell back to
+ * a generic label, with nothing in the log to indicate a bug.
+ *
+ * Amounts are assembled from the four 32-bit limbs, sign-extended via
+ * `BigInt.asIntN` so a negative adjustment does not wrap into a huge positive
+ * number.
+ */
 function decodeScValI128(val: xdr.ScVal | undefined): bigint {
   if (!val) return 0n
   try {
-    const parts = val.i128()
-    const hi = parts.hi()
-    const lo = parts.lo()
-    const hiHi = BigInt(hi.high)
-    const hiLo = BigInt(hi.low)
-    const loHi = BigInt(lo.high)
-    const loLo = BigInt(lo.low)
-    return (hiHi << 96n) | (hiLo << 64n) | (loHi << 32n) | loLo
+    const parts = val.i128() as unknown as {
+      lo: Int32Limb | { low(): number; high(): number }
+      hi: Int32Limb | { low(): number; high(): number }
+    }
+    const hi = readLimb(parts.hi)
+    const lo = readLimb(parts.lo)
+
+    const unsigned =
+      (BigInt(hi.high) << 96n) | (BigInt(hi.low) << 64n) | (BigInt(lo.high) << 32n) | BigInt(lo.low)
+    return BigInt.asIntN(128, unsigned)
   } catch {
     return 0n
   }
@@ -74,6 +113,26 @@ function decodeScValU32(val: xdr.ScVal | undefined): number {
     return val.u32()
   } catch {
     return 0
+  }
+}
+
+/**
+ * Decode a contract-supplied string.
+ *
+ * Contract payloads carry user-controlled text (a reviewer's comment, a quest
+ * title), so a non-string or absent value must not throw or leak a raw
+ * `ScVal` debug representation into the UI. `String::from` raises for values
+ * that are not `ScVal::String`, and an over-long string is not worth rendering
+ * in a toast, so the length is capped.
+ */
+const MAX_DECODED_STRING_LENGTH = 280
+
+function decodeScValString(val: xdr.ScVal | undefined): string {
+  if (!val) return ""
+  try {
+    return val.str().toString().slice(0, MAX_DECODED_STRING_LENGTH)
+  } catch {
+    return ""
   }
 }
 
@@ -113,6 +172,8 @@ export interface ParsedEvent {
   reviewer?: string
   action?: number
   outcome?: number
+  /** Reviewer comment from `milestone_feedback`; `""` when absent. */
+  comment?: string
 }
 
 export function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
@@ -266,9 +327,9 @@ export function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
       txHash: event.txHash,
     }
   }
-  if (matchTopic(event, "milestone_partial")) {
+  if (matchTopic(event, "partial_completion")) {
     return {
-      type: "milestone_partial",
+      type: "partial_completion",
       questId: decodeScValU32(vals[0]),
       milestoneId: decodeScValU32(vals[1]),
       enrollee: decodeScValAddress(vals[2]),
@@ -306,6 +367,11 @@ export function parseEvent(event: rpc.Api.EventResponse): ParsedEvent | null {
       enrollee: decodeScValAddress(vals[2]),
       reviewer: decodeScValAddress(vals[3]),
       action: decodeScValU32(vals[4]),
+      // The reviewer's comment is the sixth and final payload element. It was
+      // previously discarded, so a learner was told only that a milestone had
+      // been approved or rejected and never saw why — which is the single most
+      // useful part of a verification result.
+      comment: decodeScValString(vals[5]),
       ledger: event.ledger,
       txHash: event.txHash,
     }
@@ -377,7 +443,7 @@ export async function fetchQuestHistory(questId: number): Promise<ParsedEvent[]>
     { topics: [[topicHex("quest_cancelled")]], contractIds },
     { topics: [[topicHex("peer_approved")]], contractIds },
     { topics: [[topicHex("certificate_minted")]], contractIds },
-    { topics: [[topicHex("milestone_partial")]], contractIds },
+    { topics: [[topicHex("partial_completion")]], contractIds },
     { topics: [[topicHex("pending_reward_released")]], contractIds },
     { topics: [[topicHex("certificate_mint_failed")]], contractIds },
     { topics: [[topicHex("milestone_feedback")]], contractIds },
@@ -410,8 +476,28 @@ export function useQuestEventStream(enabled: boolean) {
   const lastLedgerRef = useRef<number | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
-  const { notifyMilestoneCompletion, notifyRewardDistribution, notifyQuestStatusChange, addToast } =
-    useNotifications()
+  const {
+    notifyEnrollment,
+    notifyVerification,
+    notifyRewardDistribution,
+    notifyQuestStatusChange,
+    notifyQuestCancellation,
+    addToast,
+  } = useNotifications()
+  const { ownedQuests, enrolledQuests, isLoading: roleLoading } = useUserRole()
+  const { address } = useWallet()
+
+  // Snapshot the viewer's participation once per render so the poll loop reads
+  // a stable value. These stay arrays: a wallet participates in a handful of
+  // quests, so a `Set` would cost more to build than the lookups it saves.
+  const participation = useMemo<ViewerParticipation>(
+    () => ({
+      address,
+      ownedQuestIds: ownedQuests.map(q => q.id),
+      enrolledQuestIds: enrolledQuests.map(q => q.id),
+    }),
+    [address, ownedQuests, enrolledQuests]
+  )
 
   const processEvents = useCallback(
     async (events: rpc.Api.EventResponse[]) => {
@@ -423,57 +509,160 @@ export function useQuestEventStream(enabled: boolean) {
 
         if (!mountedRef.current) return
 
+        // The stream sees the whole network's activity, not just the viewer's.
+        // Drop anything the viewer is not a party to before it becomes a toast;
+        // this is the difference between a handful of relevant notifications and
+        // a toast for every quest that settles.
+        const role = resolveViewerRole(parsed, participation)
+        if (!role) continue
+
+        // True when the viewer is the account the event is about, i.e. the
+        // notification is from the learner's side rather than the creator's.
+        const asLearner = isLearnerSubject(parsed, participation)
+
         switch (parsed.type) {
           case "milestone_completed":
-            notifyMilestoneCompletion(
-              `Milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId})`,
-              "approved"
-            )
+          case "peer_approved": {
+            // `peer_approved` is emitted for every approval in a peer-reviewed
+            // quest and `milestone_completed` when the milestone closes, so a
+            // single approval previously produced two toasts. One
+            // verification result is now one notification, and it carries the
+            // milestone's criteria context rather than an opaque "quest #7".
+            const label = `Milestone #${parsed.milestoneId ?? "?"}`
+            if (asLearner) {
+              notifyVerification(label, "approved")
+            } else {
+              addToast({
+                title: "Learner Progress",
+                message: `${shortenAddress(parsed.enrollee ?? "")} completed ${label.toLowerCase()} on quest #${parsed.questId}.`,
+                type: "success",
+                category: "verification",
+              })
+            }
             break
-          case "peer_approved":
-            notifyMilestoneCompletion(
-              `Milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId})`,
-              "approved"
-            )
+          }
+          case "partial_completion": {
+            // Partial credit is a verification result too: the criteria were
+            // met partially and a pro-rata reward was released. Reporting it
+            // as an outright "approved" was wrong, and it also fired both a
+            // completion toast and a partial-credit toast for one event.
+            const label = `Milestone #${parsed.milestoneId ?? "?"}`
+            const criteria = `${parsed.criteriaMet ?? "?"}/${parsed.maxCriteria ?? "?"} criteria met`
+            if (asLearner) {
+              addToast({
+                title: "Partial Credit Awarded",
+                message:
+                  `${label}: ${criteria}. ` +
+                  `${parsed.amount ? `${formatAmount(parsed.amount)} released.` : ""}`.trim(),
+                type: "info",
+                category: "verification",
+              })
+            } else {
+              addToast({
+                title: "Partial Credit Awarded",
+                message: `${shortenAddress(parsed.enrollee ?? "")} met ${criteria} on ${label.toLowerCase()} of quest #${parsed.questId}.`,
+                type: "info",
+                category: "verification",
+              })
+            }
             break
-          case "reward_distributed":
-            notifyRewardDistribution(
-              parsed.amount ? formatAmount(parsed.amount) : "reward",
-              "claimed"
-            )
+          }
+          case "milestone_feedback": {
+            // The reviewer's comment is the substance of the result and was
+            // being dropped on the floor; surface it via `notifyVerification`,
+            // which appends it to the message.
+            const status =
+              parsed.action === 0
+                ? "approved"
+                : parsed.action === 1
+                  ? "rejected"
+                  : "changes_requested"
+            const feedback = parsed.comment || undefined
+            if (asLearner) {
+              notifyVerification(`Milestone #${parsed.milestoneId ?? "?"}`, status, feedback)
+            } else {
+              const reviewer = parsed.reviewer ? shortenAddress(parsed.reviewer) : "A reviewer"
+              const verb =
+                status === "approved"
+                  ? "approved"
+                  : status === "rejected"
+                    ? "rejected"
+                    : "requested changes on"
+              addToast({
+                title: "Reviewer Feedback",
+                message: `${reviewer} ${verb} milestone #${parsed.milestoneId ?? "?"} of quest #${parsed.questId} from ${shortenAddress(parsed.enrollee ?? "")}.`,
+                type:
+                  status === "approved" ? "success" : status === "rejected" ? "warning" : "info",
+                category: "verification",
+              })
+            }
             break
-          case "reward_funded":
-            notifyRewardDistribution(
-              parsed.amount ? formatAmount(parsed.amount) : "tokens",
-              "funded"
-            )
+          }
+          case "reward_distributed": {
+            const amount = parsed.amount ? formatAmount(parsed.amount) : "reward"
+            // A payout is the learner's money; the creator gets the same
+            // notification but phrased as a distribution they made. Only the
+            // account that was actually paid is told it was claimed.
+            if (asLearner) {
+              notifyRewardDistribution(amount, "claimed")
+            } else if (role === "creator" || role === "both") {
+              addToast({
+                title: "Reward Distributed",
+                message: `${amount} paid out to ${shortenAddress(parsed.enrollee ?? "")} on quest #${parsed.questId}.`,
+                type: "success",
+                category: "reward_distribution",
+              })
+            }
             break
-          case "enrollee_added":
-            addToast({
-              title: "New Enrollee",
-              message: `Someone joined Quest #${parsed.questId}.`,
-              type: "info",
-              category: "quest_status",
-            })
+          }
+          case "reward_funded": {
+            // Escrow funding is the creator's own action; the learner has no
+            // stake in it beyond "the quest can now pay out".
+            if (asLearner) {
+              notifyRewardDistribution(
+                parsed.amount ? formatAmount(parsed.amount) : "tokens",
+                "funded"
+              )
+            }
             break
+          }
+          case "reward_refunded": {
+            if (asLearner) {
+              notifyRewardDistribution(
+                parsed.amount ? formatAmount(parsed.amount) : "reward",
+                "refunded"
+              )
+            }
+            break
+          }
+          case "enrollee_added": {
+            // A creator-only notification. The payload's third slot is the quest
+            // owner, so the recipient is resolvable without another chain read.
+            // This was previously a generic "Someone joined" toast sent to every
+            // connected wallet, categorised as a quest status change.
+            notifyEnrollment(`Quest #${parsed.questId}`, parsed.enrollee ?? "", "added")
+            break
+          }
           case "quest_archived":
             notifyQuestStatusChange(`Quest #${parsed.questId}`, "archived")
             break
           case "quest_cancelled":
-            notifyQuestStatusChange(`Quest #${parsed.questId}`, "cancelled")
+            notifyQuestCancellation(`Quest #${parsed.questId}`)
             break
           case "certificate_minted":
             addToast({
               title: "Certificate Minted!",
-              message: `A completion certificate was minted for ${shortenAddress(parsed.enrollee ?? "")}.`,
+              message: `A completion certificate was minted for ${shortenAddress(parsed.enrollee ?? "")} on quest #${parsed.questId}.`,
               type: "success",
-              category: "milestone",
+              category: "verification",
             })
             break
           case "quest_created":
+            // Only meaningful to the creator, and `resolveViewerRole` has
+            // already confirmed the viewer owns the quest.
             addToast({
               title: "Quest Created",
-              message: `New quest #${parsed.questId} has been created.`,
+              message: `Your quest #${parsed.questId} is live.`,
               type: "success",
               category: "quest_status",
             })
@@ -489,7 +678,7 @@ export function useQuestEventStream(enabled: boolean) {
           case "creator_verified":
             addToast({
               title: "Creator Verified",
-              message: `Creator verified for quest #${parsed.questId}.`,
+              message: `Creator verification approved for quest #${parsed.questId}.`,
               type: "success",
               category: "quest_status",
             })
@@ -502,83 +691,12 @@ export function useQuestEventStream(enabled: boolean) {
               category: "quest_status",
             })
             break
-          case "admin_transferred":
-            addToast({
-              title: "Admin Transferred",
-              message: `Contract admin transferred.`,
-              type: "info",
-              category: "system",
-            })
-            break
-          case "quest_ttl_extended":
-            addToast({
-              title: "TTL Extended",
-              message: `Quest #${parsed.questId} TTL has been extended.`,
-              type: "info",
-              category: "system",
-            })
-            break
-          case "distribution_mode_set":
-            addToast({
-              title: "Distribution Mode Changed",
-              message: `Distribution mode updated for quest #${parsed.questId}.`,
-              type: "warning",
-              category: "quest_status",
-            })
-            break
-          case "reward_refunded":
-            notifyRewardDistribution(
-              parsed.amount ? formatAmount(parsed.amount) : "reward",
-              "refunded"
-            )
-            break
-          case "milestone_partial":
-            notifyMilestoneCompletion(
-              `Milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId})`,
-              "approved"
-            )
-            addToast({
-              title: "Partial Credit Awarded",
-              message: `${parsed.criteriaMet ?? "?"}/${parsed.maxCriteria ?? "?"} criteria met on milestone #${parsed.milestoneId ?? "?"}.`,
-              type: "info",
-              category: "milestone",
-            })
-            break
-          case "pending_reward_released":
-            notifyRewardDistribution(
-              parsed.amount ? formatAmount(parsed.amount) : "reward",
-              "claimed"
-            )
-            break
-          case "certificate_mint_failed":
-            addToast({
-              title: "Certificate Mint Failed",
-              message: `Certificate minting failed for ${shortenAddress(parsed.enrollee ?? "")} on quest #${parsed.questId}. It can be retried.`,
-              type: "error",
-              category: "milestone",
-            })
-            break
-          case "milestone_feedback": {
-            const actionLabel =
-              parsed.action === 0 ? "approved" : parsed.action === 1 ? "rejected" : "requested changes on"
-            notifyMilestoneCompletion(
-              `Milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId})`,
-              parsed.action === 0 ? "approved" : parsed.action === 1 ? "rejected" : "submitted"
-            )
-            addToast({
-              title: "Milestone Feedback",
-              message: `Reviewer ${actionLabel} milestone #${parsed.milestoneId ?? "?"}.`,
-              type: parsed.action === 0 ? "success" : parsed.action === 1 ? "warning" : "info",
-              category: "milestone",
-            })
-            break
-          }
           case "dispute_initiated":
             addToast({
               title: "Dispute Initiated",
               message: `A dispute was opened on milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId}).`,
               type: "warning",
-              category: "milestone",
+              category: "verification",
             })
             break
           case "dispute_resolved":
@@ -586,13 +704,37 @@ export function useQuestEventStream(enabled: boolean) {
               title: "Dispute Resolved",
               message: `Dispute on milestone #${parsed.milestoneId ?? "?"} (Quest #${parsed.questId}) resolved as ${parsed.outcome === 1 ? "overturned" : "upheld"}.`,
               type: parsed.outcome === 1 ? "success" : "info",
-              category: "milestone",
+              category: "verification",
+            })
+            break
+          case "pending_reward_released":
+            if (asLearner) {
+              notifyRewardDistribution(
+                parsed.amount ? formatAmount(parsed.amount) : "reward",
+                "claimed"
+              )
+            }
+            break
+          case "certificate_mint_failed":
+            addToast({
+              title: "Certificate Mint Failed",
+              message: `Certificate minting failed for ${shortenAddress(parsed.enrollee ?? "")} on quest #${parsed.questId}. It can be retried.`,
+              type: "error",
+              category: "verification",
             })
             break
         }
       }
     },
-    [notifyMilestoneCompletion, notifyRewardDistribution, notifyQuestStatusChange, addToast]
+    [
+      participation,
+      notifyEnrollment,
+      notifyVerification,
+      notifyRewardDistribution,
+      notifyQuestStatusChange,
+      notifyQuestCancellation,
+      addToast,
+    ]
   )
 
   const poll = useCallback(async () => {
@@ -613,7 +755,7 @@ export function useQuestEventStream(enabled: boolean) {
       { topics: [[topicHex("quest_cancelled")]], contractIds },
       { topics: [[topicHex("peer_approved")]], contractIds },
       { topics: [[topicHex("certificate_minted")]], contractIds },
-      { topics: [[topicHex("milestone_partial")]], contractIds },
+      { topics: [[topicHex("partial_completion")]], contractIds },
       { topics: [[topicHex("pending_reward_released")]], contractIds },
       { topics: [[topicHex("certificate_mint_failed")]], contractIds },
       { topics: [[topicHex("milestone_feedback")]], contractIds },
@@ -665,10 +807,23 @@ export function useQuestEventStream(enabled: boolean) {
     }
   }, [processEvents])
 
+  /**
+   * Whether the stream may start polling.
+   *
+   * Polling must wait for the viewer's participation to resolve. The poll
+   * advances its cursor on every response, so a poll that ran while the
+   * participation lists were still empty would filter every event out as
+   * "not mine" and then advance past them — losing those notifications
+   * permanently rather than merely delaying them. Waiting also means the
+   * initial backfill from `startLedger: 0` is filtered against real
+   * participation instead of an empty snapshot.
+   */
+  const ready = enabled && !!address && !roleLoading
+
   useEffect(() => {
     mountedRef.current = true
 
-    if (!enabled) {
+    if (!ready) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
         intervalRef.current = null
@@ -689,5 +844,5 @@ export function useQuestEventStream(enabled: boolean) {
         intervalRef.current = null
       }
     }
-  }, [enabled, poll])
+  }, [ready, poll])
 }

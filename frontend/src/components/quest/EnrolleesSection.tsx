@@ -22,6 +22,7 @@ interface Milestone {
 interface Completion {
   milestoneId: number
   completed: boolean
+  enrollee: string
 }
 
 interface EnrolleesSectionProps {
@@ -63,7 +64,7 @@ export function EnrolleesSection({
 
   const renderEnrollee = (enrollee: Enrollee) => {
     const enrolleeCompletions = completions.filter(
-      c => c.completed && milestones.some(m => m.id === c.milestoneId)
+      c => c.completed && c.enrollee === enrollee.address && milestones.some(m => m.id === c.milestoneId)
     )
     const completedCount = enrolleeCompletions.length
     const progressPercent = milestones.length > 0 ? (completedCount / milestones.length) * 100 : 0

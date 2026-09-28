@@ -1,5 +1,5 @@
 #![no_std]
-use common::{extend_instance_ttl, QuestInfo};
+use common::{extend_instance_ttl, extend_persistent_ttl, QuestInfo};
 use soroban_sdk::{
     contract, contractclient, contracterror, contractimpl, contracttype, symbol_short, Address,
     Env, String, Vec,
@@ -180,6 +180,7 @@ impl CompletionContract {
 
         // 4. Record completion.
         env.storage().persistent().set(&completed_key, &token_id);
+        extend_persistent_ttl(&env, &completed_key);
         extend_instance_ttl(&env);
         env.events().publish(
             (symbol_short!("completed"),),

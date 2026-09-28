@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '@/components/ui/button';
 
 interface Props {
   children: React.ReactNode;
@@ -30,14 +31,14 @@ export class RouteErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div role="alert" style={{ padding: 24, border: '1px solid #e5e7eb', borderRadius: 12, background: '#fff', margin: 16 }}>
-          <h2 style={{ fontWeight: 700, marginBottom: 8 }}>Something went wrong in {this.props.routeName || 'this view'}</h2>
-          <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 12 }}>Error ID: {this.state.errorId} — you can retry or navigate away. Your wallet remains connected.</p>
-          {this.state.error && <pre style={{ background: '#f9fafb', padding: 12, borderRadius: 8, fontSize: 12, overflow: 'auto', maxHeight: 120 }}>{this.state.error.message}</pre>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={this.handleRetry} style={{ padding: '8px 12px', borderRadius: 8, background: '#0057FF', color: 'white' }}>Retry</button>
-            <a href="/" style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb', textDecoration: 'none' }}>Go Home</a>
-            <button onClick={() => window.location.reload()} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}>Reload Page</button>
+        <div role="alert" className="border-border bg-card m-4 border p-6 shadow-md rounded-lg">
+          <h2 className="font-bold mb-2">Something went wrong in {this.props.routeName || 'this view'}</h2>
+          <p className="text-muted-foreground text-sm mb-3">Error ID: {this.state.errorId} — you can retry or navigate away. Your wallet remains connected.</p>
+          {this.state.error && <pre className="bg-muted p-3 rounded text-xs overflow-auto max-h-30 mb-4">{this.state.error.message}</pre>}
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={this.handleRetry} variant="default">Retry</Button>
+            <Button onClick={() => window.location.href = '/'} variant="outline">Go Home</Button>
+            <Button onClick={() => window.location.reload()} variant="outline">Reload Page</Button>
           </div>
         </div>
       );

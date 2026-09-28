@@ -353,8 +353,9 @@ export function Dashboard(
   const rewardFilteredQuests = tokenFilteredQuests.filter(q => {
     const stats = questStats[q.id]
     const pool = stats?.poolBalance ?? 0
-    if (deferredRewardMin !== "" && pool < rewardMinNum) return false
-    if (deferredRewardMax !== "" && pool > rewardMaxNum) return false
+    const poolDisplay = pool / 10 ** 7
+    if (deferredRewardMin !== "" && poolDisplay < rewardMinNum) return false
+    if (deferredRewardMax !== "" && poolDisplay > rewardMaxNum) return false
     return true
   })
 

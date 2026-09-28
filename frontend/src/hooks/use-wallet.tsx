@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react"
 import freighter, { WatchWalletChanges } from "@stellar/freighter-api"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
+import { queryClient } from "@/lib/query-client"
 import { pushToast } from "@/lib/notifications"
 import {
   walletRegistry,
@@ -169,7 +170,15 @@ function useWalletState(): WalletContextValue {
     isModalOpen: false,
   })
 
-  const clearConnection = useCallback(() => {
+  const clearConnection = useCallback((addressToClear?: string | null) => {
+    if (addressToClear) {
+      queryClient.removeQueries({
+        predicate: query => {
+          const key = query.queryKey
+          return Array.isArray(key) && key.includes(addressToClear)
+        },
+      })
+    }
     setState(s => ({
       ...s,
       address: null,
@@ -422,8 +431,8 @@ function useWalletState(): WalletContextValue {
     const adapter = walletRegistry.getAdapter(targetId)
     void adapter.disconnect()
     setManualDisconnect()
-    clearConnection()
-  }, [clearConnection, state.selectedWalletId])
+    clearConnection(state.address)
+  }, [clearConnection, state.selectedWalletId, state.address])
 
   const verifySession = useCallback(async (): Promise<boolean> => {
     if (getManualDisconnect()) {
@@ -549,6 +558,15 @@ function useWalletState(): WalletContextValue {
           s.wrongNetwork === wrongNetwork
         ) {
           return s
+        }
+
+        if (s.address && s.address !== address) {
+          queryClient.removeQueries({
+            predicate: query => {
+              const key = query.queryKey
+              return Array.isArray(key) && key.includes(s.address)
+            },
+          })
         }
 
         return {

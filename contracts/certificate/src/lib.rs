@@ -371,6 +371,8 @@ impl CertificateContract {
         recipient: Address,
     ) -> Result<u32, Error> {
         Self::require_not_paused(&env)?;
+        recipient.require_auth();
+
         let milestone_contract = Self::get_milestone_contract(env.clone())?;
 
         // Cross-contract call to check completions

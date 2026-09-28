@@ -1,6 +1,7 @@
 import { ArrowLeft, Plus, Share2, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { MarkdownDescription } from "@/components/markdown-description"
 
 interface QuestHeaderPanelProps {
   questId: number
@@ -47,7 +48,9 @@ export function QuestHeaderPanel({
           </div>
 
           <h1 className="text-3xl leading-tight font-bold sm:text-4xl">{questName}</h1>
-          <p className="text-muted-foreground mt-2 max-w-2xl text-base">{questDescription}</p>
+          <div className="text-muted-foreground mt-2 max-w-2xl text-base">
+            <MarkdownDescription content={questDescription} />
+          </div>
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">

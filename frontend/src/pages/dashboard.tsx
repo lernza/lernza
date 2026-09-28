@@ -92,6 +92,7 @@ export function Dashboard(
     }
   }, [publicQuests, extraPublicQuests])
 
+  // All filter/sort/search/tag/pagination state is owned by useDashboardFilters.
   const filters = useDashboardFilters({
     publicQuests,
     ownedQuests,
@@ -142,135 +143,6 @@ export function Dashboard(
     navigateToPath("/create-quest")
   }
 
-  const loadedPublicQuests = [...publicQuests, ...extraPublicQuests]
-
-  const filteredQuests =
-    filter === "owned"
-      ? ownedQuests
-      : filter === "enrolled"
-        ? enrolledQuests
-        : loadedPublicQuests
-    filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : loadedPublicQuests
-
-  const presetFilteredQuests = (() => {
-    if (preset === "ending-soon") {
-      const sevenDaysFromNow = nowSeconds + 7 * 24 * 60 * 60
-      return filteredQuests.filter(
-        q => q.deadline > 0 && q.deadline > nowSeconds && q.deadline <= sevenDaysFromNow
-      )
-    }
-    if (preset === "recently-funded") {
-      const thirtyDaysAgo = nowSeconds - 30 * 24 * 60 * 60
-      return filteredQuests.filter(q => q.createdAt >= thirtyDaysAgo)
-    }
-    if (preset === "recently-verified") {
-      return filteredQuests.filter(q => q.verified)
-    }
-    return filteredQuests
-  })()
-
-  const availableCategories = Array.from(
-    new Set(filteredQuests.map(q => q.category).filter((c): c is string => !!c))
-  ).sort()
-  const availableCreators = Array.from(new Set(filteredQuests.map(q => q.owner))).sort()
-  const availableRewardTokens = Array.from(new Set(filteredQuests.map(q => q.tokenAddr))).sort()
-
-  // Derive quest status from on-chain state via the single shared
-  // lifecycle-status function (see lib/utils.ts's getQuestLifecycleStatus doc
-  // comment) instead of reimplementing the active/expired/archived/cancelled
-  // logic locally with its own edge cases.
-  function deriveQuestStatus(q: { status: number; deadline: number }): QuestDiscoveryStatus {
-    const lifecycle = getQuestLifecycleStatus({
-      status: q.status as QuestInfo["status"],
-      deadline: q.deadline,
-    })
-    return lifecycle === "active" ? "active" : "completed"
-  }
-
-  const statusFilteredQuests =
-    statusFilter === "all"
-      ? presetFilteredQuests
-      : presetFilteredQuests.filter(q => deriveQuestStatus(q) === statusFilter)
-
-  const categoryFilteredQuests =
-    category === "all"
-      ? statusFilteredQuests
-      : statusFilteredQuests.filter(q => q.category === category)
-
-  const creatorFilteredQuests =
-    creatorFilter === "all"
-      ? categoryFilteredQuests
-      : categoryFilteredQuests.filter(q => q.owner === creatorFilter)
-
-  const tokenFilteredQuests =
-    rewardTokenFilter === "all"
-      ? creatorFilteredQuests
-      : creatorFilteredQuests.filter(q => q.tokenAddr === rewardTokenFilter)
-
-  // Reward range filter (uses deferred values to avoid re-rendering on every keystroke)
-  const rewardMinNum = deferredRewardMin !== "" ? Number(deferredRewardMin) : 0
-  const rewardMaxNum = deferredRewardMax !== "" ? Number(deferredRewardMax) : Infinity
-  const rewardFilteredQuests = tokenFilteredQuests.filter(q => {
-    const stats = questStats[q.id]
-    const pool = stats?.poolBalance ?? 0
-    const poolDisplay = pool / 10 ** 7
-    if (deferredRewardMin !== "" && poolDisplay < rewardMinNum) return false
-    if (deferredRewardMax !== "" && poolDisplay > rewardMaxNum) return false
-    return true
-  })
-
-  const searchQuery = deferredSearch.trim().toLowerCase()
-  const searchedQuests = searchQuery
-    ? rewardFilteredQuests.filter(q => {
-        const haystack = [q.name, q.description, q.category, ...(q.tags ?? [])]
-          .join(" ")
-          .toLowerCase()
-        return haystack.includes(searchQuery)
-      })
-    : rewardFilteredQuests
-
-  // Tag filter — multi-tag AND/OR (issue #1635)
-  const allKnownTags = Array.from(new Set(filteredQuests.flatMap(q => q.tags ?? []))).sort()
-  const tagSuggestions = tagInput.trim()
-    ? allKnownTags.filter(
-        tag =>
-          tag.toLowerCase().includes(tagInput.trim().toLowerCase()) && !selectedTags.includes(tag)
-      )
-    : []
-  const tagFilteredQuests =
-    selectedTags.length === 0
-      ? searchedQuests
-      : searchedQuests.filter(q => {
-          const qtags = q.tags ?? []
-          return tagFilterMode === "AND"
-            ? selectedTags.every(tag => qtags.includes(tag))
-            : selectedTags.some(tag => qtags.includes(tag))
-        })
-
-  const sortedQuests = [...tagFilteredQuests].sort((a, b) => {
-    const statsA = questStats[a.id]
-    const statsB = questStats[b.id]
-
-    switch (sortBy) {
-      case "ending-soon": {
-        const deadlineA = a.deadline > 0 ? a.deadline : Infinity
-        const deadlineB = b.deadline > 0 ? b.deadline : Infinity
-        return deadlineA - deadlineB
-      }
-      case "most-enrolled":
-        return (statsB?.enrolleeCount ?? 0) - (statsA?.enrolleeCount ?? 0)
-      case "highest-reward":
-        return (statsB?.poolBalance ?? 0) - (statsA?.poolBalance ?? 0)
-      case "newest":
-      default:
-        return b.createdAt - a.createdAt
-    }
-  })
-
-  const visibleQuests = sortedQuests.slice(0, displayCount)
-
-  const ownedCount = ownedQuests.length
-  const enrolledCount = enrolledQuests.length
   const milestonesCompleted = (Object.values(questCompletions) as number[]).reduce(
     (sum: number, count: number) => sum + count,
     0
@@ -323,7 +195,6 @@ export function Dashboard(
     if (hasMorePublic) void loadMorePublic()
   }
 
-  // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <OnboardingBanner onboarding={onboarding} />

@@ -1,30 +1,4 @@
 import { useMemo, useState } from "react"
-// In-memory cache for completion status: key -> { completed: boolean, timestamp: number }
-const completionCache = new Map<string, { completed: boolean; timestamp: number }>()
-const CACHE_TTL_MS = 60_000 // 60 seconds TTL
-
-async function fetchWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length)
-  let currentIndex = 0
-
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (currentIndex < items.length) {
-      const idx = currentIndex++
-      results[idx] = await fn(items[idx])
-    }
-  })
-
-  await Promise.all(workers)
-  return results
-}
-
-// frontend/src/pages/quest.tsx (wired to on-chain data)
-import { useState, useMemo, useCallback, useEffect } from "react"
-import { useQueryClient, useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
 import {
@@ -34,10 +8,6 @@ import {
   useRewardPool,
   useTotalReservedReward,
 } from "@/hooks/use-quest-data"
-import { queryKeys } from "@/lib/query-keys"
-import { milestoneClient } from "@/lib/contracts/milestone"
-import type { DisputeOutcome } from "@/lib/contracts/milestone-client"
-import { questClient } from "@/lib/contracts/quest"
 import { PageMetadata } from "@/components/PageMetadata"
 import { buildQuestMetadata } from "@/lib/questMetadata"
 import { QuestStatus, type QuestInfo } from "@/lib/contract-types"
@@ -74,7 +44,6 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const [isReportOpen, setIsReportOpen] = useState(false)
   const { addToast } = useToast()
   const { address } = useWallet()
-  const queryClient = useQueryClient()
 
   useReferralCapture(questId)
 
@@ -131,366 +100,37 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const disputes = useQuestDisputes({ questId, address, quest, milestones, addToast })
   const claims = useQuestClaims({ questId, addToast })
 
-  // Build enrollees list for sections
   const enrollees = useMemo(
     () => enrolleeAddresses.map((addr, index) => ({ id: index, address: addr })),
     [enrolleeAddresses]
   )
 
-  // Build completions array from the map for section components
-  const completions = useMemo(() => {
-    const result: { milestoneId: number; enrollee: string; completed: boolean }[] = []
-    for (const enrollee of enrolleeAddresses) {
-      for (const milestone of milestones) {
-        const key = `${enrollee}-${milestone.id}`
-        if (completionMap[key]) {
-          result.push({ milestoneId: milestone.id, enrollee, completed: true })
-        }
-      }
-    }
-    return result
-  }, [enrolleeAddresses, milestones, completionMap])
-
-  // Memoised derivations
-  const { totalReward, completedMilestones, isComplete, earnedReward } = useMemo(() => {
-    const total = milestones.reduce((sum, m) => sum + Number(m.rewardAmount), 0)
-    const completedSet = new Set(completions.filter(c => c.completed).map(c => c.milestoneId))
-    const completed = completedSet.size
-    return {
-      totalReward: total,
-      completedMilestones: completed,
-      isComplete: completed === milestones.length && milestones.length > 0,
-      earnedReward: milestones
-        .filter(m => completedSet.has(m.id))
-        .reduce((sum, m) => sum + Number(m.rewardAmount), 0),
-    }
-  }, [milestones, completions])
-
-  const handleAddEnrollee = useCallback(() => {
-    if (address) {
-      recordReferralEnrollment(questId, address)
-    }
-    addToast("Add enrollee clicked", "info")
-  }, [addToast, address, questId])
-
-  const handleRemoveEnrollee = useCallback(
-    (enrollee: { address: string }) => setEnrolleeToRemove(enrollee),
-    []
+  const { completions } = useQuestCompletions({ questId, enrolleeAddresses, milestones })
+  const { totalReward, completedMilestones, isComplete, earnedReward } = useMilestoneStats(
+    milestones,
+    completions
   )
 
-  const confirmRemoveEnrollee = useCallback(
-    async (enrollee: { address: string }) => {
-      if (!address || !quest || quest.owner !== address) {
-        addToast("Only the quest owner can remove a learner.", "error")
-        return
-      }
-      try {
-        await questClient.removeEnrollee(address, questId, enrollee.address)
-        setEnrolleeToRemove(null)
-        addToast("Learner removed. Verified work and earned rewards remain protected.", "success")
-        await queryClient.invalidateQueries({ queryKey: queryKeys.enrollees(questId) })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Removal failed."
-        addToast(
-          message.includes("RemovalBlockedByPendingApproval") ||
-            message.includes("LeaveBlockedByPendingApproval")
-            ? "Removal is blocked while a submission is awaiting review or reward settlement."
-            : message,
-          "error"
-        )
-      }
-    },
-    [addToast, address, quest, questId, queryClient]
-  )
+  const {
+    enrolleeToRemove,
+    setEnrolleeToRemove,
+    handleAddEnrollee,
+    handleAddMilestone,
+    handleVerifyCompletion,
+    handleRemoveEnrollee,
+    confirmRemoveEnrollee,
+  } = useEnrolleeActions({ questId, address: address || undefined, quest, addToast })
 
-  const handleAddMilestone = useCallback(() => {
-    addToast("Add milestone clicked", "info")
-  }, [addToast])
+  const disputes = useQuestDisputes({ questId, address: address || undefined, quest, milestones, addToast })
+  const claims = useQuestClaims({ questId, addToast })
 
-  const handleVerifyCompletion = useCallback(
-    (milestoneId: number) => {
-      addToast(`Verified milestone ${milestoneId}`, "success")
-    },
-    [addToast]
-  )
-
-  // Dispute state for the connected learner, so an appealable submission shows
-  // the right affordance and status. See issue #1614.
-  const [disputeStates, setDisputeStates] = useState<
-    Map<number, MilestoneDisputeState>
-  >(new Map())
-  const [isDisputePending, setIsDisputePending] = useState(false)
-  const [ownerDisputes, setOwnerDisputes] = useState<OwnerDispute[]>([])
-  const isQuestOwner = !!address && !!quest?.owner && quest.owner === address
-
-  // Owners additionally see every open dispute awaiting their ruling.
-  useEffect(() => {
-    if (!isQuestOwner) {
-      setOwnerDisputes([])
-      return
-    }
-
-    let cancelled = false
-
-    const loadOwnerDisputes = async () => {
-      try {
-        const entries = await milestoneClient.getOpenDisputes(questId, 0, 100)
-        if (cancelled) return
-        setOwnerDisputes(
-          entries.map(entry => ({
-            milestoneId: entry.milestoneId,
-            enrollee: entry.enrollee,
-            reason: entry.record.reason
-          }))
-        )
-      } catch {
-        // Non-fatal: the resolve affordance simply stays hidden.
-      }
-    }
-
-    void loadOwnerDisputes()
-    return () => {
-      cancelled = true
-    }
-  }, [isQuestOwner, questId])
-
-  useEffect(() => {
-    if (!address || milestones.length === 0) {
-      setDisputeStates(new Map())
-      return
-    }
-
-    let cancelled = false
-
-    const loadDisputes = async () => {
-      try {
-        const entries: [number, MilestoneDisputeState][] = []
-        for (const milestone of milestones) {
-          const [status, open, cooldown] = await Promise.all([
-            milestoneClient.getDisputeStatus(questId, milestone.id, address),
-            milestoneClient.hasOpenDispute(questId, milestone.id, address),
-            milestoneClient.getDisputeCooldownRemaining(questId, milestone.id, address)
-          ])
-          if (status === null) continue
-          entries.push([
-            milestone.id,
-            {
-              status,
-              reason: "",
-              // A closed dispute with a live cooldown means "recently ruled".
-              cooldownSeconds: open ? 0 : cooldown
-            }
-          ])
-        }
-        if (!cancelled) setDisputeStates(new Map(entries))
-      } catch {
-        // Non-fatal: the dispute affordance simply stays hidden.
-      }
-    }
-
-    void loadDisputes()
-    return () => {
-      cancelled = true
-    }
-  }, [address, questId, milestones])
-
-  const handleOpenDispute = useCallback(
-    async (milestoneId: number, reason: string) => {
-      if (!address) return
-      setIsDisputePending(true)
-      try {
-        await milestoneClient.openDispute(address, questId, milestoneId, reason, {
-          onSigning: () => addToast("Opening dispute…", "info"),
-          onSuccess: () => {
-            addToast("Dispute opened. The quest owner will review it.", "success")
-            setDisputeStates(
-              prev =>
-                new Map(prev).set(milestoneId, { status: 0, reason, cooldownSeconds: 0 })
-            )
-          },
-          onError: err => addToast(String(err), "error", 5000)
-        })
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : String(err), "error", 5000)
-      } finally {
-        setIsDisputePending(false)
-      }
-    },
-    [address, questId, addToast]
-  )
-
-  const handleResolveDispute = useCallback(
-    async (
-      milestoneId: number,
-      enrollee: string,
-      outcome: DisputeOutcome,
-      note?: string
-    ) => {
-      if (!address) return
-      setIsDisputePending(true)
-      try {
-        await milestoneClient.resolveDispute(
-          address,
-          questId,
-          milestoneId,
-          enrollee,
-          outcome,
-          note,
-          {
-            onSuccess: () => addToast("Dispute resolved.", "success"),
-            onError: err => addToast(String(err), "error", 5000)
-          }
-        )
-        setOwnerDisputes(prev => prev.filter(d => d.milestoneId !== milestoneId))
-        setDisputeStates(prev => {
-          const next = new Map(prev)
-          next.delete(milestoneId)
-          return next
-        })
-      } catch (err) {
-        addToast(err instanceof Error ? err.message : String(err), "error", 5000)
-      } finally {
-        setIsDisputePending(false)
-      }
-    },
-    [address, questId, addToast]
-  )
-
-  const handleClaimRewards = useCallback(
-    async (
-      enrollee: { id: number; address: string },
-      claimableMilestones: { id: number; title: string; rewardAmount: number }[]
-    ) => {
-      setIsClaiming(true)
-      setClaimSummary(null)
-
-      try {
-        const inputs = claimableMilestones.map(m => ({
-          milestoneId: m.id,
-          title: m.title,
-          rewardAmount: BigInt(m.rewardAmount),
-        }))
-
-        const summary = await batchClaimRewards(
-          enrollee.address,
-          questId,
-          enrollee.address,
-          inputs,
-          {
-            onProgress: (result, index, total) => {
-              if (result.status === "success") {
-                addToast(
-                  `Claimed "${result.milestoneTitle}" (${index + 1}/${total})`,
-                  "success",
-                  2000
-                )
-              } else {
-                addToast(
-                  `Failed to claim "${result.milestoneTitle}": ${result.error || "Unknown error"}`,
-                  "error",
-                  4000
-                )
-              }
-            },
-          }
-        )
-
-        setClaimSummary(summary)
-        setIsClaimDialogOpen(true)
-
-        if (summary.failureCount === 0) {
-          addToast(`Successfully claimed all ${summary.successCount} milestones!`, "success", 5000)
-        } else if (summary.successCount > 0) {
-          addToast(
-            `${summary.successCount} claimed, ${summary.failureCount} failed. Review details.`,
-            "warning",
-            6000
-          )
-        } else {
-          addToast(`All ${summary.failureCount} claims failed. Check details.`, "error", 6000)
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Batch claim failed"
-        addToast(`Claim process error: ${message}`, "error", 6000)
-      } finally {
-        setIsClaiming(false)
-      }
-    },
-    [questId, addToast]
-  )
-
-  const handleRetryFailed = useCallback(
-    async (failedResults: MilestoneClaimResult[]) => {
-      setIsRetrying(true)
-
-      try {
-        const retryInputs = failedResults.map(r => ({
-          milestoneId: r.milestoneId,
-          title: r.milestoneTitle,
-          rewardAmount: r.rewardAmount ?? 0n,
-        }))
-
-        const enrollee = claimSummary?.enrollee || ""
-        const retrySummary = await batchClaimRewards(enrollee, questId, enrollee, retryInputs, {
-          onProgress: (result, index, total) => {
-            if (result.status === "success") {
-              addToast(
-                `Retry: Claimed "${result.milestoneTitle}" (${index + 1}/${total})`,
-                "success",
-                2000
-              )
-            } else {
-              addToast(
-                `Retry: Failed "${result.milestoneTitle}": ${result.error || "Unknown error"}`,
-                "error",
-                4000
-              )
-            }
-          },
-        })
-
-        const previousSuccesses = claimSummary?.results.filter(r => r.status === "success") || []
-        const mergedResults = [...previousSuccesses, ...retrySummary.results]
-
-        const mergedSummary: BatchClaimSummary = {
-          results: mergedResults,
-          successCount: mergedResults.filter(r => r.status === "success").length,
-          failureCount: mergedResults.filter(r => r.status === "failed").length,
-          totalAmount: (claimSummary?.totalAmount ?? 0n) + retrySummary.totalAmount,
-          questId,
-          enrollee,
-        }
-
-        setClaimSummary(mergedSummary)
-
-        if (retrySummary.failureCount === 0) {
-          addToast("All retried claims succeeded!", "success", 5000)
-        } else {
-          addToast(
-            `${retrySummary.successCount} retried claims succeeded, ${retrySummary.failureCount} still failed.`,
-            "warning",
-            6000
-          )
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Retry failed"
-        addToast(`Retry error: ${message}`, "error", 6000)
-      } finally {
-        setIsRetrying(false)
-      }
-    },
-    [questId, claimSummary, addToast]
-  )
-
-  const handleCloseClaimDialog = () => setIsClaimDialogOpen(false)
-
-  const isLoading = questLoading || milestonesLoading || enrolleesLoading || prerequisitesLoading
+  const isLoading = questLoading || milestonesLoading || enrolleesLoading
   const error = questError || milestonesError || enrolleesError
 
   if (isLoading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
-        <PageMetadata {...questPageMeta(questId)} />
+        <PageMetadata title={`Quest #${questId}`} description="Loading quest data from chain..." />
         <LoadingState message="Loading quest data from chain..." />
       </div>
     )
@@ -508,22 +148,24 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   }
 
   // Map milestones to the shape expected by section components
-  const mappedMilestones = milestones.map(m => ({
-    id: m.id,
-    questId: m.questId,
-    title: m.title,
-    description: m.description,
-    rewardAmount: Number(m.rewardAmount),
-    prerequisiteIds: m.prerequisiteIds,
-    deadline: m.deadline,
-  }))
+  const mappedMilestones = milestones
+    .filter(m => m.deadline !== undefined)
+    .map(m => ({
+      id: m.id,
+      questId: m.questId,
+      title: m.title,
+      description: m.description,
+      rewardAmount: Number(m.rewardAmount),
+      prerequisiteIds: m.prerequisiteIds,
+      deadline: m.deadline as number,
+    }))
 
   const { isQuestOwner } = disputes
 
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
-      <PageMetadata {...questPageMeta(questId, quest.name, quest.description)} />
+      <PageMetadata title={quest.name} description={quest.description} />
 
       <QuestPanels
         questId={questId}
@@ -647,6 +289,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         onRetryFailed={claims.handleRetryFailed}
         isRetrying={claims.isRetrying}
         isReportOpen={isReportOpen}
+        onOpenReport={() => setIsReportOpen(true)}
         onCloseReport={() => setIsReportOpen(false)}
         enrolleeToRemove={enrolleeToRemove}
         onCancelRemoveEnrollee={() => setEnrolleeToRemove(null)}

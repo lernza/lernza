@@ -23,6 +23,7 @@ async function fetchWithConcurrency<T, R>(
 
 // frontend/src/pages/quest.tsx (wired to on-chain data)
 import { useState, useMemo, useCallback, useEffect } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
 import {
@@ -32,6 +33,7 @@ import {
   useRewardPool,
   useTotalReservedReward,
 } from "@/hooks/use-quest-data"
+import { queryKeys } from "@/lib/query-keys"
 import { milestoneClient } from "@/lib/contracts/milestone"
 import type { DisputeOutcome } from "@/lib/contracts/milestone-client"
 import { questClient } from "@/lib/contracts/quest"
@@ -80,6 +82,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   const [enrolleeToRemove, setEnrolleeToRemove] = useState<{ address: string } | null>(null)
   const { addToast } = useToast()
   const { address } = useWallet()
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -226,7 +229,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         await questClient.removeEnrollee(address, questId, enrollee.address)
         setEnrolleeToRemove(null)
         addToast("Learner removed. Verified work and earned rewards remain protected.", "success")
-        window.location.reload()
+        await queryClient.invalidateQueries({ queryKey: queryKeys.enrollees(questId) })
       } catch (error) {
         const message = error instanceof Error ? error.message : "Removal failed."
         addToast(
@@ -238,7 +241,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         )
       }
     },
-    [addToast, address, quest, questId]
+    [addToast, address, quest, questId, queryClient]
   )
 
   const handleAddMilestone = useCallback(() => {

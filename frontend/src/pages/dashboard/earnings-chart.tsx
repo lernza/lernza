@@ -13,9 +13,10 @@ import type { EarningsDataPoint } from "@/lib/shared-types"
 
 interface EarningsChartProps {
   data: EarningsDataPoint[]
+  capped?: boolean
 }
 
-export default function EarningsChart({ data }: EarningsChartProps) {
+export default function EarningsChart({ data, capped = false }: EarningsChartProps) {
   return (
     <Card className="border-border overflow-hidden border shadow-lg">
       <CardHeader className="bg-background border-border border-b py-4">
@@ -24,6 +25,12 @@ export default function EarningsChart({ data }: EarningsChartProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="bg-background p-6">
+        {capped && (
+          <p role="status" className="mb-3 text-sm text-amber-700">
+            Chart value capped at the maximum safely chartable number. Your earnings total above
+            remains exact.
+          </p>
+        )}
         <div className="h-[250px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>

@@ -12,7 +12,24 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 export function formatTokens(amount: number | bigint, decimals = 7, symbol = "TOKEN"): string {
-  return formatTokenAmount(amount, { decimals, symbol, compact: true })
+  if (typeof amount !== "bigint") {
+    return formatTokenAmount(amount, { decimals, symbol, compact: true })
+  }
+
+  if (amount < 0n) return `ERROR: Negative ${symbol}`
+  const whole = amount / 10n ** BigInt(decimals)
+  const compactUnits = [
+    { divisor: 1_000_000_000n, suffix: "B" },
+    { divisor: 1_000_000n, suffix: "M" },
+    { divisor: 1_000n, suffix: "K" },
+  ]
+  for (const { divisor, suffix } of compactUnits) {
+    if (whole >= divisor) {
+      const tenths = (whole * 10n + divisor / 2n) / divisor
+      return `${tenths / 10n}.${tenths % 10n}${suffix} ${symbol}`.trim()
+    }
+  }
+  return formatTokenAmount(amount, { decimals, symbol })
 }
 
 export function getSecondsRemaining(deadline: number, nowMs = Date.now()): number {

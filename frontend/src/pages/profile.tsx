@@ -265,7 +265,7 @@ export function Profile() {
       const enrolled = enrolledQuests || []
       for (const quest of enrolled) {
         const completions = await milestoneClient.getEnrolleeCompletions(quest.id, address)
-        const milestones = await milestoneClient.listMilestones(quest.id)
+        const milestones = await milestoneClient.getMilestones(quest.id)
         const totalMilestones = milestones.length
 
         if (completions > 0 && totalMilestones > 0) {

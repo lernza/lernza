@@ -181,16 +181,6 @@ export class MilestoneClient {
     return result ? this.withPrerequisites(this.parseMilestoneInfo(result), questId) : null
   }
 
-  async listMilestones(questId: number): Promise<MilestoneInfo[]> {
-    const result = await this.invokeRead("get_milestones", [
-      nativeToScVal(questId, { type: "u32" }),
-    ])
-    if (!Array.isArray(result)) return []
-    return Promise.all(
-      result.map(async raw => this.withPrerequisites(this.parseMilestoneInfo(raw), questId))
-    )
-  }
-
   async getMilestones(questId: number): Promise<MilestoneInfo[]> {
     const result = await this.invokeRead("get_milestones", [
       nativeToScVal(questId, { type: "u32" }),
@@ -221,7 +211,7 @@ export class MilestoneClient {
     const cached = this.prereqCache.get(key)
     if (cached) return cached
 
-    // Single-flight: `getMilestone`, `listMilestones` and `getMilestones` can
+    // Single-flight: `getMilestone` and `getMilestones` can
     // all reach the same milestone in the same tick, and a page can mount more
     // than one consumer. Without this, N callers meant N identical RPC calls.
     const inFlight = this.prereqInFlight.get(key)

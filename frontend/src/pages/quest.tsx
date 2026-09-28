@@ -58,6 +58,14 @@ import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
 import { LoadingState } from "@/components/ui/async-states"
 import { TransferOwnershipDialog } from "@/components/quest/transfer-ownership-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { storePendingReferral, recordReferralEnrollment } from "@/lib/referrals"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
 
@@ -69,6 +77,7 @@ interface QuestViewProps {
 export function QuestView({ questId, onBack }: QuestViewProps) {
   const [activeTab, setActiveTab] = useState<QuestTab>("milestones")
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
+  const [enrolleeToRemove, setEnrolleeToRemove] = useState<{ address: string } | null>(null)
   const { addToast } = useToast()
   const { address } = useWallet()
 
@@ -203,21 +212,19 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   }, [addToast, address, questId])
 
   const handleRemoveEnrollee = useCallback(
+    (enrollee: { address: string }) => setEnrolleeToRemove(enrollee),
+    []
+  )
+
+  const confirmRemoveEnrollee = useCallback(
     async (enrollee: { address: string }) => {
       if (!address || !quest || quest.owner !== address) {
         addToast("Only the quest owner can remove a learner.", "error")
         return
       }
-      if (
-        typeof window !== "undefined" &&
-        !window.confirm(
-          "Remove this learner? Verified milestones and earned rewards stay protected. A learner with a submission awaiting review or reward settlement cannot be removed until the review is resolved."
-        )
-      ) {
-        return
-      }
       try {
         await questClient.removeEnrollee(address, questId, enrollee.address)
+        setEnrolleeToRemove(null)
         addToast("Learner removed. Verified work and earned rewards remain protected.", "success")
         window.location.reload()
       } catch (error) {
@@ -713,6 +720,36 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
         questName={quest.name}
         onClose={() => setIsReportOpen(false)}
       />
+
+      <Dialog
+        open={enrolleeToRemove !== null}
+        onOpenChange={open => {
+          if (!open) setEnrolleeToRemove(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove learner?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. Verified milestones and earned rewards stay protected.
+              A learner with a submission awaiting review or reward settlement cannot be removed
+              until the review is resolved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEnrolleeToRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!enrolleeToRemove}
+              onClick={() => enrolleeToRemove && void confirmRemoveEnrollee(enrolleeToRemove)}
+            >
+              Remove learner
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {address && quest?.owner === address && (
         <TransferOwnershipDialog

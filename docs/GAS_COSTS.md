@@ -92,3 +92,14 @@ Additionally, Soroban transactions require a **Base Fee** (minimum 100 stroops =
 - **Use Pagination**: For enrollee progress or completion queries, use bounded limits (`offset`, `limit`) to minimize RPC simulation memory.
 - **Batch Milestone Operations**: Batch milestone creation or approvals where supported to reduce transaction base fee overhead.
 - **Pre-simulate Transactions**: Use frontend RPC pre-simulation (`simulateTransaction`) to fetch precise resource footrpints before asking users to sign in Freighter.
+
+### Quest completion with many milestones
+
+`completion.complete_quest` reads the quest's milestone count and sends the full set of
+milestone IDs to `milestone.get_completion_batch` in one cross-contract invocation. The
+milestone contract checks each completion flag in storage, so CPU and read work still scale
+linearly with the number of milestones. The configured maximum is 50 milestones per quest;
+the completion contract test exercises finalization at that maximum under Soroban's default
+test budget. Keeping the check batched avoids the much higher per-invocation overhead of 50
+separate cross-contract calls. If the milestone cap changes, rerun that resource-limit case
+and review the transaction simulation budget before release.

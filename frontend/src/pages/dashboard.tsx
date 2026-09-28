@@ -405,8 +405,10 @@ export function Dashboard(
     0
   )
 
+  const userEarningsBigInt =
+    typeof userEarnings === "bigint" ? userEarnings : BigInt(userEarnings || 0)
   const personalStats = {
-    totalEarned: typeof userEarnings === "bigint" ? userEarnings : BigInt(userEarnings || 0),
+    totalEarned: userEarningsBigInt,
     questsOwned: ownedCount,
     questsEnrolled: enrolledCount,
     milestonesCompleted,
@@ -429,9 +431,13 @@ export function Dashboard(
     }))
 
   const currentMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date())
+  const earningsChartCapped = userEarningsBigInt > BigInt(Number.MAX_SAFE_INTEGER)
   const earningsHistory = [
     { date: "Start", amount: 0 },
-    { date: currentMonth, amount: Number(userEarnings) },
+    {
+      date: currentMonth,
+      amount: earningsChartCapped ? Number.MAX_SAFE_INTEGER : Number(userEarningsBigInt),
+    },
   ]
 
   const renderQuestCard = (ws: (typeof visibleQuests)[number], i: number) => {
@@ -663,7 +669,7 @@ export function Dashboard(
                     <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
                   }
                 >
-                  <EarningsChart data={earningsHistory} />
+                  <EarningsChart data={earningsHistory} capped={earningsChartCapped} />
                 </Suspense>
               </SectionErrorBoundary>
             </>

@@ -31,7 +31,7 @@ export function CreatorDashboard() {
         ownedQuests.map(async quest => {
           const [enrollees, milestones, poolBalance] = await Promise.all([
             questClient.getEnrollees(quest.id),
-            milestoneClient.listMilestones(quest.id),
+            milestoneClient.getMilestones(quest.id),
             rewardsClient.getPoolBalance(quest.id),
           ])
 

@@ -118,6 +118,30 @@ fn test_complete_quest_finalizes_certificate() {
 }
 
 #[test]
+fn test_complete_quest_at_max_milestones_uses_bounded_batch_read() {
+    let s = setup();
+    let quest_id = create_quest(&s);
+    let milestone_client = MilestoneContractClient::new(&s.env, &s.milestone);
+
+    for _ in 0..milestone::MAX_MILESTONES {
+        let milestone_id = create_milestone(&s, quest_id);
+        milestone_client.verify_completion(&s.admin, &quest_id, &milestone_id, &s.recipient);
+    }
+
+    // Measure only finalization: milestone setup and verification happen in
+    // separate invocations. complete_quest performs one batch cross-contract
+    // read for all 50 completion flags and must stay within the VM budget.
+    s.env.budget().reset_default();
+    let token_id = CompletionContractClient::new(&s.env, &s.completion).complete_quest(
+        &s.admin,
+        &quest_id,
+        &s.recipient,
+    );
+    assert!(token_id > 0);
+    assert!(s.env.budget().cpu_instruction_cost() > 0);
+}
+
+#[test]
 fn test_complete_quest_rejects_non_owner() {
     let s = setup();
     let quest_id = create_quest(&s);

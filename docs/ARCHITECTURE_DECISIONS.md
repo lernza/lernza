@@ -1,6 +1,7 @@
-# Architectural Decisions
+This document summarizes key architectural choices for Lernza. For the full catalog of durable rationale, alternative evaluations, and consequences, consult the [Architecture Decision Records Index](adr/README.md).
 
-This document records the key architectural choices made for the Lernza project, the rationale behind them, and the trade‑offs considered. It complements the more detailed `docs/ARCHITECTURE.md` diagrammatic overview.
+> **Rule for Contributors**: All material architecture changes (contract boundaries, storage patterns, security/auth boundaries, or protocol upgrades) MUST reference an ADR in `docs/adr/`.
+
 
 ---
 ## 1. Four‑Contract Separation

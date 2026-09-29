@@ -12,6 +12,7 @@
  * namespace, not a stale read of the old one.
  */
 import { env } from "@/lib/env"
+import { contractAddresses } from "@/lib/contracts/config"
 
 // A short, stable scope tag rather than the full network passphrase string
 // in every key (keeps devtools output readable); still unique per network.
@@ -20,21 +21,20 @@ function networkScope(): string {
 }
 
 export const queryKeys = {
-  quest: (questId: number) =>
-    ["quest", networkScope(), env.VITE_QUEST_CONTRACT_ID, questId] as const,
+  quest: (questId: number) => ["quest", networkScope(), contractAddresses.quest, questId] as const,
 
   milestones: (questId: number) =>
-    ["milestones", networkScope(), env.VITE_MILESTONE_CONTRACT_ID, questId] as const,
+    ["milestones", networkScope(), contractAddresses.milestone, questId] as const,
 
   milestoneCount: (questId: number) =>
-    ["milestoneCount", networkScope(), env.VITE_MILESTONE_CONTRACT_ID, questId] as const,
+    ["milestoneCount", networkScope(), contractAddresses.milestone, questId] as const,
 
   enrollees: (questId: number) =>
-    ["enrollees", networkScope(), env.VITE_QUEST_CONTRACT_ID, questId] as const,
+    ["enrollees", networkScope(), contractAddresses.quest, questId] as const,
 
   rewardPool: (questId: number) =>
-    ["rewardPool", networkScope(), env.VITE_REWARDS_CONTRACT_ID, questId] as const,
+    ["rewardPool", networkScope(), contractAddresses.rewards, questId] as const,
 
   questAuthority: (questId: number) =>
-    ["questAuthority", networkScope(), env.VITE_REWARDS_CONTRACT_ID, questId] as const,
+    ["questAuthority", networkScope(), contractAddresses.rewards, questId] as const,
 } as const

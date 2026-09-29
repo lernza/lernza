@@ -12,6 +12,7 @@ import { TermsOfService } from "@/pages/terms"
 import { PrivacyPolicy } from "@/pages/privacy"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { NotificationProvider } from "@/contexts/notification-context"
+import { I18nProvider } from "@/i18n"
 import { useWallet } from "@/hooks/use-wallet"
 import { OnboardingTutorial } from "@/components/onboarding-tutorial"
 import { useOnboarding } from "@/hooks/use-onboarding"
@@ -26,9 +27,13 @@ const History = lazy(() => import("@/pages/history").then((m) => ({ default: m.H
 const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
 const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
 const AnalyticsPage = lazy(() => import("@/pages/analytics").then((m) => ({ default: m.Analytics })))
+const CertificateView = lazy(() => import("@/pages/certificate").then((m) => ({ default: m.CertificateView })))
+const NotificationsPage = lazy(() => import("@/pages/notifications").then((m) => ({ default: m.NotificationsPage })))
 import { useToast } from "@/hooks/use-toast"
 import { subscribeToasts } from "@/lib/notifications"
 import { useQuestEventStream } from "@/hooks/use-quest-events"
+import { useDeadlineReminders } from "@/hooks/use-deadline-reminders"
+import { OfflineBanner } from "@/components/offline-banner"
 
 // ─── Routing ───────────────────────────────────────────────────────────────────
 
@@ -41,11 +46,12 @@ const VALID_PAGES = [
   "leaderboard",
   "history",
   "analytics",
+  "notifications",
   "terms",
   "privacy",
 ] as const
-type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "404"
-const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["dashboard", "profile", "create-quest", "creator-dashboard"])
+type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "certificate" | "404"
+const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["profile", "create-quest", "creator-dashboard"])
 
 function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: () => void }) {
   const { verifySession } = useWallet()
@@ -66,31 +72,43 @@ function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: (
   return verified ? <>{children}</> : <PageSkeleton />
 }
 
-function pathToPage(pathname: string): {
+export function pathToPage(pathname: string): {
   page: Page
   questId: number | null
   creatorAddress: string | null
+  certificateId: number | null
 } {
   const clean = pathname.replace(/\/+$/, "") || "/"
 
-  if (clean === "/") return { page: "landing", questId: null, creatorAddress: null }
-  if (clean === "/dashboard") return { page: "dashboard", questId: null, creatorAddress: null }
-  if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null }
+  if (clean === "/") return { page: "landing", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/dashboard") return { page: "dashboard", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null, certificateId: null }
   if (clean === "/create-quest" || clean === "/quest/create") {
-    return { page: "create-quest", questId: null, creatorAddress: null }
+    return { page: "create-quest", questId: null, creatorAddress: null, certificateId: null }
   }
   if (clean === "/creator-dashboard") {
-    return { page: "creator-dashboard", questId: null, creatorAddress: null }
+    return { page: "creator-dashboard", questId: null, creatorAddress: null, certificateId: null }
   }
-  if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null }
-  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null }
-  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null }
-  if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null }
-  if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null }
+  if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/notifications") return { page: "notifications", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null, certificateId: null }
+  if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null, certificateId: null }
 
   const questMatch = clean.match(/^\/quest\/(\d+)$/)
   if (questMatch) {
-    return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null }
+    return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null, certificateId: null }
+  }
+
+  const certificateMatch = clean.match(/^\/certificate\/(\d+)$/)
+  if (certificateMatch) {
+    return {
+      page: "certificate",
+      questId: null,
+      creatorAddress: null,
+      certificateId: Number(certificateMatch[1]),
+    }
   }
 
   const creatorMatch = clean.match(/^\/creator\/([^/]+)$/)
@@ -99,10 +117,11 @@ function pathToPage(pathname: string): {
       page: "creator",
       questId: null,
       creatorAddress: decodeURIComponent(creatorMatch[1]),
+      certificateId: null,
     }
   }
 
-  return { page: "404", questId: null, creatorAddress: null }
+  return { page: "404", questId: null, creatorAddress: null, certificateId: null }
 }
 
 function pageToPath(page: Page, questId: number | null, creatorAddress: string | null): string {
@@ -120,6 +139,10 @@ function App() {
   const onboarding = useOnboarding()
   const { connected } = useWallet()
   useQuestEventStream(connected)
+  // 24-hour deadline reminders. These come from quest state rather than the
+  // event stream, because a deadline entering its final day emits no contract
+  // event to poll for.
+  useDeadlineReminders(connected)
 
   // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
   useEffect(() => {
@@ -146,20 +169,20 @@ function App() {
     const page = (VALID_PAGES as readonly string[]).includes(p) ? (p as Page) : "404"
     const path = pageToPath(page, null, null)
     window.history.pushState(null, "", path)
-    setState({ page, questId: null, creatorAddress: null })
+    setState({ page, questId: null, creatorAddress: null, certificateId: null })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const handleSelectQuest = useCallback((id: number) => {
     const path = pageToPath("quest", id, null)
     window.history.pushState(null, "", path)
-    setState({ page: "quest", questId: id, creatorAddress: null })
+    setState({ page: "quest", questId: id, creatorAddress: null, certificateId: null })
     window.scrollTo({ top: 0, behavior: "smooth" })
   }, [])
 
   const redirectToLanding = useCallback(() => {
     window.history.replaceState(null, "", "/")
-    setState({ page: "landing", questId: null, creatorAddress: null })
+    setState({ page: "landing", questId: null, creatorAddress: null, certificateId: null })
   }, [])
 
   useEffect(() => {
@@ -172,73 +195,126 @@ function App() {
     const page = state.page
     if (page === "quest" && state.questId !== null) {
       return (
-        <Suspense fallback={<PageSkeleton />}>
-          <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
-        </Suspense>
+        <SectionErrorBoundary label="Quest View">
+          <Suspense fallback={<PageSkeleton />}>
+            <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
+          </Suspense>
+        </SectionErrorBoundary>
       )
     }
 
     switch (page) {
       case "landing":
-        return <Landing onNavigate={handleNavigate} />
+        return (
+          <SectionErrorBoundary label="Landing">
+            <Landing onNavigate={handleNavigate} />
+          </SectionErrorBoundary>
+        )
       case "dashboard":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <Dashboard
-              onSelectQuest={handleSelectQuest}
-              onCreateQuest={() => handleNavigate("create-quest")}
-              onLaunchTutorial={() => onboarding.open(0)}
-            />
-          </Suspense>
+          <SectionErrorBoundary label="Dashboard">
+            <Suspense fallback={<PageSkeleton />}>
+              <Dashboard
+                onSelectQuest={handleSelectQuest}
+                onCreateQuest={() => handleNavigate("create-quest")}
+                onLaunchTutorial={() => onboarding.open(0)}
+              />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "create-quest":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <CreateQuest onBack={() => handleNavigate("dashboard")} />
-          </Suspense>
+          <SectionErrorBoundary label="Create Quest">
+            <Suspense fallback={<PageSkeleton />}>
+              <CreateQuest onBack={() => handleNavigate("dashboard")} />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "profile":
-        return <Profile />
+        return (
+          <SectionErrorBoundary label="Profile">
+            <Profile />
+          </SectionErrorBoundary>
+        )
       case "leaderboard":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <Leaderboard />
-          </Suspense>
+          <SectionErrorBoundary label="Leaderboard">
+            <Suspense fallback={<PageSkeleton />}>
+              <Leaderboard />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "history":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <History />
-          </Suspense>
+          <SectionErrorBoundary label="History">
+            <Suspense fallback={<PageSkeleton />}>
+              <History />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "analytics":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <AnalyticsPage />
-          </Suspense>
+          <SectionErrorBoundary label="Analytics">
+            <Suspense fallback={<PageSkeleton />}>
+              <AnalyticsPage />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "creator":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <CreatorProfile address={state.creatorAddress} />
-          </Suspense>
+          <SectionErrorBoundary label="Creator Profile">
+            <Suspense fallback={<PageSkeleton />}>
+              <CreatorProfile address={state.creatorAddress} />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "creator-dashboard":
         return (
-          <Suspense fallback={<PageSkeleton />}>
-            <CreatorDashboard />
-          </Suspense>
+          <SectionErrorBoundary label="Creator Dashboard">
+            <Suspense fallback={<PageSkeleton />}>
+              <CreatorDashboard />
+            </Suspense>
+          </SectionErrorBoundary>
+        )
+      case "certificate":
+        return (
+          <SectionErrorBoundary label="Certificate View">
+            <Suspense fallback={<PageSkeleton />}>
+              <CertificateView certificateId={state.certificateId ?? 0} />
+            </Suspense>
+          </SectionErrorBoundary>
+        )
+      case "notifications":
+        return (
+          <SectionErrorBoundary label="Notifications">
+            <Suspense fallback={<PageSkeleton />}>
+              <NotificationsPage onBack={() => handleNavigate("dashboard")} />
+            </Suspense>
+          </SectionErrorBoundary>
         )
       case "terms":
-        return <TermsOfService />
+        return (
+          <SectionErrorBoundary label="Terms of Service">
+            <TermsOfService />
+          </SectionErrorBoundary>
+        )
       case "privacy":
-        return <PrivacyPolicy />
+        return (
+          <SectionErrorBoundary label="Privacy Policy">
+            <PrivacyPolicy />
+          </SectionErrorBoundary>
+        )
       default:
-        return <NotFound onNavigate={handleNavigate} />
+        return (
+          <SectionErrorBoundary label="Not Found">
+            <NotFound onNavigate={handleNavigate} />
+          </SectionErrorBoundary>
+        )
     }
   }
 
   return (
+    <I18nProvider>
     <NotificationProvider>
       <ErrorBoundaryProvider>
         <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
@@ -253,6 +329,8 @@ function App() {
             <SectionErrorBoundary label="Navigation">
               <Navbar activePage={state.page} onNavigate={handleNavigate} onLaunchTutorial={() => onboarding.open(0)} />
             </SectionErrorBoundary>
+            {/* Offline connectivity status (#1626) */}
+            <OfflineBanner />
             <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
               <main id="main-content">
                 {PROTECTED_PAGES.has(state.page) ? (
@@ -277,6 +355,7 @@ function App() {
         </ErrorBoundary>
       </ErrorBoundaryProvider>
     </NotificationProvider>
+    </I18nProvider>
   )
 }
 

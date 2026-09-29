@@ -13,7 +13,7 @@ export async function getQuestCreations(days = 30): Promise<DailyMetric[]> {
        AND indexed_at >= NOW() - INTERVAL '${days} days'
      GROUP BY 1 ORDER BY 1 DESC`
   )
-  return result.rows.map(r => ({ day: r.day.toISOString().slice(0, 10), count: Number(r.count) }))
+  return result.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), count: Number(r.count) }))
 }
 
 export async function getRewardDistributions(days = 30): Promise<DailyMetric[]> {
@@ -24,7 +24,7 @@ export async function getRewardDistributions(days = 30): Promise<DailyMetric[]> 
        AND indexed_at >= NOW() - INTERVAL '${days} days'
      GROUP BY 1 ORDER BY 1 DESC`
   )
-  return result.rows.map(r => ({ day: r.day.toISOString().slice(0, 10), count: Number(r.count) }))
+  return result.rows.map((r: any) => ({ day: r.day.toISOString().slice(0, 10), count: Number(r.count) }))
 }
 
 export async function getEnrollmentCount(days = 30): Promise<number> {
@@ -49,7 +49,7 @@ export async function getFraudSignals(): Promise<
        AND indexed_at >= NOW() - INTERVAL '24 hours'
      HAVING COUNT(*) > 10`
   )
-  return result.rows.map(r => ({
+  return result.rows.map((r: any) => ({
     signal: r.signal,
     wallet_count: Number(r.wallet_count),
     event_count: Number(r.event_count),

@@ -1,14 +1,17 @@
 import { Users, Target, Coins } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface StatsPanelProps {
   enrolleesCount: number
   milestonesCount: number
   poolBalance: number
+  reservedReward: number
   totalReward: number
 }
 
-export function StatsPanel({ enrolleesCount, milestonesCount, totalReward }: StatsPanelProps) {
+export function StatsPanel({ enrolleesCount, milestonesCount, poolBalance, reservedReward, totalReward }: StatsPanelProps) {
+  const { symbol } = useTokenSymbol()
   const stats = [
     {
       label: "Enrollees",
@@ -21,14 +24,19 @@ export function StatsPanel({ enrolleesCount, milestonesCount, totalReward }: Sta
       Icon: Target,
     },
     {
-      label: "Total Reward",
-      value: `${totalReward} USDC`,
+      label: "Reserved Reward",
+      value: `${reservedReward} ${symbol}`,
+      Icon: Coins,
+    },
+    {
+      label: "Uncommitted Reward",
+      value: `${Math.max(0, poolBalance - reservedReward)} ${symbol}`,
       Icon: Coins,
     },
   ]
 
   return (
-    <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {stats.map(({ label, value, Icon }) => (
         <div
           key={label}

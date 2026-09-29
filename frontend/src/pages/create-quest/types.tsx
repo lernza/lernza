@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { Check, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "@/i18n"
 import React from "react"
 import {
   MAX_QUEST_NAME_LEN,
@@ -53,6 +54,7 @@ export const step1Schema = z.object({
     )
     .max(5, "Maximum 5 tags allowed")
     .default([]),
+  referralBonus: z.number().min(0).max(1000).optional().default(10),
 })
 export type Step1Values = z.infer<typeof step1Schema>
 
@@ -65,7 +67,10 @@ export const milestoneSchema = z.object({
   description: z
     .string()
     .min(1, "Description is required")
-    .max(MAX_MILESTONE_DESCRIPTION_LEN, `Description max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`)
+    .max(
+      MAX_MILESTONE_DESCRIPTION_LEN,
+      `Description max ${MAX_MILESTONE_DESCRIPTION_LEN} characters`
+    )
     .refine(val => val.trim().length > 0, "Description cannot be blank"),
   rewardAmount: z
     .number({ message: "Reward amount is required" })
@@ -89,7 +94,11 @@ export type TxPhase = "idle" | "funding" | "funded" | "creating" | "created" | "
 export function FieldError({ message, id }: { message?: string; id?: string }) {
   if (!message) return null
   return (
-    <p id={id} className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold" role="alert">
+    <p
+      id={id}
+      className="text-destructive mt-1 flex items-center gap-1.5 text-xs font-bold"
+      role="alert"
+    >
       <AlertCircle className="h-3 w-3 flex-shrink-0" />
       {message}
     </p>
@@ -114,10 +123,11 @@ export function FormLabel({
 }
 
 export function StepIndicator({ current }: { current: FormStep }) {
+  const { t } = useTranslation()
   const steps = [
-    { n: 1, label: "Basics" },
-    { n: 2, label: "Milestones" },
-    { n: 3, label: "Fund & Review" },
+    { n: 1, label: t("create.step.basics") },
+    { n: 2, label: t("create.step.milestones") },
+    { n: 3, label: t("create.step.fund") },
   ]
   return (
     <div className="mb-8 flex items-center gap-0">

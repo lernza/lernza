@@ -2,6 +2,7 @@ import React from "react"
 import { describe, it, expect } from "vitest"
 import { render, screen } from "@testing-library/react"
 import { axe } from "vitest-axe"
+import { I18nProvider } from "@/i18n"
 import { step1Schema, milestoneSchema } from "./types"
 import { QuestCreationProvider } from "./context"
 import { Step1Form } from "./step1"
@@ -81,9 +82,11 @@ describe("Quest Creation Validation Schema Tests", () => {
 describe("Step1Form Component Validation and Accessibility", () => {
   it("renders labels associated with inputs via htmlFor and id", () => {
     render(
-      <QuestCreationProvider>
-        <Step1Form />
-      </QuestCreationProvider>
+      <I18nProvider>
+        <QuestCreationProvider>
+          <Step1Form />
+        </QuestCreationProvider>
+      </I18nProvider>
     )
 
     const nameInput = screen.getByLabelText(/Quest Name/i)
@@ -101,9 +104,11 @@ describe("Step1Form Component Validation and Accessibility", () => {
 
   it("has zero accessibility violations", async () => {
     const { container } = render(
-      <QuestCreationProvider>
-        <Step1Form />
-      </QuestCreationProvider>
+      <I18nProvider>
+        <QuestCreationProvider>
+          <Step1Form />
+        </QuestCreationProvider>
+      </I18nProvider>
     )
     const results = await axe(container)
     expect(results).toHaveNoViolations()
@@ -113,9 +118,11 @@ describe("Step1Form Component Validation and Accessibility", () => {
 describe("Step2Form Component Validation and Accessibility", () => {
   it("renders milestone input labels associated with unique IDs", () => {
     render(
-      <QuestCreationProvider>
-        <Step2Form />
-      </QuestCreationProvider>
+      <I18nProvider>
+        <QuestCreationProvider>
+          <Step2Form />
+        </QuestCreationProvider>
+      </I18nProvider>
     )
 
     const titleInput = screen.getByLabelText(/Title/i)
@@ -125,9 +132,11 @@ describe("Step2Form Component Validation and Accessibility", () => {
 
   it("has zero accessibility violations", async () => {
     const { container } = render(
-      <QuestCreationProvider>
-        <Step2Form />
-      </QuestCreationProvider>
+      <I18nProvider>
+        <QuestCreationProvider>
+          <Step2Form />
+        </QuestCreationProvider>
+      </I18nProvider>
     )
     const results = await axe(container)
     expect(results).toHaveNoViolations()

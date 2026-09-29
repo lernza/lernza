@@ -1,4 +1,4 @@
-import { useCallback, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from "react"
+import { useCallback, type AnchorHTMLAttributes, type MouseEvent, type FocusEvent, type ReactNode } from "react"
 import { isPlainLeftClick, navigateToPath } from "@/lib/navigation"
 
 // Static map of route paths → their lazy import functions.
@@ -31,11 +31,26 @@ interface PrefetchLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   children: ReactNode
 }
 
-export function PrefetchLink({ to, children, onClick, ...props }: PrefetchLinkProps) {
-  const handleMouseEnter = useCallback(() => {
+export function PrefetchLink({ to, children, onClick, onFocus, ...props }: PrefetchLinkProps) {
+  const prefetch = useCallback(() => {
     const fn = getRouteImport(to)
-    if (fn) fn()
+    if (fn) void fn()
   }, [to])
+
+  const handleMouseEnter = useCallback(() => {
+    prefetch()
+  }, [prefetch])
+
+  // Keyboard users tab to links without hovering — prefetch on focus too so
+  // route chunks are warm before Enter is pressed (issue #1625).
+  const handleFocus = useCallback(
+    (event: FocusEvent<HTMLAnchorElement>) => {
+      onFocus?.(event)
+      if (event.defaultPrevented) return
+      prefetch()
+    },
+    [onFocus, prefetch]
+  )
 
   const handleClick = useCallback(
     (event: MouseEvent<HTMLAnchorElement>) => {
@@ -49,7 +64,7 @@ export function PrefetchLink({ to, children, onClick, ...props }: PrefetchLinkPr
   )
 
   return (
-    <a href={to} onClick={handleClick} onMouseEnter={handleMouseEnter} {...props}>
+    <a href={to} onClick={handleClick} onMouseEnter={handleMouseEnter} onFocus={handleFocus} {...props}>
       {children}
     </a>
   )

@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react"
 import { Loader2, Activity, UserPlus, Trophy, Coins, Award } from "lucide-react"
-import { fetchQuestHistory, ParsedEvent, shortenAddress } from "@/hooks/use-quest-events"
+import { fetchQuestHistory, shortenAddress, type ParsedEvent } from "@/hooks/use-quest-events"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
-function formatAmount(amount: bigint): string {
+function formatAmount(amount: bigint, symbol: string): string {
   const whole = Number(amount / 10_000_000n)
-  return `${whole.toLocaleString()} USDC`
+  return `${whole.toLocaleString()} ${symbol}`
 }
 
 export function TimelineSection({ questId }: { questId: number }) {
+  const { symbol } = useTokenSymbol()
   const [events, setEvents] = useState<ParsedEvent[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -26,8 +28,8 @@ export function TimelineSection({ questId }: { questId: number }) {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
-        <p className="mt-4 text-muted-foreground text-sm font-bold">Loading on-chain events...</p>
+        <Loader2 className="text-accent h-8 w-8 animate-spin" />
+        <p className="text-muted-foreground mt-4 text-sm font-bold">Loading on-chain events...</p>
       </div>
     )
   }
@@ -36,9 +38,9 @@ export function TimelineSection({ questId }: { questId: number }) {
     return (
       <Card className="animate-fade-in-up border-dashed">
         <CardContent className="flex flex-col items-center py-12 text-center">
-          <Activity className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
-          <h3 className="font-semibold text-lg">No Activity Yet</h3>
-          <p className="text-muted-foreground text-sm mt-2 max-w-sm">
+          <Activity className="text-muted-foreground mb-4 h-10 w-10 opacity-50" />
+          <h3 className="text-lg font-semibold">No Activity Yet</h3>
+          <p className="text-muted-foreground mt-2 max-w-sm text-sm">
             This quest hasn't had any on-chain activity yet.
           </p>
         </CardContent>
@@ -48,7 +50,7 @@ export function TimelineSection({ questId }: { questId: number }) {
 
   // Group events by ledger (very basic grouping)
   return (
-    <div className="animate-fade-in-up relative mx-auto max-w-3xl space-y-8 before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
+    <div className="animate-fade-in-up before:via-border relative mx-auto max-w-3xl space-y-8 before:absolute before:inset-0 before:ml-5 before:h-full before:w-0.5 before:-translate-x-px before:bg-gradient-to-b before:from-transparent before:to-transparent md:before:mx-auto md:before:translate-x-0">
       {events.map((event, index) => {
         let Icon = Activity
         let title = "Event"
@@ -71,13 +73,13 @@ export function TimelineSection({ questId }: { questId: number }) {
             Icon = Coins
             title = "Pool Funded"
             description = `Reward pool received funding.`
-            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount)}</Badge>
+            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount, symbol)}</Badge>
             break
           case "reward_distributed":
             Icon = Coins
             title = "Reward Distributed"
             description = `Reward claimed by ${shortenAddress(event.enrollee!)}.`
-            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount)}</Badge>
+            if (event.amount) badge = <Badge variant="success">+{formatAmount(event.amount, symbol)}</Badge>
             break
           case "certificate_minted":
             Icon = Award
@@ -93,20 +95,25 @@ export function TimelineSection({ questId }: { questId: number }) {
         }
 
         return (
-          <div key={`${event.txHash}-${index}`} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+          <div
+            key={`${event.txHash}-${index}`}
+            className="group is-active relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse"
+          >
             {/* Icon */}
-            <div className="flex items-center justify-center w-10 h-10 rounded-full border-2 border-border bg-background shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
-              <Icon className="h-4 w-4 text-foreground" />
+            <div className="border-border bg-background flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 shadow md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+              <Icon className="text-foreground h-4 w-4" />
             </div>
-            
+
             {/* Card */}
-            <Card className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] hover:shadow-md transition-shadow">
-              <CardContent className="p-4 flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <h4 className="font-bold text-sm">{title}</h4>
-                  <span className="text-xs text-muted-foreground font-mono">Ledger {event.ledger}</span>
+            <Card className="w-[calc(100%-4rem)] transition-shadow hover:shadow-md md:w-[calc(50%-2.5rem)]">
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold">{title}</h4>
+                  <span className="text-muted-foreground font-mono text-xs">
+                    Ledger {event.ledger}
+                  </span>
                 </div>
-                <p className="text-sm text-muted-foreground">{description}</p>
+                <p className="text-muted-foreground text-sm">{description}</p>
                 {badge && <div className="mt-2">{badge}</div>}
               </CardContent>
             </Card>

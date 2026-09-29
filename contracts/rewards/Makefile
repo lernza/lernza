@@ -5,6 +5,9 @@ all: test
 test: build
 	cargo test
 
+bench:
+	cargo bench
+
 build:
 	stellar contract build
 	@ls -l target/wasm32v1-none/release/*.wasm

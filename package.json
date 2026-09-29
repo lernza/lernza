@@ -22,6 +22,7 @@
   "author": "Lernza Contributors",
   "license": "MIT",
   "dependencies": {
-    "@sentry/react": "^10.55.0"
+    "@sentry/react": "^10.55.0",
+    "react-joyride": "^2.5.5"
   }
 }

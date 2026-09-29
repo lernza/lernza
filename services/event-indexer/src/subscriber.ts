@@ -33,7 +33,7 @@ function scValToJson(val: unknown): unknown {
 }
 
 export class EventSubscriber {
-  private server: rpc.Server
+  private server: any
 
   constructor(rpcUrl: string) {
     this.server = new rpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith("http://") })
@@ -60,7 +60,7 @@ export class EventSubscriber {
           },
         ],
         limit: PAGE_SIZE,
-        cursor,
+        ...(cursor ? { cursor } : {}),
       })
 
       for (const event of response.events) {

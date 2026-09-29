@@ -46,6 +46,7 @@ fn test_insufficient_pool_rejects_large_distribution() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     QuestContractClient::new(&env, &quest_id).add_enrollee(&0u32, &enrollee);
 
@@ -63,6 +64,9 @@ fn test_insufficient_pool_rejects_large_distribution() {
         &String::from_str(&env, "D"),
         &1000_i128,
         &false,
+        &None,
+        &None,
+        &None,
     );
     MilestoneContractClient::new(&env, &milestone_id)
         .verify_completion(&owner, &0u32, &ms_id, &enrollee);

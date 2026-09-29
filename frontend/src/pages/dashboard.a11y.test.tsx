@@ -124,7 +124,12 @@ vi.mock("@/hooks/use-wallet", () => ({
 
 import { useWallet } from "../hooks/use-wallet"
 import { Dashboard } from "./dashboard"
+import { I18nProvider } from "@/i18n"
 const mockUseWallet = vi.mocked(useWallet)
+
+function renderDashboard() {
+  return render(<Dashboard />, { wrapper: I18nProvider })
+}
 
 describe("Dashboard keyboard navigation", () => {
   beforeEach(() => {
@@ -140,7 +145,7 @@ describe("Dashboard keyboard navigation", () => {
   })
 
   it("opens a quest card with Enter and Space", async () => {
-    render(<Dashboard />)
+    renderDashboard()
 
     const questTitle = (await screen.findAllByText(/quest alpha/i))[0]
     const cardButton = questTitle.closest("button")
@@ -149,7 +154,7 @@ describe("Dashboard keyboard navigation", () => {
   })
 
   it("renders quest cards for connected users", async () => {
-    const { container } = render(<Dashboard />)
+    const { container } = renderDashboard()
 
     expect((await screen.findAllByText(/quest alpha/i)).length).toBeGreaterThan(0)
     expect(

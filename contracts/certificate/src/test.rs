@@ -29,6 +29,8 @@ fn test_certificate_minting() {
     assert_eq!(metadata.quest_category, quest_category);
     assert_eq!(metadata.recipient, recipient);
     assert_eq!(metadata.issuer, owner);
+    // No milestone contract wired up yet -> milestone_count falls back to 0.
+    assert_eq!(metadata.milestone_count, 0);
 
     let user_certs = client.get_user_certificates(&recipient);
     assert_eq!(user_certs.len(), 1);
@@ -418,4 +420,23 @@ fn test_revoke_only_removes_target_certificate_from_user_list() {
     assert_eq!(user_certs.get(0).unwrap(), cert2);
     assert!(client.is_revoked(&cert1));
     assert!(!client.is_revoked(&cert2));
+}
+
+#[test]
+fn test_mint_quest_certificate_decoupled_flow() {
+    let (env, client, _owner) = setup();
+    let recipient = Address::generate(&env);
+
+    let cert_id = client.mint_quest_certificate(
+        &101u32,
+        &String::from_str(&env, "Rust On Stellar"),
+        &String::from_str(&env, "Smart Contracts"),
+        &recipient,
+    );
+
+    assert!(client.has_quest_certificate(&101u32, &recipient));
+    assert_eq!(client.get_quest_certificate(&101u32, &recipient), cert_id);
+    let (meta, cert_owner) = client.get_certificate_details(&cert_id);
+    assert_eq!(meta.quest_id, 101u32);
+    assert_eq!(cert_owner, recipient);
 }

@@ -78,6 +78,7 @@ fn create_quest_with_category_and_tags(
 #[test]
 fn test_create_quest() {
     let (env, client, owner, token) = setup();
+    let ts = env.ledger().timestamp();
     let id = create_quest_helper(&env, &client, &owner, &token);
     assert_eq!(id, 0);
     assert_eq!(client.get_quest_count(), 1);
@@ -85,6 +86,7 @@ fn test_create_quest() {
     assert_eq!(quest.owner, owner);
     assert_eq!(quest.name, String::from_str(&env, "My Quest"));
     assert_eq!(quest.token_addr, token);
+    assert_eq!(quest.created_at, ts);
 }
 
 #[test]
@@ -324,6 +326,67 @@ fn test_remove_enrollee() {
     let enrollees = client.get_enrollees(&0);
     assert_eq!(enrollees.len(), 1);
     assert_eq!(enrollees.get(0).unwrap(), e2);
+    assert!(!client.is_enrollee(&0, &e1));
+}
+
+#[test]
+fn test_batch_remove_enrollees() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+    client.add_enrollee(&0, &e2);
+    client.add_enrollee(&0, &e3);
+
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), e2.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+
+    // No holds set, so no blocked addresses
+    assert_eq!(blocked.len(), 0);
+    // e1 and e2 removed; e3 remains
+    assert!(!client.is_enrollee(&0, &e1));
+    assert!(!client.is_enrollee(&0, &e2));
+    assert!(client.is_enrollee(&0, &e3));
+    assert_eq!(client.get_enrollees(&0).len(), 1);
+}
+
+#[test]
+fn test_batch_remove_enrollees_respects_leave_hold() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+    client.add_enrollee(&0, &e2);
+
+    // Place hold on e1
+    client.place_leave_hold(&0, &owner, &e1);
+
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), e2.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+
+    // e1 is blocked
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked.get(0).unwrap(), e1);
+    // e1 still enrolled; e2 removed
+    assert!(client.is_enrollee(&0, &e1));
+    assert!(!client.is_enrollee(&0, &e2));
+}
+
+#[test]
+fn test_batch_remove_enrollees_idempotent_for_non_enrolled() {
+    let (env, client, owner, token) = setup();
+    create_quest_helper(&env, &client, &owner, &token);
+    let e1 = Address::generate(&env);
+    let not_enrolled = Address::generate(&env);
+    client.add_enrollee(&0, &e1);
+
+    // not_enrolled is silently skipped, no error
+    let to_remove = soroban_sdk::vec![&env, e1.clone(), not_enrolled.clone()];
+    let blocked = client.batch_remove_enrollees(&0, &to_remove);
+    assert_eq!(blocked.len(), 0);
     assert!(!client.is_enrollee(&0, &e1));
 }
 
@@ -911,9 +974,11 @@ fn test_place_leave_hold_rejects_non_enrollee() {
 #[test]
 fn test_new_quest_is_active_by_default() {
     let (env, client, owner, token) = setup();
+    let ts = env.ledger().timestamp();
     create_quest_helper(&env, &client, &owner, &token);
     let quest = client.get_quest(&0);
     assert_eq!(quest.status, QuestStatus::Active);
+    assert_eq!(quest.created_at, ts);
 }
 
 #[test]
@@ -1893,6 +1958,45 @@ fn test_invite_respects_enrollment_cap() {
 }
 
 #[test]
+fn test_is_invite_valid_false_when_quest_full() {
+    // Issue #1283 — a quest at its enrollment cap rejects invite redemption
+    // with QuestFull, so the outstanding invite must not be reported as valid
+    // either (otherwise the query surface advertises an invite that can never
+    // be redeemed).
+    let (env, client, owner, token) = setup();
+    let quest_id = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Capped Quest"),
+        &String::from_str(&env, "Only one seat"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Private,
+        &Some(1u32),
+        &None,
+    );
+
+    let preimage_a = b"seat-one";
+    let preimage_b = b"seat-two";
+    let commitment_a = sha256_commitment(&env, preimage_a);
+    let commitment_b = sha256_commitment(&env, preimage_b);
+    client.register_invite(&owner, &quest_id, &commitment_a);
+    client.register_invite(&owner, &quest_id, &commitment_b);
+
+    // While the quest still has a free seat both invites are redeemable.
+    assert!(client.is_invite_valid(&quest_id, &commitment_a));
+    assert!(client.is_invite_valid(&quest_id, &commitment_b));
+
+    // The single seat is taken by the first redemption.
+    let alice = Address::generate(&env);
+    client.join_quest_with_invite(&alice, &quest_id, &Bytes::from_slice(&env, preimage_a));
+
+    // The quest is now full: no outstanding invite may be reported as valid.
+    assert!(!client.is_invite_valid(&quest_id, &commitment_a));
+    assert!(!client.is_invite_valid(&quest_id, &commitment_b));
+}
+
+#[test]
 fn test_invite_already_enrolled_rejected() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Private);
@@ -2310,7 +2414,7 @@ fn test_get_active_participant_count_defaults_to_all_active() {
 
     // All enrollees default to Active status
     assert_eq!(client.get_active_participant_count(&quest_id), 3);
-    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 3);
+    assert_eq!(client.get_active_participants(&quest_id).len(), 3);
 }
 
 #[test]
@@ -2329,7 +2433,7 @@ fn test_get_active_participant_count_excludes_suspended() {
     // Suspend one enrollee
     client.set_enrollee_status(&quest_id, &e1, &EnrolleeStatus::Suspended);
     assert_eq!(client.get_active_participant_count(&quest_id), 1);
-    assert_eq!(client.get_active_participants(&quest_id).unwrap().len(), 1);
+    assert_eq!(client.get_active_participants(&quest_id).len(), 1);
 }
 
 #[test]
@@ -2359,3 +2463,726 @@ fn test_get_active_participant_count_nonexistent_quest() {
     let r = client.try_get_active_participant_count(&999);
     assert_eq!(r, Err(Ok(Error::NotFound)));
 }
+
+#[test]
+fn test_category_management_functions() {
+    let (env, client, owner, token) = setup();
+    let admin = Address::generate(&env);
+    client.initialize(&admin);
+
+    let cat_rust = String::from_str(&env, "Rust");
+    let cat_stellar = String::from_str(&env, "Stellar");
+    let cat_duplicate = String::from_str(&env, "RustLang");
+
+    // Create quests with various categories
+    let _q1 = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Quest 1"),
+        &String::from_str(&env, "Desc 1"),
+        &cat_rust,
+        &Vec::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    let _q2 = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Quest 2"),
+        &String::from_str(&env, "Desc 2"),
+        &cat_stellar,
+        &Vec::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    let q3 = client.create_quest(
+        &owner,
+        &String::from_str(&env, "Quest 3"),
+        &String::from_str(&env, "Desc 3"),
+        &cat_duplicate,
+        &Vec::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    // 1. List categories with pagination
+    let categories = client.list_categories(&0, &10);
+    assert_eq!(categories.len(), 3);
+    assert!(categories.contains(&cat_rust));
+    assert!(categories.contains(&cat_stellar));
+    assert!(categories.contains(&cat_duplicate));
+
+    // 2. Category quest counts
+    assert_eq!(client.category_quest_count(&cat_rust), 1);
+    assert_eq!(client.category_quest_count(&cat_stellar), 1);
+    assert_eq!(client.category_quest_count(&cat_duplicate), 1);
+
+    // 3. Admin merges duplicate category "RustLang" into "Rust"
+    let merged_count = client.merge_categories(&cat_duplicate, &cat_rust);
+    assert_eq!(merged_count, 1);
+
+    // Verify consolidated category
+    assert_eq!(client.category_quest_count(&cat_rust), 2);
+    assert_eq!(client.category_quest_count(&cat_duplicate), 0);
+
+    let q3_info = client.get_quest(&q3);
+    assert_eq!(q3_info.category, cat_rust);
+
+    // 4. Clean up empty categories
+    let cleaned = client.cleanup_empty_categories();
+    assert_eq!(cleaned, 0);
+}
+// ── Ownership transfer tests (#1471) ────────────────────────────────────────
+
+#[test]
+fn test_initiate_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, nominee);
+}
+
+#[test]
+fn test_transfer_quest_ownership() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let new_owner = Address::generate(&env);
+
+    client.transfer_quest_ownership(&quest_id, &new_owner);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, new_owner);
+
+    // Nominee accepts transfer
+    let r = client.try_accept_transfer(&quest_id, &new_owner);
+    assert!(r.is_ok());
+
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.owner, new_owner);
+}
+
+#[test]
+fn test_initiate_transfer_replaces_existing() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee1 = Address::generate(&env);
+    let nominee2 = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee1);
+    client.initiate_transfer(&quest_id, &nominee2);
+
+    let transfer = client.get_pending_transfer(&quest_id).unwrap();
+    assert_eq!(transfer.nominee, nominee2);
+}
+
+#[test]
+fn test_initiate_transfer_rejects_self_nomination() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_initiate_transfer(&quest_id, &owner);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_initiate_transfer_rejects_archived_quest() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.archive_quest(&quest_id);
+
+    let r = client.try_initiate_transfer(&quest_id, &nominee);
+    assert_eq!(r, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_accept_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    // Accept must be called by the nominee
+    let r = client.try_accept_transfer(&quest_id, &nominee);
+    assert!(r.is_ok());
+
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.owner, nominee);
+
+    // Pending transfer should be cleared
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+#[test]
+fn test_accept_transfer_rejects_non_nominee() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+    let stranger = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+
+    let r = client.try_accept_transfer(&quest_id, &stranger);
+    assert_eq!(r, Err(Ok(Error::NotTransferNominee)));
+}
+
+#[test]
+fn test_accept_transfer_rejects_no_pending() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_accept_transfer(&quest_id, &owner);
+    assert_eq!(r, Err(Ok(Error::NoPendingTransfer)));
+}
+
+#[test]
+fn test_cancel_transfer() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let nominee = Address::generate(&env);
+
+    client.initiate_transfer(&quest_id, &nominee);
+    client.cancel_transfer(&quest_id);
+
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+#[test]
+fn test_cancel_transfer_rejects_no_pending() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let r = client.try_cancel_transfer(&quest_id);
+    assert_eq!(r, Err(Ok(Error::NoPendingTransfer)));
+}
+
+#[test]
+fn test_get_pending_transfer_none() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+}
+
+// ── Waitlist tests (#1472) ──────────────────────────────────────────────────
+
+fn create_quest_with_cap(
+    env: &Env,
+    client: &QuestContractClient,
+    owner: &Address,
+    token: &Address,
+    max: u32,
+) -> u32 {
+    client.create_quest(
+        owner,
+        &String::from_str(env, "Capped Quest"),
+        &String::from_str(env, "Description"),
+        &String::from_str(env, "Programming"),
+        &Vec::<String>::new(env),
+        token,
+        &Visibility::Public,
+        &Some(max),
+        &None,
+    )
+}
+
+#[test]
+fn test_join_quest_waitlist_when_full() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 2);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    // Quest is full — e3 should be waitlisted, not rejected
+    client.join_quest(&e3, &quest_id);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+
+    let waitlist = client.get_waitlist(&quest_id);
+    assert_eq!(waitlist.len(), 1);
+    assert_eq!(waitlist.get(0).unwrap(), e3);
+}
+
+#[test]
+fn test_join_quest_waitlist_fifo_order() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+    client.join_quest(&e3, &quest_id);
+
+    let waitlist = client.get_waitlist(&quest_id);
+    assert_eq!(waitlist.get(0).unwrap(), e2);
+    assert_eq!(waitlist.get(1).unwrap(), e3);
+}
+
+#[test]
+fn test_join_quest_rejects_duplicate_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    // e2 tries to join waitlist again
+    let r = client.try_join_quest(&e2, &quest_id);
+    assert_eq!(r, Err(Ok(Error::AlreadyEnrolled)));
+}
+
+#[test]
+fn test_promote_from_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    let promoted = client.promote_from_waitlist(&quest_id).unwrap();
+    assert_eq!(promoted, Some(e2));
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e1));
+    assert!(enrollees.contains(&e2));
+
+    let waitlist = client.get_waitlist(&quest_id);
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_promote_from_waitlist_empty() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let result = client.promote_from_waitlist(&quest_id).unwrap();
+    assert_eq!(result, None);
+}
+
+#[test]
+fn test_remove_from_waitlist() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    client.remove_from_waitlist(&quest_id, &e2);
+
+    let waitlist = client.get_waitlist(&quest_id);
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_remove_from_waitlist_not_found() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let stranger = Address::generate(&env);
+
+    let r = client.try_remove_from_waitlist(&quest_id, &stranger);
+    assert_eq!(r, Err(Ok(Error::NotFound)));
+}
+
+#[test]
+fn test_get_waitlist_length() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    assert_eq!(client.get_waitlist_length(&quest_id), 0);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+
+    assert_eq!(client.get_waitlist_length(&quest_id), 2);
+}
+
+#[test]
+fn test_auto_promote_on_remove_enrollee() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 2);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+    client.join_quest(&e2, &quest_id);
+    client.join_quest(&e3, &quest_id);
+
+    // e3 is on the waitlist
+    assert_eq!(client.get_waitlist_length(&quest_id), 1);
+
+    // Remove e1 — e3 should be auto-promoted
+    client.remove_enrollee(&quest_id, &e1);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e2));
+    assert!(enrollees.contains(&e3));
+
+    let waitlist = client.get_waitlist(&quest_id);
+    assert_eq!(waitlist.len(), 0);
+}
+
+#[test]
+fn test_owner_force_add_bypasses_cap() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_with_cap(&env, &client, &owner, &token, 1);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+
+    client.join_quest(&e1, &quest_id);
+
+    // Owner force-adds e2 even though quest is full
+    client.add_enrollee(&quest_id, &e2);
+
+    let enrollees = client.get_enrollees(&quest_id);
+    assert_eq!(enrollees.len(), 2);
+    assert!(enrollees.contains(&e1));
+    assert!(enrollees.contains(&e2));
+}
+
+#[test]
+fn test_removal_before_completion_is_authorized_and_cleans_enrollment() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let learner = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &learner);
+    client.remove_enrollee(&quest_id, &learner);
+
+    assert!(!client.is_enrollee(&quest_id, &learner));
+
+    // Re-enrollment starts clean and is not blocked by stale removal state.
+    client.add_enrollee(&quest_id, &learner);
+    assert_eq!(
+        client.get_enrollee_status(&quest_id, &learner),
+        EnrolleeStatus::Active
+    );
+}
+
+#[test]
+fn test_removal_is_blocked_while_review_hold_is_present() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let learner = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &learner);
+    client.place_leave_hold(&quest_id, &owner, &learner);
+
+    assert_eq!(
+        client.try_remove_enrollee(&quest_id, &learner),
+        Err(Ok(Error::RemovalBlockedByPendingApproval))
+    );
+    assert_eq!(
+        client.try_leave_quest(&learner, &quest_id),
+        Err(Ok(Error::LeaveBlockedByPendingApproval))
+    );
+
+    client.lift_leave_hold(&quest_id, &owner, &learner);
+    client.remove_enrollee(&quest_id, &learner);
+    assert!(!client.is_enrollee(&quest_id, &learner));
+}
+
+#[test]
+fn test_removal_after_completion_state_does_not_retain_enrollment_state() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let learner = Address::generate(&env);
+
+    client.add_enrollee(&quest_id, &learner);
+    client.set_enrollee_status(&quest_id, &learner, &EnrolleeStatus::Inactive);
+    client.remove_enrollee(&quest_id, &learner);
+
+    assert!(!client.is_enrollee(&quest_id, &learner));
+
+    // Re-enrollment resets the prior inactive status to the default active state.
+    client.add_enrollee(&quest_id, &learner);
+    assert_eq!(
+        client.get_enrollee_status(&quest_id, &learner),
+        EnrolleeStatus::Active
+    );
+}
+
+#[test]
+fn test_owner_can_suspend_and_resume_with_notice() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let reason = String::from_str(&env, "security investigation");
+
+    client.suspend_quest(&quest_id, &owner, &reason);
+    let suspended = client.get_quest(&quest_id);
+    assert_eq!(suspended.status, QuestStatus::Suspended);
+    assert_eq!(client.get_suspension(&quest_id).unwrap().reason, reason);
+
+    client.resume_quest(&quest_id, &owner);
+    assert_eq!(client.get_quest(&quest_id).status, QuestStatus::Active);
+}
+
+#[test]
+fn test_suspended_quest_rejects_enrollment_and_unauthorized_operator() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let stranger = Address::generate(&env);
+    let reason = String::from_str(&env, "incident");
+
+    assert_eq!(
+        client.try_suspend_quest(&quest_id, &stranger, &reason),
+        Err(Ok(Error::Unauthorized))
+    );
+    client.suspend_quest(&quest_id, &owner, &reason);
+    assert_eq!(
+        client.try_join_quest(&stranger, &quest_id),
+        Err(Ok(Error::QuestSuspended))
+    );
+}
+
+#[test]
+fn test_create_quest_default_metadata_uri_is_none() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.metadata_uri, None);
+}
+
+#[test]
+fn test_create_quest_with_valid_metadata_uri() {
+    let (env, client, owner, token) = setup();
+    let uri = String::from_str(&env, "ipfs://bafybeic52i.../metadata.json");
+    let quest_id = client.create_quest_with_metadata(
+        &owner,
+        &String::from_str(&env, "IPFS Quest"),
+        &String::from_str(&env, "Short on-chain summary"),
+        &String::from_str(&env, "Web3"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &None,
+        &Some(uri.clone()),
+    );
+    let quest = client.get_quest(&quest_id);
+    assert_eq!(quest.metadata_uri, Some(uri));
+}
+
+#[test]
+fn test_create_quest_with_invalid_metadata_uri_rejected() {
+    let (env, client, owner, token) = setup();
+    // Invalid scheme
+    let invalid_scheme = String::from_str(&env, "ftp://example.com/meta.json");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Invalid Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(invalid_scheme),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Too short (< 7 bytes)
+    let too_short = String::from_str(&env, "http:/");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Short URI Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(too_short),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Contains whitespace
+    let with_space = String::from_str(&env, "https://example.com/path with space.json");
+    assert_eq!(
+        client.try_create_quest_with_metadata(
+            &owner,
+            &String::from_str(&env, "Space URI Quest"),
+            &String::from_str(&env, "Summary"),
+            &String::from_str(&env, "Web3"),
+            &Vec::<String>::new(&env),
+            &token,
+            &Visibility::Public,
+            &None,
+            &None,
+            &Some(with_space),
+        ),
+        Err(Ok(Error::InvalidInput))
+    );
+}
+
+#[test]
+fn test_set_metadata_uri_updates_version_and_history() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+    let initial_quest = client.get_quest(&quest_id);
+    assert_eq!(initial_quest.version, 1);
+    assert_eq!(initial_quest.metadata_uri, None);
+
+    let stranger = Address::generate(&env);
+    let new_uri = String::from_str(&env, "https://arweave.net/tx-id-12345");
+
+    // Stranger cannot update metadata URI
+    assert_eq!(
+        client.try_set_metadata_uri(&quest_id, &stranger, &Some(new_uri.clone())),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    // Owner sets metadata URI
+    client.set_metadata_uri(&quest_id, &owner, &Some(new_uri.clone()));
+    let updated = client.get_quest(&quest_id);
+    assert_eq!(updated.version, 2);
+    assert_eq!(updated.metadata_uri, Some(new_uri));
+
+    // History contains version 1 with None metadata_uri
+    let history = client.get_quest_version_history(&quest_id);
+    assert_eq!(history.len(), 1);
+    assert_eq!(history.get(0).unwrap().version, 1);
+    assert_eq!(history.get(0).unwrap().metadata_uri, None);
+
+    // Clear metadata URI
+    client.set_metadata_uri(&quest_id, &owner, &None);
+    let cleared = client.get_quest(&quest_id);
+    assert_eq!(cleared.version, 3);
+    assert_eq!(cleared.metadata_uri, None);
+}
+
+// --- Re-enrollment cooldown (issue #1649) ---
+
+#[test]
+fn test_reenroll_allowed_when_cooldown_unset() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), None);
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // No cooldown configured: re-enrolling on the same ledger is allowed.
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
+fn test_reenroll_blocked_within_cooldown_period() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &100);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), Some(100));
+
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // Still within 100 ledgers of leaving — rejected for every path.
+    assert_eq!(
+        client.try_add_enrollee(&quest_id, &enrollee),
+        Err(Ok(Error::ReEnrollCooldown))
+    );
+    assert_eq!(
+        client.try_join_quest(&enrollee, &quest_id),
+        Err(Ok(Error::ReEnrollCooldown))
+    );
+
+    // Other learners are unaffected.
+    let other = Address::generate(&env);
+    client.add_enrollee(&quest_id, &other);
+    assert!(client.is_enrollee(&quest_id, &other));
+}
+
+#[test]
+fn test_reenroll_allowed_after_cooldown_expires() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &10);
+    let enrollee = Address::generate(&env);
+    client.add_enrollee(&quest_id, &enrollee);
+    client.remove_enrollee(&quest_id, &enrollee);
+
+    // Advance the ledger past the cooldown window.
+    let current = env.ledger().sequence();
+    env.ledger().set_sequence_number(current + 10);
+
+    client.add_enrollee(&quest_id, &enrollee);
+    assert!(client.is_enrollee(&quest_id, &enrollee));
+}
+
+#[test]
+fn test_reenroll_cooldown_owner_only_and_disablable() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let stranger = Address::generate(&env);
+    assert_eq!(
+        client.try_set_enrollment_cooldown(&quest_id, &stranger, &10),
+        Err(Ok(Error::Unauthorized))
+    );
+
+    client.set_enrollment_cooldown(&quest_id, &owner, &0);
+    assert_eq!(client.get_enrollment_cooldown(&quest_id), None);
+}
+
+#[test]
+fn test_undismiss_dashboard_guidance_enrollment_check() {
+    let (env, client, owner, token) = setup();
+    let quest_id = create_quest_helper(&env, &client, &owner, &token);
+
+    let stranger = Address::generate(&env);
+    
+    // Attempting to undismiss dashboard guidance when not enrolled should fail.
+    assert_eq!(
+        client.try_undismiss_dashboard_guidance(&stranger, &quest_id),
+        Err(Ok(Error::NotEnrolled))
+    );
+}
+

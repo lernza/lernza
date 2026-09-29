@@ -44,7 +44,7 @@ import { rewardsClient } from "@/lib/contracts/rewards"
 const mockUseWallet = vi.mocked(useWallet)
 const mockQuestClient = vi.mocked(questClient, true)
 const mockRewardsClient = vi.mocked(rewardsClient, true)
-import { Leaderboard, fetchTopEarners, fetchMostActiveQuests } from "./leaderboard"
+import { Leaderboard, fetchTopEarners, fetchMostActiveQuests, clearEarningsCache } from "./leaderboard"
 
 const mockUseAsyncData = vi.mocked(useAsyncData)
 
@@ -99,7 +99,7 @@ describe("Leaderboard", () => {
   it("quest row links to the quest detail page", async () => {
     render(<Leaderboard />)
 
-    fireEvent.click(screen.getByRole("button", { name: /view active quests/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /view active quests/i }))
 
     await act(async () => {
       await Promise.resolve()
@@ -161,5 +161,43 @@ describe("fetchMostActiveQuests tie-breaking", () => {
     expect(idOrder[1]).toEqual(idOrder[0])
     expect(idOrder[2]).toEqual(idOrder[0])
     expect(idOrder[0]).toEqual([10, 20, 30])
+  })
+})
+
+describe("fetchTopEarners caching & concurrency (#1674)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearEarningsCache()
+  })
+
+  it("caches earnings to prevent redundant RPC calls on repeated invocations", async () => {
+    mockQuestClient.listPublicQuests.mockResolvedValue([
+      { id: 1, name: "Quest One" } as any,
+    ])
+    mockQuestClient.getEnrollees.mockResolvedValue(["GUSER_A", "GUSER_B"])
+    mockRewardsClient.getUserEarnings.mockResolvedValue(500n)
+
+    // First fetch
+    await fetchTopEarners()
+    expect(mockRewardsClient.getUserEarnings).toHaveBeenCalledTimes(2)
+
+    // Second fetch should use client cache without refiring getUserEarnings
+    await fetchTopEarners()
+    expect(mockRewardsClient.getUserEarnings).toHaveBeenCalledTimes(2)
+  })
+
+  it("refetches when cache is cleared", async () => {
+    mockQuestClient.listPublicQuests.mockResolvedValue([
+      { id: 1, name: "Quest One" } as any,
+    ])
+    mockQuestClient.getEnrollees.mockResolvedValue(["GUSER_A"])
+    mockRewardsClient.getUserEarnings.mockResolvedValue(500n)
+
+    await fetchTopEarners()
+    expect(mockRewardsClient.getUserEarnings).toHaveBeenCalledTimes(1)
+
+    clearEarningsCache()
+    await fetchTopEarners()
+    expect(mockRewardsClient.getUserEarnings).toHaveBeenCalledTimes(2)
   })
 })

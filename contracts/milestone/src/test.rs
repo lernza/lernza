@@ -1,5 +1,7 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, Address, Env, String, Vec};
+use soroban_sdk::{
+    testutils::Address as _, testutils::Events, testutils::Ledger as _, Address, Env, String, Vec,
+};
 
 // Import the quest contract for testing
 extern crate certificate;
@@ -71,6 +73,9 @@ fn create_ms(
         &String::from_str(env, "Description"),
         &reward,
         &false,
+        &None,
+        &None,
+        &None,
     )
 }
 
@@ -117,6 +122,9 @@ fn test_pause_blocks_milestone_writes_until_unpaused() {
         &String::from_str(&env, "Should fail while paused"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(create_result, Err(Ok(Error::Paused)));
 
@@ -230,6 +238,9 @@ fn test_verify_completion_requires_previous() {
         &String::from_str(&env, "Description"),
         &100,
         &true,
+        &None,
+        &None,
+        &None,
     );
 
     let enrollee = Address::generate(&env);
@@ -241,6 +252,46 @@ fn test_verify_completion_requires_previous() {
     client.verify_completion(&owner, &q_id, &0, &enrollee);
     let reward = client.verify_completion(&owner, &q_id, &sequential_id, &enrollee);
     assert_eq!(reward, 100);
+}
+
+#[test]
+fn test_branching_prerequisites_require_all_dependencies() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let first = create_ms(&env, &client, &owner, q_id, "First", 50);
+    let second = create_ms(&env, &client, &owner, q_id, "Second", 50);
+    let branch = client.create_milestone_with_prereqs(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Branch"),
+        &String::from_str(&env, "Requires both branches"),
+        &100,
+        &soroban_sdk::vec![&env, first, second],
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &branch),
+        soroban_sdk::vec![&env, first, second]
+    );
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &first, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &second, &enrollee);
+    assert_eq!(
+        client.verify_completion(&owner, &q_id, &branch, &enrollee),
+        100
+    );
 }
 
 #[test]
@@ -305,6 +356,9 @@ fn test_wrong_owner_cannot_create() {
         &String::from_str(&env, "Hack"),
         &999,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::OwnerMismatch)));
 }
@@ -338,6 +392,9 @@ fn test_zero_reward_milestone() {
         &String::from_str(&env, "Description"),
         &0,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
@@ -372,11 +429,12 @@ fn test_get_distribution_mode_and_flat_reward_after_set() {
 fn test_percentage_mode_rounding_to_nearest() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
-    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
-    create_ms(&env, &client, &owner, q_id, "Task", 101);
 
     // Set Percentage mode to 75%
     client.set_distribution_mode(&owner, &q_id, &DistributionMode::Percentage(75), &0);
+
+    // Milestone with reward_amount 101 to exercise rounding (75% -> 75.75)
+    create_ms(&env, &client, &owner, q_id, "Task", 101);
 
     let enrollee = Address::generate(&env);
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -386,8 +444,8 @@ fn test_percentage_mode_rounding_to_nearest() {
 
     // Now test exact case: 100 * 75% = 75
     let q2 = create_quest(&env, &quest_client, &owner);
-    create_ms(&env, &client, &owner, q2, "Task2", 100);
     client.set_distribution_mode(&owner, &q2, &DistributionMode::Percentage(75), &0);
+    create_ms(&env, &client, &owner, q2, "Task2", 100);
     let e2 = Address::generate(&env);
     quest_client.add_enrollee(&q2, &e2);
     assert_eq!(client.verify_completion(&owner, &q2, &0, &e2), 75);
@@ -772,6 +830,9 @@ fn test_milestone_ownership_race_condition() {
         &String::from_str(&env, "Description"),
         &9999,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Attack fails — attacker is not the quest owner
@@ -785,6 +846,9 @@ fn test_milestone_ownership_race_condition() {
         &String::from_str(&env, "Description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(id, 0);
 
@@ -828,6 +892,9 @@ fn test_get_quest_not_found_fails() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::NotFound)));
 }
@@ -1024,6 +1091,9 @@ fn test_peer_review_respects_sequential_unlocks() {
         &String::from_str(&env, "Description"),
         &100,
         &true,
+        &None,
+        &None,
+        &None,
     );
 
     client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
@@ -1033,11 +1103,11 @@ fn test_peer_review_respects_sequential_unlocks() {
     quest_client.add_enrollee(&q_id, &enrollee);
     quest_client.add_enrollee(&q_id, &peer);
 
-    client.submit_for_review(&enrollee, &q_id, &1);
-    let blocked = client.try_approve_completion(&peer, &q_id, &1, &enrollee);
+    let blocked = client.try_submit_for_review(&enrollee, &q_id, &1);
     assert_eq!(blocked, Err(Ok(Error::MilestoneNotUnlocked)));
 
     client.verify_completion(&owner, &q_id, &0, &enrollee);
+    client.submit_for_review(&enrollee, &q_id, &1);
     let approved = client.approve_completion(&peer, &q_id, &1, &enrollee);
     assert_eq!(approved, Some(100));
 }
@@ -1177,6 +1247,9 @@ fn test_create_milestone_empty_title() {
         &String::from_str(&env, "Valid description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -1192,6 +1265,9 @@ fn test_create_milestone_empty_description() {
         &String::from_str(&env, ""),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -1209,6 +1285,9 @@ fn test_create_milestone_very_long_title() {
         &String::from_str(&env, "Valid description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::TitleTooLong)));
 }
@@ -1226,6 +1305,9 @@ fn test_create_milestone_very_long_description() {
         &long_desc,
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::DescriptionTooLong)));
 }
@@ -1241,6 +1323,9 @@ fn test_create_milestone_negative_reward() {
         &String::from_str(&env, "Valid description"),
         &-1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
@@ -1256,6 +1341,9 @@ fn test_create_milestone_zero_reward() {
         &String::from_str(&env, "Valid description"),
         &0,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
@@ -1271,6 +1359,9 @@ fn test_create_milestone_reward_too_large() {
         &String::from_str(&env, "Valid description"),
         &(MAX_REWARD_AMOUNT + 1),
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
@@ -1286,6 +1377,9 @@ fn test_create_milestone_max_reward_amount_succeeds() {
         &String::from_str(&env, "Valid description"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(id, 0);
 }
@@ -1303,6 +1397,9 @@ fn test_create_milestone_max_length_title_succeeds() {
         &String::from_str(&env, "Valid description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(id, 0);
 }
@@ -1320,6 +1417,9 @@ fn test_create_milestone_max_length_description_succeeds() {
         &max_desc,
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(id, 0);
 }
@@ -1335,12 +1435,22 @@ fn test_create_milestones_batch_success() {
         description: String::from_str(&env, "D1"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
+
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
     });
     milestones.push_back(MilestoneInput {
         title: String::from_str(&env, "M2"),
         description: String::from_str(&env, "D2"),
         reward_amount: 200,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
+
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
     });
 
     let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
@@ -1353,6 +1463,388 @@ fn test_create_milestones_batch_success() {
     assert_eq!(m1.title, String::from_str(&env, "M1"));
     let m2 = client.get_milestone(&q_id, &1);
     assert_eq!(m2.title, String::from_str(&env, "M2"));
+}
+
+/// Batch chains that depend on the previous milestone remain legal (#1630).
+#[test]
+fn test_create_milestones_batch_chain_is_acyclic() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M3"),
+        description: String::from_str(&env, "D3"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(ids.len(), 3);
+    assert_eq!(ids.get(0).unwrap(), 0);
+    assert_eq!(ids.get(2).unwrap(), 2);
+}
+
+/// Issue #1800: the batch path used to store `MilestoneInfo` without ever
+/// writing `DataKey::Prerequisites`, so batch-created milestones had no
+/// retrievable prerequisite list. `get_milestone_prerequisites` must return
+/// the same data for batch-created milestones as for single-created ones.
+#[test]
+fn test_create_milestones_batch_stores_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 200,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    let first = ids.get(0).unwrap();
+    let second = ids.get(1).unwrap();
+
+    // Ungated milestone: an explicit empty list, not a missing entry.
+    assert!(client.get_milestone_prerequisites(&q_id, &first).is_empty());
+
+    // `requires_previous` resolves to the implicit `id - 1` edge.
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &second),
+        soroban_sdk::vec![&env, first]
+    );
+
+    // The key must be present in storage, not merely inferred by the
+    // legacy fallback.
+    let stored: Option<soroban_sdk::Vec<u32>> = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Prerequisites(q_id, second))
+    });
+    assert_eq!(stored, Some(soroban_sdk::vec![&env, first]));
+}
+
+/// Issue #1800: explicit prerequisite ids supplied to the batch path are
+/// honoured, and the prerequisite gate actually blocks completion until every
+/// listed dependency is done.
+#[test]
+fn test_create_milestones_batch_explicit_prerequisites_gate_completion() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let first = create_ms(&env, &client, &owner, q_id, "First", 50);
+    let second = create_ms(&env, &client, &owner, q_id, "Second", 50);
+
+    // One batch item that branches off two pre-existing milestones.
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "Branch"),
+        description: String::from_str(&env, "Requires both"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, first, second],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    let branch = ids.get(0).unwrap();
+    assert_eq!(branch, 2);
+
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &branch),
+        soroban_sdk::vec![&env, first, second]
+    );
+    // An explicit list implies gating even though `requires_previous` was false.
+    assert!(client.get_milestone(&q_id, &branch).requires_previous);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &first, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &second, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Ok(Ok(100))
+    );
+}
+
+/// Issue #1800: prerequisites may reference an earlier item in the same batch,
+/// but never a forward/self reference, a duplicate, or a milestone that does
+/// not exist. Each rejection leaves the quest untouched.
+#[test]
+fn test_create_milestones_batch_rejects_invalid_explicit_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let batch_with = |prerequisites: soroban_sdk::Vec<u32>, requires_previous: bool| {
+        let mut items = Vec::new(&env);
+        items.push_back(MilestoneInput {
+            title: String::from_str(&env, "M1"),
+            description: String::from_str(&env, "D1"),
+            reward_amount: 100,
+            requires_previous,
+            prerequisites,
+            difficulty: None,
+            estimated_duration: None,
+            prerequisites_knowledge: None,
+        });
+        items
+    };
+
+    // Forward/self reference: id 0 cannot depend on id 1.
+    let forward = batch_with(soroban_sdk::vec![&env, 1u32], false);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &forward),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Nonexistent prerequisite below the current id.
+    let missing = batch_with(soroban_sdk::vec![&env, 7u32], false);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &missing),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // The first milestone of a quest may never be gated.
+    let gated_first = batch_with(Vec::new(&env), true);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &gated_first),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Nothing landed.
+    assert_eq!(client.get_milestone_count(&q_id), 0);
+    assert!(client.get_milestones(&q_id).is_empty());
+}
+
+/// Issue #1800: a duplicated prerequisite id is rejected, and an earlier item
+/// in the same batch is accepted as a prerequisite.
+#[test]
+fn test_create_milestones_batch_rejects_duplicate_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let existing = create_ms(&env, &client, &owner, q_id, "Existing", 50);
+
+    let mut duplicated = Vec::new(&env);
+    duplicated.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, existing, existing],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &duplicated),
+        Err(Ok(Error::InvalidInput))
+    );
+    assert_eq!(client.get_milestone_count(&q_id), 1);
+
+    // An earlier item in the same batch is a legal prerequisite.
+    let mut chained = Vec::new(&env);
+    chained.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    chained.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, existing],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &chained);
+    let second = ids.get(1).unwrap();
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &second),
+        soroban_sdk::vec![&env, existing]
+    );
+}
+
+/// Issue #1801: `NextMilestoneId` and `MilestoneCount` must never diverge.
+/// Every creation path is exercised and both storage keys are read back
+/// directly to confirm they stay in lockstep.
+#[test]
+fn test_milestone_counters_stay_in_sync_across_all_create_paths() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let counters = |env: &Env, client: &MilestoneContractClient, quest_id: u32| -> (u32, u32) {
+        env.as_contract(&client.address, || {
+            (
+                env.storage()
+                    .persistent()
+                    .get::<_, u32>(&DataKey::NextMilestoneId(quest_id))
+                    .unwrap_or(0),
+                env.storage()
+                    .persistent()
+                    .get::<_, u32>(&DataKey::MilestoneCount(quest_id))
+                    .unwrap_or(0),
+            )
+        })
+    };
+
+    // Nothing created yet.
+    assert_eq!(counters(&env, &client, q_id), (0, 0));
+
+    // Path 1: create_milestone
+    create_ms(&env, &client, &owner, q_id, "Single", 50);
+    assert_eq!(counters(&env, &client, q_id), (1, 1));
+    assert_eq!(client.get_milestone_count(&q_id), 1);
+    assert_eq!(client.get_milestones(&q_id).len(), 1);
+
+    // Path 2: create_milestone_with_prereqs
+    let with_prereqs = client.create_milestone_with_prereqs(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Branching"),
+        &String::from_str(&env, "Description"),
+        &100,
+        &soroban_sdk::vec![&env, 0u32],
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(with_prereqs, 1);
+    assert_eq!(counters(&env, &client, q_id), (2, 2));
+
+    // Path 3: create_milestones_batch
+    let mut batch = Vec::new(&env);
+    batch.push_back(MilestoneInput {
+        title: String::from_str(&env, "B1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    batch.push_back(MilestoneInput {
+        title: String::from_str(&env, "B2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    client.create_milestones_batch(&owner, &q_id, &batch);
+
+    assert_eq!(counters(&env, &client, q_id), (4, 4));
+
+    // The two counters back different queries, so a divergence would show up
+    // as inconsistent answers.
+    let listed = client.get_milestones(&q_id);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    let progress = client.get_enrollee_progress(&q_id, &enrollee, &0, &100);
+    let partial = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(listed.len() as u32, 4);
+    assert_eq!(client.get_milestone_count(&q_id), 4);
+    assert_eq!(progress.total_milestones, 4);
+    assert_eq!(partial.total, 4);
+}
+
+/// Topological validation (#1630): a cycle in the effective prerequisite
+/// graph is rejected before any milestone is written. The cycle is
+/// manufactured via direct storage injection because the public creation
+/// paths cannot produce one.
+#[test]
+fn test_create_milestones_batch_rejects_prerequisite_cycle() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Existing", 50);
+
+    // Store a forward prerequisite for the existing milestone 0 pointing at 1,
+    // which the batch is about to create with an edge back to 0: 0 -> 1 -> 0.
+    let mut forward = Vec::new(&env);
+    forward.push_back(1u32);
+    env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Prerequisites(q_id, 0), &forward);
+    });
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(result, Err(Ok(Error::CircularDependency)));
+
+    // Nothing was written: the quest still has only the pre-existing milestone.
+    assert_eq!(client.get_milestone_count(&q_id), 1);
 }
 
 #[test]
@@ -1368,6 +1860,11 @@ fn test_create_milestones_batch_oversized_rejection() {
             description: String::from_str(&env, "D"),
             reward_amount: 100,
             requires_previous: false,
+            prerequisites: Vec::new(&env),
+
+            difficulty: None,
+            estimated_duration: None,
+            prerequisites_knowledge: None,
         });
     }
 
@@ -1386,12 +1883,22 @@ fn test_create_milestones_batch_atomic_validation() {
         description: String::from_str(&env, "Valid"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
+
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
     });
     milestones.push_back(MilestoneInput {
         title: String::from_str(&env, ""), // INVALID
         description: String::from_str(&env, "Valid"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
+
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
     });
 
     let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
@@ -1420,6 +1927,9 @@ fn test_create_milestone_exceeds_max_milestones() {
             &String::from_str(&env, "Desc"),
             &1,
             &false,
+            &None,
+            &None,
+            &None,
         );
         assert_eq!(id, i);
     }
@@ -1433,6 +1943,9 @@ fn test_create_milestone_exceeds_max_milestones() {
         &String::from_str(&env, "Desc"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 
@@ -1455,6 +1968,9 @@ fn test_create_milestone_at_boundary() {
             &String::from_str(&env, "D"),
             &1,
             &false,
+            &None,
+            &None,
+            &None,
         );
     }
     assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES - 1);
@@ -1467,6 +1983,9 @@ fn test_create_milestone_at_boundary() {
         &String::from_str(&env, "D"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(last_id, MAX_MILESTONES - 1);
     assert_eq!(client.get_milestone_count(&q_id), MAX_MILESTONES);
@@ -1479,6 +1998,9 @@ fn test_create_milestone_at_boundary() {
         &String::from_str(&env, "D"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 }
@@ -1499,6 +2021,9 @@ fn test_milestone_cap_per_quest_independent() {
             &String::from_str(&env, "D"),
             &1,
             &false,
+            &None,
+            &None,
+            &None,
         );
     }
 
@@ -1510,6 +2035,9 @@ fn test_milestone_cap_per_quest_independent() {
         &String::from_str(&env, "D"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(result, Err(Ok(Error::InvalidInput)));
 
@@ -1521,6 +2049,9 @@ fn test_milestone_cap_per_quest_independent() {
         &String::from_str(&env, "D"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(id, 0);
     assert_eq!(client.get_milestone_count(&q2), 1);
@@ -1592,6 +2123,9 @@ fn test_create_milestone_0_cannot_require_previous() {
         &String::from_str(&env, "Desc"),
         &100,
         &true,
+        &None,
+        &None,
+        &None,
     );
 
     // Should fail with InvalidInput
@@ -1609,6 +2143,11 @@ fn test_create_milestones_batch_0_cannot_require_previous() {
         description: String::from_str(&env, "Desc"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
+
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
     });
 
     let result = client.try_create_milestones_batch(&owner, &q_id, &batch);
@@ -1633,6 +2172,32 @@ fn test_verify_completion_fails_if_flat_reward_missing() {
 
     let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
     assert_eq!(result, Err(Ok(Error::FlatRewardNotConfigured)));
+}
+
+/// Defensive guard (#1285): a Flat reward that is present but non-positive
+/// cannot exist through the public API (set_distribution_mode rejects it),
+/// so it is simulated by writing storage directly. Verification must fail
+/// with InvalidAmount instead of paying a non-positive reward.
+#[test]
+fn test_verify_completion_fails_if_flat_reward_is_zero() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::Mode(q_id), &DistributionMode::Flat);
+        env.storage()
+            .persistent()
+            .set(&DataKey::FlatReward(q_id), &0i128);
+    });
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::InvalidAmount)));
 }
 
 // --- Snapshot distribution mode at submission (issue #863) ---
@@ -1814,7 +2379,8 @@ fn test_verify_completion_past_deadline_rejected() {
     quest_client.add_enrollee(&q_id, &enrollee);
 
     // Set deadline in past
-    quest_client.set_deadline(&q_id, &999);
+    env.ledger().set_timestamp(1_000);
+    quest_client.set_deadline(&q_id, &500);
 
     let res = client.try_verify_completion(&owner, &q_id, &ms_id, &enrollee);
     assert_eq!(res, Err(Ok(Error::DeadlineExpired)));
@@ -1836,6 +2402,225 @@ fn test_verify_completion_cancelled_quest_rejected() {
     assert_eq!(res, Err(Ok(Error::Unauthorized)));
 }
 
+#[test]
+fn test_verify_completion_rejects_partial_credit_mode() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Set distribution mode to PartialCredit
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // verify_completion should reject PartialCredit mode; use verify_partial_completion instead
+    let result = client.try_verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+// ── PartialCredit distribution mode tests ────────────────────────────────────
+
+#[test]
+fn test_partial_credit_mode_proportional_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Graded Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 8 out of 10 criteria met → 80% of 100 = 80
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    assert_eq!(reward, 80);
+    assert!(client.is_completed(&q_id, &0, &enrollee));
+    assert_eq!(client.get_enrollee_completions(&q_id, &enrollee), 1);
+    assert_eq!(client.get_enrollee_earnings(&q_id, &enrollee), 80);
+}
+
+#[test]
+fn test_partial_credit_full_criteria_gives_full_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Full Task", 200);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 10/10 → full reward
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &10);
+    assert_eq!(reward, 200);
+}
+
+#[test]
+fn test_partial_credit_minimum_criteria_gives_minimal_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Minimal Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 1/10 → 10 tokens
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &1);
+    assert_eq!(reward, 10);
+}
+
+#[test]
+fn test_partial_credit_truncates_fractional_reward() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // 3-criteria denominator to force a fractional result
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(3), &0);
+    create_ms(&env, &client, &owner, q_id, "Fractional Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 1/3 of 100 = 33.33... → truncated to 33
+    let reward = client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &1);
+    assert_eq!(reward, 33);
+}
+
+#[test]
+fn test_partial_credit_zero_criteria_met_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_criteria_exceeds_max_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &11);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_wrong_mode_rejected() {
+    // verify_partial_completion requires PartialCredit mode; Custom mode must be rejected.
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Default mode is Custom — no set_distribution_mode call needed.
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &5);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_double_verify_fails() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    assert_eq!(result, Err(Ok(Error::AlreadyCompleted)));
+}
+
+#[test]
+fn test_partial_credit_not_enrolled_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task", 100);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_verify_partial_completion(&owner, &q_id, &0, &stranger, &5);
+    assert_eq!(result, Err(Ok(Error::NotEnrolled)));
+}
+
+#[test]
+fn test_partial_credit_set_zero_max_criteria_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let result =
+        client.try_set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(0), &0);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+#[test]
+fn test_partial_credit_multiple_milestones_accumulate_earnings() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task A", 100);
+    create_ms(&env, &client, &owner, q_id, "Task B", 200);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // 8/10 of task A → 80, then 5/10 of task B → 100
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    client.verify_partial_completion(&owner, &q_id, &1, &enrollee, &5);
+
+    assert_eq!(client.get_enrollee_earnings(&q_id, &enrollee), 180);
+    assert_eq!(client.get_enrollee_completions(&q_id, &enrollee), 2);
+}
+
+#[test]
+fn test_get_partial_score() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::PartialCredit(10), &0);
+    create_ms(&env, &client, &owner, q_id, "Task A", 100);
+    create_ms(&env, &client, &owner, q_id, "Task B", 100);
+    create_ms(&env, &client, &owner, q_id, "Task C", 100);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // Before any completions: 0 / 3
+    let score = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(score.completed, 0);
+    assert_eq!(score.total, 3);
+
+    // Complete two milestones
+    client.verify_partial_completion(&owner, &q_id, &0, &enrollee, &8);
+    client.verify_partial_completion(&owner, &q_id, &1, &enrollee, &10);
+
+    let score = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(score.completed, 2);
+    assert_eq!(score.total, 3);
+}
 // --- Security audit tests — issue #1428 ---
 
 #[test]
@@ -1851,6 +2636,9 @@ fn test_pause_rejects_milestone_creation() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(r, Err(Ok(Error::Paused)));
 }
@@ -1900,6 +2688,9 @@ fn test_non_owner_cannot_create_milestone() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(r, Err(Ok(Error::OwnerMismatch)));
 }
@@ -1917,6 +2708,9 @@ fn test_milestone_reward_bounds() {
         &String::from_str(&env, "Desc"),
         &0,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(r, Err(Ok(Error::InvalidAmount)));
 
@@ -1928,6 +2722,9 @@ fn test_milestone_reward_bounds() {
         &String::from_str(&env, "Desc"),
         &(-100),
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(r, Err(Ok(Error::InvalidAmount)));
 }
@@ -1944,6 +2741,11 @@ fn test_batch_size_limit() {
             description: String::from_str(&env, "D"),
             reward_amount: 100,
             requires_previous: false,
+            prerequisites: Vec::new(&env),
+
+            difficulty: None,
+            estimated_duration: None,
+            prerequisites_knowledge: None,
         });
     }
 
@@ -1992,7 +2794,7 @@ fn test_title_too_long_rejected() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
 
-    let long_title = String::from_bytes(&env, &vec![b'a'; 129]);
+    let long_title = String::from_bytes(&env, &[b'a'; 129]);
     let r = client.try_create_milestone(
         &owner,
         &q_id,
@@ -2000,6 +2802,938 @@ fn test_title_too_long_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     assert_eq!(r, Err(Ok(Error::TitleTooLong)));
+}
+
+#[test]
+fn test_verify_completion_with_feedback() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Milestone 1"),
+        &String::from_str(&env, "Description 1"),
+        &150,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+
+    let feedback_comment = String::from_str(&env, "Outstanding solution! Clean architecture.");
+    let reward =
+        client.verify_completion_with_feedback(&owner, &q_id, &ms_id, &enrollee, &feedback_comment);
+    assert_eq!(reward, 150);
+
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 1);
+    let item = history.get(0).unwrap();
+    assert_eq!(item.reviewer, owner);
+    assert_eq!(item.action, FeedbackAction::Approve);
+    assert_eq!(item.comment, feedback_comment);
+}
+
+#[test]
+fn test_reject_completion_with_feedback() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Peer Review Milestone"),
+        &String::from_str(&env, "Description"),
+        &200,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    let reject_feedback =
+        String::from_str(&env, "Proof link is broken. Please submit working code.");
+    client.reject_completion_with_feedback(&owner, &q_id, &ms_id, &enrollee, &reject_feedback);
+
+    // Reserved reward should be restored / decreased
+    assert_eq!(client.get_total_reserved_reward(&q_id), 0);
+
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 1);
+    let item = history.get(0).unwrap();
+    assert_eq!(item.reviewer, owner);
+    assert_eq!(item.action, FeedbackAction::Reject);
+    assert_eq!(item.comment, reject_feedback);
+}
+
+#[test]
+fn test_request_changes_and_resubmit_flow() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let enrollee = Address::generate(&env);
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &peer);
+
+    let ms_id = client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Interactive Milestone"),
+        &String::from_str(&env, "Description"),
+        &300,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Peer requests changes
+    let change_feedback = String::from_str(&env, "Please add tests for edge cases.");
+    client.request_changes_with_feedback(&peer, &q_id, &ms_id, &enrollee, &change_feedback);
+
+    // Enrollee addresses changes and resubmits
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Peer approves completion with feedback
+    let approve_feedback = String::from_str(&env, "Tests look comprehensive now! Approved.");
+    let reward =
+        client.approve_completion_with_feedback(&peer, &q_id, &ms_id, &enrollee, &approve_feedback);
+    assert_eq!(reward, Some(300));
+    assert!(client.is_completed(&q_id, &ms_id, &enrollee));
+
+    // Full history preserved across cycle
+    let history = client.get_milestone_feedback_history(&q_id, &ms_id, &enrollee);
+    assert_eq!(history.len(), 2);
+    assert_eq!(
+        history.get(0).unwrap().action,
+        FeedbackAction::RequestChanges
+    );
+    assert_eq!(history.get(0).unwrap().comment, change_feedback);
+    assert_eq!(history.get(1).unwrap().action, FeedbackAction::Approve);
+    assert_eq!(history.get(1).unwrap().comment, approve_feedback);
+}
+
+// ---- Issue #1412: edge-case coverage for distribution modes & verification ----
+
+/// Competitive distribution when more learners complete a milestone than there
+/// are winner slots. The first completer is rewarded; the remaining completers
+/// are still recorded as completed (so their progress counts) but receive 0.
+#[test]
+fn test_competitive_distribution_more_completers_than_winners() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    // Only a single winner per milestone.
+    client.set_distribution_mode(&owner, &q_id, &DistributionMode::Competitive(1), &0);
+    let ms_id = create_ms(&env, &client, &owner, q_id, "Race to finish", 100);
+
+    let e1 = Address::generate(&env);
+    let e2 = Address::generate(&env);
+    let e3 = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &e1);
+    quest_client.add_enrollee(&q_id, &e2);
+    quest_client.add_enrollee(&q_id, &e3);
+
+    // First completer claims the only reward slot.
+    assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e1), 100);
+    // "Tied" losers beyond the cap get nothing...
+    assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e2), 0);
+    assert_eq!(client.verify_completion(&owner, &q_id, &ms_id, &e3), 0);
+    // ...but their completion is still recorded and their count advances.
+    assert!(client.is_completed(&q_id, &ms_id, &e2));
+    assert!(client.is_completed(&q_id, &ms_id, &e3));
+    assert_eq!(client.get_enrollee_completions(&q_id, &e2), 1);
+    assert_eq!(client.get_enrollee_earnings(&q_id, &e2), 0);
+}
+
+/// Custom distribution: a per-milestone reward above the protocol maximum is
+/// rejected at creation time, while a reward exactly at the cap is accepted.
+/// This guards against a milestone promising more than the reward pool can pay.
+#[test]
+fn test_custom_distribution_reward_exceeding_max_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    // Exceeds MAX_REWARD_AMOUNT (1_000_000_000_000_000).
+    let oversized = 1_000_000_000_000_001_i128;
+    let rejected = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Too generous"),
+        &String::from_str(&env, "Would drain the pool"),
+        &oversized,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(rejected, Err(Ok(Error::InvalidAmount)));
+
+    // Exactly at the cap is valid.
+    let accepted = client.try_create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "At cap"),
+        &String::from_str(&env, "Within bounds"),
+        &1_000_000_000_000_000_i128,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    assert!(accepted.is_ok());
+}
+
+/// Peer-review verification with insufficient reviewers: a milestone configured
+/// for 3 approvals cannot complete with only 2, and a reviewer who is not an
+/// active enrollee is rejected outright.
+#[test]
+fn test_peer_review_insufficient_reviewers_blocks_completion() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(3));
+    let ms_id = create_ms(&env, &client, &owner, q_id, "Group project", 100);
+
+    let enrollee = Address::generate(&env);
+    let p1 = Address::generate(&env);
+    let p2 = Address::generate(&env);
+    let p3 = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    quest_client.add_enrollee(&q_id, &p1);
+    quest_client.add_enrollee(&q_id, &p2);
+    quest_client.add_enrollee(&q_id, &p3);
+
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Two approvals: still below the required 3, so no completion yet.
+    assert_eq!(
+        client.approve_completion(&p1, &q_id, &ms_id, &enrollee),
+        None
+    );
+    assert_eq!(
+        client.approve_completion(&p2, &q_id, &ms_id, &enrollee),
+        None
+    );
+    assert!(!client.is_completed(&q_id, &ms_id, &enrollee));
+
+    // A non-enrolled reviewer cannot approve.
+    assert_eq!(
+        client.try_approve_completion(&stranger, &q_id, &ms_id, &enrollee),
+        Err(Ok(Error::NotEnrolled))
+    );
+
+    // The third valid approval reaches the threshold and completes it.
+    assert_eq!(
+        client.approve_completion(&p3, &q_id, &ms_id, &enrollee),
+        Some(100)
+    );
+    assert!(client.is_completed(&q_id, &ms_id, &enrollee));
+}
+
+/// Milestone submission is rejected once the quest deadline has passed.
+#[test]
+fn test_milestone_submission_after_quest_expiry_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    // A real contract address satisfies the quest's is_contract_address check.
+    let token = env.register(QuestContract, ());
+    let now = env.ledger().timestamp();
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Expiring Quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &Vec::<String>::new(&env),
+        &token,
+        &Visibility::Public,
+        &None,
+        &Some(now + 1000),
+    );
+    let ms_id = create_ms(&env, &client, &owner, q_id, "Timed task", 100);
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+
+    let enrollee = Address::generate(&env);
+    let late = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    // Enroll the late submitter before the deadline (enrollment is closed after).
+    quest_client.add_enrollee(&q_id, &late);
+    // Submission before the deadline succeeds.
+    client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    // Advance ledger past the deadline and attempt a late submission.
+    env.ledger().set_timestamp(now + 2000);
+    assert_eq!(
+        client.try_submit_for_review(&late, &q_id, &ms_id),
+        Err(Ok(Error::DeadlineExpired))
+    );
+}
+
+/// Batch milestone creation rejects invalid ordering: the first milestone in a
+/// batch cannot require a previous milestone because none exists yet.
+#[test]
+fn test_batch_milestone_invalid_ordering_rejected() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "First requires previous"),
+        description: String::from_str(&env, "Invalid ordering"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "Second"),
+        description: String::from_str(&env, "Valid"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
+    assert_eq!(result, Err(Ok(Error::InvalidInput)));
+}
+
+// ─── Dispute resolution (issue #1614) ───────────────────────────────────────
+
+/// Build the precondition for a dispute: an enrolled learner submits a
+/// milestone and the quest owner rejects it with written feedback.
+fn setup_rejected_submission(
+    env: &Env,
+    client: &MilestoneContractClient,
+    quest_client: &QuestContractClient,
+    owner: &Address,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: &Address,
+) {
+    // Submissions only exist under peer review, so the quest must opt in first.
+    client.set_verification_mode(owner, &quest_id, &VerificationMode::PeerReview(1));
+    quest_client.add_enrollee(&quest_id, enrollee);
+    client.submit_for_review(enrollee, &quest_id, &milestone_id);
+    client.reject_completion_with_feedback(
+        owner,
+        &quest_id,
+        &milestone_id,
+        enrollee,
+        &String::from_str(env, "Does not meet the bar"),
+    );
+}
+
+#[test]
+fn test_open_dispute_stores_pending_record() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "My evidence shows the requirement is met"),
+    );
+
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Pending)
+    );
+    assert!(client.has_open_dispute(&q_id, &0, &enrollee));
+
+    let entry = client.get_dispute(&q_id, &0, &enrollee).unwrap();
+    assert_eq!(entry.quest_id, q_id);
+    assert_eq!(entry.milestone_id, 0);
+    assert_eq!(entry.enrollee, enrollee);
+    assert_eq!(
+        entry.record.reason,
+        String::from_str(&env, "My evidence shows the requirement is met")
+    );
+    assert_eq!(entry.record.reward_amount, 100);
+    assert_eq!(entry.record.resolver, None);
+}
+
+#[test]
+fn test_open_dispute_emits_event() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Please review"),
+    );
+
+    // The event buffer is scoped to the invocation, so `open_dispute` must have
+    // published exactly one non-diagnostic event.
+    let events = env.events().all();
+    assert_eq!(
+        events.len(),
+        1,
+        "open_dispute must publish exactly one dispute_initiated event"
+    );
+}
+
+#[test]
+fn test_open_dispute_rejected_when_submission_still_pending() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+    quest_client.add_enrollee(&q_id, &enrollee);
+    client.submit_for_review(&enrollee, &q_id, &0);
+
+    // The submission is still in review, so there is nothing to dispute.
+    let result =
+        client.try_open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Too early"));
+    assert_eq!(result, Err(Ok(Error::NotEligibleForDispute)));
+}
+
+#[test]
+fn test_open_dispute_rejected_without_prior_rejection() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    // No feedback history at all — nothing was ever rejected.
+    let result = client.try_open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Never rejected"),
+    );
+    assert_eq!(result, Err(Ok(Error::NotEligibleForDispute)));
+}
+
+#[test]
+fn test_open_dispute_rejected_for_non_enrollee() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    let stranger = Address::generate(&env);
+    let result = client.try_open_dispute(&stranger, &q_id, &0, &String::from_str(&env, "Not mine"));
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_open_dispute_rejects_duplicate_while_open() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "First attempt"),
+    );
+
+    let duplicate = client.try_open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Second attempt"),
+    );
+    assert_eq!(duplicate, Err(Ok(Error::DisputeAlreadyOpen)));
+
+    // Still exactly one dispute on record.
+    let disputes = client.get_disputes(&q_id, &0, &10);
+    assert_eq!(disputes.len(), 1);
+}
+
+#[test]
+fn test_open_dispute_rejects_reason_too_long() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    let long = "x".repeat(MAX_DISPUTE_REASON_LEN as usize + 1);
+    let result = client.try_open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, &long));
+    assert_eq!(result, Err(Ok(Error::DisputeReasonTooLong)));
+}
+
+#[test]
+fn test_open_dispute_enforces_cooldown_after_ruling() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    client.open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Attempt one"));
+    client.resolve_dispute(&owner, &q_id, &0, &enrollee, &DisputeOutcome::Upheld, &None);
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Upheld)
+    );
+
+    // A re-dispute inside the cooldown window is rejected.
+    let immediate =
+        client.try_open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Attempt two"));
+    assert_eq!(immediate, Err(Ok(Error::DisputeCooldownActive)));
+    assert!(client.dispute_cooldown_remaining(&q_id, &0, &enrollee) > 0);
+
+    // Once the cooldown lapses a fresh dispute is allowed.
+    env.ledger().with_mut(|li| {
+        li.timestamp = li.timestamp + DISPUTE_COOLDOWN_SECONDS + 1;
+    });
+    assert_eq!(client.dispute_cooldown_remaining(&q_id, &0, &enrollee), 0);
+    client.open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Attempt two"));
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Pending)
+    );
+}
+
+#[test]
+fn test_resolve_dispute_upheld_is_final() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Please look again"),
+    );
+
+    client.resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Upheld,
+        &Some(String::from_str(&env, "The bar was not met")),
+    );
+
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Upheld)
+    );
+    assert!(!client.has_open_dispute(&q_id, &0, &enrollee));
+    // The rejection stands: no pending submission is restored.
+    assert_eq!(client.get_approval_count(&q_id, &0, &enrollee), 0);
+
+    let entry = client.get_dispute(&q_id, &0, &enrollee).unwrap();
+    assert_eq!(entry.record.resolver, Some(owner.clone()));
+    assert!(entry.record.resolved_at.is_some());
+    assert_eq!(
+        entry.record.resolution_note,
+        Some(String::from_str(&env, "The bar was not met"))
+    );
+
+    // A second ruling is rejected — the dispute is final.
+    let again = client.try_resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+    assert_eq!(again, Err(Ok(Error::DisputeAlreadyResolved)));
+}
+
+#[test]
+fn test_resolve_dispute_overturned_restores_submission() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Evidence attached"),
+    );
+
+    client.resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Overturned)
+    );
+    // The pending submission is back, so the learner can re-enter review.
+    let snapshot = client.get_pending_submission(&q_id, &0, &enrollee);
+    assert!(snapshot.is_some());
+    assert_eq!(snapshot.unwrap().reward_amount, 100);
+    // Reserved reward is restored, so the pool can still cover the payout.
+    assert_eq!(client.get_total_reserved_reward(&q_id), 100);
+}
+
+#[test]
+fn test_resolve_dispute_requires_owner_or_admin() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Fair process please"),
+    );
+
+    // An unrelated address cannot rule.
+    let stranger = Address::generate(&env);
+    let result = client.try_resolve_dispute(
+        &stranger,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Upheld,
+        &None,
+    );
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+
+    // Nor can an enrolled peer reviewer — only the owner or contract admin.
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &peer);
+    let peer_result = client.try_resolve_dispute(
+        &peer,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+    assert_eq!(peer_result, Err(Ok(Error::Unauthorized)));
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Pending)
+    );
+
+    // The contract admin can rule even without owning the quest.
+    client.resolve_dispute(&owner, &q_id, &0, &enrollee, &DisputeOutcome::Upheld, &None);
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Upheld)
+    );
+}
+
+#[test]
+fn test_resolve_dispute_rejects_disputing_learner() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+    client.open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Let me win"));
+
+    // The learner holds no resolving role, so the call is rejected outright.
+    let result = client.try_resolve_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Pending)
+    );
+}
+
+#[test]
+fn test_resolve_dispute_rejects_resolver_ruling_on_own_dispute() {
+    let (env, client, quest_client, owner) = setup();
+    // `owner` is both the quest owner and the contract admin, and also enrols in
+    // their own quest. A resolver may never rule on a dispute they opened
+    // themselves, however privileged they otherwise are.
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(1));
+
+    let peer = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &peer);
+    quest_client.add_enrollee(&q_id, &owner);
+
+    // The owner submits their own work; a peer reviewer rejects it.
+    client.submit_for_review(&owner, &q_id, &0);
+    client.reject_completion_with_feedback(
+        &peer,
+        &q_id,
+        &0,
+        &owner,
+        &String::from_str(&env, "Needs more depth"),
+    );
+
+    client.open_dispute(&owner, &q_id, &0, &String::from_str(&env, "Self dispute"));
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &owner),
+        Some(DisputeStatus::Pending)
+    );
+
+    let result = client.try_resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &owner,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+    assert_eq!(result, Err(Ok(Error::InvalidApprover)));
+}
+
+#[test]
+fn test_resolve_dispute_requires_existing_dispute() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    let result =
+        client.try_resolve_dispute(&owner, &q_id, &0, &enrollee, &DisputeOutcome::Upheld, &None);
+    assert_eq!(result, Err(Ok(Error::DisputeNotFound)));
+}
+
+#[test]
+fn test_resolve_dispute_escalation_flow() {
+    let (env, client, quest_client, admin) = setup();
+    // Quest owner is deliberately a different address from the contract admin
+    // so the escalation role check is actually exercised.
+    let owner = Address::generate(&env);
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Outside my expertise"),
+    );
+
+    // A non-admin (the quest owner here) cannot escalate.
+    let owner_result = client.try_resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Escalated,
+        &None,
+    );
+    assert_eq!(owner_result, Err(Ok(Error::Unauthorized)));
+
+    // The contract admin escalates it for arbitration.
+    client.resolve_dispute(
+        &admin,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Escalated,
+        &Some(String::from_str(&env, "Routed to arbitration")),
+    );
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Escalated)
+    );
+    // An escalated dispute is still open, so no duplicate can be opened.
+    let duplicate = client.try_open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Again"));
+    assert_eq!(duplicate, Err(Ok(Error::DisputeAlreadyOpen)));
+
+    // Escalating twice is invalid.
+    let re_escalate = client.try_resolve_dispute(
+        &admin,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Escalated,
+        &None,
+    );
+    assert_eq!(re_escalate, Err(Ok(Error::InvalidDisputeOutcome)));
+
+    // Arbitration settles the dispute.
+    client.resolve_dispute(
+        &admin,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Overturned)
+    );
+}
+
+#[test]
+fn test_get_disputes_lists_and_pages() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+    create_ms(&env, &client, &owner, q_id, "Task 2", 100);
+
+    let a = Address::generate(&env);
+    let b = Address::generate(&env);
+    let c = Address::generate(&env);
+    for (learner, ms_id) in [(&a, 0u32), (&b, 0u32), (&c, 1u32)] {
+        setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, ms_id, learner);
+        client.open_dispute(learner, &q_id, &ms_id, &String::from_str(&env, "Let me in"));
+    }
+
+    let all = client.get_disputes(&q_id, &0, &10);
+    assert_eq!(all.len(), 3);
+
+    let first_page = client.get_disputes(&q_id, &0, &2);
+    assert_eq!(first_page.len(), 2);
+    let second_page = client.get_disputes(&q_id, &2, &2);
+    assert_eq!(second_page.len(), 1);
+    assert_eq!(second_page.get(0).unwrap().enrollee, c);
+
+    // Paging bounds are enforced.
+    assert_eq!(
+        client.try_get_disputes(&q_id, &0, &0),
+        Err(Ok(Error::DisputePageTooLarge))
+    );
+    assert_eq!(
+        client.try_get_disputes(&q_id, &0, &(MAX_DISPUTE_PAGE + 1)),
+        Err(Ok(Error::DisputePageTooLarge))
+    );
+
+    // Resolve one, then only the two remaining are "open".
+    client.resolve_dispute(&owner, &q_id, &0, &a, &DisputeOutcome::Upheld, &None);
+    let open = client.get_open_disputes(&q_id, &0, &10);
+    assert_eq!(open.len(), 2);
+    assert!(open
+        .iter()
+        .all(|e| e.record.status == DisputeStatus::Pending));
+    assert_eq!(client.get_disputes(&q_id, &0, &10).len(), 3);
+}
+
+#[test]
+fn test_get_disputes_empty_for_untouched_quest() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 100);
+
+    assert!(client.get_disputes(&q_id, &0, &10).is_empty());
+    assert!(client.get_open_disputes(&q_id, &0, &10).is_empty());
+    assert_eq!(client.get_dispute_status(&q_id, &0, &owner), None);
+    assert!(client.get_dispute(&q_id, &0, &owner).is_none());
+    assert_eq!(client.dispute_cooldown_remaining(&q_id, &0, &owner), 0);
+}
+
+#[test]
+fn test_dispute_full_lifecycle_end_to_end() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Task 1", 250);
+    let enrollee = Address::generate(&env);
+    setup_rejected_submission(&env, &client, &quest_client, &owner, q_id, 0, &enrollee);
+
+    // 1. Learner opens a dispute with a reason.
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Here is the deploy tx"),
+    );
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Pending)
+    );
+    assert_eq!(client.get_open_disputes(&q_id, &0, &10).len(), 1);
+
+    // 2. The owner upholds the rejection.
+    client.resolve_dispute(&owner, &q_id, &0, &enrollee, &DisputeOutcome::Upheld, &None);
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Upheld)
+    );
+    assert!(client.get_open_disputes(&q_id, &0, &10).is_empty());
+
+    // 3. Cooldown blocks an immediate re-dispute.
+    assert!(client.dispute_cooldown_remaining(&q_id, &0, &enrollee) > 0);
+    let early = client.try_open_dispute(&enrollee, &q_id, &0, &String::from_str(&env, "Please"));
+    assert_eq!(early, Err(Ok(Error::DisputeCooldownActive)));
+
+    // 4. After the cooldown the learner re-disputes, and this time the owner
+    //    escalates to the contract admin, who overturns and restores the work.
+    env.ledger().with_mut(|li| {
+        li.timestamp = li.timestamp + DISPUTE_COOLDOWN_SECONDS + 1;
+    });
+    client.open_dispute(
+        &enrollee,
+        &q_id,
+        &0,
+        &String::from_str(&env, "Re-checked the tx"),
+    );
+    client.resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Escalated,
+        &None,
+    );
+    client.resolve_dispute(
+        &owner,
+        &q_id,
+        &0,
+        &enrollee,
+        &DisputeOutcome::Overturned,
+        &None,
+    );
+
+    assert_eq!(
+        client.get_dispute_status(&q_id, &0, &enrollee),
+        Some(DisputeStatus::Overturned)
+    );
+    assert!(client
+        .get_pending_submission(&q_id, &0, &enrollee)
+        .is_some());
+
+    // 5. The restored submission can be verified and paid.
+    let reward = client.verify_completion(&owner, &q_id, &0, &enrollee);
+    assert_eq!(reward, 250);
+    assert!(client.is_completed(&q_id, &0, &enrollee));
 }

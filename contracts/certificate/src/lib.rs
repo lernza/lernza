@@ -5,7 +5,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, BytesN, Env, IntoVal, String,
     Symbol, Vec,
 };
-use stellar_access::ownable::{self as ownable, Ownable};
+use stellar_access::ownable::{self as ownable};
 use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::Base;
 
@@ -16,6 +16,9 @@ pub struct CertificateMetadata {
     pub quest_name: String,
     pub quest_category: String,
     pub completion_date: u64,
+    /// Number of milestones in the quest at mint time. Surfaced on the
+    /// public certificate page so a viewer can see how much was completed.
+    pub milestone_count: u32,
     pub issuer: Address,
     pub recipient: Address,
 }
@@ -89,6 +92,21 @@ impl CertificateContract {
     }
 
     #[only_owner]
+    /// Mint a completion certificate for a quest.
+    ///
+    /// # Arguments
+    /// * `quest_id` - ID of the completed quest
+    /// * `quest_name` - Name of the quest (for metadata)
+    /// * `quest_category` - Category of the quest (for metadata)
+    /// * `recipient` - Address receiving the certificate NFT
+    /// * `issuer` - Address issuing the certificate (e.g., quest owner or milestone contract)
+    ///
+    /// # Returns
+    /// The token ID of the minted certificate NFT
+    ///
+    /// # Errors
+    /// * `Paused` - If contract is paused
+    /// * `AlreadyIssued` - If recipient already has a certificate for this quest
     pub fn mint_certificate(
         env: Env,
         quest_id: u32,
@@ -97,44 +115,63 @@ impl CertificateContract {
         recipient: Address,
         issuer: Address,
     ) -> Result<u32, Error> {
-        Self::require_not_paused(&env)?;
+        Self::internal_mint(
+            &env,
+            quest_id,
+            quest_name,
+            quest_category,
+            recipient,
+            issuer,
+        )
+    }
+
+    fn internal_mint(
+        env: &Env,
+        quest_id: u32,
+        quest_name: String,
+        quest_category: String,
+        recipient: Address,
+        issuer: Address,
+    ) -> Result<u32, Error> {
+        Self::require_not_paused(env)?;
         let cert_key = DataKey::QuestCertificate(quest_id, recipient.clone());
         if env.storage().persistent().has(&cert_key) {
             return Err(Error::AlreadyIssued);
         }
 
-        let token_id = Base::sequential_mint(&env, &recipient);
+        let token_id = Base::sequential_mint(env, &recipient);
 
         let metadata = CertificateMetadata {
             quest_id,
             quest_name: quest_name.clone(),
             quest_category,
             completion_date: env.ledger().timestamp(),
-            issuer: issuer.clone(),
+            milestone_count: Self::quest_milestone_count(env.clone(), quest_id),
+            issuer,
             recipient: recipient.clone(),
         };
 
         let metadata_key = DataKey::CertificateMetadata(token_id);
         env.storage().persistent().set(&metadata_key, &metadata);
-        extend_persistent_ttl(&env, &metadata_key);
+        extend_persistent_ttl(env, &metadata_key);
 
         env.storage().persistent().set(&cert_key, &token_id);
-        extend_persistent_ttl(&env, &cert_key);
+        extend_persistent_ttl(env, &cert_key);
 
         let user_key = DataKey::UserCertificates(recipient.clone());
         let mut certificates: Vec<u32> = env
             .storage()
             .persistent()
             .get(&user_key)
-            .unwrap_or(Vec::new(&env));
+            .unwrap_or(Vec::new(env));
         certificates.push_back(token_id);
         env.storage().persistent().set(&user_key, &certificates);
-        extend_persistent_ttl(&env, &user_key);
+        extend_persistent_ttl(env, &user_key);
 
-        extend_instance_ttl(&env);
+        extend_instance_ttl(env);
 
         env.events().publish(
-            (Symbol::new(&env, "certificate_minted"),),
+            (Symbol::new(env, "certificate_minted"),),
             (token_id, quest_id, recipient, quest_name),
         );
 
@@ -155,6 +192,13 @@ impl CertificateContract {
         env.storage().persistent().get(&key).ok_or(Error::NotFound)
     }
 
+    /// Get all certificate token IDs issued to a user.
+    ///
+    /// # Arguments
+    /// * `user` - User address
+    ///
+    /// # Returns
+    /// Vec of token IDs for certificates owned by the user
     pub fn get_user_certificates(env: Env, user: Address) -> Vec<u32> {
         let key = DataKey::UserCertificates(user);
         env.storage()
@@ -163,6 +207,14 @@ impl CertificateContract {
             .unwrap_or(Vec::new(&env))
     }
 
+    /// Check if a user has a certificate for a specific quest.
+    ///
+    /// # Arguments
+    /// * `quest_id` - ID of the quest
+    /// * `recipient` - User address
+    ///
+    /// # Returns
+    /// true if user has already received a certificate for this quest
     pub fn has_quest_certificate(env: Env, quest_id: u32, recipient: Address) -> bool {
         let key = DataKey::QuestCertificate(quest_id, recipient);
         env.storage().persistent().has(&key)
@@ -177,9 +229,19 @@ impl CertificateContract {
     ) -> Result<u32, Error> {
         Self::require_not_paused(&env)?;
         let owner = ownable::get_owner(&env).ok_or(Error::NotOwner)?;
-        Self::mint_certificate(env, quest_id, quest_name, quest_category, recipient, owner)
+        Self::internal_mint(&env, quest_id, quest_name, quest_category, recipient, owner)
     }
 
+    /// Get metadata and current owner of a certificate.
+    ///
+    /// # Arguments
+    /// * `token_id` - The certificate token ID
+    ///
+    /// # Returns
+    /// Tuple of (certificate metadata, current owner address)
+    ///
+    /// # Errors
+    /// * `NotFound` - If certificate does not exist
     pub fn get_certificate_details(
         env: Env,
         token_id: u32,
@@ -189,6 +251,13 @@ impl CertificateContract {
         Ok((metadata, owner))
     }
 
+    /// Get all certificates issued to a user with their metadata.
+    ///
+    /// # Arguments
+    /// * `user` - User address
+    ///
+    /// # Returns
+    /// Vec of (token_id, metadata) tuples for all certificates owned by user
     pub fn get_user_certificate_details(
         env: Env,
         user: Address,
@@ -207,6 +276,17 @@ impl CertificateContract {
         details
     }
 
+    /// Revoke a certificate NFT. Owner-only.
+    ///
+    /// # Arguments
+    /// * `token_id` - The certificate token ID to revoke
+    ///
+    /// # Auth Requirements
+    /// * Caller must be the contract owner
+    ///
+    /// # Errors
+    /// * `NotOwner` - If caller is not the contract owner
+    /// * `AlreadyRevoked` - If certificate is already revoked
     #[only_owner]
     pub fn revoke_certificate(env: Env, token_id: u32) -> Result<(), Error> {
         if env
@@ -306,6 +386,25 @@ impl CertificateContract {
         Ok(())
     }
 
+    /// Resolve the number of milestones configured for `quest_id`.
+    ///
+    /// Best-effort: if the milestone contract hasn't been wired up via
+    /// `set_milestone_contract`, or the cross-contract read fails, we fall
+    /// back to 0 rather than failing the mint. The count is purely
+    /// informational metadata for the certificate display page.
+    fn quest_milestone_count(env: Env, quest_id: u32) -> u32 {
+        let milestone_contract: Option<Address> =
+            env.storage().instance().get(&DataKey::MilestoneContract);
+        match milestone_contract {
+            Some(contract) => env.invoke_contract(
+                &contract,
+                &Symbol::new(&env, "get_milestone_count"),
+                soroban_sdk::vec![&env, quest_id.into_val(&env)],
+            ),
+            None => 0,
+        }
+    }
+
     #[only_owner]
     pub fn set_milestone_contract(env: Env, milestone_contract: Address) -> Result<(), Error> {
         env.storage()
@@ -330,6 +429,8 @@ impl CertificateContract {
         recipient: Address,
     ) -> Result<u32, Error> {
         Self::require_not_paused(&env)?;
+        recipient.require_auth();
+
         let milestone_contract = Self::get_milestone_contract(env.clone())?;
 
         // Cross-contract call to check completions
@@ -349,9 +450,9 @@ impl CertificateContract {
             return Err(Error::NotCompleted);
         }
 
-        // Mint using the contract's own address as the issuer
-        Self::mint_certificate(
-            env.clone(),
+        // Mint using the contract's own address as the issuer via decoupled internal helper
+        Self::internal_mint(
+            &env,
             quest_id,
             quest_name,
             quest_category,

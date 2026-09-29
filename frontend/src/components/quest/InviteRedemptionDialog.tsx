@@ -1,8 +1,10 @@
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { Loader2, AlertCircle, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { useScrollLock } from "@/hooks/use-scroll-lock"
+import { useFocusTrap } from "@/hooks/use-focus-trap"
 import { useWallet } from "@/hooks/use-wallet"
 import { hashInviteCode } from "@/lib/invite-utils"
 import { questClient } from "@/lib/contracts/quest"
@@ -28,6 +30,16 @@ export function InviteRedemptionDialog({
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState<"idle" | "validating" | "joining" | "success" | "error">("idle")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // This dialog is only mounted while it is open, so the trap is always active.
+  const handleCancel = useCallback(() => {
+    if (!isProcessing) onCancel?.()
+  }, [isProcessing, onCancel])
+
+  useScrollLock(true)
+  useFocusTrap(dialogRef, { isActive: true, onEscape: handleCancel })
 
   const handleRedeem = async () => {
     if (!connected || !address) {
@@ -67,20 +79,30 @@ export function InviteRedemptionDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-md animate-scale-in">
+      <Card
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="invite-redemption-title"
+        aria-describedby="invite-redemption-description"
+        tabIndex={-1}
+        className="w-full max-w-md animate-scale-in"
+      >
         <CardContent className="pt-6">
           <div className="space-y-6">
             {/* Header */}
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold">Join Quest</h2>
-              <p className="text-muted-foreground text-sm">
+              <h2 id="invite-redemption-title" className="text-2xl font-semibold">
+                Join Quest
+              </h2>
+              <p id="invite-redemption-description" className="text-muted-foreground text-sm">
                 You have an invite to join <span className="font-semibold">{questName}</span>
               </p>
             </div>
 
             {/* Status Display */}
             {status === "success" ? (
-              <div className="flex flex-col items-center space-y-4 py-4">
+              <div className="flex flex-col items-center space-y-4 py-4" aria-live="polite">
                 <div className="bg-success/10 border-success flex h-16 w-16 items-center justify-center border-2">
                   <CheckCircle className="text-success h-8 w-8" />
                 </div>
@@ -90,7 +112,10 @@ export function InviteRedemptionDialog({
                 </div>
               </div>
             ) : status === "error" ? (
-              <div className="space-y-3 rounded-lg border border-destructive bg-destructive/5 p-4">
+              <div
+                className="space-y-3 rounded-lg border border-destructive bg-destructive/5 p-4"
+                role="alert"
+              >
                 <div className="flex items-center gap-3">
                   <AlertCircle className="text-destructive h-5 w-5" />
                   <h3 className="font-semibold">Something went wrong</h3>
@@ -125,7 +150,7 @@ export function InviteRedemptionDialog({
               {status !== "success" && (
                 <Button
                   variant="outline"
-                  onClick={onCancel}
+                  onClick={handleCancel}
                   disabled={isProcessing}
                   className="flex-1"
                 >

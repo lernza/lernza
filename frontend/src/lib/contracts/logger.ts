@@ -41,10 +41,12 @@ export function logContractCall(entry: ContractLogEntry) {
 
   if (isDev) {
     const prefix = `[contract:${entry.contract}] ${entry.fn}`
-    if (entry.result === "success") {
+    if (entry.result === "success")
       console.info(prefix, { ...entry })
-    } else {
+    else if (entry.result === "failed") {
       console.warn(prefix, { ...entry })
+    } else {
+      console.error(prefix, { ...entry })
     }
   }
 }

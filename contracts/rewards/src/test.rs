@@ -391,6 +391,9 @@ fn test_distribute_reward_overflow() {
         &String::from_str(&env, "Desc"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -439,6 +442,9 @@ fn test_distribute_reward_earnings_overflow() {
         &String::from_str(&env, "Desc"),
         &MAX_REWARD_AMOUNT,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -491,6 +497,9 @@ fn test_zero_amount_edge_cases() {
         &String::from_str(&env, "Desc"),
         &1,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -584,6 +593,9 @@ fn test_distribute_reward() {
         &String::from_str(&env, "Description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -646,6 +658,9 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Description"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     let ms2_id = milestone_client.create_milestone(
         &owner,
@@ -654,6 +669,9 @@ fn test_distribute_multiple_rewards() {
         &String::from_str(&env, "Description"),
         &200,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     quest_client.add_enrollee(&q_id, &e1);
@@ -859,6 +877,9 @@ fn test_authority_self_distribution() {
         &String::from_str(&env, "Description"),
         &1000,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &owner);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &owner);
@@ -967,6 +988,9 @@ fn test_distribute_reward_after_milestone_completion() {
         &String::from_str(&env, "Complete task"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Fund quest
@@ -1143,6 +1167,9 @@ fn test_distribute_reward_idempotent() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1267,6 +1294,9 @@ fn test_distribute_reward_zero_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1316,6 +1346,9 @@ fn test_distribute_reward_negative_amount_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1399,6 +1432,9 @@ fn test_distribute_reward_amount_exceeds_max_rejected() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
     quest_client.add_enrollee(&q_id, &enrollee);
     milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
@@ -1957,6 +1993,9 @@ fn test_refund_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Enrollee completes it
@@ -2328,6 +2367,349 @@ fn test_refund_pool_decrements_total_funded() {
     assert_eq!(client.get_quest_refunded(&q_id), 3_500);
 }
 
+// --- get_platform_stats counter validation (issue #1274) ---
+
+#[test]
+fn test_get_platform_stats_returns_consistent_counters() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Stats quest"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    let (quests, funded, distributed) = client.get_platform_stats();
+    assert_eq!(quests, 1);
+    assert_eq!(funded, 5_000);
+    assert_eq!(distributed, 0);
+}
+
+#[test]
+fn test_get_platform_stats_errors_when_distributed_exceeds_funded() {
+    // A stale/corrupt `TotalFunded` (e.g. a refund that was applied to the
+    // counter without the matching pool write) must not be reported as a
+    // platform statistic: the platform can never pay out more than it received.
+    let (
+        env,
+        client,
+        cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+
+    env.as_contract(&cid, || {
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &1_000_i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalDistributed, &2_500_i128);
+    });
+
+    let result = client.try_get_platform_stats();
+    assert_eq!(result, Err(Ok(Error::InconsistentStats)));
+}
+
+#[test]
+fn test_get_platform_stats_errors_on_negative_counter() {
+    let (
+        env,
+        client,
+        cid,
+        _token_addr,
+        _quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+
+    env.as_contract(&cid, || {
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalFunded, &-1_i128);
+    });
+
+    let result = client.try_get_platform_stats();
+    assert_eq!(result, Err(Ok(Error::InconsistentStats)));
+}
+
+// --- refund_remaining_funds: issue #1624 — explicit archive-triggered refund
+// callable by the quest owner after archival (grace period) or cancellation
+// (immediate), returning pool minus reserved-but-unpaid obligations. ---
+
+#[test]
+fn test_refund_remaining_funds_success_after_archive() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 5_000);
+
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+
+    assert_eq!(refunded, 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 5_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 5_000);
+}
+
+#[test]
+fn test_refund_remaining_funds_requires_archive() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Active quest — refund must be rejected.
+    let result = client.try_refund_remaining_funds(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::QuestNotArchived)));
+
+    // Archived but inside the grace window — still rejected.
+    quest_client.archive_quest(&q_id);
+    let result = client.try_refund_remaining_funds(&owner, &q_id);
+    assert_eq!(result, Err(Ok(Error::RefundWindowNotOpen)));
+}
+
+#[test]
+fn test_refund_remaining_funds_unauthorized_when_not_owner() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let result = client.try_refund_remaining_funds(&attacker, &q_id);
+    assert_eq!(result, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_refund_remaining_funds_cancelled_refunds_immediately() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.cancel_quest(&q_id);
+
+    // Cancelled quests skip the grace period.
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+    assert_eq!(refunded, 5_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_remaining_funds_respects_reserved_obligations() {
+    let (
+        env,
+        client,
+        _cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+
+    // Create a peer-review milestone with a pending submission so 2_000 is
+    // reserved but unpaid. Only the unreserved 3_000 is refundable.
+    use milestone::VerificationMode;
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Task"),
+        &String::from_str(&env, "Desc"),
+        &2_000,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+    milestone_client.set_verification_mode(&owner, &q_id, &VerificationMode::PeerReview(2));
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.submit_for_review(&enrollee, &q_id, &ms_id);
+
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 2_000);
+}
+
 // --- refund_expired_pool: issue #1187 — recover funds from an abandoned,
 // never-archived quest once its deadline has passed. ---
 
@@ -2359,6 +2741,7 @@ fn test_refund_expired_pool_success_without_archiving() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2415,6 +2798,7 @@ fn test_refund_expired_pool_no_deadline() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2452,6 +2836,7 @@ fn test_refund_expired_pool_grace_period_enforced() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2495,6 +2880,7 @@ fn test_refund_expired_pool_unauthorized() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2531,6 +2917,7 @@ fn test_refund_expired_pool_not_funded() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2576,6 +2963,7 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
 
     client.fund_quest(&owner, &q_id, &5_000);
@@ -2587,6 +2975,9 @@ fn test_refund_expired_pool_respects_reserved_obligations() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     quest_client.add_enrollee(&q_id, &enrollee);
@@ -2635,6 +3026,7 @@ fn test_refund_expired_pool_paused() {
         &soroban_sdk::Vec::<String>::new(&env),
         &token_addr,
         &Visibility::Public,
+        &None,
         &None,
     );
 
@@ -2719,6 +3111,7 @@ fn test_distribute_rejects_zero_amount() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);
 
@@ -2754,6 +3147,7 @@ fn test_distribute_rejects_self_payment() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);
 
@@ -2764,6 +3158,9 @@ fn test_distribute_rejects_self_payment() {
         &String::from_str(&env, "Desc"),
         &100,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     // Owner tries to pay themselves (caller == enrollee)
@@ -2903,6 +3300,7 @@ fn test_pool_cannot_go_negative() {
         &token_addr,
         &Visibility::Public,
         &None,
+        &None,
     );
     client.fund_quest(&owner, &q_id, &1_000);
 
@@ -2914,6 +3312,9 @@ fn test_pool_cannot_go_negative() {
         &String::from_str(&env, "Desc"),
         &2_000,
         &false,
+        &None,
+        &None,
+        &None,
     );
 
     let enrollee = Address::generate(&env);
@@ -2922,4 +3323,453 @@ fn test_pool_cannot_go_negative() {
 
     let r = client.try_distribute_reward(&owner, &q_id, &m_id, &enrollee, &2_000);
     assert_eq!(r, Err(Ok(Error::InsufficientPool)));
+}
+
+// --- issue #1733: over-distribution must not permanently lock a quest pool ---
+//
+// `refund_pool`, `refund_unused_pool`, `refund_remaining_funds` and
+// `refund_expired_pool` all computed
+//
+//     obligations = total_reserved.checked_sub(distributed)
+//     refundable  = pool.checked_sub(obligations)
+//
+// so any quest whose `QuestDistributed` aggregate exceeded the milestone
+// contract's `total_reserved` returned `ArithmeticOverflow` from *every* refund
+// entry point, forever. The underflow was itself the persisted state, so no
+// retry or parameter change could recover the owner's deposit.
+//
+// These tests drive `QuestDistributed` past the reservation and assert each
+// refund path now succeeds and returns the full remaining balance.
+
+/// Force `QuestDistributed` above the milestone contract's reservation, which is
+/// the exact state that used to wedge every refund path.
+fn over_distribute(env: &Env, cid: &Address, quest_id: u32) {
+    env.as_contract(cid, || {
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestDistributed(quest_id), &9_999_i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::QuestPool(quest_id), &3_000_i128);
+    });
+}
+
+#[test]
+fn test_refundable_amount_saturates_instead_of_erroring() {
+    // distributed > reserved: everything reserved was already paid, so there
+    // are no outstanding obligations and the whole pool is refundable.
+    assert_eq!(
+        RewardsContract::refundable_amount(1_000, 1_500, 3_000),
+        3_000
+    );
+    // distributed == reserved: obligations are exactly zero, so nothing is held back.
+    assert_eq!(
+        RewardsContract::refundable_amount(1_000, 1_000, 3_000),
+        3_000
+    );
+    // Normal case: reserved obligations still outstanding are withheld.
+    assert_eq!(
+        RewardsContract::refundable_amount(4_000, 1_000, 10_000),
+        7_000
+    );
+    // obligations exceed the pool: nothing is refundable, no error.
+    assert_eq!(RewardsContract::refundable_amount(9_000, 0, 3_000), 0);
+    // A negative reservation must not become a negative obligation and inflate
+    // the refundable amount past the pool balance.
+    assert_eq!(
+        RewardsContract::refundable_amount(-5_000, 9_999, 3_000),
+        3_000
+    );
+    // Degenerate zero case.
+    assert_eq!(RewardsContract::refundable_amount(0, 0, 0), 0);
+}
+
+#[test]
+fn test_refund_pool_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    // Precondition: this is the state that previously wedged refund_pool.
+    over_distribute(&env, &cid, q_id);
+    // The old code would have returned Err(ArithmeticOverflow) here.
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    client.refund_pool(&owner, &q_id, &3_000);
+
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}
+
+#[test]
+fn test_refund_pool_rejects_amount_above_refundable_when_over_distributed() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    // Refundable is the full remaining pool (3_000), so 3_001 must be refused
+    // with the ordinary InsufficientPool error rather than an overflow error.
+    let result = client.try_refund_pool(&owner, &q_id, &3_001);
+    assert_eq!(result, Err(Ok(Error::InsufficientPool)));
+
+    // And the boundary value still succeeds.
+    client.refund_pool(&owner, &q_id, &3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+}
+
+#[test]
+fn test_refund_remaining_funds_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    quest_client.archive_quest(&q_id);
+    env.ledger()
+        .set_timestamp(env.ledger().timestamp() + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_remaining_funds(&owner, &q_id);
+
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}
+
+#[test]
+fn test_refund_expired_pool_succeeds_when_distributed_exceeds_reserved() {
+    let (
+        env,
+        client,
+        cid,
+        token_addr,
+        quest_client,
+        _quest_id,
+        _milestone_client,
+        _milestone_id,
+        _certificate_client,
+        _certificate_id,
+        _admin,
+    ) = setup();
+    let owner = Address::generate(&env);
+
+    let sac = StellarAssetClient::new(&env, &token_addr);
+    sac.mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(&env, "Test"),
+        &String::from_str(&env, "Desc"),
+        &String::from_str(&env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(&env),
+        &token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    client.fund_quest(&owner, &q_id, &5_000);
+    let deadline = env.ledger().timestamp() + 1_000;
+    quest_client.set_deadline(&q_id, &deadline);
+    env.ledger().set_timestamp(deadline + 604_800 + 1);
+
+    over_distribute(&env, &cid, q_id);
+
+    let token_client = TokenClient::new(&env, &token_addr);
+    let balance_before = token_client.balance(&owner);
+
+    let refunded = client.refund_expired_pool(&owner, &q_id);
+
+    assert_eq!(refunded, 3_000);
+    assert_eq!(client.get_pool_balance(&q_id), 0);
+    assert_eq!(token_client.balance(&owner), balance_before + 3_000);
+    assert_eq!(client.get_quest_refunded(&q_id), 3_000);
+}
+
+// ── issue #1732: PayoutRecord idempotency must be token-scoped ───────────────
+//
+// The idempotency key used to be (quest_id, milestone_id, enrollee) with no
+// token component, so `distribute_reward` (main staking token) and
+// `distribute_reward_with_token` (an arbitrary supported token) shared a
+// single slot for a given (quest, milestone, enrollee). Paying a milestone in
+// the main token therefore made a subsequent legitimate payout of the same
+// milestone in a second token return `AlreadyPaid`, so the enrollee could never
+// be paid in more than one token for the same milestone.
+
+/// Build a quest with one completed milestone, funded in the main staking token
+/// and in a second token, with `owner` as the quest authority.
+/// Returns (owner, second_token, quest_id, milestone_id, enrollee).
+#[allow(clippy::type_complexity)]
+fn setup_multi_token_quest(
+    env: &Env,
+    client: &RewardsContractClient<'static>,
+    quest_client: &QuestContractClient<'static>,
+    milestone_client: &MilestoneContractClient<'static>,
+    token_addr: &Address,
+    admin: &Address,
+) -> (Address, Address, u32, u32, Address) {
+    let owner = Address::generate(env);
+    let enrollee = Address::generate(env);
+
+    // A second, distinct token contract.
+    let token_b = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    StellarAssetClient::new(env, token_addr).mint(&owner, &10_000);
+    StellarAssetClient::new(env, &token_b).mint(&owner, &10_000);
+
+    let q_id = quest_client.create_quest(
+        &owner,
+        &String::from_str(env, "Multi Token Quest"),
+        &String::from_str(env, "Desc"),
+        &String::from_str(env, "Programming"),
+        &soroban_sdk::Vec::<String>::new(env),
+        token_addr,
+        &Visibility::Public,
+        &None,
+        &None,
+    );
+
+    // Fund the main token first — this also establishes `owner` as the
+    // quest authority that later distribution calls must be authorized by.
+    client.fund_quest(&owner, &q_id, &5_000);
+    client.fund_quest_with_token(&owner, &q_id, &token_b, &4_000);
+
+    let ms_id = milestone_client.create_milestone(
+        &owner,
+        &q_id,
+        &String::from_str(env, "MS1"),
+        &String::from_str(env, "Desc"),
+        &1_000,
+        &false,
+        &None,
+        &None,
+        &None,
+    );
+
+    quest_client.add_enrollee(&q_id, &enrollee);
+    milestone_client.verify_completion(&owner, &q_id, &ms_id, &enrollee);
+
+    (owner, token_b, q_id, ms_id, enrollee)
+}
+
+/// The headline regression for #1732: the same milestone can be paid in two
+/// different tokens. Before the fix the second call returned `AlreadyPaid`
+/// because both payouts shared one tokenless idempotency slot.
+#[test]
+fn test_multi_token_payout_does_not_collide_with_main_token_payout() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Pay the milestone in the main staking token.
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+
+    // Then pay the same milestone in a second token. This used to fail.
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+
+    // Both legs actually settled.
+    let main = TokenClient::new(&env, &token_addr);
+    let second = TokenClient::new(&env, &token_b);
+    assert_eq!(main.balance(&enrollee), 1_000);
+    assert_eq!(second.balance(&enrollee), 1_000);
+    assert_eq!(client.get_pool_balance(&q_id), 4_000);
+    assert_eq!(client.get_pool_balance_with_token(&q_id, &token_b), 3_000);
+}
+
+/// Token-scoping must not weaken idempotency: the *same* token is still
+/// refused on a second attempt, in both the main-token and per-token paths.
+#[test]
+fn test_same_token_payout_is_still_rejected_as_duplicate() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+    assert_eq!(
+        client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+    assert_eq!(
+        client.try_distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+}
+
+/// Migration: a payout recorded *before* this upgrade used a tokenless key.
+/// A legacy record cannot be attributed to a particular token, so it must keep
+/// blocking the payout entirely rather than risk a double-pay. Paying that
+/// same milestone in a second token is refused too.
+#[test]
+fn test_legacy_payout_record_keeps_blocking_payouts() {
+    let (env, client, cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Simulate a pre-upgrade deployment: a tokenless record already exists.
+    env.as_contract(&cid, || {
+        env.storage().persistent().set(
+            &DataKey::LegacyPayoutRecord(q_id, ms_id, enrollee.clone()),
+            &1_000i128,
+        );
+    });
+
+    // The original main-token payout must stay refused — no double-pay.
+    assert_eq!(
+        client.try_distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+    // And a second token must not slip through the legacy record either.
+    assert_eq!(
+        client.try_distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000),
+        Err(Ok(Error::AlreadyPaid))
+    );
+}
+
+/// A record written *after* the upgrade is token-scoped, so it does not block a
+/// payout of the same milestone in a different token.
+#[test]
+fn test_new_record_does_not_block_a_different_token() {
+    let (env, client, _cid, token_addr, quest_client, _, milestone_client, _, _cc, _cid2, admin) =
+        setup();
+    let (owner, token_b, q_id, ms_id, enrollee) = setup_multi_token_quest(
+        &env,
+        &client,
+        &quest_client,
+        &milestone_client,
+        &token_addr,
+        &admin,
+    );
+
+    // Pay in the second token FIRST, then in the main token. Either order must
+    // work — the pre-fix collision was order-dependent on the main-token call
+    // happening first.
+    client.distribute_reward_with_token(&owner, &q_id, &ms_id, &enrollee, &token_b, &1_000);
+    client.distribute_reward(&owner, &q_id, &ms_id, &enrollee, &1_000);
+
+    let main = TokenClient::new(&env, &token_addr);
+    let second = TokenClient::new(&env, &token_b);
+    assert_eq!(main.balance(&enrollee), 1_000);
+    assert_eq!(second.balance(&enrollee), 1_000);
 }

@@ -1,4 +1,8 @@
+import { MAX_MILESTONES } from "@/lib/contract-types"
 import { milestoneSchema } from "./types"
+
+/** A quest accepts at most this many milestones (#1617). */
+export const MAX_MILESTONES_PER_QUEST = 50
 
 export interface ParsedMilestone {
   title: string
@@ -47,6 +51,40 @@ function parseCsvLine(line: string): string[] {
 }
 
 /**
+ * Strictly parses a reward cell. Values are collected as whole USDC tokens, so
+ * the cell is validated rather than coerced: stripping every non-numeric
+ * character would silently turn "-10" into 10 and "1,000" into 1, both of which
+ * pass validation as the wrong reward.
+ */
+function parseRewardAmount(raw: string): { value: number } | { error: string } {
+  const trimmed = raw.trim()
+  if (trimmed === "") {
+    return { error: "Reward amount is required" }
+  }
+  if (trimmed.startsWith("-")) {
+    return { error: "Reward amount cannot be negative" }
+  }
+
+  const cleaned = trimmed
+    .replace(/^(usdc|usd|token)\s*/i, "")
+    .replace(/\s*(usdc|usd|token)$/i, "")
+    .replace(/^[$€£]+\s*/, "")
+    .replace(/\s*[$€£]+$/, "")
+    .replace(/[,\s_]/g, "")
+
+  if (!/^\d+(\.\d+)?$/.test(cleaned)) {
+    return { error: `"${trimmed}" is not a valid reward amount` }
+  }
+
+  const value = Number(cleaned)
+  if (!Number.isFinite(value)) {
+    return { error: `"${trimmed}" is not a valid reward amount` }
+  }
+
+  return { value }
+}
+
+/**
  * Parses raw CSV text into validated milestone objects and row errors
  */
 export function parseCsvMilestones(csvText: string): CsvParseResult {
@@ -85,18 +123,40 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
     const title = cols[titleIdx] || ""
     const description = cols[descIdx] || ""
     const rewardStr = cols[rewardIdx] || ""
-    const rewardAmount = parseFloat(rewardStr.replace(/[^0-9.]/g, ""))
+
+    const parsedReward = parseRewardAmount(rewardStr)
+    if ("error" in parsedReward) {
+      errors.push({ row: rowNum, field: "rewardAmount", message: parsedReward.error })
+      continue
+    }
+    const rewardAmount = parseFloat(rewardStr.replace(/[$,]/g, "").trim())
 
     const rawObj = {
       title,
       description,
-      rewardAmount: isNaN(rewardAmount) ? 0 : rewardAmount,
+      rewardAmount: parsedReward.value,
     }
 
     const valResult = milestoneSchema.safeParse(rawObj)
 
     if (valResult.success) {
-      milestones.push(valResult.data)
+      // The milestone contract rejects milestone ids >= MAX_MILESTONES, so the
+      // cap is enforced at parse time rather than surfacing as an opaque
+      // transaction failure on step 2.
+      if (milestones.length >= MAX_MILESTONES) {
+        errors.push({
+          row: rowNum,
+          field: "general",
+          message: `Exceeded contract limit of ${MAX_MILESTONES} milestones per quest; row ignored`,
+        })
+      } else {
+        milestones.push(valResult.data)
+      }
+      milestones.push({
+        title: valResult.data.title,
+        description: valResult.data.description,
+        rewardAmount: valResult.data.rewardAmount,
+      })
     } else {
       valResult.error.issues.forEach(issue => {
         errors.push({
@@ -108,6 +168,21 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
     }
   }
 
+  // Reject files that would push the quest past the on-chain milestone cap.
+  if (milestones.length + errors.length > MAX_MILESTONES_PER_QUEST) {
+    return {
+      milestones: [],
+      errors: [
+        ...errors,
+        {
+          row: 0,
+          field: "file",
+          message: `A quest accepts at most ${MAX_MILESTONES_PER_QUEST} milestones.`
+        }
+      ]
+    }
+  }
+
   return { milestones, errors }
 }
 
@@ -116,9 +191,25 @@ export function parseCsvMilestones(csvText: string): CsvParseResult {
  */
 export function generateCsvTemplate(): string {
   return [
-    'title,description,rewardAmount',
+    "milestone_title,description,reward_amount",
+    "title,description,rewardAmount",
     '"Complete Environment Setup","Set up development tools and connect wallet",50',
     '"Hello Soroban","Write your first Soroban smart contract in Rust",100',
     '"Deploy to Testnet","Deploy smart contract to Stellar Testnet and execute tests",150',
   ].join("\n")
+}
+
+/**
+ * Triggers a browser download of the sample CSV template
+ */
+export function downloadCsvTemplate(filename = "milestones_template.csv"): void {
+  const blob = new Blob([generateCsvTemplate()], { type: "text/csv" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }

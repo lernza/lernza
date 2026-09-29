@@ -1,7 +1,9 @@
 import { useEffect, useCallback, useRef } from "react"
 import { Trophy, Users, Coins, RefreshCw } from "lucide-react"
 import { useAsyncData } from "@/hooks/use-async-data"
-import { LoadingState, EmptyState } from "@/components/ui/async-states"
+import { EmptyState } from "@/components/ui/async-states"
+import { Skeleton } from "@/components/ui/skeleton"
+import { VirtualList } from "@/components/ui/virtual-list"
 import { SmartError } from "@/components/error-states"
 import { questClient } from "@/lib/contracts/quest"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -31,6 +33,70 @@ interface ActiveQuestEntry {
 
 const PAGE_SIZE = 50
 
+// Skeleton for leaderboard loading state (#1720)
+function LeaderboardSkeleton() {
+  return (
+    <div role="status" aria-live="polite" aria-busy="true" className="space-y-2">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md"
+        >
+          <Skeleton className="h-8 w-8 flex-shrink-0" />
+          <Skeleton className="h-4 flex-1" />
+          <Skeleton className="h-6 w-24" />
+        </div>
+      ))}
+      <span className="sr-only">Loading leaderboard data…</span>
+    </div>
+  )
+}
+
+interface CacheEntry {
+  totalEarned: bigint
+  timestamp: number
+}
+
+const EARNINGS_CACHE_TTL_MS = 60_000 // 1 minute cache TTL
+const earningsCache = new Map<string, CacheEntry>()
+const RPC_CONCURRENCY_LIMIT = 10
+
+export function clearEarningsCache() {
+  earningsCache.clear()
+}
+
+async function getCachedUserEarnings(address: string): Promise<bigint> {
+  const now = Date.now()
+  const cached = earningsCache.get(address)
+  if (cached && now - cached.timestamp < EARNINGS_CACHE_TTL_MS) {
+    return cached.totalEarned
+  }
+  const totalEarned = await rewardsClient.getUserEarnings(address)
+  earningsCache.set(address, { totalEarned, timestamp: now })
+  return totalEarned
+}
+
+async function fetchWithConcurrencyLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return []
+  const results: R[] = new Array(items.length)
+  let currentIndex = 0
+
+  const workerCount = Math.min(limit, items.length)
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (currentIndex < items.length) {
+      const index = currentIndex++
+      results[index] = await fn(items[index])
+    }
+  })
+
+  await Promise.all(workers)
+  return results
+}
+
 export async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]> {
   const quests = await questClient.listPublicQuests(offset, PAGE_SIZE)
   const enrolleeSets = await Promise.all(quests.map(q => questClient.getEnrollees(q.id)))
@@ -42,11 +108,14 @@ export async function fetchTopEarners(offset: number = 0): Promise<EarnerEntry[]
     }
   }
 
-  const entries = await Promise.all(
-    Array.from(allAddresses).map(async address => {
-      const totalEarned = await rewardsClient.getUserEarnings(address)
+  const addressList = Array.from(allAddresses)
+  const entries = await fetchWithConcurrencyLimit(
+    addressList,
+    RPC_CONCURRENCY_LIMIT,
+    async address => {
+      const totalEarned = await getCachedUserEarnings(address)
       return { address, totalEarned }
-    })
+    }
   )
 
   return entries
@@ -127,7 +196,6 @@ function LeaderboardContent() {
   const [allEarners, setAllEarners] = useState<EarnerEntry[]>([])
   const [allQuests, setAllQuests] = useState<ActiveQuestEntry[]>([])
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const observerTarget = useRef<HTMLDivElement>(null)
 
   const {
     data: earnersData,
@@ -197,22 +265,16 @@ function LeaderboardContent() {
     }
   }, [questsOffset, allQuests.length])
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0]?.isIntersecting && !isLoadingMore) {
-        if (activeTab === "earners") {
-          void loadMoreEarners()
-        } else {
-          void loadMoreQuests()
-        }
-      }
-    })
-
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current)
+  // Rows are windowed by `VirtualList`, which invokes `onEndReached` when the
+  // tail of the list scrolls into the overscan buffer — this replaces the
+  // previous IntersectionObserver sentinel.
+  const handleEndReached = useCallback(() => {
+    if (isLoadingMore) return
+    if (activeTab === "earners") {
+      void loadMoreEarners()
+    } else {
+      void loadMoreQuests()
     }
-
-    return () => observer.disconnect()
   }, [activeTab, isLoadingMore, loadMoreEarners, loadMoreQuests])
 
   const refetchActive = useCallback(() => {
@@ -261,7 +323,9 @@ function LeaderboardContent() {
           onClick={() => setActiveTab("earners")}
           className={cn(
             "border-border flex flex-1 cursor-pointer items-center justify-center gap-2 border-r px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "earners" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+            activeTab === "earners"
+              ? "bg-accent text-accent-foreground"
+              : "bg-background hover:bg-secondary"
           )}
         >
           <Coins className="h-4 w-4" />
@@ -273,7 +337,9 @@ function LeaderboardContent() {
           onClick={() => setActiveTab("quests")}
           className={cn(
             "flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors",
-            activeTab === "quests" ? "bg-accent text-black" : "bg-background hover:bg-secondary"
+            activeTab === "quests"
+              ? "bg-accent text-accent-foreground"
+              : "bg-background hover:bg-secondary"
           )}
         >
           <Users className="h-4 w-4" />
@@ -294,7 +360,7 @@ function LeaderboardContent() {
       </div>
 
       {/* Content */}
-      {isLoading && <LoadingState message="Fetching on-chain data…" />}
+      {isLoading && <LeaderboardSkeleton />}
       {!isLoading && error && <SmartError message={error} onRetry={refetchActive} />}
       {!isLoading && !error && isEmpty && (
         <EmptyState
@@ -306,55 +372,67 @@ function LeaderboardContent() {
 
       {/* Top Earners list */}
       {!isLoading && !error && !isEmpty && activeTab === "earners" && (
-        <>
-          <ol className="space-y-2">
-            {allEarners.map(entry => (
-              <li
-                key={entry.address}
-                className="border-border bg-card flex items-center gap-4 border px-4 py-3 shadow-md"
+        <VirtualList
+          as="ol"
+          items={allEarners}
+          getKey={entry => entry.address}
+          estimateSize={() => 68}
+          onEndReached={handleEndReached}
+          aria-label="Top earners"
+          itemClassName="py-1"
+          renderItem={entry => (
+            <div className="border-border bg-card flex h-full items-center gap-4 border px-4 py-3 shadow-md">
+              <RankBadge rank={entry.rank} />
+              <PrefetchLink
+                to={`/creator/${entry.address}`}
+                className="hover:text-accent flex-1 font-mono text-sm font-bold transition-colors"
               >
-                <RankBadge rank={entry.rank} />
-                <PrefetchLink
-                  to={`/creator/${entry.address}`}
-                  className="hover:text-accent flex-1 font-mono text-sm font-bold transition-colors"
-                >
-                  {shortenAddress(entry.address, 6)}
-                </PrefetchLink>
-                <span className="border-border bg-background border px-2 py-1 text-xs font-semibold shadow-sm">
-                  {formatTokens(entry.totalEarned)}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more earners…" />}
-          </div>
-        </>
+                {shortenAddress(entry.address, 6)}
+              </PrefetchLink>
+              <span className="border-border bg-background border px-2 py-1 text-xs font-semibold shadow-sm">
+                {formatTokens(entry.totalEarned)}
+              </span>
+            </div>
+          )}
+        />
       )}
 
       {/* Most Active Quests list */}
       {!isLoading && !error && !isEmpty && activeTab === "quests" && (
-        <>
-          <ol className="space-y-2">
-            {allQuests.map(entry => (
-              <PrefetchLink
-                key={entry.id}
-                to={`/quest/${entry.id}`}
-                className="border-border bg-card flex cursor-pointer items-center gap-4 border px-4 py-3 shadow-md transition-transform hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <RankBadge rank={entry.rank} />
-                <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
-                <span className="border-border bg-background flex items-center gap-1 border px-2 py-1 text-xs font-semibold shadow-sm">
-                  <Users className="h-3 w-3" />
-                  {entry.enrolleeCount}
-                </span>
-              </PrefetchLink>
-            ))}
-          </ol>
-          <div ref={observerTarget} className="mt-8 py-4 text-center">
-            {isLoadingMore && <LoadingState message="Loading more quests…" />}
-          </div>
-        </>
+        <VirtualList
+          as="ol"
+          items={allQuests}
+          getKey={entry => String(entry.id)}
+          estimateSize={() => 68}
+          onEndReached={handleEndReached}
+          aria-label="Most active quests"
+          itemClassName="py-1"
+          renderItem={entry => (
+            <PrefetchLink
+              to={`/quest/${entry.id}`}
+              className="border-border bg-card flex h-full cursor-pointer items-center gap-4 border px-4 py-3 shadow-md transition-transform hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <RankBadge rank={entry.rank} />
+              <span className="flex-1 truncate text-sm font-bold">{entry.name}</span>
+              <span className="border-border bg-background flex items-center gap-1 border px-2 py-1 text-xs font-semibold shadow-sm">
+                <Users className="h-3 w-3" />
+                {entry.enrolleeCount}
+              </span>
+            </PrefetchLink>
+          )}
+        />
+      )}
+
+      {isLoadingMore && (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="mt-4 flex items-center justify-center gap-2 py-4 text-sm"
+        >
+          <Skeleton className="h-4 w-4" />
+          <span>Loading more…</span>
+        </div>
       )}
     </PageContainer>
   )

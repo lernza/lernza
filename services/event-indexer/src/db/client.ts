@@ -1,9 +1,9 @@
 import pg from "pg"
-import { config } from "./config.js"
+import { config } from "../config.js"
 
-let pool: pg.Pool | null = null
+let pool: any | null = null
 
-export function getPool(): pg.Pool {
+export function getPool(): { query: <T=any>(...args: any[]) => Promise<{rows: T[], rowCount: number}>, end: () => Promise<void> } {
   if (!pool) {
     pool = new pg.Pool({ connectionString: config.databaseUrl })
   }

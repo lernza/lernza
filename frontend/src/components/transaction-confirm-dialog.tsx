@@ -1,12 +1,13 @@
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
 import { X, Shield, AlertCircle, Loader2, UserX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { cn, formatTokens } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { formatTokenAmount } from "@/lib/token-amount"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
+import { useFocusTrap } from "@/hooks/use-focus-trap"
 import type { RecipientStatus } from "@/lib/contract-types"
 
 export interface TransactionDetails {
@@ -39,7 +40,6 @@ export function TransactionConfirmDialog({
   const actionLabel = details?.actionName ?? "confirm this transaction"
 
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
 
   // Lock body scroll when dialog is open
@@ -54,73 +54,17 @@ export function TransactionConfirmDialog({
     }, 150)
   }, [isPending, onCancel])
 
+  // Trap focus, autofocus the confirm button, close on Escape, restore focus.
+  useFocusTrap(dialogRef, {
+    isActive: isOpen && details !== null,
+    onEscape: handleClose,
+    initialFocusRef: confirmButtonRef,
+  })
+
   const truncateAddress = (address: string) => {
     if (!address) return ""
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
-
-  // Handle Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen && !isPending) {
-        handleClose()
-      }
-    }
-
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown)
-    }
-
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, isPending, handleClose])
-
-  // Handle Focus Management
-  useEffect(() => {
-    if (isOpen) {
-      // Store the previously focused element
-      previousFocusRef.current = document.activeElement as HTMLElement
-
-      // Focus the primary action button after a brief delay to ensure it's rendered
-      const focusTimer = setTimeout(() => {
-        if (confirmButtonRef.current) {
-          confirmButtonRef.current.focus()
-        }
-      }, 100)
-
-      const handleTabKey = (e: KeyboardEvent) => {
-        if (e.key !== "Tab" || !dialogRef.current) return
-
-        const focusable = dialogRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        const first = focusable[0] as HTMLElement
-        const last = focusable[focusable.length - 1] as HTMLElement
-
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            last.focus()
-            e.preventDefault()
-          }
-        } else {
-          if (document.activeElement === last) {
-            first.focus()
-            e.preventDefault()
-          }
-        }
-      }
-
-      window.addEventListener("keydown", handleTabKey)
-
-      return () => {
-        clearTimeout(focusTimer)
-        window.removeEventListener("keydown", handleTabKey)
-        // Restore focus to the previously focused element
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus()
-        }
-      }
-    }
-  }, [isOpen])
 
   if (!isOpen || !details) return null
 
@@ -143,6 +87,7 @@ export function TransactionConfirmDialog({
         aria-modal="true"
         aria-labelledby="tx-dialog-title"
         aria-describedby="tx-dialog-description"
+        tabIndex={-1}
         className={cn(
           "animate-fade-in-up relative z-10 w-full max-w-md px-4",
           isClosing && "scale-95 opacity-0"
@@ -262,7 +207,7 @@ export function TransactionConfirmDialog({
             </div>
 
             {/* Actions */}
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 pt-2">
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:gap-3">
               <Button
                 variant="outline"
                 onClick={handleClose}

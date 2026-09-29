@@ -1,37 +1,34 @@
-## What does this PR do?
+# fix: reward scaling, creator verification TTL side-effect, and archive index cleanup
 
-This PR implements the dashboard analytics feature as requested. It introduces `recharts` to render the user's earnings over time, which is **lazy-loaded** to keep the initial bundle size small (~314kB). The implementation also extracts the dashboard into maintainable sub-components (`PlatformStats`, `PersonalProgress`, `TrendingQuests`, `RecentActivity`) and provides a full neo-brutalist UI overhaul with platform-wide and personal statistics.
+## Summary
 
-In addition, it resolves the following issues:
-- **#880 perf(milestone)**: Paginated `get_enrollee_progress` with `offset` and `limit` to prevent unbounded range queries and save gas.
-- **#877 feat(quest)**: Standardized payload to include `(quest_id, enrollee, actor, timestamp, join_mode)` in enrollment events.
-- **#894 fix(frontend)**: Added specific UI for DUPLICATE / ERROR submit statuses.
-- **#890 fix(frontend)**: Detected account change after signing by comparing the envelope's source account to the wallet.
+This PR addresses four core issues across the frontend and smart contracts:
 
-## Related Issue
+1. **Milestone Reward Decimal Scaling (`fix(create-quest)`)**:
+   - Replaced hardcoded `1_000_000` (6 decimals) scaling factor in `step3.tsx` with `10n ** BigInt(verifiedToken.decimals)`.
+   - Ensures milestone rewards and pool funding share identical scaling across arbitrary tokens (including 7-decimal XLM).
 
-Closes: #56, #880, #877, #894, #890
+2. **BigInt Precision Preservation (`fix(create-quest)`)**:
+   - Replaced `BigInt(10 ** decimals)` with `10n ** BigInt(decimals)` in `step3.tsx` and `use-wallet-balance.ts`.
+   - Avoids intermediate JavaScript float conversion exceeding `Number.MAX_SAFE_INTEGER` for tokens with $>15$ decimals.
 
-## Type of Change
+3. **Creator Verification TTL Side-Effect (`fix(quest)`)**:
+   - Removed `common::extend_persistent_ttl` from the read-only `is_creator_verified` query in `contracts/quest/src/lib.rs`.
+   - Ensures verification TTL is only granted or extended during explicit admin actions (`verify_creator`), preventing quest creation from perpetually renewing verification. Documented verification lifecycle.
 
-- [x] Bug fix
-- [x] New feature
-- [ ] Refactor (no behavior change)
-- [ ] Documentation
-- [ ] Infrastructure / CI
-- [ ] Tests
+4. **Archive Quest Index Cleanup (`fix(quest)`)**:
+   - Added `remove_id_from_index` calls for `DataKey::PublicCategoryQuests` and `DataKey::PublicQuests` in `archive_quest`.
+   - Prevents archived quests from polluting public discovery listings and category search results.
 
-## Checklist
+5. **Contract Build Stabilization**:
+   - Decoupled `internal_mint` in `contracts/certificate/src/lib.rs` to allow owner-independent issuance from `verify_and_issue`.
+   - Addressed clippy warnings (`len_zero`, `match_like_matches_macro`, `implicit_saturating_sub`, unnecessary casts).
 
-- [x] I have read the [Contributing Guide](CONTRIBUTING.md)
-- [x] My PR title follows [Conventional Commits](https://www.conventionalcommits.org/) (e.g., `feat:`, `fix:`, `refactor:`)
-- [x] I have added at least one label to this PR
-- [ ] I have added/updated tests for my changes (if applicable)
-- [ ] `cargo test --workspace` passes (if contracts changed)
-- [x] `pnpm build` passes (if frontend changed)
-- [ ] `cargo fmt --all -- --check` passes (if Rust changed)
-- [x] `pnpm lint` passes (if frontend changed)
+## Build Verification
 
-## Screenshots
-
-<img width="1366" height="768" alt="image" src="https://github.com/user-attachments/assets/5cc4fc1b-b92e-48d6-bec0-d6e0769d7b6b" />
+- **Rust / Soroban**:
+  - `cargo check --workspace --lib` passes with 0 errors.
+  - `cargo build --target wasm32-unknown-unknown --release --package quest --package milestone --package rewards --package certificate --package completion` passes with 0 errors.
+  - `cargo fmt --all -- --check` passes cleanly.
+- **Frontend**:
+  - `pnpm build` (`tsc -b && vite build`) passes with 0 errors.

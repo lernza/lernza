@@ -1,19 +1,24 @@
 /**
- * Data backup and export/restore procedure utility (Issue #1262).
- * Handles export, validation, and restoration of off-chain application state & transaction queues.
+ * Data backup and export/restore procedure utility (Issue #1262, #1501).
+ * Handles export, validation, and restoration of off-chain application state,
+ * transaction queues, and learner profile metadata.
  */
 import { logger } from "./logger"
+import type { LearnerProfile } from "./profile-types"
+import { validateFullProfile } from "./profile-validation"
 
 export interface BackupData {
   version: string
   timestamp: string
   transactionQueue: unknown
   userPreferences: unknown
+  profiles: Record<string, LearnerProfile>
   cache: Record<string, unknown>
 }
 
 export class BackupManager {
-  private static BACKUP_VERSION = "1.0.0"
+  private static BACKUP_VERSION = "1.1.0"
+  private static PROFILE_KEY_PREFIX = "lernza_profile_"
 
   /**
    * Export full off-chain application state to a JSON backup structure.
@@ -24,6 +29,7 @@ export class BackupManager {
       timestamp: new Date().toISOString(),
       transactionQueue: null,
       userPreferences: null,
+      profiles: {},
       cache: {},
     }
 
@@ -39,10 +45,27 @@ export class BackupManager {
           backup.userPreferences = JSON.parse(rawPrefs)
         }
 
-        // Collect all lernza cache entries
         for (let i = 0; i < window.localStorage.length; i++) {
           const key = window.localStorage.key(i)
-          if (key?.startsWith("lernza_cache_")) {
+          if (!key) continue
+
+          if (key.startsWith(this.PROFILE_KEY_PREFIX)) {
+            const walletAddress = key.slice(this.PROFILE_KEY_PREFIX.length)
+            const rawVal = window.localStorage.getItem(key)
+            if (rawVal) {
+              try {
+                const profile = JSON.parse(rawVal) as LearnerProfile
+                backup.profiles[walletAddress] = profile
+              } catch (parseErr) {
+                logger.warn("Skipping invalid profile in backup export", {
+                  key,
+                  err: parseErr,
+                })
+              }
+            }
+          }
+
+          if (key.startsWith("lernza_cache_")) {
             const rawVal = window.localStorage.getItem(key)
             if (rawVal) {
               backup.cache[key] = JSON.parse(rawVal)
@@ -98,6 +121,23 @@ export class BackupManager {
             "lernza_user_prefs",
             JSON.stringify(backup.userPreferences),
           )
+        }
+
+        if (backup.profiles) {
+          Object.entries(backup.profiles).forEach(([walletAddress, profile]) => {
+            const validation = validateFullProfile(profile)
+            if (validation.valid) {
+              window.localStorage.setItem(
+                `${this.PROFILE_KEY_PREFIX}${walletAddress}`,
+                JSON.stringify(profile),
+              )
+            } else {
+              logger.warn("Skipping invalid profile in backup restore", {
+                walletAddress,
+                errors: validation.errors,
+              })
+            }
+          })
         }
 
         if (backup.cache) {

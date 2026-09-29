@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { formatTokenAmount } from "./token-amount"
+import { QuestStatus } from "./contract-types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -11,15 +12,45 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 export function formatTokens(amount: number | bigint, decimals = 7, symbol = "TOKEN"): string {
-  return formatTokenAmount(amount, { decimals, symbol, compact: true })
+  if (typeof amount !== "bigint") {
+    return formatTokenAmount(amount, { decimals, symbol, compact: true })
+  }
+
+  if (amount < 0n) return `ERROR: Negative ${symbol}`
+  const whole = amount / 10n ** BigInt(decimals)
+  const compactUnits = [
+    { divisor: 1_000_000_000n, suffix: "B" },
+    { divisor: 1_000_000n, suffix: "M" },
+    { divisor: 1_000n, suffix: "K" },
+  ]
+  for (const { divisor, suffix } of compactUnits) {
+    if (whole >= divisor) {
+      const tenths = (whole * 10n + divisor / 2n) / divisor
+      return `${tenths / 10n}.${tenths % 10n}${suffix} ${symbol}`.trim()
+    }
+  }
+  return formatTokenAmount(amount, { decimals, symbol })
+}
+
+/**
+ * Formats an amount already denominated in whole USDC tokens.
+ *
+ * `formatTokens` scales raw amounts by token decimals, so it renders a 100 USDC
+ * reward as "0 USDC" — the create-quest form and CSV imports collect whole
+ * tokens, not base units.
+ */
+export function formatUsdc(amount: number): string {
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 
 export function getSecondsRemaining(deadline: number, nowMs = Date.now()): number {
-  return Math.max(0, Math.floor(deadline - nowMs / 1000))
+  const nowSeconds = Math.floor(nowMs / 1000) // Convert once to whole seconds
+  return Math.max(0, deadline - nowSeconds)
 }
 
 export function isExpiredDeadline(deadline: number, nowMs = Date.now()): boolean {
-  return deadline > 0 && deadline <= nowMs / 1000
+  const nowSeconds = Math.floor(nowMs / 1000)
+  return deadline > 0 && deadline <= nowSeconds
 }
 
 export function isExpiringSoon(deadline: number, nowMs = Date.now()): boolean {
@@ -48,3 +79,23 @@ export function formatDeadlineLabel(deadline: number, nowMs = Date.now()): strin
   return `Expires in ${days} day${days === 1 ? "" : "s"}`
 }
 
+export type QuestLifecycleStatus = "active" | "ended" | "archived" | "cancelled" | "suspended"
+
+/**
+ * Single source of truth for deriving a quest's lifecycle status. Previously
+ * this logic was reimplemented (with subtly different edge-case handling —
+ * a `<` vs `<=` deadline comparison, missing pool-balance checks, hardcoded
+ * status-number magic values) in dashboard.tsx, analytics.tsx, and
+ * quest-status-badge-helpers.ts. Everything should derive status from here.
+ */
+export function getQuestLifecycleStatus(
+  quest: { status: QuestStatus; deadline: number; poolBalance?: number },
+  nowMs = Date.now()
+): QuestLifecycleStatus {
+  if (quest.status === QuestStatus.Suspended) return "suspended"
+  if (quest.status === QuestStatus.Cancelled) return "cancelled"
+  if (quest.status === QuestStatus.Archived) return "archived"
+  if (isExpiredDeadline(quest.deadline, nowMs)) return "ended"
+  if (quest.poolBalance !== undefined && quest.poolBalance <= 0) return "ended"
+  return "active"
+}

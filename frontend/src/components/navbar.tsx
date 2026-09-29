@@ -3,15 +3,18 @@ import { Wallet, LogOut, Menu, X, Sun, Moon, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useWallet } from "@/hooks/use-wallet"
 import { useColorScheme } from "@/hooks/use-color-scheme"
+import { useTranslation } from "@/i18n"
 import { cn } from "@/lib/utils"
-import { NetworkMismatchBanner } from "@/components/error-states"
+import { NetworkIndicator, NetworkMismatchBanner } from "@/components/error-states"
+import { NotificationCenter } from "@/components/notifications/notification-center"
+import { LanguageSelector } from "@/components/language-selector"
 
 const NAV_ITEMS = [
-  { key: "landing", label: "Home" },
-  { key: "dashboard", label: "Dashboard" },
-  { key: "leaderboard", label: "Leaderboard" },
-  { key: "history", label: "History" },
-  { key: "profile", label: "Profile" },
+  { key: "landing", labelKey: "nav.home" as const },
+  { key: "dashboard", labelKey: "nav.dashboard" as const },
+  { key: "leaderboard", labelKey: "nav.leaderboard" as const },
+  { key: "history", labelKey: "nav.history" as const },
+  { key: "profile", labelKey: "nav.profile" as const },
 ] as const
 
 interface NavbarProps {
@@ -64,7 +67,8 @@ function ThemeToggle() {
 }
 
 export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps) {
-  const { connected, shortAddress, connect, disconnect, loading, wrongNetwork } = useWallet()
+  const { connected, shortAddress, connect, disconnect, loading } = useWallet()
+  const { t } = useTranslation()
   const [mobileOpen, setMobileOpen] = useState(false)
 
   const handleNavigate = (page: string) => {
@@ -101,7 +105,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
                       : "hover:border-border hover:bg-secondary border-transparent"
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               </li>
             ))}
@@ -110,7 +114,10 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
 
         {/* Right side: theme toggle + tutorial + wallet + mobile menu */}
         <div className="flex items-center gap-2">
+          <NetworkIndicator />
+          <LanguageSelector />
           <ThemeToggle />
+          <NotificationCenter onNavigate={handleNavigate} />
 
           {/* Tutorial launch button */}
           {onLaunchTutorial && (
@@ -146,9 +153,15 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
               </Button>
             </>
           ) : (
-            <Button onClick={connect} disabled={loading} size="sm" className="shimmer-on-hover" data-onboarding="connect-wallet">
+            <Button
+              onClick={() => void connect()}
+              disabled={loading}
+              size="sm"
+              className="shimmer-on-hover"
+              data-onboarding="connect-wallet"
+            >
               <Wallet className="h-4 w-4" />
-              {loading ? "Connecting..." : "Connect Wallet"}
+              {loading ? t("nav.connecting") : t("nav.connectWallet")}
             </Button>
           )}
 
@@ -188,7 +201,7 @@ export function Navbar({ activePage, onNavigate, onLaunchTutorial }: NavbarProps
                       : "hover:border-border hover:bg-secondary border-transparent"
                   )}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               </li>
             ))}

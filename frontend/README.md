@@ -62,9 +62,15 @@ src/
 └── index.css            # Design tokens, animations, utilities
 ```
 
-## Wallet
+## Network and Wallet Safety
 
-Uses [Freighter](https://freighter.app) (`@stellar/freighter-api`) for wallet connection. Switch to **Testnet** in Freighter settings before connecting.
+Uses [Freighter](https://freighter.app) (`@stellar/freighter-api`) for wallet connection. The persistent network indicator reflects the configured Stellar network and the wallet's detected network. Testnet is highlighted as a non-production environment.
+
+Transactions are blocked when Freighter is on a different network from the active build. Switch Freighter to the network shown in the indicator and retry; no signing or submission request is made while the mismatch remains.
+
+This safeguard implements [issue #1508](https://github.com/lernza/lernza/issues/1508).
+
+The environment loader generates one active `.env.local` from `config/development.yaml`, `config/staging.yaml`, or `config/production.yaml`. Contract IDs are read only from that selected configuration together with its `VITE_SOROBAN_NETWORK_PASSPHRASE`; do not mix contract IDs between environment files. Use `node scripts/load-config.mjs <environment> > frontend/.env.local` when changing environments.
 
 ## Data Sources (Current State)
 

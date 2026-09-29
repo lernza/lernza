@@ -26,7 +26,7 @@ function formatBalance(raw: string): string {
 }
 
 function formatRewardBalance(raw: bigint, decimals: number): string {
-  const divisor = BigInt(10 ** decimals)
+  const divisor = 10n ** BigInt(decimals)
   const whole = raw / divisor
   const fraction = raw % divisor
   const fractionStr = fraction.toString().padStart(decimals, "0").slice(0, 2)

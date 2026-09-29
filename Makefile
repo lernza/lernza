@@ -1,4 +1,4 @@
-.PHONY: setup test test-quest test-milestone test-rewards fmt lint build deploy clean
+.PHONY: setup test test-quest test-milestone test-rewards fmt lint build deploy bench clean
 
 setup:
 	./scripts/bootstrap.sh
@@ -29,6 +29,8 @@ build:
 deploy:
 	./scripts/deploy-contracts.sh --network testnet --build
 
+bench:
+	bash scripts/bench-contracts.sh
+
 clean:
 	cargo clean
-

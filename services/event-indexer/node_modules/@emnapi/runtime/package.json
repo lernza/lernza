@@ -1,0 +1,39 @@
+{
+  "name": "@emnapi/runtime",
+  "version": "2.0.0-alpha.3",
+  "description": "emnapi runtime",
+  "type": "module",
+  "main": "./dist/emnapi.js",
+  "module": "./dist/emnapi.js",
+  "types": "./dist/emnapi.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/emnapi.d.ts",
+      "import": "./dist/emnapi.js",
+      "require": "./index.cjs",
+      "default": "./dist/emnapi.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "tslib": "^2.4.0"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "test": "node ./test/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toyobayashi/emnapi.git"
+  },
+  "author": "toyobayashi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/toyobayashi/emnapi/issues"
+  },
+  "homepage": "https://github.com/toyobayashi/emnapi#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}

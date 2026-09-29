@@ -9,6 +9,16 @@ soroban-sdk = "22.0.11"
 stellar-tokens = "0.4.1"
 stellar-access = "0.4.1"
 stellar-macros = "0.7.2"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Benchmarking setup for performance monitoring.
+# Use `cargo bench` to run benchmarks and track component render times and contract call latencies.
+[profile.bench]
+inherits = "release"
+opt-level = 3
+debug = 1
+strip = "none"
+panic = "unwind"
 
 [profile.release]
 opt-level = "z"
@@ -20,7 +30,7 @@ panic = "abort"
 codegen-units = 1
 lto = true
 
-# For more information about this profile see https://soroban.stellar.org/docs/basic-tutorials/logging#cargotoml-profile
+# For more information about this profile see https://soroban.stellar.org/docs/basic-tutorials/logging#cargotml-profile
 [profile.release-with-logs]
 inherits = "release"
 debug-assertions = true

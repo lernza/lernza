@@ -183,6 +183,19 @@ reward twice).
   providers, but should be revisited if reliance on a single provider
   becomes a bottleneck.
 
+## Residual Risks
+
+The following risks are accepted for the current deployment and should be
+revisited as the platform matures:
+
+| Risk | Status | Notes |
+|------|--------|-------|
+| Single-admin key compromise | Accepted (MVP) | Multisig + timelock planned (see ADR-007) |
+| RPC provider single point of failure | Accepted (MVP) | Multi-provider quorum read not yet implemented |
+| Quest creator reputation | Accepted | No on-chain reputation system; relies on community trust |
+| Token contract due diligence | Accepted | Only reviewed tokens recommended in SECURITY.md |
+| Client-side storage of unsigned XDR | Accepted | Pruned after 30 minutes; no signed data stored |
+
 ## Out of Scope
 
 - Physical security of user devices.

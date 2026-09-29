@@ -75,8 +75,7 @@ proptest! {
                         &String::from_str(&env, "Milestone"),
                         &String::from_str(&env, "Description"),
                         &100,
-                        &false,
-                    );
+                        &false, &None, &None, &None);
                     if let Some(prev) = prev_id {
                         prop_assert!(mid > prev, "milestone id {} not > prev {}", mid, prev);
                     }

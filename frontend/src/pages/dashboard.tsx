@@ -1,54 +1,28 @@
-import React, { useState, useEffect, useCallback, Suspense } from "react"
-import {
-  Plus,
-  Users,
-  Target,
-  Coins,
-  ChevronRight,
-  Wallet,
-  Sparkles,
-  LayoutDashboard,
-  Loader2,
-  Search,
-  X,
-  BookOpen,
-  SlidersHorizontal,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { PrefetchLink } from "@/components/PrefetchLink"
-import { useContractData } from "@/hooks/use-async-data"
-import { EmptyState } from "@/components/ui/async-states"
-import { SkeletonQuestList } from "@/components/ui/skeleton"
-import { SmartError } from "@/components/error-states"
-import { SectionErrorBoundary } from "@/components/error-boundary"
-import { useWallet } from "@/hooks/use-wallet"
+import { useCallback, useEffect, useState } from "react"
 import { questClient } from "@/lib/contracts/quest"
-import { milestoneClient } from "@/lib/contracts/milestone"
-import { rewardsClient } from "@/lib/contracts/rewards"
-import type { QuestInfo, CategoryInfo } from "@/lib/contract-types"
-import { useQuestStatsMap } from "@/hooks/use-quest-stats"
-import { formatTokens } from "@/lib/utils"
-import { navigateToPath } from "@/lib/navigation"
+import { useWallet } from "@/hooks/use-wallet"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import { useOnboarding } from "@/hooks/use-onboarding"
-
-// Sub-components
-import { PersonalProgress } from "./dashboard/personal-progress"
+import { useDashboardData } from "@/hooks/use-dashboard-data"
+import { useDashboardFilters } from "@/hooks/use-dashboard-filters"
+import { navigateToPath } from "@/lib/navigation"
+import { SectionErrorBoundary } from "@/components/error-boundary"
+import type { QuestInfo, CategoryInfo } from "@/lib/contract-types"
+import {
+  DASHBOARD_LOAD_MORE_SIZE,
+  DASHBOARD_QUEST_PAGE_SIZE,
+  RECENT_ACTIVITY_LIMIT,
+  TRENDING_QUEST_LIMIT,
+} from "./dashboard/constants"
+import { OnboardingBanner } from "./dashboard/onboarding-banner"
+import { WelcomeBanner } from "./dashboard/welcome-banner"
+import { DashboardStats } from "./dashboard/dashboard-stats"
+import { FilterPanel } from "./dashboard/filter-panel"
+import { QuestList } from "./dashboard/quest-list"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
 import { PageMetadata } from "@/components/PageMetadata"
 import { PAGE_METADATA } from "@/lib/page-metadata"
-
-// Lazy-loaded chart
-const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
-const DASHBOARD_QUEST_PAGE_SIZE = 20
-const DASHBOARD_LOAD_MORE_SIZE = 20
-const TRENDING_QUEST_LIMIT = 2
-const RECENT_ACTIVITY_LIMIT = 5
-
-type QuestDiscoveryStatus = "all" | "active" | "upcoming" | "completed"
 
 interface DashboardProps {
   onSelectQuest?: (id: number) => void
@@ -57,33 +31,12 @@ interface DashboardProps {
   onLaunchTutorial?: () => void
 }
 
-export function Dashboard(props: DashboardProps = {} as DashboardProps) {
-  return (
-    <>
-      <PageMetadata {...PAGE_METADATA.dashboard} />
-      <DashboardContent {...props} />
-    </>
-  )
-}
-
-function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps) {
-  const { connected, connect, shortAddress, address, loading: walletConnecting, error } = useWallet()
-  const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
-  const [preset, setPreset] = useState<
-    "none" | "ending-soon" | "recently-funded" | "recently-verified"
-  >("none")
-  const [search, setSearch] = useState("")
-  const [category, setCategory] = useState("all")
-  const [creatorFilter, setCreatorFilter] = useState("all")
-  const [rewardTokenFilter, setRewardTokenFilter] = useState("all")
-  const [sortBy, setSortBy] = useState<
-    "newest" | "ending-soon" | "most-enrolled" | "highest-reward"
-  >("newest")
-  const [statusFilter, setStatusFilter] = useState<QuestDiscoveryStatus>("all")
-  const [rewardMin, setRewardMin] = useState<string>("")
-  const [rewardMax, setRewardMax] = useState<string>("")
-  const [displayCount, setDisplayCount] = useState(DASHBOARD_QUEST_PAGE_SIZE)
-  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000))
+export function Dashboard(
+  { onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps
+) {
+  const { symbol } = useTokenSymbol()
+  const { connected, connect, shortAddress, address } = useWallet()
+  const onboarding = useOnboarding()
 
   // Incremental, contract-side pagination of the public quest feed so the
   // dashboard never renders all (potentially hundreds of) quests at once.
@@ -97,128 +50,20 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   // its quests) disappears from discovery — issue #1348.
   const [categoryInfo, setCategoryInfo] = useState<CategoryInfo | null>(null)
 
-  useEffect(() => {
-    if (category === "all" || !questClient.getCategory) {
-      setCategoryInfo(null)
-      return
-    }
-    let active = true
-    questClient
-      .getCategory(category)
-      .then(info => {
-        if (active) setCategoryInfo(info)
-      })
-      .catch(() => {
-        if (active) setCategoryInfo(null)
-      })
-    return () => {
-      active = false
-    }
-  }, [category])
-  
-  const onboarding = useOnboarding()
-
   // Dashboard data stays refetchable so error-state retry can reload the full view.
   const {
-    data: dashboardData,
+    publicQuests,
+    ownedQuests,
+    enrolledQuests,
+    accessibleQuests,
+    questCompletions,
+    userEarnings,
+    questStats,
+    questStatsLoading,
     isLoading,
-    error: loadError,
+    loadError,
     refetch,
-  } = useContractData(
-    "dashboard",
-    async () => {
-      const publicQuests = await questClient.listPublicQuests(0, DASHBOARD_QUEST_PAGE_SIZE)
-      const [ownedQuests, enrolledQuests] = address
-        ? await Promise.all([
-            questClient.listQuestsByOwner(address),
-            questClient.listQuestsByEnrollee(address),
-          ])
-        : [[], []]
-
-      const allQuests = [...publicQuests, ...ownedQuests, ...enrolledQuests]
-      if (allQuests.length === 0) {
-        console.warn("[Dashboard] No quests loaded from any source")
-      }
-
-      const questMap = new Map(allQuests.map(quest => [quest.id, quest] as const))
-
-      if (questMap.size < allQuests.length) {
-        console.warn(
-          `[Dashboard] Deduplication lost ${allQuests.length - questMap.size} quest(s)`,
-          { before: allQuests.length, after: questMap.size }
-        )
-      }
-
-      const accessibleQuests = Array.from(questMap.values())
-
-      const previewAllQuests = [
-        ...publicQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-        ...ownedQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-        ...enrolledQuests.slice(0, DASHBOARD_QUEST_PAGE_SIZE),
-      ]
-
-      if (previewAllQuests.length === 0) {
-        console.warn("[Dashboard] No preview quests loaded from any source")
-      }
-
-      const previewQuestMap = new Map(
-        previewAllQuests.map(quest => [quest.id, quest] as const)
-      )
-
-      if (previewQuestMap.size < previewAllQuests.length) {
-        console.warn(
-          `[Dashboard] Preview deduplication lost ${previewAllQuests.length - previewQuestMap.size} quest(s)`,
-          { before: previewAllQuests.length, after: previewQuestMap.size }
-        )
-      }
-
-      const previewQuests = Array.from(previewQuestMap.values())
-
-      let questCompletions: Record<number, number> = {}
-      let userEarnings = 0n
-      if (address) {
-        const [completionEntries, earnings] = await Promise.all([
-          Promise.all(
-            previewQuests.map(async q => {
-              const completed = await milestoneClient.getEnrolleeCompletions(q.id, address)
-              return [q.id, completed] as const
-            })
-          ),
-          rewardsClient.getUserEarnings(address),
-        ])
-        questCompletions = Object.fromEntries(completionEntries)
-        userEarnings = earnings
-      }
-
-      return {
-        publicQuests,
-        ownedQuests,
-        enrolledQuests,
-        accessibleQuests,
-        previewQuestIds: previewQuests.map(q => q.id),
-        questCompletions,
-        userEarnings,
-      }
-    },
-    {
-      enabled: connected,
-      queryKey: [connected, address],
-    }
-  )
-
-  // Extract data or use defaults
-  const {
-    publicQuests = [],
-    ownedQuests = [],
-    enrolledQuests = [],
-    accessibleQuests = [],
-    previewQuestIds = [],
-    questCompletions = {},
-    userEarnings = 0n,
-  } = dashboardData || {}
-
-  const { statsByQuestId: questStats, isLoading: questStatsLoading } =
-    useQuestStatsMap(previewQuestIds)
+  } = useDashboardData({ connected, address })
 
   // When the first page of public quests arrives at full size, there are likely
   // more pages available on the contract to be loaded on demand.
@@ -247,6 +92,36 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     }
   }, [publicQuests, extraPublicQuests])
 
+  const filters = useDashboardFilters({
+    publicQuests,
+    ownedQuests,
+    enrolledQuests,
+    extraPublicQuests,
+    questStats,
+  })
+
+  // Look up the listing details for the selected category so the panel can warn
+  // about upcoming expiry.
+  useEffect(() => {
+    const selected = filters.category
+    if (selected === "all" || !questClient.getCategory) {
+      setCategoryInfo(null)
+      return
+    }
+    let active = true
+    questClient
+      .getCategory(selected)
+      .then(info => {
+        if (active) setCategoryInfo(info)
+      })
+      .catch(() => {
+        if (active) setCategoryInfo(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [filters.category])
+
   const goToQuest = (id: number) => {
     if (onSelectQuest) {
       onSelectQuest(id)
@@ -256,6 +131,10 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   }
 
   const goToCreateQuest = () => {
+    if (!connected) {
+      connect()
+      return
+    }
     if (onCreateQuest) {
       onCreateQuest()
       return
@@ -271,6 +150,7 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
       : filter === "enrolled"
         ? enrolledQuests
         : loadedPublicQuests
+    filter === "owned" ? ownedQuests : filter === "enrolled" ? enrolledQuests : loadedPublicQuests
 
   const presetFilteredQuests = (() => {
     if (preset === "ending-soon") {
@@ -295,16 +175,16 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
   const availableCreators = Array.from(new Set(filteredQuests.map(q => q.owner))).sort()
   const availableRewardTokens = Array.from(new Set(filteredQuests.map(q => q.tokenAddr))).sort()
 
-  // Derive quest status from on-chain state
-  function deriveQuestStatus(q: {
-    status: number
-    deadline: number
-    archivedAt?: number
-  }): QuestDiscoveryStatus {
-    if (q.status === 1 || q.status === 2) return "completed" // Archived or Cancelled
-    if (q.deadline > 0 && q.deadline < nowSeconds) return "completed"
-    if (q.deadline > 0 && q.deadline > nowSeconds) return "upcoming"
-    return "active"
+  // Derive quest status from on-chain state via the single shared
+  // lifecycle-status function (see lib/utils.ts's getQuestLifecycleStatus doc
+  // comment) instead of reimplementing the active/expired/archived/cancelled
+  // logic locally with its own edge cases.
+  function deriveQuestStatus(q: { status: number; deadline: number }): QuestDiscoveryStatus {
+    const lifecycle = getQuestLifecycleStatus({
+      status: q.status as QuestInfo["status"],
+      deadline: q.deadline,
+    })
+    return lifecycle === "active" ? "active" : "completed"
   }
 
   const statusFilteredQuests =
@@ -327,18 +207,19 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
       ? creatorFilteredQuests
       : creatorFilteredQuests.filter(q => q.tokenAddr === rewardTokenFilter)
 
-  // Reward range filter
-  const rewardMinNum = rewardMin !== "" ? Number(rewardMin) : 0
-  const rewardMaxNum = rewardMax !== "" ? Number(rewardMax) : Infinity
+  // Reward range filter (uses deferred values to avoid re-rendering on every keystroke)
+  const rewardMinNum = deferredRewardMin !== "" ? Number(deferredRewardMin) : 0
+  const rewardMaxNum = deferredRewardMax !== "" ? Number(deferredRewardMax) : Infinity
   const rewardFilteredQuests = tokenFilteredQuests.filter(q => {
     const stats = questStats[q.id]
     const pool = stats?.poolBalance ?? 0
-    if (rewardMin !== "" && pool < rewardMinNum) return false
-    if (rewardMax !== "" && pool > rewardMaxNum) return false
+    const poolDisplay = pool / 10 ** 7
+    if (deferredRewardMin !== "" && poolDisplay < rewardMinNum) return false
+    if (deferredRewardMax !== "" && poolDisplay > rewardMaxNum) return false
     return true
   })
 
-  const searchQuery = search.trim().toLowerCase()
+  const searchQuery = deferredSearch.trim().toLowerCase()
   const searchedQuests = searchQuery
     ? rewardFilteredQuests.filter(q => {
         const haystack = [q.name, q.description, q.category, ...(q.tags ?? [])]
@@ -348,7 +229,25 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
       })
     : rewardFilteredQuests
 
-  const sortedQuests = [...searchedQuests].sort((a, b) => {
+  // Tag filter — multi-tag AND/OR (issue #1635)
+  const allKnownTags = Array.from(new Set(filteredQuests.flatMap(q => q.tags ?? []))).sort()
+  const tagSuggestions = tagInput.trim()
+    ? allKnownTags.filter(
+        tag =>
+          tag.toLowerCase().includes(tagInput.trim().toLowerCase()) && !selectedTags.includes(tag)
+      )
+    : []
+  const tagFilteredQuests =
+    selectedTags.length === 0
+      ? searchedQuests
+      : searchedQuests.filter(q => {
+          const qtags = q.tags ?? []
+          return tagFilterMode === "AND"
+            ? selectedTags.every(tag => qtags.includes(tag))
+            : selectedTags.some(tag => qtags.includes(tag))
+        })
+
+  const sortedQuests = [...tagFilteredQuests].sort((a, b) => {
     const statsA = questStats[a.id]
     const statsB = questStats[b.id]
 
@@ -377,10 +276,12 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     0
   )
 
+  const userEarningsBigInt =
+    typeof userEarnings === "bigint" ? userEarnings : BigInt(userEarnings || 0)
   const personalStats = {
-    totalEarned: Number(userEarnings),
-    questsOwned: ownedCount,
-    questsEnrolled: enrolledCount,
+    totalEarned: userEarningsBigInt,
+    questsOwned: ownedQuests.length,
+    questsEnrolled: enrolledQuests.length,
     milestonesCompleted,
   }
 
@@ -401,596 +302,111 @@ function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: Da
     }))
 
   const currentMonth = new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date())
+  const earningsChartCapped = userEarningsBigInt > BigInt(Number.MAX_SAFE_INTEGER)
   const earningsHistory = [
     { date: "Start", amount: 0 },
-    { date: currentMonth, amount: Number(userEarnings) },
+    {
+      date: currentMonth,
+      amount: earningsChartCapped ? Number.MAX_SAFE_INTEGER : Number(userEarningsBigInt),
+    },
   ]
 
-  if (!connected) {
-    return (
-      <div className="relative flex min-h-[calc(100vh-67px)] items-center justify-center overflow-hidden">
-        {/* Background elements */}
-        <div className="bg-grid-dots pointer-events-none absolute inset-0" />
-        <div
-          className="bg-accent border-border animate-float absolute top-[10%] left-[8%] h-20 w-20 rotate-12 border opacity-[0.08] shadow-md"
-          style={{ animationDuration: "8s" }}
-        />
-        <div
-          className="bg-accent border-border animate-float absolute right-[6%] bottom-[15%] h-14 w-14 -rotate-6 border opacity-[0.1] shadow-md"
-          style={{ animationDuration: "6s", animationDelay: "1s" }}
-        />
-        <div
-          className="bg-success border-border animate-float absolute top-[60%] left-[5%] h-10 w-10 rotate-45 border opacity-[0.06] shadow-sm"
-          style={{ animationDuration: "7s", animationDelay: "2s" }}
-        />
-        <div
-          className="bg-accent border-border animate-float absolute top-[20%] right-[12%] h-8 w-8 -rotate-12 border opacity-[0.07]"
-          style={{ animationDuration: "9s", animationDelay: "0.5s" }}
-        />
+  const commitTag = (tag: string) => {
+    if (tag && !filters.selectedTags.includes(tag)) {
+      filters.setSelectedTags(prev => [...prev, tag])
+    }
+    filters.setTagInput("")
+  }
 
-        <div className="relative mx-auto max-w-lg px-4">
-          {/* Card container */}
-          <div className="bg-background border-border animate-scale-in overflow-hidden border shadow-xl">
-            {/* Yellow header strip */}
-            <div className="bg-accent border-border flex items-center justify-between border-b px-6 py-3">
-              <span className="text-xs font-semibold tracking-wider uppercase">Dashboard</span>
-              <div className="flex items-center gap-1.5">
-                <div className="bg-destructive border-border h-2.5 w-2.5 border" />
-                <span className="text-xs font-bold">Not Connected</span>
-              </div>
-            </div>
-
-            <div className="p-8 text-center sm:p-10">
-              <div className="bg-accent border-border animate-fade-in-up mx-auto mb-6 flex h-20 w-20 items-center justify-center border shadow-md">
-                <Wallet className="h-8 w-8" />
-              </div>
-              <h2 className="animate-fade-in-up stagger-1 mb-3 text-2xl font-semibold sm:text-3xl">
-                Connect your wallet
-              </h2>
-              <p className="text-muted-foreground animate-fade-in-up stagger-2 mx-auto mb-8 max-w-sm">
-                Connect your Freighter wallet to view your quests, track your progress, and start
-                earning USDC.
-              </p>
-              <Button
-                size="lg"
-                onClick={connect}
-                disabled={walletConnecting}
-                className="shimmer-on-hover animate-fade-in-up stagger-3"
-              >
-                {walletConnecting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting...
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="h-4 w-4" />
-                    Connect Wallet
-                  </>
-                )}
-              </Button>
-
-              {error && (
-                <div
-                  role="alert"
-                  className="border-border bg-destructive/10 mb-6 border px-4 py-3 text-left text-sm font-semibold text-destructive"
-                >
-                  {error.message}
-                </div>
-              )}
-
-              {/* Mini feature list */}
-              <div className="border-border animate-fade-in-up stagger-4 mt-8 border-t pt-6">
-                <div className="flex flex-wrap justify-center gap-4">
-                  {[
-                    { icon: Target, text: "Track quests" },
-                    { icon: Coins, text: "Earn tokens" },
-                    { icon: Sparkles, text: "On-chain" },
-                  ].map(item => (
-                    <div key={item.text} className="flex items-center gap-2">
-                      <div className="bg-secondary border-border flex h-6 w-6 items-center justify-center border-[1.5px]">
-                        <item.icon className="h-3 w-3" />
-                      </div>
-                      <span className="text-muted-foreground text-xs font-bold">{item.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Decorative accent blocks */}
-          <div className="bg-accent border-border animate-fade-in-up stagger-5 absolute -top-4 -right-4 hidden h-10 w-10 rotate-12 border shadow-md sm:block" />
-          <div className="bg-success border-border animate-fade-in-up stagger-6 absolute -bottom-3 -left-3 hidden h-8 w-8 -rotate-6 border shadow-sm sm:block" />
-        </div>
-      </div>
-    )
+  const loadMore = () => {
+    filters.setDisplayCount(prev => prev + DASHBOARD_LOAD_MORE_SIZE)
+    if (hasMorePublic) void loadMorePublic()
   }
 
   // We group all return elements into a single return with one parent div to avoid JSX parsing ambiguity
   return (
     <div className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      {/* Getting Started Banner for new users */}
-      {!onboarding?.completed && (
-        <div className="bg-primary text-primary-foreground mb-8 flex flex-col sm:flex-row items-center justify-between p-6 shadow-lg">
-          <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Sparkles className="h-5 w-5" /> Let's get you started!
-            </h2>
-            <p className="mt-1 text-primary-foreground/80">
-              New to Lernza? Take our quick interactive tour to learn how to earn or create quests.
-            </p>
-          </div>
-          <div className="mt-4 sm:mt-0 flex gap-3">
-            <Button variant="secondary" onClick={() => onboarding?.open?.(0)} className="font-bold">
-              Learner Tour
-            </Button>
-            <Button variant="outline" onClick={() => onboarding?.open?.(5)} className="bg-transparent border-primary-foreground hover:bg-primary-foreground/10 text-primary-foreground">
-              Creator Tour
-            </Button>
-            <Button variant="ghost" onClick={() => onboarding?.complete?.()} className="hover:bg-primary-foreground/10 text-primary-foreground" aria-label="Dismiss banner">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <OnboardingBanner onboarding={onboarding} />
 
-      {/* Welcome banner */}
-      <div className="bg-accent border-border animate-fade-in-up relative mb-8 overflow-hidden border p-6 shadow-lg sm:p-8">
-        <div className="bg-diagonal-lines pointer-events-none absolute inset-0 opacity-30" />
-        <div className="relative flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <Sparkles className="h-5 w-5" />
-              <span className="text-sm font-bold tracking-wider uppercase">Welcome back</span>
-            </div>
-            <PrefetchLink to={`/creator/${address}`}>
-              <h1 className="hover:text-background/80 text-3xl font-semibold transition-colors sm:text-4xl">
-                {shortAddress}
-              </h1>
-            </PrefetchLink>
-            <p className="mt-1 text-sm font-bold opacity-70">
-              You have {personalStats.questsEnrolled} active quests
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            onClick={goToCreateQuest}
-            className="shimmer-on-hover group flex-shrink-0"
-            data-onboarding="nav-create-quest"
-          >
-            <Plus className="h-4 w-4" />
-            Create quest
-          </Button>
-          {onLaunchTutorial && (
-            <Button
-              variant="outline"
-              onClick={onLaunchTutorial}
-              data-onboarding="tutorial-button"
-              className="flex-shrink-0 flex items-center gap-2"
-              aria-label="Open getting started tutorial"
-            >
-              <BookOpen className="h-4 w-4" aria-hidden="true" />
-              Take the tour
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Platform Stats Overview removed as requested */}
+      <WelcomeBanner
+        connected={connected}
+        address={address}
+        shortAddress={shortAddress}
+        questsEnrolled={personalStats.questsEnrolled}
+        onCreateQuest={goToCreateQuest}
+        onLaunchTutorial={onLaunchTutorial}
+      />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Left Column (Personal Stats, Chart, Quests) */}
         <div className="animate-fade-in-up stagger-2 space-y-8 lg:col-span-2">
-          {/* Personal Stats */}
-          <SectionErrorBoundary label="Personal stats">
-            <PersonalProgress stats={personalStats} />
-          </SectionErrorBoundary>
-
-          {/* Earnings Chart (Lazy Loaded) */}
-          <SectionErrorBoundary label="Earnings chart">
-            <Suspense
-              fallback={
-                <div className="bg-muted border-border h-[250px] animate-pulse border shadow-lg" />
-              }
-            >
-              <EarningsChart data={earningsHistory} />
-            </Suspense>
-          </SectionErrorBoundary>
+          {connected && <DashboardStats personalStats={personalStats} earningsHistory={earningsHistory} />}
 
           {/* Your Quests Section */}
           <SectionErrorBoundary label="Your quests">
             <div>
-              <div className="relative mb-5 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-                <h2 className="flex items-center gap-2 text-xl font-semibold">
-                  <LayoutDashboard className="h-5 w-5" /> Your Quests
-                </h2>
-                <div
-                  className="border-border flex gap-0 border shadow-md"
-                  role="group"
-                  aria-label="Quest filter"
-                >
-                  {(["all", "owned", "enrolled"] as const).map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      aria-pressed={filter === f}
-                      className={`border-border cursor-pointer border-r px-4 py-2 text-xs font-semibold tracking-wider capitalize uppercase transition-colors last:border-r-0 ${
-                        filter === f ? "bg-accent" : "bg-background hover:bg-secondary"
-                      }`}
-                    >
-                      {f === "all" ? "Show all" : f === "owned" ? "Show owned" : "Show enrolled"}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <FilterPanel
+                filter={filters.filter}
+                onFilterChange={filters.setFilter}
+                connected={connected}
+                search={filters.search}
+                onSearchChange={filters.setSearch}
+                category={filters.category}
+                onCategoryChange={filters.setCategory}
+                availableCategories={filters.availableCategories}
+                creatorFilter={filters.creatorFilter}
+                onCreatorFilterChange={filters.setCreatorFilter}
+                availableCreators={filters.availableCreators}
+                address={address}
+                rewardTokenFilter={filters.rewardTokenFilter}
+                onRewardTokenFilterChange={filters.setRewardTokenFilter}
+                availableRewardTokens={filters.availableRewardTokens}
+                sortBy={filters.sortBy}
+                onSortByChange={filters.setSortBy}
+                tagInput={filters.tagInput}
+                onTagInputChange={filters.setTagInput}
+                onTagCommit={commitTag}
+                selectedTags={filters.selectedTags}
+                onSelectedTagsChange={filters.setSelectedTags}
+                tagSuggestions={filters.tagSuggestions}
+                tagFilterMode={filters.tagFilterMode}
+                onTagFilterModeChange={filters.setTagFilterMode}
+                categoryInfo={categoryInfo}
+                symbol={symbol}
+                statusFilter={filters.statusFilter}
+                onStatusFilterChange={filters.setStatusFilter}
+                rewardMin={filters.rewardMin}
+                onRewardMinChange={filters.setRewardMin}
+                rewardMax={filters.rewardMax}
+                onRewardMaxChange={filters.setRewardMax}
+                onClearRewardRange={() => {
+                  filters.setRewardMin("")
+                  filters.setRewardMax("")
+                }}
+                preset={filters.preset}
+                onPresetChange={filters.setPreset}
+              />
 
-              {/* Search, category filter, and sort */}
-              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="relative flex-1">
-                  <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    placeholder="Search quests by name, description, category, or tag"
-                    aria-label="Search quests"
-                    className="border-border bg-background w-full border py-2.5 pr-9 pl-9 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none"
-                  />
-                  {search && (
-                    <button
-                      type="button"
-                      onClick={() => setSearch("")}
-                      aria-label="Clear search"
-                      className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-
-                <select
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  aria-label="Filter by category"
-                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
-                >
-                  <option value="all">All categories</option>
-                  {availableCategories.map(c => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={creatorFilter}
-                  onChange={e => setCreatorFilter(e.target.value)}
-                  aria-label="Filter by creator"
-                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
-                >
-                  <option value="all">All creators</option>
-                  {availableCreators.map(creator => (
-                    <option key={creator} value={creator}>
-                      {creator === address
-                        ? "You"
-                        : `${creator.slice(0, 6)}...${creator.slice(-4)}`}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={rewardTokenFilter}
-                  onChange={e => setRewardTokenFilter(e.target.value)}
-                  aria-label="Filter by reward token"
-                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
-                >
-                  <option value="all">All tokens</option>
-                  {availableRewardTokens.map(token => (
-                    <option key={token} value={token}>
-                      {`${token.slice(0, 6)}...${token.slice(-4)}`}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as typeof sortBy)}
-                  aria-label="Sort quests"
-                  className="border-border bg-background cursor-pointer border px-3 py-2.5 text-xs font-semibold tracking-wider uppercase shadow-sm focus:outline-none"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="ending-soon">Ending soon</option>
-                  <option value="most-enrolled">Most enrolled</option>
-                  <option value="highest-reward">Highest reward</option>
-                </select>
-              </div>
-
-              {categoryInfo && (
-                <p
-                  className={`text-xs font-bold ${
-                    categoryInfo.expiresAt * 1000 - Date.now() < 7 * 24 * 60 * 60 * 1000
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  {categoryInfo.expiresAt * 1000 - Date.now() < 7 * 24 * 60 * 60 * 1000
-                    ? "Expiring soon — "
-                    : "Available until "}
-                  {new Date(categoryInfo.expiresAt * 1000).toLocaleDateString()}
-                </p>
-              )}
-
-              {/* Status filter chips */}
-              <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Status filter">
-                {(
-                  [
-                    { value: "all", label: "All status" },
-                    { value: "active", label: "Active" },
-                    { value: "upcoming", label: "Upcoming" },
-                    { value: "completed", label: "Completed" },
-                  ] as const
-                ).map(s => (
-                  <button
-                    key={s.value}
-                    onClick={() => setStatusFilter(s.value)}
-                    aria-pressed={statusFilter === s.value}
-                    className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
-                      statusFilter === s.value
-                        ? "bg-accent"
-                        : "bg-background hover:bg-secondary hover:shadow-md"
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Reward range filter */}
-              <div className="mb-5 flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <SlidersHorizontal className="text-muted-foreground h-3.5 w-3.5" />
-                  <span className="text-muted-foreground text-xs font-bold uppercase">Reward range:</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={rewardMin}
-                    onChange={e => setRewardMin(e.target.value)}
-                    placeholder="Min USDC"
-                    aria-label="Minimum reward amount"
-                    min="0"
-                    className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"
-                  />
-                  <span className="text-muted-foreground text-xs">-</span>
-                  <input
-                    type="number"
-                    value={rewardMax}
-                    onChange={e => setRewardMax(e.target.value)}
-                    placeholder="Max USDC"
-                    aria-label="Maximum reward amount"
-                    min="0"
-                    className="border-border bg-background w-28 border px-3 py-1.5 text-xs font-medium shadow-sm focus:outline-none"
-                  />
-                  {(rewardMin !== "" || rewardMax !== "") && (
-                    <button
-                      type="button"
-                      onClick={() => { setRewardMin(""); setRewardMax("") }}
-                      aria-label="Clear reward range"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Preset Filter Chips */}
-              <div className="mb-5 flex flex-wrap gap-2" role="group" aria-label="Preset filters">
-                {(
-                  [
-                    { value: "none", label: "Show all" },
-                    { value: "ending-soon", label: "Show ending soon" },
-                    { value: "recently-funded", label: "Show recently funded" },
-                    { value: "recently-verified", label: "Show recently verified" },
-                  ] as const
-                ).map(p => (
-                  <button
-                    key={p.value}
-                    onClick={() => setPreset(p.value)}
-                    aria-pressed={preset === p.value}
-                    className={`border-border border px-3 py-1.5 text-xs font-bold shadow-sm transition-all ${
-                      preset === p.value
-                        ? "bg-accent"
-                        : "bg-background hover:bg-secondary hover:shadow-md"
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-
-              {loadError && (
-                <div className="mb-5">
-                  <SmartError message={loadError} onRetry={() => void refetch()} />
-                </div>
-              )}
-
-              {(isLoading || questStatsLoading) && <SkeletonQuestList className="mb-5" count={3} />}
-
-              <div className="relative grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-1">
-                {visibleQuests.map((ws, i) => {
-                  const stats = questStats[ws.id] || {
-                    enrolleeCount: 0,
-                    milestoneCount: 0,
-                    poolBalance: 0,
-                  }
-                  const totalMilestones = stats.milestoneCount
-                  const completedCount = questCompletions[ws.id] || 0
-                  const totalReward = stats.poolBalance
-                  const earnedReward =
-                    totalMilestones > 0 ? (totalReward * completedCount) / totalMilestones : 0
-                  const isOwned = !!address && ws.owner === address
-
-                  return (
-                    <button
-                      key={ws.id}
-                      type="button"
-                      onClick={() => goToQuest(ws.id)}
-                      aria-label={`Open quest ${ws.name}`}
-                      data-onboarding={i === 0 ? "quest-card" : undefined}
-                      className={`card-tilt group animate-fade-in-up cursor-pointer stagger-${i + 1} focus-visible:ring-ring w-full text-left focus-visible:ring-2 focus-visible:outline-none`}
-                    >
-                      <Card>
-                        <CardHeader className="pb-3">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="mb-1 flex items-center gap-3">
-                                <CardTitle className="group-hover:text-accent text-base transition-colors">
-                                  {ws.name}
-                                </CardTitle>
-                                {completedCount === totalMilestones && totalMilestones > 0 && (
-                                  <Badge variant="success" className="gap-1">
-                                    <Sparkles className="h-3 w-3" />
-                                    Complete
-                                  </Badge>
-                                )}
-                                <Badge
-                                  variant={isOwned ? "default" : "secondary"}
-                                  className="text-[10px]"
-                                >
-                                  {isOwned ? "Owner" : "Enrolled"}
-                                </Badge>
-                              </div>
-                              <p className="text-muted-foreground mt-1 line-clamp-1 text-sm">
-                                {ws.description}
-                              </p>
-                            </div>
-                            <div className="bg-secondary border-border group-hover:bg-accent ml-3 flex h-8 w-8 flex-shrink-0 items-center justify-center border transition-all group-hover:shadow-sm">
-                              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
-                            <Badge variant="secondary" className="gap-1">
-                              <Users className="h-3 w-3" />
-                              {ws.maxEnrollees ? (
-                                <>
-                                  {stats.enrolleeCount}/{ws.maxEnrollees} enrolled (
-                                  {Math.max(0, ws.maxEnrollees - stats.enrolleeCount)} left)
-                                </>
-                              ) : (
-                                <>{stats.enrolleeCount} enrolled</>
-                              )}
-                            </Badge>
-                            <Badge variant="secondary" className="gap-1">
-                              <Target className="h-3 w-3" />
-                              {stats.milestoneCount} milestones
-                            </Badge>
-                            <Badge variant="default" className="gap-1">
-                              <Coins className="h-3 w-3" />
-                              {formatTokens(stats.poolBalance)} USDC
-                            </Badge>
-                            {ws.category && (
-                              <Badge variant="outline" className="text-[10px]">
-                                {ws.category}
-                              </Badge>
-                            )}
-                          </div>
-
-                          {totalMilestones > 0 && (
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-3">
-                                <Progress
-                                  value={completedCount}
-                                  max={totalMilestones}
-                                  className="flex-1"
-                                />
-                                <span className="text-muted-foreground text-xs font-bold whitespace-nowrap">
-                                  {completedCount}/{totalMilestones}
-                                </span>
-                              </div>
-                              {earnedReward > 0 && (
-                                <div className="flex items-center justify-between">
-                                  <span className="text-muted-foreground text-xs font-bold">
-                                    Earned so far
-                                  </span>
-                                  <span className="text-xs font-semibold text-green-700">
-                                    +{formatTokens(earnedReward)} / {formatTokens(totalReward)} USDC
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {(hasMorePublic || sortedQuests.length > visibleQuests.length) &&
-                !isLoading &&
-                !loadError && (
-                  <div className="mt-5 text-center">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setDisplayCount(prev => prev + DASHBOARD_LOAD_MORE_SIZE)
-                        if (hasMorePublic) void loadMorePublic()
-                      }}
-                      className="shimmer-on-hover"
-                      disabled={loadingMore}
-                    >
-                      {loadingMore ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Loading…
-                        </>
-                      ) : (
-                        `Load more (${visibleQuests.length} of ${sortedQuests.length})`
-                      )}
-                    </Button>
-                  </div>
-                )}
-
-              {sortedQuests.length === 0 && !isLoading && !loadError && (
-                <div className="mt-5">
-                  <EmptyState
-                    variant="default"
-                    illustration="dashboard"
-                    title={
-                      searchQuery || category !== "all"
-                        ? "No matching quests"
-                        : preset !== "none"
-                          ? `No ${preset.replace("-", " ")} quests`
-                          : filter === "all"
-                            ? "No quests yet"
-                            : `No ${filter} quests`
-                    }
-                    description={
-                      searchQuery || category !== "all"
-                        ? "No quests match your search and filters. Try broadening them."
-                        : preset !== "none"
-                          ? `No quests match the "${preset.replace("-", " ")}" filter. Try a different preset.`
-                          : filter === "all"
-                            ? "Create your first quest to start incentivizing learning with on-chain rewards."
-                            : filter === "owned"
-                              ? "You haven't created any quests yet. Start one to incentivize learners."
-                              : "You haven't enrolled in any quests yet. Browse available quests to get started."
-                    }
-                    action={
-                      filter === "all" || filter === "owned"
-                        ? {
-                            label: "Create quest",
-                            onClick: goToCreateQuest,
-                          }
-                        : undefined
-                    }
-                  />
-                </div>
-              )}
+              <QuestList
+                quests={filters.visibleQuests}
+                totalCount={filters.sortedQuests.length}
+                questStats={questStats}
+                questCompletions={questCompletions}
+                address={address}
+                isLoading={isLoading}
+                statsLoading={questStatsLoading}
+                loadError={loadError}
+                hasMorePublic={hasMorePublic}
+                loadingMore={loadingMore}
+                onRetry={() => void refetch()}
+                onLoadMore={loadMore}
+                onOpenQuest={goToQuest}
+                onCreateQuest={goToCreateQuest}
+                filter={filters.filter}
+                preset={filters.preset}
+                category={filters.category}
+                searchQuery={filters.searchQuery}
+              />
             </div>
           </SectionErrorBoundary>
         </div>

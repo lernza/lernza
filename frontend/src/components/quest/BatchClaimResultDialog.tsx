@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useRef } from "react"
 import { createPortal } from "react-dom"
 import { X, CheckCircle2, AlertCircle, Coins, RotateCcw, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn, formatTokens } from "@/lib/utils"
 import { useScrollLock } from "@/hooks/use-scroll-lock"
+import { useFocusTrap } from "@/hooks/use-focus-trap"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
 
 interface BatchClaimResultDialogProps {
@@ -23,10 +25,10 @@ export function BatchClaimResultDialog({
   onRetryFailed,
   isRetrying = false,
 }: BatchClaimResultDialogProps) {
+  const { symbol } = useTokenSymbol()
   const [isClosing, setIsClosing] = useState(false)
 
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
   // Lock body scroll when dialog is open
@@ -41,70 +43,17 @@ export function BatchClaimResultDialog({
     }, 150)
   }, [isRetrying, onClose])
 
+  // Trap focus, autofocus the close button, close on Escape, restore focus.
+  useFocusTrap(dialogRef, {
+    isActive: isOpen && summary !== null,
+    onEscape: handleClose,
+    initialFocusRef: closeButtonRef,
+  })
+
   const truncateAddress = (address: string) => {
     if (!address) return ""
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
-
-  // Handle Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen && !isRetrying) {
-        handleClose()
-      }
-    }
-
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown)
-    }
-
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, isRetrying, handleClose])
-
-  // Focus management
-  useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement
-
-      const focusTimer = setTimeout(() => {
-        if (closeButtonRef.current) {
-          closeButtonRef.current.focus()
-        }
-      }, 100)
-
-      const handleTabKey = (e: KeyboardEvent) => {
-        if (e.key !== "Tab" || !dialogRef.current) return
-
-        const focusable = dialogRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        const first = focusable[0] as HTMLElement
-        const last = focusable[focusable.length - 1] as HTMLElement
-
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            last.focus()
-            e.preventDefault()
-          }
-        } else {
-          if (document.activeElement === last) {
-            first.focus()
-            e.preventDefault()
-          }
-        }
-      }
-
-      window.addEventListener("keydown", handleTabKey)
-
-      return () => {
-        clearTimeout(focusTimer)
-        window.removeEventListener("keydown", handleTabKey)
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus()
-        }
-      }
-    }
-  }, [isOpen])
 
   if (!isOpen || !summary) return null
 
@@ -131,6 +80,7 @@ export function BatchClaimResultDialog({
         aria-modal="true"
         aria-labelledby="batch-result-title"
         aria-describedby="batch-result-description"
+        tabIndex={-1}
         className={cn(
           "animate-fade-in-up relative z-10 w-full max-w-lg px-4",
           isClosing && "scale-95 opacity-0"
@@ -189,7 +139,7 @@ export function BatchClaimResultDialog({
                 {summary.totalAmount > 0n && (
                   <div className="mt-2 flex items-center gap-2">
                     <Badge variant="success" className="gap-1.5">
-                      <Coins className="h-3 w-3" />+{formatTokens(Number(summary.totalAmount))} USDC
+                      <Coins className="h-3 w-3" />+{formatTokens(Number(summary.totalAmount), 7, symbol)}{" "}
                       claimed
                     </Badge>
                   </div>
@@ -230,7 +180,7 @@ export function BatchClaimResultDialog({
                           {result.status === "success" && result.rewardAmount !== undefined && (
                             <Badge variant="success" className="shrink-0 gap-1 text-xs">
                               <Coins className="h-3 w-3" />+
-                              {formatTokens(Number(result.rewardAmount))} USDC
+                              {formatTokens(Number(result.rewardAmount), 7, symbol)}
                             </Badge>
                           )}
                         </div>

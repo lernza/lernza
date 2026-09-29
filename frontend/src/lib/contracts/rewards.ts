@@ -1,29 +1,18 @@
 /** Soroban contract client for the Lernza rewards system (claim, distribute, track). */
-import { isDev, env } from "@/lib/env"
+import { isDev } from "@/lib/env"
+import { Address, Contract, nativeToScVal, scValToNative, xdr } from "@stellar/stellar-sdk"
 import {
-  Address,
-  Contract,
-  nativeToScVal,
-  scValToNative,
-  xdr,
-  TransactionBuilder,
-  Keypair,
-  Account,
-} from "@stellar/stellar-sdk"
-import {
-  server,
   signAndSubmitTracked,
-  NETWORK_PASSPHRASE,
-  RPC_TIMEOUT_MS,
-  withTimeout,
-  withRpcReadThrottle,
+  simulateContractRead,
+  prepareContractTransaction,
   type TransactionLifecycleHandlers,
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
 import { safeContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
+import { contractAddresses } from "./config"
 
-const CONTRACT_ID = env.VITE_REWARDS_CONTRACT_ID
+const CONTRACT_ID = contractAddresses.rewards
 
 export class RewardsClient {
   private contract: Contract | null
@@ -63,12 +52,24 @@ export class RewardsClient {
     return result ? BigInt(result) : 0n
   }
 
+  async getQuestDistributed(questId: number): Promise<bigint> {
+    const result = await this.invokeRead("get_quest_distributed", [
+      nativeToScVal(questId, { type: "u32" }),
+    ])
+    if (!result) return 0n
+    return BigInt(scValToNative(result))
+  }
+
   async getTotalDistributed(): Promise<TotalDistributed> {
     const result = await this.invokeRead("get_total_distributed", [])
     return result ? BigInt(result) : 0n
   }
 
-  async getPlatformStats(): Promise<{ totalFundedQuests: number; totalFunded: bigint; totalDistributed: bigint }> {
+  async getPlatformStats(): Promise<{
+    totalFundedQuests: number
+    totalFunded: bigint
+    totalDistributed: bigint
+  }> {
     const result = await this.invokeRead("get_platform_stats", [])
     if (!result) return { totalFundedQuests: 0, totalFunded: 0n, totalDistributed: 0n }
     const native = scValToNative(result)
@@ -156,25 +157,7 @@ export class RewardsClient {
 
   private async invokeRead(method: string, args: xdr.ScVal[]) {
     return withContractLogging("rewards", method, {}, async () => {
-      const randomKP = Keypair.random()
-      const account = new Account(randomKP.publicKey(), "0")
-
-      const tx = new TransactionBuilder(account, {
-        fee: "10000",
-        networkPassphrase: NETWORK_PASSPHRASE,
-      })
-        .addOperation(this.getContract().call(method, ...args))
-        .setTimeout(30)
-        .build()
-
-      const response = await withRpcReadThrottle(`loading ${method.replace(/_/g, " ")}`, () =>
-        withTimeout(server.simulateTransaction(tx), RPC_TIMEOUT_MS, `RPC timeout: ${method}`)
-      )
-
-      if (response && "result" in response && response.result) {
-        return scValToNative(response.result.retval)
-      }
-      return null
+      return simulateContractRead(this.getContract(), { method, args })
     }).catch((e: unknown) => {
       if (isDev) {
         console.error(`Read error ${method}:`, e)
@@ -184,25 +167,7 @@ export class RewardsClient {
   }
 
   private async buildTx(source: string, method: string, args: xdr.ScVal[]) {
-    const account = await withTimeout(
-      server.getAccount(source),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: getAccount"
-    )
-
-    const tx = new TransactionBuilder(account, {
-      fee: "10000",
-      networkPassphrase: NETWORK_PASSPHRASE,
-    })
-      .addOperation(this.getContract().call(method, ...args))
-      .setTimeout(30)
-      .build()
-
-    return await withTimeout(
-      server.prepareTransaction(tx),
-      RPC_TIMEOUT_MS,
-      "RPC timeout: prepareTransaction"
-    )
+    return prepareContractTransaction(this.getContract(), source, { method, args })
   }
 }
 

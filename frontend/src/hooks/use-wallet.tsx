@@ -2,7 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react"
 import freighter, { WatchWalletChanges } from "@stellar/freighter-api"
 import { NETWORK_PASSPHRASE } from "@/lib/contracts/client"
+import { queryClient } from "@/lib/query-client"
 import { pushToast } from "@/lib/notifications"
+import {
+  walletRegistry,
+  getActiveWalletAdapter,
+  setActiveWalletAdapter,
+  getAllWalletAdapters,
+  type WalletAdapter,
+  type WalletId,
+} from "@/lib/wallets"
+import { WalletConnectionModal } from "@/components/wallet/WalletConnectionModal"
 
 const DISCONNECTED_KEY = "lernza_wallet_disconnected"
 const FREIGHTER_INSTALL_URL = "https://www.freighter.app/"
@@ -37,6 +47,8 @@ interface WalletState {
   expectedNetworkName: string
   wrongNetwork: boolean
   error: WalletErrorState | null
+  selectedWalletId: WalletId
+  isModalOpen: boolean
 }
 
 function parseNetwork(passphrase?: string | null, network?: string | null): WalletNetwork {
@@ -99,13 +111,17 @@ type FreighterApi = {
 const freighterApi = freighter as unknown as FreighterApi
 type WalletContextValue = WalletState & {
   installUrl: string
-  connect: () => Promise<void>
+  wallets: WalletAdapter[]
+  connect: (walletId?: WalletId) => Promise<void>
   retryConnect: () => Promise<void>
   resetWalletError: () => void
   /** Re-checks wallet permission and the active account before protected use. */
   verifySession: () => Promise<boolean>
   disconnect: () => void
   shortAddress: string | null
+  openModal: () => void
+  closeModal: () => void
+  selectWallet: (walletId: WalletId) => Promise<void>
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null)
@@ -150,9 +166,19 @@ function useWalletState(): WalletContextValue {
     expectedNetworkName: getNetworkName(expectedNetwork),
     wrongNetwork: false,
     error: null,
+    selectedWalletId: getActiveWalletAdapter().id,
+    isModalOpen: false,
   })
 
-  const clearConnection = useCallback(() => {
+  const clearConnection = useCallback((addressToClear?: string | null) => {
+    if (addressToClear) {
+      queryClient.removeQueries({
+        predicate: query => {
+          const key = query.queryKey
+          return Array.isArray(key) && key.includes(addressToClear)
+        },
+      })
+    }
     setState(s => ({
       ...s,
       address: null,
@@ -222,39 +248,16 @@ function useWalletState(): WalletContextValue {
     }
   }, [])
 
-  const connect = useCallback(async () => {
-    setState(s => ({ ...s, loading: true, error: null }))
-
-    try {
-      const installed = await detectFreighter()
-      if (!installed) {
-        setState(s => ({ ...s, loading: false }))
-        return
-      }
-
-      // Check for missing API before attempting connection
-      if (!freighterApi.getNetworkDetails) {
-        setState(s => ({
-          ...s,
-          loading: false,
-          error: {
-            code: "missing_api",
-            message:
-              "Your Freighter version is outdated and missing required features. Please update Freighter to the latest version and try again.",
-          },
-        }))
-        return
-      }
-
-      clearManualDisconnect()
-      const { address } = await withTimeout(freighterApi.requestAccess(), TIMEOUT_MS, TIMEOUT_ERROR)
-      await syncNetwork()
+  const connect = useCallback(
+    async (walletId?: WalletId) => {
+      const targetId = walletId ?? state.selectedWalletId ?? "freighter"
+      const adapter = walletRegistry.getAdapter(targetId)
+      setActiveWalletAdapter(targetId)
 
       setState(s => ({
         ...s,
-        address,
-        connected: true,
-        loading: false,
+        selectedWalletId: targetId,
+        loading: true,
         error: null,
       }))
     } catch (err) {
@@ -284,41 +287,152 @@ function useWalletState(): WalletContextValue {
         return
       }
 
-      // Check for timeout first
-      if (msg === TIMEOUT_ERROR.message || normalized.includes("timed out")) {
+      try {
+        if (targetId === "freighter") {
+          const installed = await detectFreighter()
+          if (!installed) {
+            setState(s => ({ ...s, loading: false }))
+            return
+          }
+
+          // Check for missing API before attempting connection
+          if (!freighterApi.getNetworkDetails) {
+            setState(s => ({
+              ...s,
+              loading: false,
+              error: {
+                code: "missing_api",
+                message:
+                  "Your Freighter version is outdated and missing required features. Please update Freighter to the latest version and try again.",
+              },
+            }))
+            return
+          }
+
+          clearManualDisconnect()
+          const { address } = await withTimeout(
+            freighterApi.requestAccess(),
+            TIMEOUT_MS,
+            TIMEOUT_ERROR
+          )
+          await syncNetwork()
+
+          setState(s => ({
+            ...s,
+            address,
+            connected: true,
+            loading: false,
+            isModalOpen: false,
+            error: null,
+          }))
+        } else {
+          const installed = await Promise.resolve(adapter.isInstalled())
+          if (!installed) {
+            setState(s => ({
+              ...s,
+              loading: false,
+              installed: false,
+              isModalOpen: true,
+              error: {
+                code: "freighter_not_installed",
+                message: `${adapter.name} is not installed. Please install ${adapter.name} or choose another wallet.`,
+              },
+            }))
+            return
+          }
+
+          clearManualDisconnect()
+          const { address } = await withTimeout(
+            adapter.connect(),
+            TIMEOUT_MS,
+            new Error(`${adapter.name} request timed out`)
+          )
+
+          setState(s => ({
+            ...s,
+            address,
+            connected: true,
+            loading: false,
+            isModalOpen: false,
+            error: null,
+          }))
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        const normalized = msg.toLowerCase()
+
+        if (
+          normalized.includes("reject") ||
+          normalized.includes("cancel") ||
+          normalized.includes("denied")
+        ) {
+          setState(s => ({
+            ...s,
+            loading: false,
+            connected: false,
+            address: null,
+            error: {
+              code: "user_rejected",
+              message:
+                "You rejected the wallet connection request. Reconnect and approve the request to continue, or switch wallets if you changed your mind.",
+            },
+          }))
+          return
+        }
+
+        if (msg === TIMEOUT_ERROR.message || normalized.includes("timed out")) {
+          setState(s => ({
+            ...s,
+            loading: false,
+            error: {
+              code: "timeout",
+              message: `${adapter.name} did not respond in time. Make sure ${adapter.name} is unlocked and try again.`,
+            },
+          }))
+          return
+        }
+
         setState(s => ({
           ...s,
           loading: false,
-          error: {
-            code: "timeout",
-            message:
-              "Freighter did not respond in time. Make sure Freighter is unlocked and try again.",
-          },
+          error: isNetworkError(err)
+            ? {
+                code: "network_error",
+                message:
+                  `Network error while connecting ${adapter.name}. Check your internet connection and status, then retry.`,
+              }
+            : {
+                code: "unknown",
+                message: err instanceof Error ? err.message : `Failed to connect ${adapter.name}`,
+              },
         }))
-        return
       }
+    },
+    [detectFreighter, state.selectedWalletId, syncNetwork]
+  )
 
-      setState(s => ({
-        ...s,
-        loading: false,
-        error: isNetworkError(err)
-          ? {
-              code: "network_error",
-              message:
-                "Network error while connecting wallet. Check your internet connection and Freighter status, then retry.",
-            }
-          : {
-              code: "unknown",
-              message: err instanceof Error ? err.message : "Failed to connect wallet",
-            },
-      }))
-    }
-  }, [detectFreighter, syncNetwork])
+  const openModal = useCallback(() => {
+    setState(s => ({ ...s, isModalOpen: true }))
+  }, [])
+
+  const closeModal = useCallback(() => {
+    setState(s => ({ ...s, isModalOpen: false, error: null }))
+  }, [])
+
+  const selectWallet = useCallback(
+    async (walletId: WalletId) => {
+      await connect(walletId)
+    },
+    [connect]
+  )
 
   const disconnect = useCallback(() => {
+    const targetId = state.selectedWalletId ?? "freighter"
+    const adapter = walletRegistry.getAdapter(targetId)
+    void adapter.disconnect()
     setManualDisconnect()
-    clearConnection()
-  }, [clearConnection])
+    clearConnection(state.address)
+  }, [clearConnection, state.selectedWalletId, state.address])
 
   const verifySession = useCallback(async (): Promise<boolean> => {
     if (getManualDisconnect()) {
@@ -327,25 +441,41 @@ function useWalletState(): WalletContextValue {
     }
 
     try {
-      const installed = await detectFreighter()
-      if (!installed) {
-        clearConnection()
-        return false
+      const targetId = state.selectedWalletId ?? "freighter"
+      if (targetId === "freighter") {
+        const installed = await detectFreighter()
+        if (!installed) {
+          clearConnection()
+          return false
+        }
+        const { address } = await withTimeout(freighterApi.getAddress(), TIMEOUT_MS, TIMEOUT_ERROR)
+        if (!address) {
+          clearConnection()
+          return false
+        }
+        await syncNetwork()
+        setState(s => ({ ...s, address, connected: true, loading: false, error: null }))
+        return true
+      } else {
+        const adapter = walletRegistry.getAdapter(targetId)
+        const { address } = await withTimeout(
+          adapter.getAddress(),
+          TIMEOUT_MS,
+          new Error(`${adapter.name} request timed out`)
+        )
+        if (!address) {
+          clearConnection()
+          return false
+        }
+        setState(s => ({ ...s, address, connected: true, loading: false, error: null }))
+        return true
       }
-      const { address } = await withTimeout(freighterApi.getAddress(), TIMEOUT_MS, TIMEOUT_ERROR)
-      if (!address) {
-        clearConnection()
-        return false
-      }
-      await syncNetwork()
-      setState(s => ({ ...s, address, connected: true, loading: false, error: null }))
-      return true
     } catch {
       // A stale React state value must never be accepted as a valid session.
       clearConnection()
       return false
     }
-  }, [clearConnection, detectFreighter, syncNetwork])
+  }, [clearConnection, detectFreighter, state.selectedWalletId, syncNetwork])
 
   useEffect(() => {
     let active = true
@@ -430,6 +560,15 @@ function useWalletState(): WalletContextValue {
           return s
         }
 
+        if (s.address && s.address !== address) {
+          queryClient.removeQueries({
+            predicate: query => {
+              const key = query.queryKey
+              return Array.isArray(key) && key.includes(s.address)
+            },
+          })
+        }
+
         return {
           ...s,
           address,
@@ -460,23 +599,48 @@ function useWalletState(): WalletContextValue {
     () => ({
       ...state,
       installUrl: FREIGHTER_INSTALL_URL,
+      wallets: getAllWalletAdapters(),
       connect,
       retryConnect,
       resetWalletError,
       verifySession,
       disconnect,
+      openModal,
+      closeModal,
+      selectWallet,
       shortAddress: state.address
         ? `${state.address.slice(0, 4)}...${state.address.slice(-4)}`
         : null,
     }),
-    [connect, disconnect, resetWalletError, retryConnect, state, verifySession]
+    [
+      closeModal,
+      connect,
+      disconnect,
+      openModal,
+      resetWalletError,
+      retryConnect,
+      selectWallet,
+      state,
+      verifySession,
+    ]
   )
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const wallet = useWalletState()
 
-  return <WalletContext.Provider value={wallet}>{children}</WalletContext.Provider>
+  return (
+    <WalletContext.Provider value={wallet}>
+      {children}
+      <WalletConnectionModal
+        open={wallet.isModalOpen}
+        onClose={wallet.closeModal}
+        onSelectWallet={wallet.selectWallet}
+        connectingWalletId={wallet.loading ? wallet.selectedWalletId : null}
+        error={wallet.error?.message}
+      />
+    </WalletContext.Provider>
+  )
 }
 
 export function useWallet() {

@@ -4,6 +4,7 @@ import {
   shortenAddress,
   formatTokens,
   formatDeadlineLabel,
+  getSecondsRemaining,
   isExpiredDeadline,
   isExpiringSoon,
 } from "./utils"
@@ -76,6 +77,14 @@ describe("deadline helpers", () => {
   it("marks expired deadlines correctly", () => {
     expect(isExpiredDeadline(Math.floor(nowMs / 1000) - 1, nowMs)).toBe(true)
     expect(isExpiredDeadline(Math.floor(nowMs / 1000) + 60, nowMs)).toBe(false)
+  })
+
+  it("uses whole seconds without floating-point drift", () => {
+    // nowMs = 1000.5s after epoch; deadline is 1005s
+    expect(getSecondsRemaining(1005, 1000500)).toBe(5)
+    // 999ms into second 1000 is already expired
+    expect(isExpiredDeadline(1000, 1000999)).toBe(true)
+    expect(getSecondsRemaining(1000, 1000999)).toBe(0)
   })
 
   it("detects when a deadline is within 24 hours", () => {

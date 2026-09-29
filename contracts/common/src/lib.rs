@@ -6,6 +6,8 @@ use soroban_sdk::{contracttype, Address, Env, String, Vec};
 /// preventing accidental misuse with invalid types at compile time.
 pub trait IsDataKey: soroban_sdk::IntoVal<Env, soroban_sdk::Val> {}
 
+impl IsDataKey for String {}
+
 /// Target TTL for persistent and instance storage entries: 518_400 ledgers.
 /// At ~5 seconds per ledger this is roughly 30 days. Every write or meaningful
 /// update to a long-lived entry should extend its TTL to this value so that
@@ -77,6 +79,7 @@ pub enum QuestStatus {
     Active = 0,
     Archived = 1,
     Cancelled = 2,
+    Suspended = 3,
 }
 
 #[contracttype]
@@ -105,9 +108,15 @@ pub struct QuestInfo {
     pub deadline: u64,
     pub archived_at: u64,
     pub max_enrollees: Option<u32>,
+    /// Optional re-enrollment cooldown in ledger sequences. When set, an
+    /// address that leaves a quest cannot re-enroll until this many ledgers
+    /// have passed since it was removed (#1649). `None` preserves the
+    /// previous behaviour of unrestricted re-enrollment.
+    pub cooldown_period: Option<u32>,
     pub verified: bool,
     pub version: u32,
     pub prerequisite_quest_ids: Vec<u32>,
+    pub metadata_uri: Option<String>,
 }
 
 #[contracttype]
@@ -130,6 +139,7 @@ pub struct QuestVersion {
     pub visibility: Visibility,
     pub max_enrollees: Option<u32>,
     pub updated_at: u64,
+    pub metadata_uri: Option<String>,
 }
 
 /// Validate that an address is a Stellar contract address (not an account).
@@ -173,8 +183,37 @@ pub fn is_contract_address(addr: &Address) -> bool {
         return false;
     }
 
-    for i in 1..56 {
-        let c = buf[i];
+    for &c in buf[1..].iter() {
+        let valid = c.is_ascii_uppercase() || (b'2'..=b'7').contains(&c);
+        if !valid {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Validate that an address is a valid Stellar address (account 'G' or contract 'C').
+///
+/// **What this function checks:**
+/// - Length is exactly 56 characters
+/// - First character is 'G' (account) or 'C' (contract)
+/// - All characters use valid base32 charset (A-Z, 2-7)
+pub fn is_valid_stellar_address(addr: &Address) -> bool {
+    let s = addr.to_string();
+
+    if s.len() != 56 {
+        return false;
+    }
+
+    let mut buf = [0u8; 56];
+    s.copy_into_slice(&mut buf);
+
+    if buf[0] != b'G' && buf[0] != b'C' {
+        return false;
+    }
+
+    for &c in buf[1..].iter() {
         let valid = c.is_ascii_uppercase() || (b'2'..=b'7').contains(&c);
         if !valid {
             return false;
@@ -196,7 +235,7 @@ pub fn extend_persistent_ttl(env: &Env, key: &impl IsDataKey) {
 /// Lightweight acceptance of http/https/ipfs schemes and rejects whitespace
 /// and empty strings.
 pub fn is_valid_url(s: &String) -> bool {
-    if s.len() == 0 || s.len() > 2048 {
+    if s.is_empty() || s.len() > 2048 {
         return false;
     }
     let mut buf = [0u8; 2048];
@@ -230,11 +269,11 @@ pub fn is_valid_url(s: &String) -> bool {
 /// Data: (caller_contract, target_contract, method_symbol, params)
 pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_call"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_call"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             params.clone(),
         ),
     );
@@ -245,11 +284,11 @@ pub fn log_cross_call(env: &Env, target: &Address, method: &str, params: &String
 /// Data: (caller_contract, target_contract, method_symbol, success, result)
 pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool, result: &String) {
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "cross_contract_return"),),
+        (soroban_sdk::Symbol::new(env, "cross_contract_return"),),
         (
             env.current_contract_address(),
             target.clone(),
-            soroban_sdk::Symbol::new(&env, method),
+            soroban_sdk::Symbol::new(env, method),
             success,
             result.clone(),
         ),
@@ -258,27 +297,35 @@ pub fn log_cross_return(env: &Env, target: &Address, method: &str, success: bool
 
 /// Helper: emit a canonical quest_created event
 /// Topics: (quest_created,)
-/// Data: (quest_id, owner, name)
-pub fn emit_quest_created(env: &Env, quest_id: u32, owner: &Address, name: &String) {
+/// Data: (quest_id, owner, name, created_at, timestamp)
+pub fn emit_quest_created(
+    env: &Env,
+    quest_id: u32,
+    owner: &Address,
+    name: &String,
+    created_at: u64,
+) {
+    let timestamp = env.ledger().timestamp();
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "quest_created"),),
-        (quest_id, owner.clone(), name.clone()),
+        (soroban_sdk::Symbol::new(env, "quest_created"),),
+        (quest_id, owner.clone(), name.clone(), created_at, timestamp),
     );
 }
 
 /// Helper: emit reward_funded event
 /// Topics: (reward_funded,)
-/// Data: (quest_id, funder, amount)
+/// Data: (quest_id, funder, amount, timestamp)
 pub fn emit_reward_funded(env: &Env, quest_id: u32, funder: &Address, amount: i128) {
+    let timestamp = env.ledger().timestamp();
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_funded"),),
-        (quest_id, funder.clone(), amount),
+        (soroban_sdk::Symbol::new(env, "reward_funded"),),
+        (quest_id, funder.clone(), amount, timestamp),
     );
 }
 
 /// Helper: emit reward_distributed event
 /// Topics: (reward_distributed,)
-/// Data: (quest_id, milestone_id, enrollee, amount)
+/// Data: (quest_id, milestone_id, enrollee, amount, timestamp)
 pub fn emit_reward_distributed(
     env: &Env,
     quest_id: u32,
@@ -286,9 +333,92 @@ pub fn emit_reward_distributed(
     enrollee: &Address,
     amount: i128,
 ) {
+    let timestamp = env.ledger().timestamp();
     env.events().publish(
-        (soroban_sdk::Symbol::new(&env, "reward_distributed"),),
-        (quest_id, milestone_id, enrollee.clone(), amount),
+        (soroban_sdk::Symbol::new(env, "reward_distributed"),),
+        (quest_id, milestone_id, enrollee.clone(), amount, timestamp),
+    );
+}
+
+/// Helper: emit enrollee_added event with standardized indexer metadata.
+/// Topics: (enrollee_added,)
+/// Data: (quest_id, enrollee, actor, timestamp, join_mode)
+pub fn emit_enrollee_added(
+    env: &Env,
+    quest_id: u32,
+    enrollee: &Address,
+    actor: &Address,
+    join_mode: soroban_sdk::Symbol,
+) {
+    let timestamp = env.ledger().timestamp();
+    env.events().publish(
+        (soroban_sdk::Symbol::new(env, "enrollee_added"),),
+        (
+            quest_id,
+            enrollee.clone(),
+            actor.clone(),
+            timestamp,
+            join_mode,
+        ),
+    );
+}
+
+/// Helper: emit enrollee_removed event with standardized indexer metadata.
+/// Topics: (enrollee_removed,)
+/// Data: (quest_id, enrollee, actor, timestamp)
+pub fn emit_enrollee_removed(env: &Env, quest_id: u32, enrollee: &Address, actor: &Address) {
+    let timestamp = env.ledger().timestamp();
+    env.events().publish(
+        (soroban_sdk::Symbol::new(env, "enrollee_removed"),),
+        (quest_id, enrollee.clone(), actor.clone(), timestamp),
+    );
+}
+
+/// Helper: emit milestone_created event with standardized indexer metadata.
+/// Topics: (milestone_created,)
+/// Data: (milestone_id, quest_id, reward_amount, actor, timestamp)
+pub fn emit_milestone_created(
+    env: &Env,
+    milestone_id: u32,
+    quest_id: u32,
+    reward_amount: i128,
+    actor: &Address,
+) {
+    let timestamp = env.ledger().timestamp();
+    env.events().publish(
+        (soroban_sdk::Symbol::new(env, "milestone_created"),),
+        (
+            milestone_id,
+            quest_id,
+            reward_amount,
+            actor.clone(),
+            timestamp,
+        ),
+    );
+}
+
+/// Helper: emit milestone_completed event with standardized indexer metadata.
+/// Topics: (milestone_completed,)
+/// Data: (quest_id, milestone_id, enrollee, reward, actor, timestamp)
+pub fn emit_milestone_completed(
+    env: &Env,
+    quest_id: u32,
+    milestone_id: u32,
+    enrollee: &Address,
+    reward: i128,
+    actor: &Address,
+) {
+    let timestamp = env.ledger().timestamp();
+    env.events().publish(
+        (soroban_sdk::Symbol::new(env, "milestone_completed"),),
+        (
+            quest_id,
+            milestone_id,
+            enrollee.clone(),
+            reward,
+            actor.clone(),
+            timestamp,
+        ),
     );
 }
 
@@ -310,6 +440,23 @@ pub fn get_persistent<K: IsDataKey, T: soroban_sdk::TryFromVal<Env, soroban_sdk:
     env.storage().persistent().get(key)
 }
 
+/// Helper utility for batching persistent storage lookups of correlated key pairs (#1641).
+pub fn get_persistent_pair<K1, K2, T1, T2>(
+    env: &Env,
+    key1: &K1,
+    key2: &K2,
+) -> (Option<T1>, Option<T2>)
+where
+    K1: IsDataKey,
+    K2: IsDataKey,
+    T1: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+    T2: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>,
+{
+    let val1 = env.storage().persistent().get(key1);
+    let val2 = env.storage().persistent().get(key2);
+    (val1, val2)
+}
+
 /// Planning-only heuristic for rent-cost estimates: stroops charged per
 /// 1,024 bytes of persistent-entry payload for a single `BUMP` (~30 day) TTL
 /// extension window. This mirrors the order of magnitude of Soroban's
@@ -329,4 +476,28 @@ pub fn estimate_persistent_rent(entry_size_bytes: u32) -> i128 {
     let bytes = entry_size_bytes as i128;
     // Ceil-divide so partial kilobytes still round up to a whole unit of rent.
     ((bytes * RENT_STROOPS_PER_KB_PER_BUMP) + 1023) / 1024
+}
+
+/// Deterministic milestone ID — issue #1340
+/// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork.
+/// Currently unused as milestones use auto-incrementing IDs. Retained in common crate
+/// for potential future use if architecture changes to hash-based IDs.
+pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    out
 }

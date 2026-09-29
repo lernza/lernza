@@ -14,6 +14,7 @@ import {
   FileSpreadsheet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useTranslation } from "@/i18n"
 import { formatTokens, cn } from "@/lib/utils"
 import { MAX_MILESTONE_TITLE_LEN, MAX_MILESTONE_DESCRIPTION_LEN } from "@/lib/contract-types"
 import { step2Schema, milestoneSchema, type Step2Values, FieldError, FormLabel } from "./types"
@@ -22,6 +23,7 @@ import { CsvImportDialog } from "./csv-import-dialog"
 import type { ParsedMilestone } from "./csv-parser"
 
 export function Step2Form() {
+  const { t } = useTranslation()
   const { step2Data, setStep2Data, goToNext, goToBack } = useQuestCreation()
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false)
 
@@ -33,7 +35,8 @@ export function Step2Form() {
     setValue,
     formState: { errors, isValid },
   } = useForm<Step2Values>({
-    resolver: zodResolver(step2Schema),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    resolver: zodResolver(step2Schema as any),
     defaultValues: step2Data,
     mode: "onChange",
   })
@@ -53,9 +56,18 @@ export function Step2Form() {
 
   const milestones = watch("milestones")
   useEffect(() => {
-    const subscription = watch(value => setStep2Data({
-      milestones: (value.milestones ?? []).map(milestone => ({ ...milestone, prerequisiteIds: milestone.prerequisiteIds ?? [] })),
-    }))
+    const subscription = watch(value => {
+      if (value.milestones) {
+        setStep2Data({
+          milestones: value.milestones.map(milestone => ({
+            title: milestone?.title ?? "",
+            description: milestone?.description ?? "",
+            rewardAmount: milestone?.rewardAmount ?? 0,
+            prerequisiteIds: milestone?.prerequisiteIds ?? [],
+          })),
+        })
+      }
+    })
     return () => subscription.unsubscribe()
   }, [setStep2Data, watch])
   const totalReward = milestones.reduce((sum: number, m: z.infer<typeof milestoneSchema>) => {
@@ -75,12 +87,14 @@ export function Step2Form() {
           <div className="flex items-center gap-2">
             <Target className="h-4 w-4" />
             <span className="text-sm font-semibold tracking-wider uppercase">
-              Step 2 — Milestones
+              {t("create.step2")}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <Coins className="h-3.5 w-3.5" />
-            <span className="text-xs font-semibold">Total: {formatTokens(totalReward)} USDC</span>
+            <span className="text-xs font-semibold">
+              {t("create.total", { amount: formatTokens(totalReward) })}
+            </span>
           </div>
         </div>
 
@@ -108,7 +122,7 @@ export function Step2Form() {
                         {index + 1}
                       </div>
                       <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                        Milestone {index + 1}
+                        {t("create.milestoneLabel", { index: index + 1 })}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -116,7 +130,7 @@ export function Step2Form() {
                         type="button"
                         onClick={() => swap(index, index - 1)}
                         disabled={index === 0}
-                        aria-label={`Move milestone ${index + 1} up`}
+                        aria-label={t("create.moveUp", { index: index + 1 })}
                         className="border-border bg-background hover:bg-secondary neo-press flex h-11 w-11 cursor-pointer items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                       >
                         <ChevronUp className="h-3.5 w-3.5" />
@@ -125,7 +139,7 @@ export function Step2Form() {
                         type="button"
                         onClick={() => swap(index, index + 1)}
                         disabled={index === fields.length - 1}
-                        aria-label={`Move milestone ${index + 1} down`}
+                        aria-label={t("create.moveDown", { index: index + 1 })}
                         className="border-border bg-background hover:bg-secondary neo-press flex h-11 w-11 cursor-pointer items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                       >
                         <ChevronDown className="h-3.5 w-3.5" />
@@ -134,7 +148,7 @@ export function Step2Form() {
                         type="button"
                         onClick={() => remove(index)}
                         disabled={fields.length === 1}
-                        aria-label={`Remove milestone ${index + 1}`}
+                        aria-label={t("create.removeMilestone", { index: index + 1 })}
                         className="border-border bg-background hover:bg-destructive/10 hover:border-destructive neo-press flex h-11 w-11 cursor-pointer items-center justify-center border transition-colors disabled:cursor-not-allowed disabled:opacity-30 sm:h-7 sm:w-7"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -145,7 +159,7 @@ export function Step2Form() {
                   {/* Title */}
                   <div>
                     <FormLabel htmlFor={`milestone-${index}-title`} required>
-                      Title
+                      {t("create.field.title")}
                     </FormLabel>
                     <input
                       id={`milestone-${index}-title`}
@@ -156,11 +170,11 @@ export function Step2Form() {
                           ? `milestone-${index}-title-error`
                           : undefined
                       }
-                      placeholder="e.g. Hello World"
+                      placeholder={t("create.placeholder.title")}
                       className={cn(
                         "border-border bg-background w-full border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.title &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_TITLE_LEN}
                     />
@@ -172,7 +186,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          titleVal.length > MAX_MILESTONE_TITLE_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {titleVal.length}/{MAX_MILESTONE_TITLE_LEN}
@@ -183,7 +199,7 @@ export function Step2Form() {
                   {/* Description */}
                   <div>
                     <FormLabel htmlFor={`milestone-${index}-description`} required>
-                      Description
+                      {t("create.field.description")}
                     </FormLabel>
                     <textarea
                       id={`milestone-${index}-description`}
@@ -195,11 +211,11 @@ export function Step2Form() {
                           : undefined
                       }
                       rows={2}
-                      placeholder="What should the learner do to complete this milestone?"
+                      placeholder={t("create.placeholder.milestoneDescription")}
                       className={cn(
                         "border-border bg-background w-full resize-none border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                         errors.milestones?.[index]?.description &&
-                          "border-destructive focus:ring-1 focus:ring-destructive"
+                          "border-destructive focus:ring-destructive focus:ring-1"
                       )}
                       maxLength={MAX_MILESTONE_DESCRIPTION_LEN}
                     />
@@ -211,7 +227,9 @@ export function Step2Form() {
                       <span
                         className={cn(
                           "ml-auto text-xs font-bold",
-                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9 ? "text-destructive" : "text-muted-foreground"
+                          descVal.length > MAX_MILESTONE_DESCRIPTION_LEN * 0.9
+                            ? "text-destructive"
+                            : "text-muted-foreground"
                         )}
                       >
                         {descVal.length}/{MAX_MILESTONE_DESCRIPTION_LEN}
@@ -222,7 +240,7 @@ export function Step2Form() {
                   {/* Reward Amount */}
                   <div>
                     <FormLabel htmlFor={`milestone-${index}-reward`} required>
-                      Reward Amount (USDC)
+                      {t("create.field.reward")}
                     </FormLabel>
                     <div className="flex items-center gap-0">
                       <div className="border-border bg-secondary border border-r-0 px-3 py-2 text-xs font-semibold">
@@ -242,11 +260,11 @@ export function Step2Form() {
                         type="number"
                         min="0.01"
                         step="0.01"
-                        placeholder="100"
+                        placeholder={t("create.placeholder.reward")}
                         className={cn(
                           "border-border bg-background flex-1 border px-4 py-2 text-sm font-medium transition-shadow focus:shadow-md focus:outline-none",
                           errors.milestones?.[index]?.rewardAmount &&
-                            "border-destructive focus:ring-1 focus:ring-destructive"
+                            "border-destructive focus:ring-destructive focus:ring-1"
                         )}
                       />
                     </div>
@@ -257,19 +275,39 @@ export function Step2Form() {
                   </div>
 
                   <div>
-                    <FormLabel>Prerequisites</FormLabel>
-                    <p className="text-muted-foreground mb-2 text-xs">Require the immediately preceding milestone to be verified before this work unlocks.</p>
+                    <FormLabel>{t("create.field.prerequisites")}</FormLabel>
+                    <p className="text-muted-foreground mb-2 text-xs">
+                      {t("create.field.prerequisitesHint")}
+                    </p>
                     <div className="flex flex-wrap gap-2">
-                      {fields.slice(Math.max(index - 1, 0), index).map((_, offset) => {
-                        const prerequisiteIndex = index - 1 + offset
-                        return <label key={prerequisiteIndex} className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold">
-                          <input type="checkbox" checked={prerequisiteIds.includes(prerequisiteIndex)} onChange={() => {
-                            const next = prerequisiteIds.includes(prerequisiteIndex) ? [] : [prerequisiteIndex]
-                            setValue(`milestones.${index}.prerequisiteIds`, next, { shouldDirty: true, shouldValidate: true })
-                          }} /> Step {prerequisiteIndex + 1}
-                        </label>
+                      {fields.slice(0, index).map((_, prerequisiteIndex) => {
+                        return (
+                          <label
+                            key={prerequisiteIndex}
+                            className="border-border flex cursor-pointer items-center gap-1.5 border px-2 py-1 text-xs font-semibold"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={prerequisiteIds.includes(prerequisiteIndex)}
+                              onChange={() => {
+                                const next = prerequisiteIds.includes(prerequisiteIndex)
+                                  ? prerequisiteIds.filter(id => id !== prerequisiteIndex)
+                                  : [...prerequisiteIds, prerequisiteIndex]
+                                setValue(`milestones.${index}.prerequisiteIds`, next, {
+                                  shouldDirty: true,
+                                  shouldValidate: true,
+                                })
+                              }}
+                            />{" "}
+                            {t("create.prerequisiteStep", { index: prerequisiteIndex + 1 })}
+                          </label>
+                        )
                       })}
-                      {index === 0 && <span className="text-muted-foreground text-xs">First milestone is immediately available.</span>}
+                      {index === 0 && (
+                        <span className="text-muted-foreground text-xs">
+                          {t("create.firstMilestoneAvailable")}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -278,14 +316,16 @@ export function Step2Form() {
           </div>
 
           {/* Add & Import buttons */}
-          <div className="border-border border-t p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="border-border grid grid-cols-1 gap-3 border-t p-5 sm:grid-cols-2">
             <button
               type="button"
-              onClick={() => append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })}
+              onClick={() =>
+                append({ title: "", description: "", rewardAmount: 0, prerequisiteIds: [] })
+              }
               className="border-border hover:bg-secondary flex w-full cursor-pointer items-center justify-center gap-2 border border-dashed py-3 text-sm font-semibold transition-colors"
             >
               <Plus className="h-4 w-4" />
-              Add Milestone
+              {t("create.addMilestone")}
             </button>
             <button
               type="button"
@@ -293,7 +333,7 @@ export function Step2Form() {
               className="border-border bg-accent/30 hover:bg-accent flex w-full cursor-pointer items-center justify-center gap-2 border py-3 text-sm font-semibold transition-colors"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              Import CSV
+              {t("create.importCsv")}
             </button>
           </div>
         </div>
@@ -309,7 +349,7 @@ export function Step2Form() {
       <div className="bg-secondary border-border flex items-center justify-between border px-5 py-3 shadow-md">
         <div className="flex items-center gap-2">
           <Coins className="h-4 w-4" />
-          <span className="text-sm font-semibold">Total reward pool needed</span>
+          <span className="text-sm font-semibold">{t("create.totalPool")}</span>
         </div>
         <span className="text-lg font-semibold tabular-nums">{formatTokens(totalReward)} USDC</span>
       </div>
@@ -317,10 +357,10 @@ export function Step2Form() {
       <div className="flex items-center justify-between">
         <Button type="button" variant="outline" onClick={goToBack}>
           <ArrowLeft className="h-4 w-4" />
-          Back
+          {t("common.back")}
         </Button>
         <Button type="submit" className="shimmer-on-hover" disabled={!isValid}>
-          Next: Fund & Review
+          {t("create.nextFund")}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

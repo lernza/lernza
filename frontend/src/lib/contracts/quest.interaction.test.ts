@@ -19,6 +19,7 @@ import {
   Keypair,
   nativeToScVal,
   scValToNative,
+  TransactionBuilder,
   xdr,
 } from "@stellar/stellar-sdk"
 
@@ -50,6 +51,38 @@ vi.mock("./client", () => ({
     simulateTransaction: (...args: unknown[]) => mocks.simulateTransaction(...args),
   },
   signAndSubmit: (...args: unknown[]) => mocks.signAndSubmit(...args),
+  signAndSubmitTracked: (tx: unknown, _label: string, handlers?: unknown) =>
+    mocks.signAndSubmit(tx, handlers),
+  simulateContractRead: async (contract: Contract, call: { method: string; args: xdr.ScVal[] }) => {
+    const account = new Account(OWNER, "0")
+    const tx = new TransactionBuilder(account, {
+      fee: "10000",
+      networkPassphrase: "Standalone Network ; February 2017",
+    })
+      .addOperation(contract.call(call.method, ...call.args))
+      .setTimeout(30)
+      .build()
+    const response = await mocks.simulateTransaction(tx)
+    return response && "result" in response && response.result
+      ? scValToNative(response.result.retval)
+      : null
+  },
+  prepareContractTransaction: async (
+    contract: Contract,
+    source: string,
+    call: { method: string; args: xdr.ScVal[] }
+  ) => {
+    const account = await mocks.getAccount(source)
+    return mocks.prepareTransaction(
+      new TransactionBuilder(account, {
+        fee: "10000",
+        networkPassphrase: "Standalone Network ; February 2017",
+      })
+        .addOperation(contract.call(call.method, ...call.args))
+        .setTimeout(30)
+        .build()
+    )
+  },
   NETWORK_PASSPHRASE: "Standalone Network ; February 2017",
   RPC_TIMEOUT_MS: 15000,
   withTimeout: <T>(promise: Promise<T>) => promise,
@@ -84,6 +117,7 @@ function questStruct(o: {
   deadline?: number
   maxEnrollees?: number | null
   verified?: boolean
+  metadataUri?: string | null
 }): xdr.ScVal {
   return nativeToScVal({
     id: nativeToScVal(o.id, { type: "u32" }),
@@ -100,6 +134,8 @@ function questStruct(o: {
     max_enrollees:
       o.maxEnrollees == null ? nativeToScVal(null) : nativeToScVal(o.maxEnrollees, { type: "u32" }),
     verified: nativeToScVal(o.verified ?? false),
+    metadata_uri:
+      o.metadataUri == null ? nativeToScVal(null) : nativeToScVal(o.metadataUri, { type: "string" }),
   })
 }
 
@@ -314,6 +350,20 @@ describe("QuestClient contract interactions (#1216)", () => {
       })
     })
 
+    it("getQuest decodes metadataUri when present", async () => {
+      readReturns(
+        questStruct({
+          id: 2,
+          owner: OWNER,
+          name: "Quest with IPFS metadata",
+          metadataUri: "ipfs://bafybeic52i.../metadata.json",
+        })
+      )
+
+      const quest = await client.getQuest(2)
+      expect(quest?.metadataUri).toBe("ipfs://bafybeic52i.../metadata.json")
+    })
+
     it("getQuest returns null when the simulation has no result", async () => {
       mocks.simulateTransaction.mockResolvedValue({})
       await expect(client.getQuest(9)).resolves.toBeNull()
@@ -408,7 +458,7 @@ describe("QuestClient contract interactions (#1216)", () => {
     it("surfaces a decoded on-chain contract error code", async () => {
       mocks.signAndSubmit.mockRejectedValue(new Error("HostError: Error(Contract, #7)"))
 
-      await expect(client.archiveQuest(OWNER, 4)).rejects.toThrow(/Contract error #7/)
+      await expect(client.archiveQuest(OWNER, 4)).rejects.toThrow(/already full/i)
     })
 
     it("swallows read errors and resolves to null", async () => {

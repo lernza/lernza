@@ -5,7 +5,7 @@ describe("BackupManager", () => {
   it("exports valid backup object structure", () => {
     const backup = BackupManager.exportBackup()
     expect(backup).toBeDefined()
-    expect(backup.version).toBe("1.0.0")
+    expect(backup.version).toBe("1.1.0")
     expect(backup.timestamp).toBeDefined()
   })
 

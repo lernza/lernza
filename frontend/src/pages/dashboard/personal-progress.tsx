@@ -1,8 +1,9 @@
 import { Activity } from "lucide-react"
 import { formatTokens } from "@/lib/utils"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface UserStatsType {
-  totalEarned: number
+  totalEarned: bigint
   questsOwned: number
   questsEnrolled: number
   milestonesCompleted: number
@@ -13,6 +14,8 @@ interface PersonalProgressProps {
 }
 
 export function PersonalProgress({ stats }: PersonalProgressProps) {
+  const { symbol, metadata } = useTokenSymbol()
+  const decimals = metadata?.decimals ?? 7
   return (
     <div>
       <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
@@ -34,7 +37,7 @@ export function PersonalProgress({ stats }: PersonalProgressProps) {
         <div className="bg-accent border-border border p-4 shadow-md">
           <p className="text-foreground text-center text-xs font-bold uppercase">Earnings</p>
           <p className="mt-2 text-center text-xl font-semibold text-green-800">
-            {formatTokens(stats.totalEarned)} USDC
+            {formatTokens(stats.totalEarned, decimals, symbol)}
           </p>
         </div>
       </div>

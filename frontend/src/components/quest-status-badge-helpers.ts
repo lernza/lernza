@@ -1,34 +1,30 @@
 import { QuestStatus } from "@/lib/contract-types"
-import { isExpiredDeadline } from "@/lib/utils"
+import { getQuestLifecycleStatus } from "@/lib/utils"
 
 /**
  * Derives quest status label from QuestStatus enum, deadline, and pool balance.
- * - Active: Quest is active and not expired
- * - Ended: Quest deadline has passed or pool is empty
- * - Archived: Quest is explicitly archived
+ * Delegates to getQuestLifecycleStatus() in lib/utils.ts, the single source
+ * of truth for this logic — see that function's doc comment.
  */
 export function getQuestStatusLabel(
   status: QuestStatus,
   deadline: number,
   poolBalance?: number
-): "Active" | "Ended" | "Archived" | "Cancelled" {
-  if (status === QuestStatus.Cancelled) {
-    return "Cancelled"
-  }
+): "Active" | "Ended" | "Archived" | "Cancelled" | "Suspended" {
+  const lifecycle = getQuestLifecycleStatus({ status, deadline, poolBalance })
 
-  if (status === QuestStatus.Archived) {
-    return "Archived"
+  switch (lifecycle) {
+    case "active":
+      return "Active"
+    case "ended":
+      return "Ended"
+    case "archived":
+      return "Archived"
+    case "cancelled":
+      return "Cancelled"
+    case "suspended":
+      return "Suspended"
   }
-
-  if (isExpiredDeadline(deadline)) {
-    return "Ended"
-  }
-
-  if (poolBalance !== undefined && poolBalance <= 0) {
-    return "Ended"
-  }
-
-  return "Active"
 }
 
 /**
@@ -38,7 +34,7 @@ export function getQuestStatusVariant(
   status: QuestStatus,
   deadline: number,
   poolBalance?: number
-): "active" | "archived" | "ended" {
+): "active" | "archived" | "ended" | "suspended" {
   const label = getQuestStatusLabel(status, deadline, poolBalance)
 
   switch (label) {
@@ -49,5 +45,7 @@ export function getQuestStatusVariant(
       return "archived"
     case "Ended":
       return "ended"
+    case "Suspended":
+      return "suspended"
   }
 }

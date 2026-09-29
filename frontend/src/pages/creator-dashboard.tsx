@@ -42,7 +42,7 @@ function CreatorDashboardContent() {
         ownedQuests.map(async quest => {
           const [enrollees, milestones, poolBalance] = await Promise.all([
             questClient.getEnrollees(quest.id),
-            milestoneClient.listMilestones(quest.id),
+            milestoneClient.getMilestones(quest.id),
             rewardsClient.getPoolBalance(quest.id),
           ])
 
@@ -92,7 +92,7 @@ function CreatorDashboardContent() {
           <p className="text-muted-foreground mb-6 max-w-md">
             Connect your wallet to access the creator dashboard and manage your quests.
           </p>
-          <Button onClick={connect} className="shimmer-on-hover">
+          <Button onClick={() => void connect()} className="shimmer-on-hover">
             Connect Wallet
           </Button>
         </div>

@@ -1,4 +1,4 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { useQuery, keepPreviousData, type QueryClient } from "@tanstack/react-query"
 import { questClient, type QuestInfo } from "@/lib/contracts/quest"
 import { milestoneClient, type MilestoneInfo } from "@/lib/contracts/milestone"
 import { rewardsClient } from "@/lib/contracts/rewards"
@@ -16,6 +16,37 @@ function mapError(err: unknown, fallback: string): string {
     return err.message
   }
   return fallback
+}
+
+/**
+ * Warms the quest-page queries for `questId` (details, milestones, enrollees)
+ * using the exact query keys from the hooks below (#1650). Failures are
+ * swallowed — prefetching is best-effort and the real page load retries.
+ */
+export function prefetchQuestData(queryClient: QueryClient, questId: number): Promise<void> {
+  if (!Number.isInteger(questId) || questId < 0) return Promise.resolve()
+
+  return Promise.all([
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.quest(questId),
+      queryFn: async () => {
+        const quest = await questClient.getQuest(questId)
+        if (!quest) throw new Error("Quest not found")
+        return quest
+      },
+      staleTime: 30 * 1000,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.milestones(questId),
+      queryFn: () => milestoneClient.getMilestones(questId),
+      staleTime: 30 * 1000,
+    }),
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.enrollees(questId),
+      queryFn: () => questClient.getEnrollees(questId),
+      staleTime: 30 * 1000,
+    }),
+  ]).then(() => undefined)
 }
 
 export function useQuest(id: number) {
@@ -172,6 +203,38 @@ export function useRewardPool(questId: number) {
         contractError(
           "rewards",
           "On-chain reward pool data is unavailable until the rewards contract is configured."
+        )
+      )
+    : null
+
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: errMsg,
+    isEmpty: !query.data,
+    refetch: (): Promise<void> => query.refetch().then(() => undefined),
+  }
+}
+
+export function useTotalReservedReward(questId: number) {
+  const enabled = Number.isInteger(questId) && questId >= 0
+  const query = useQuery<bigint, Error>({
+    queryKey: [...queryKeys.milestones(questId), "reservedReward"],
+    queryFn: async () => {
+      if (!Number.isInteger(questId) || questId < 0) throw new Error("Invalid quest id")
+      return milestoneClient.getTotalReservedReward(questId)
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+  })
+
+  const errMsg = query.error
+    ? mapError(
+        query.error,
+        contractError(
+          "milestones",
+          "On-chain milestone data is unavailable until the milestone contract is configured."
         )
       )
     : null

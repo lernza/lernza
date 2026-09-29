@@ -86,6 +86,14 @@ See [docs/deploy-testnet.md](docs/deploy-testnet.md) for full deployment details
 - Every new feature needs unit tests
 - Use the existing storage patterns (Instance/Persistent/Temporary) and TTL strategy (`BUMP = 518,400`, `THRESHOLD = 120,960`) — see [ADR-005](docs/adr/005-storage-patterns-and-ttl-strategy.md)
 - Consider gas and resource costs for on-chain state mutations — see [docs/GAS_COSTS.md](docs/GAS_COSTS.md)
+- Browser storage usage must follow [docs/DATA_RETENTION_POLICY.md](docs/DATA_RETENTION_POLICY.md) — no private keys or PII in localStorage
+
+### Architecture Decision Records (ADRs)
+
+All core protocol choices, contract boundaries, storage strategies, and authorization rules are documented as ADRs. 
+- Browse existing decisions in the [ADR Index](docs/adr/README.md).
+- Any pull request proposing material architectural changes **must** reference an existing ADR or include a new ADR using [docs/adr/template.md](docs/adr/template.md).
+
 
 ## Frontend (React/TypeScript)
 
@@ -301,3 +309,5 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful an
 ## Questions
 
 Open a [discussion](https://github.com/lernza/lernza/discussions) or comment on an issue. We're happy to help.
+
+See [Issue Triage Guide](docs/ISSUE_TRIAGE.md) for labeling and triage process.

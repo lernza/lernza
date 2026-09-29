@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckCircle2, Circle, Lock, Sparkles, Clock, Coins } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useNowSeconds } from "@/hooks/use-now"
+import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 interface Milestone {
   id: number
@@ -27,8 +29,7 @@ function getMilestoneState(index: number, milestones: Milestone[]): MilestoneSta
   return "locked"
 }
 
-// Precompute at module load: Math.random() and Date.now() must not be called during render
-const MODULE_NOW = Date.now()
+// Precompute at module load: Math.random() must not be called during render
 const CONFETTI_COUNT = 20
 const confettiStyles = Array.from({ length: CONFETTI_COUNT }, () => ({
   left: `${Math.random() * 100}%`,
@@ -41,6 +42,7 @@ export function QuestProgressTracker({
   deadline,
   className,
 }: QuestProgressTrackerProps) {
+  const { symbol } = useTokenSymbol()
   const [showConfetti, setShowConfetti] = useState(false)
 
   const completedCount = milestones.filter(m => m.completed).length
@@ -61,10 +63,11 @@ export function QuestProgressTracker({
     }
   }, [isComplete])
 
-  const timeRemaining = useMemo(
-    () => (deadline ? Math.max(0, deadline - MODULE_NOW / 1000) : null),
-    [deadline]
-  )
+  // Live clock: the countdown must reflect real time, not the timestamp
+  // captured when this module was first loaded (#1335).
+  const nowSeconds = useNowSeconds()
+
+  const timeRemaining = deadline ? Math.max(0, deadline - nowSeconds) : null
   const daysRemaining = timeRemaining ? Math.ceil(timeRemaining / 86400) : null
 
   return (
@@ -97,8 +100,17 @@ export function QuestProgressTracker({
         </div>
 
         <div className="mb-4 flex items-center gap-4">
-          <Progress value={completedCount} max={milestones.length} className="flex-1" />
-          <span className="text-sm font-semibold tabular-nums">
+          <Progress
+            value={completedCount}
+            max={milestones.length}
+            className="flex-1"
+            role="progressbar"
+            aria-valuenow={completedCount}
+            aria-valuemin={0}
+            aria-valuemax={milestones.length}
+            aria-label={`Quest progress: ${completedCount} of ${milestones.length} milestones completed`}
+          />
+          <span className="text-sm font-semibold tabular-nums" aria-hidden="true">
             {completedCount}/{milestones.length}
           </span>
         </div>
@@ -106,11 +118,11 @@ export function QuestProgressTracker({
         <div className="mb-6 flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
             <Coins className="text-success h-4 w-4" />
-            <span className="font-bold text-green-700">+{earnedReward} USDC earned</span>
+            <span className="font-bold text-green-700">+{earnedReward} {symbol} earned</span>
           </div>
           {remainingReward > 0 && (
             <span className="text-muted-foreground font-bold">
-              {remainingReward} USDC remaining
+              {remainingReward} {symbol} remaining
             </span>
           )}
           {daysRemaining !== null && (
@@ -140,9 +152,18 @@ export function QuestProgressTracker({
                     state === "pending" && "bg-background hover:bg-secondary cursor-pointer",
                     state === "locked" && "bg-muted"
                   )}
+                  role="img"
+                  aria-label={
+                    state === "completed"
+                      ? "Milestone completed"
+                      : state === "pending"
+                        ? "Milestone pending"
+                        : "Milestone locked"
+                  }
                 >
-                  {state === "completed" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                  {state === "pending" && <Circle className="text-muted-foreground h-3.5 w-3.5" />}
+                  {state === "completed" && <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                  {state === "pending" && <Circle className="text-muted-foreground h-3.5 w-3.5" aria-hidden="true" />}
+                  {state === "locked" && <Lock className="text-muted-foreground h-3 w-3" aria-hidden="true" />}
                   {state === "locked" && <Lock className="text-muted-foreground h-3 w-3" />}
                 </div>
                 <span
@@ -154,7 +175,7 @@ export function QuestProgressTracker({
                   {ms.title}
                 </span>
                 <Badge variant={state === "completed" ? "success" : "default"}>
-                  {ms.rewardAmount} USDC
+                  {ms.rewardAmount} {symbol}
                 </Badge>
               </div>
             )

@@ -89,6 +89,9 @@ proptest! {
                 &soroban_sdk::String::from_str(&env, "Description"),
                 &100, // Fixed reward amount for simplicity
                 &false,
+                &None,
+                &None,
+                &None,
             );
         }
 
@@ -243,6 +246,9 @@ proptest! {
                 &soroban_sdk::String::from_str(&env, "Description"),
                 &amount, // Use the test amount
                 &false,
+                &None,
+                &None,
+                &None,
             );
         }
 

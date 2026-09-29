@@ -1,15 +1,15 @@
 #![no_std]
 
+pub mod fixtures;
+
+pub use fixtures::{isolated_env, Accounts, Fixture, QuestBuilder};
+
 use certificate::{CertificateContract, CertificateContractClient};
 use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
 use rewards::{RewardsContract, RewardsContractClient};
-use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    token::{StellarAssetClient, TokenClient},
-    Address, Env, String, Vec,
-};
+use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
 /// Shared test setup for quest contract
 pub fn setup_quest() -> (Env, QuestContractClient<'static>, Address, Address) {
@@ -160,10 +160,35 @@ pub fn create_milestone(
         &String::from_str(env, "Description"),
         &reward,
         &false,
+        &None,
+        &None,
+        &None,
     )
 }
 
 /// Generate a test token address
 pub fn make_token(env: &Env) -> Address {
     Address::generate(env)
+}
+
+/// Deterministic milestone ID — issue #1340
+/// Uses hash(quest_id || timestamp || nonce) to avoid collisions on redeploy/fork
+pub fn deterministic_milestone_id(quest_id: &[u8], timestamp: u64, nonce: u64) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let ts_bytes = timestamp.to_be_bytes();
+    let nonce_bytes = nonce.to_be_bytes();
+    let mut idx = 0;
+    for &b in quest_id {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &ts_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    for &b in &nonce_bytes {
+        out[idx % 32] ^= b;
+        idx += 1;
+    }
+    out
 }

@@ -32,6 +32,7 @@ export const QuestStatus = {
   Active: 0,
   Archived: 1,
   Cancelled: 2,
+  Suspended: 3,
 } as const
 export type QuestStatus = (typeof QuestStatus)[keyof typeof QuestStatus]
 
@@ -59,6 +60,20 @@ export interface QuestInfo {
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
+  prerequisiteQuestIds: number[]
+  metadataUri?: string // Option<String> (metadata_uri in Rust)
+}
+
+/**
+ * Metadata returned by the `get_category` contract query (issue #1348).
+ * `expiresAt` is an absolute ledger timestamp (seconds) at which the category
+ * listing's TTL expires and the category can vanish from discovery.
+ */
+export interface CategoryInfo {
+  category: string // String
+  questCount: number // u32
+  ttlRemaining: number // u32 (ledgers left)
+  expiresAt: number // u64 (absolute expiry timestamp)
 }
 
 /**

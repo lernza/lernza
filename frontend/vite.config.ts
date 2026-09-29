@@ -33,7 +33,60 @@ export default defineConfig({
 
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,woff2,png,jpg,jpeg}"],
+        // Offline-first navigation: serve the app shell while offline so
+        // cached quest data stays viewable without a connection (#1626).
+        navigateFallback: "/index.html",
         runtimeCaching: [
+          {
+            // App shell + navigations: fresh when online, cached fallback
+            // when offline so quests remain viewable.
+            urlPattern: ({ request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "pages-cache",
+              expiration: {
+                maxEntries: 30,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+              networkTimeoutSeconds: 5,
+            },
+          },
+          {
+            // Static JS/CSS bundles: stale-while-revalidate keeps the UI
+            // instant on repeat visits while still picking up new deploys.
+            urlPattern: /\.(?:js|css)$/,
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "static-assets-cache",
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
+            // Quest data + Stellar RPC reads: fresh when online, last-known
+            // response served while offline for cached quest viewing.
+            urlPattern: /^https:\/\/.*(horizon|soroban|stellar).*$/i,
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "quest-data-cache",
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+              networkTimeoutSeconds: 5,
+            },
+          },
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
             handler: "CacheFirst",
@@ -49,13 +102,18 @@ export default defineConfig({
             },
           },
           {
+            // Images + illustrations: stale-while-revalidate so repeat visits
+            // are instant offline while new artwork still propagates (#1626).
             urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
-            handler: "CacheFirst",
+            handler: "StaleWhileRevalidate",
             options: {
               cacheName: "image-cache",
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
               },
             },
           },

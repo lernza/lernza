@@ -9,7 +9,17 @@ import {
 } from "react"
 
 export type NotificationType = "success" | "error" | "info" | "warning"
-export type NotificationCategory = "quest_status" | "milestone" | "reward" | "system"
+export type NotificationCategory =
+  | "enrollment"
+  | "submission"
+  | "verification"
+  | "reward_distribution"
+  | "deadline_reminder"
+  | "quest_cancellation"
+  | "quest_status"
+  | "milestone"
+  | "reward"
+  | "system"
 
 export interface NotificationToast {
   id: string
@@ -23,11 +33,25 @@ export interface NotificationToast {
     onClick: () => void
   }
   createdAt?: number
+  read?: boolean
 }
 
 export interface NotificationPreferences {
+  // Delivery Channels
   toastEnabled: boolean
   emailAlertsEnabled: boolean
+  inAppAlertsEnabled: boolean
+  soundEnabled: boolean
+
+  // Quest Activity Preferences (Issue #1461)
+  enrollmentAlerts: boolean
+  submissionAlerts: boolean
+  verificationAlerts: boolean
+  rewardDistributionAlerts: boolean
+  deadlineReminderAlerts: boolean
+  questCancellationAlerts: boolean
+
+  // General category flags (maintained for backwards compatibility)
   questStatusAlerts: boolean
   milestoneAlerts: boolean
   rewardAlerts: boolean
@@ -36,31 +60,58 @@ export interface NotificationPreferences {
 const DEFAULT_PREFERENCES: NotificationPreferences = {
   toastEnabled: true,
   emailAlertsEnabled: true,
+  inAppAlertsEnabled: true,
+  soundEnabled: false,
+
+  enrollmentAlerts: true,
+  submissionAlerts: true,
+  verificationAlerts: true,
+  rewardDistributionAlerts: true,
+  deadlineReminderAlerts: true,
+  questCancellationAlerts: true,
+
   questStatusAlerts: true,
   milestoneAlerts: true,
   rewardAlerts: true,
 }
 
 const PREFS_STORAGE_KEY = "lernza_notification_preferences"
+const NOTIFICATION_HISTORY_STORAGE_KEY = "lernza_notification_history"
 
 interface NotificationContextType {
   toasts: NotificationToast[]
   history: NotificationToast[]
+  unreadCount: number
   preferences: NotificationPreferences
   addToast: (toast: Omit<NotificationToast, "id" | "createdAt"> | string) => string
   removeToast: (id: string) => void
   clearAllToasts: () => void
+  markAsRead: (id: string) => void
+  markAllAsRead: () => void
+  clearHistory: () => void
   updatePreferences: (newPrefs: Partial<NotificationPreferences>) => void
+  notifyEnrollment: (questName: string, learnerAddress: string, action?: "enrolled" | "added" | "invited") => void
+  notifySubmission: (questName: string, milestoneTitle: string, submitter?: string) => void
+  notifyVerification: (milestoneTitle: string, status: "approved" | "rejected" | "changes_requested", feedback?: string) => void
+  notifyRewardDistribution: (amount: string, actionType: "funded" | "claimed" | "refunded") => void
+  notifyDeadlineReminder: (questName: string, timeRemaining: string) => void
+  notifyQuestCancellation: (questName: string, reason?: string) => void
   notifyQuestStatusChange: (questName: string, status: "created" | "updated" | "archived" | "cancelled") => void
   notifyMilestoneCompletion: (milestoneTitle: string, status: "submitted" | "approved" | "rejected") => void
-  notifyRewardDistribution: (amount: string, actionType: "funded" | "claimed" | "refunded") => void
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<NotificationToast[]>([])
-  const [history, setHistory] = useState<NotificationToast[]>([])
+  const [history, setHistory] = useState<NotificationToast[]>(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATION_HISTORY_STORAGE_KEY)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
   const [preferences, setPreferences] = useState<NotificationPreferences>(() => {
     try {
       const saved = localStorage.getItem(PREFS_STORAGE_KEY)
@@ -74,6 +125,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
+      localStorage.setItem(NOTIFICATION_HISTORY_STORAGE_KEY, JSON.stringify(history))
+    } catch {
+      // Ignore storage errors
+    }
+  }, [history])
+
+  useEffect(() => {
+    try {
       localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(preferences))
     } catch {
       // Ignore storage errors
@@ -84,6 +143,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setPreferences(prev => ({ ...prev, ...newPrefs }))
   }, [])
 
+  const markAsRead = useCallback((id: string) => {
+    setHistory(prev =>
+      prev.map(item => (item.id === id ? { ...item, read: true } : item))
+    )
+  }, [])
+
+  const markAllAsRead = useCallback(() => {
+    setHistory(prev => prev.map(item => ({ ...item, read: true })))
+  }, [])
+
+  const clearHistory = useCallback(() => {
+    setHistory([])
+  }, [])
+
+  const unreadCount = history.filter(item => !item.read).length
+
   const addToast = useCallback(
     (input: Omit<NotificationToast, "id" | "createdAt"> | string): string => {
       if (!preferences.toastEnabled) return ""
@@ -92,6 +167,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         typeof input === "string" ? { message: input } : input
 
       const category = payload.category ?? "system"
+      // Category / Activity preference filters
+      if (category === "enrollment" && !preferences.enrollmentAlerts) return ""
+      if (category === "submission" && !preferences.submissionAlerts) return ""
+      if (category === "verification" && !preferences.verificationAlerts) return ""
+      if (category === "reward_distribution" && !preferences.rewardDistributionAlerts) return ""
+      if (category === "deadline_reminder" && !preferences.deadlineReminderAlerts) return ""
+      if (category === "quest_cancellation" && !preferences.questCancellationAlerts) return ""
       if (category === "quest_status" && !preferences.questStatusAlerts) return ""
       if (category === "milestone" && !preferences.milestoneAlerts) return ""
       if (category === "reward" && !preferences.rewardAlerts) return ""
@@ -101,6 +183,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         id,
         type: "success",
         duration: 4000,
+        read: false,
         ...payload,
         createdAt: Date.now(),
       }
@@ -127,6 +210,118 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     setToasts([])
   }, [])
 
+  const notifyEnrollment = useCallback(
+    (questName: string, learnerAddress: string, action: "enrolled" | "added" | "invited" = "enrolled") => {
+      const shortAddr = `${learnerAddress.slice(0, 6)}...${learnerAddress.slice(-4)}`
+      const msgMap = {
+        enrolled: `Learner ${shortAddr} enrolled in "${questName}".`,
+        added: `Learner ${shortAddr} was added to "${questName}".`,
+        invited: `Invite accepted for "${questName}" by ${shortAddr}.`,
+      }
+      addToast({
+        title: "New Quest Enrollment",
+        message: msgMap[action],
+        type: "info",
+        category: "enrollment",
+      })
+    },
+    [addToast]
+  )
+
+  const notifySubmission = useCallback(
+    (questName: string, milestoneTitle: string, submitter?: string) => {
+      const subText = submitter ? ` by ${submitter.slice(0, 6)}...${submitter.slice(-4)}` : ""
+      addToast({
+        title: "Milestone Submitted",
+        message: `Submission for "${milestoneTitle}" in "${questName}"${subText} is ready for review.`,
+        type: "info",
+        category: "submission",
+      })
+    },
+    [addToast]
+  )
+
+  const notifyVerification = useCallback(
+    (milestoneTitle: string, status: "approved" | "rejected" | "changes_requested", feedback?: string) => {
+      const typeMap: Record<typeof status, NotificationType> = {
+        approved: "success",
+        rejected: "error",
+        changes_requested: "warning",
+      }
+      const titleMap: Record<typeof status, string> = {
+        approved: "Milestone Verified!",
+        rejected: "Submission Rejected",
+        changes_requested: "Changes Requested",
+      }
+      const baseMsgMap: Record<typeof status, string> = {
+        approved: `Milestone "${milestoneTitle}" has been verified and approved!`,
+        rejected: `Milestone "${milestoneTitle}" was rejected.`,
+        changes_requested: `Reviewer requested revisions for "${milestoneTitle}".`,
+      }
+      const message = feedback ? `${baseMsgMap[status]} Feedback: "${feedback}"` : baseMsgMap[status]
+
+      addToast({
+        title: titleMap[status],
+        message,
+        type: typeMap[status],
+        category: "verification",
+      })
+    },
+    [addToast]
+  )
+
+  const notifyRewardDistribution = useCallback(
+    (amount: string, actionType: "funded" | "claimed" | "refunded") => {
+      const typeMap: Record<typeof actionType, NotificationType> = {
+        funded: "success",
+        claimed: "success",
+        refunded: "info",
+      }
+      const titleMap: Record<typeof actionType, string> = {
+        funded: "Escrow Funded",
+        claimed: "Reward Distributed!",
+        refunded: "Unallocated Escrow Refunded",
+      }
+      const msgMap: Record<typeof actionType, string> = {
+        funded: `Successfully funded ${amount} to quest reward escrow.`,
+        claimed: `Reward payout of ${amount} distributed for milestone completion!`,
+        refunded: `${amount} unallocated escrow refunded to quest creator.`,
+      }
+
+      addToast({
+        title: titleMap[actionType],
+        message: msgMap[actionType],
+        type: typeMap[actionType],
+        category: "reward_distribution",
+      })
+    },
+    [addToast]
+  )
+
+  const notifyDeadlineReminder = useCallback(
+    (questName: string, timeRemaining: string) => {
+      addToast({
+        title: "Deadline Approaching",
+        message: `Quest "${questName}" deadline is approaching in ${timeRemaining}. Complete milestones to earn rewards!`,
+        type: "warning",
+        category: "deadline_reminder",
+      })
+    },
+    [addToast]
+  )
+
+  const notifyQuestCancellation = useCallback(
+    (questName: string, reason?: string) => {
+      addToast({
+        title: "Quest Cancelled",
+        message: `Quest "${questName}" has been cancelled.${reason ? ` Reason: ${reason}` : ""}`,
+        type: "error",
+        category: "quest_cancellation",
+      })
+    },
+    [addToast]
+  )
+
   const notifyQuestStatusChange = useCallback(
     (questName: string, status: "created" | "updated" | "archived" | "cancelled") => {
       const typeMap: Record<typeof status, NotificationType> = {
@@ -152,7 +347,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         title: titleMap[status],
         message: msgMap[status],
         type: typeMap[status],
-        category: "quest_status",
+        category: status === "cancelled" ? "quest_cancellation" : "quest_status",
       })
     },
     [addToast]
@@ -180,35 +375,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         title: titleMap[status],
         message: msgMap[status],
         type: typeMap[status],
-        category: "milestone",
-      })
-    },
-    [addToast]
-  )
-
-  const notifyRewardDistribution = useCallback(
-    (amount: string, actionType: "funded" | "claimed" | "refunded") => {
-      const typeMap: Record<typeof actionType, NotificationType> = {
-        funded: "success",
-        claimed: "success",
-        refunded: "info",
-      }
-      const titleMap: Record<typeof actionType, string> = {
-        funded: "Escrow Funded",
-        claimed: "Reward Claimed!",
-        refunded: "Unallocated Escrow Refunded",
-      }
-      const msgMap: Record<typeof actionType, string> = {
-        funded: `Successfully funded ${amount} to quest reward escrow.`,
-        claimed: `You claimed ${amount} for completing the milestone!`,
-        refunded: `${amount} refunded to quest owner.`,
-      }
-
-      addToast({
-        title: titleMap[actionType],
-        message: msgMap[actionType],
-        type: typeMap[actionType],
-        category: "reward",
+        category: status === "submitted" ? "submission" : "verification",
       })
     },
     [addToast]
@@ -219,14 +386,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       value={{
         toasts,
         history,
+        unreadCount,
         preferences,
         addToast,
         removeToast,
         clearAllToasts,
+        markAsRead,
+        markAllAsRead,
+        clearHistory,
         updatePreferences,
+        notifyEnrollment,
+        notifySubmission,
+        notifyVerification,
+        notifyRewardDistribution,
+        notifyDeadlineReminder,
+        notifyQuestCancellation,
         notifyQuestStatusChange,
         notifyMilestoneCompletion,
-        notifyRewardDistribution,
       }}
     >
       {children}
@@ -241,3 +417,5 @@ export function useNotifications() {
   }
   return context
 }
+
+export const useNotification = useNotifications

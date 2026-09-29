@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import { SectionErrorBoundary } from "@/components/error-boundary"
 import { LoadingState } from "@/components/ui/async-states"
 import type { BatchClaimSummary, MilestoneClaimResult } from "@/lib/contract-types"
+import { PageMetadata } from "@/components/PageMetadata"
+import { questPageMeta } from "@/lib/page-metadata"
 
 interface QuestViewProps {
   questId: number
@@ -260,6 +262,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+        <PageMetadata {...questPageMeta(questId)} />
         <LoadingState message="Loading quest data from chain..." />
       </div>
     )
@@ -268,6 +271,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   if (error || !quest) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:px-6">
+        <PageMetadata {...questPageMeta(questId)} />
         <h2 className="mb-4 text-2xl font-semibold">
           {error || "Quest not found"}
         </h2>
@@ -290,6 +294,7 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
   return (
     <div className="relative mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="bg-grid-dots pointer-events-none absolute inset-0 opacity-30" />
+      <PageMetadata {...questPageMeta(questId, quest.name, quest.description)} />
 
       <SectionErrorBoundary label="Quest header">
         <QuestHeaderPanel

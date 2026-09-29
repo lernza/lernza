@@ -26,6 +26,8 @@ import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-acti
 import { navigateToPath } from "@/lib/navigation"
 import { useOnboarding } from "@/hooks/use-onboarding"
 import { NotificationPreferencesCard } from "@/components/notification-preferences"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 type ProfileTab = "overview" | "activity"
 
@@ -82,6 +84,15 @@ function WalletAvatar({ address }: { address: string }) {
 }
 
 export function Profile() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.profile} />
+      <ProfileContent />
+    </>
+  )
+}
+
+function ProfileContent() {
   const { connected, connect, address, loading: walletConnecting } = useWallet()
   const [copied, setCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<ProfileTab>("overview")

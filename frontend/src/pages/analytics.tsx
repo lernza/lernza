@@ -33,6 +33,8 @@ import { milestoneClient } from "@/lib/contracts/milestone-client"
 import { formatTokens } from "@/lib/utils"
 import type { QuestInfo } from "@/lib/contract-types"
 import { QuestStatus } from "@/lib/contract-types"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -321,6 +323,15 @@ function QuestRewardsTable({ quests }: { quests: QuestAnalytics[] }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function Analytics() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.analytics} />
+      <AnalyticsContent />
+    </>
+  )
+}
+
+function AnalyticsContent() {
   const [stats, setStats] = useState<PlatformStats | null>(null)
   const [questAnalytics, setQuestAnalytics] = useState<QuestAnalytics[]>([])
   const [loading, setLoading] = useState(true)

@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge"
 import { useWallet } from "@/hooks/use-wallet"
 import { fetchWalletActivity, type WalletActivityItem } from "@/lib/horizon-activity"
 import { formatTokens } from "@/lib/utils"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 function formatHistoryDate(timestamp: number) {
   return new Date(timestamp).toLocaleString([], {
@@ -74,6 +76,15 @@ function getActivityDescription(item: WalletActivityItem) {
 }
 
 export function History() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.history} />
+      <HistoryContent />
+    </>
+  )
+}
+
+function HistoryContent() {
   const { connected, connect, address, loading: walletConnecting } = useWallet()
   const [historyItems, setHistoryItems] = useState<WalletActivityItem[]>([])
   const [loading, setLoading] = useState(false)

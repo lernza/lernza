@@ -11,8 +11,19 @@ import { SmartError } from "@/components/error-states"
 import { SkeletonQuestList } from "@/components/ui/skeleton"
 import { CreatorAnalytics } from "./dashboard/creator-analytics"
 import { navigateToPath } from "@/lib/navigation"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 export function CreatorDashboard() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.creatorDashboard} />
+      <CreatorDashboardContent />
+    </>
+  )
+}
+
+function CreatorDashboardContent() {
   const { address, connected, connect } = useWallet()
 
   const {

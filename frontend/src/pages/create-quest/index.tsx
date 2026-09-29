@@ -6,6 +6,8 @@ import { QuestCreationProvider, useQuestCreation } from "./context"
 import { StepIndicator } from "./types"
 import { QUEST_TEMPLATES } from "./templates"
 import { questDrafts } from "./drafts"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 const Step1Form = lazy(() => import("./step1").then(m => ({ default: m.Step1Form })))
 const Step2Form = lazy(() => import("./step2").then(m => ({ default: m.Step2Form })))
@@ -95,6 +97,15 @@ function CreateQuestContent({ onBack }: CreateQuestProps) {
 }
 
 export function CreateQuest({ onBack }: CreateQuestProps) {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.createQuest} />
+      <CreateQuestGate onBack={onBack} />
+    </>
+  )
+}
+
+function CreateQuestGate({ onBack }: CreateQuestProps) {
   const { connected, connect, loading } = useWallet()
 
   if (!connected) {

@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react"
 import { ArrowLeft, Home, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 interface NotFoundProps {
   onNavigate: (page: string) => void
@@ -34,6 +36,15 @@ function GlitchText({ text }: { text: string }) {
 }
 
 export function NotFound({ onNavigate }: NotFoundProps) {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.notFound} />
+      <NotFoundContent onNavigate={onNavigate} />
+    </>
+  )
+}
+
+function NotFoundContent({ onNavigate }: NotFoundProps) {
   const [hovered, setHovered] = useState(false)
 
   return (

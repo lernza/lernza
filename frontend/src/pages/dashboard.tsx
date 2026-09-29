@@ -38,6 +38,8 @@ import { useOnboarding } from "@/hooks/use-onboarding"
 import { PersonalProgress } from "./dashboard/personal-progress"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 // Lazy-loaded chart
 const EarningsChart = React.lazy(() => import("./dashboard/earnings-chart"))
@@ -55,7 +57,16 @@ interface DashboardProps {
   onLaunchTutorial?: () => void
 }
 
-export function Dashboard({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps = {} as DashboardProps) {
+export function Dashboard(props: DashboardProps = {} as DashboardProps) {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.dashboard} />
+      <DashboardContent {...props} />
+    </>
+  )
+}
+
+function DashboardContent({ onSelectQuest, onCreateQuest, onLaunchTutorial }: DashboardProps) {
   const { connected, connect, shortAddress, address, loading: walletConnecting, error } = useWallet()
   const [filter, setFilter] = useState<"all" | "owned" | "enrolled">("all")
   const [preset, setPreset] = useState<

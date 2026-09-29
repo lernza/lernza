@@ -11,12 +11,23 @@ import { formatTokens, shortenAddress } from "@/lib/utils"
 import { PageContainer } from "@/components/page-container"
 import { PageHeader } from "@/components/page-header"
 import { navigateToPath } from "@/lib/navigation"
+import { PageMetadata } from "@/components/PageMetadata"
+import { creatorPageMeta } from "@/lib/page-metadata"
 
 interface CreatorProfileProps {
   address?: string | null
 }
 
 export function CreatorProfile({ address }: CreatorProfileProps) {
+  return (
+    <>
+      <PageMetadata {...creatorPageMeta(address)} />
+      <CreatorProfileContent address={address} />
+    </>
+  )
+}
+
+function CreatorProfileContent({ address }: CreatorProfileProps) {
   const {
     data: profileData,
     isLoading,

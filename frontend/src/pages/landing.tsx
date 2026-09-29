@@ -13,6 +13,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useInView } from "@/hooks/use-animations"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -177,6 +179,15 @@ interface LandingProps {
 }
 
 export function Landing({ onNavigate }: LandingProps) {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.landing} />
+      <LandingContent onNavigate={onNavigate} />
+    </>
+  )
+}
+
+function LandingContent({ onNavigate }: LandingProps) {
   const [howRef, howInView] = useInView()
   const [featRef, featInView] = useInView()
   const [ctaRef, ctaInView] = useInView()

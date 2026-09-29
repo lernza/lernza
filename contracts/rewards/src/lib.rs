@@ -902,11 +902,14 @@ impl RewardsContract {
             .instance()
             .get::<DataKey, Address>(&DataKey::QuestContractAddr)
             .ok_or(Error::NotInitialized)?;
-        let claimant_active = QuestClient::new(&env, &quest_contract_addr_cb)
+        // One client instance reused for both cross-contract checks below;
+        // constructing it per check repeated the setup for no benefit.
+        let quest_client = QuestClient::new(&env, &quest_contract_addr_cb);
+        let claimant_active = quest_client
             .try_is_enrollee(&quest_id, &claimant)
             .unwrap_or(Ok(false))
             .unwrap_or(false)
-            && QuestClient::new(&env, &quest_contract_addr_cb)
+            && quest_client
                 .try_get_enrollee_status(&quest_id, &claimant)
                 .unwrap_or(Ok(EnrolleeStatus::Inactive))
                 .unwrap_or(EnrolleeStatus::Inactive)
@@ -1449,7 +1452,6 @@ impl RewardsContract {
         if !list.contains(&token) {
             list.push_back(token);
         }
-        env.storage().instance().set(&DataKey::SupportedTokens, &list);
         env.storage()
             .instance()
             .set(&DataKey::SupportedTokens, &list);
@@ -1483,7 +1485,6 @@ impl RewardsContract {
                 }
             }
         }
-        env.storage().instance().set(&DataKey::SupportedTokens, &list);
         env.storage()
             .instance()
             .set(&DataKey::SupportedTokens, &list);

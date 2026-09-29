@@ -1435,6 +1435,7 @@ fn test_create_milestones_batch_success() {
         description: String::from_str(&env, "D1"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
 
         difficulty: None,
         estimated_duration: None,
@@ -1445,6 +1446,7 @@ fn test_create_milestones_batch_success() {
         description: String::from_str(&env, "D2"),
         reward_amount: 200,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
 
         difficulty: None,
         estimated_duration: None,
@@ -1475,6 +1477,7 @@ fn test_create_milestones_batch_chain_is_acyclic() {
         description: String::from_str(&env, "D1"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,
@@ -1484,6 +1487,7 @@ fn test_create_milestones_batch_chain_is_acyclic() {
         description: String::from_str(&env, "D2"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,
@@ -1493,6 +1497,7 @@ fn test_create_milestones_batch_chain_is_acyclic() {
         description: String::from_str(&env, "D3"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,
@@ -1504,6 +1509,305 @@ fn test_create_milestones_batch_chain_is_acyclic() {
     assert_eq!(ids.get(2).unwrap(), 2);
 }
 
+/// Issue #1800: the batch path used to store `MilestoneInfo` without ever
+/// writing `DataKey::Prerequisites`, so batch-created milestones had no
+/// retrievable prerequisite list. `get_milestone_prerequisites` must return
+/// the same data for batch-created milestones as for single-created ones.
+#[test]
+fn test_create_milestones_batch_stores_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 200,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    let first = ids.get(0).unwrap();
+    let second = ids.get(1).unwrap();
+
+    // Ungated milestone: an explicit empty list, not a missing entry.
+    assert!(client.get_milestone_prerequisites(&q_id, &first).is_empty());
+
+    // `requires_previous` resolves to the implicit `id - 1` edge.
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &second),
+        soroban_sdk::vec![&env, first]
+    );
+
+    // The key must be present in storage, not merely inferred by the
+    // legacy fallback.
+    let stored: Option<soroban_sdk::Vec<u32>> = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Prerequisites(q_id, second))
+    });
+    assert_eq!(stored, Some(soroban_sdk::vec![&env, first]));
+}
+
+/// Issue #1800: explicit prerequisite ids supplied to the batch path are
+/// honoured, and the prerequisite gate actually blocks completion until every
+/// listed dependency is done.
+#[test]
+fn test_create_milestones_batch_explicit_prerequisites_gate_completion() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let first = create_ms(&env, &client, &owner, q_id, "First", 50);
+    let second = create_ms(&env, &client, &owner, q_id, "Second", 50);
+
+    // One batch item that branches off two pre-existing milestones.
+    let mut milestones = Vec::new(&env);
+    milestones.push_back(MilestoneInput {
+        title: String::from_str(&env, "Branch"),
+        description: String::from_str(&env, "Requires both"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, first, second],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &milestones);
+    let branch = ids.get(0).unwrap();
+    assert_eq!(branch, 2);
+
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &branch),
+        soroban_sdk::vec![&env, first, second]
+    );
+    // An explicit list implies gating even though `requires_previous` was false.
+    assert!(client.get_milestone(&q_id, &branch).requires_previous);
+
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &first, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Err(Ok(Error::MilestoneNotUnlocked))
+    );
+    client.verify_completion(&owner, &q_id, &second, &enrollee);
+    assert_eq!(
+        client.try_verify_completion(&owner, &q_id, &branch, &enrollee),
+        Ok(Ok(100))
+    );
+}
+
+/// Issue #1800: prerequisites may reference an earlier item in the same batch,
+/// but never a forward/self reference, a duplicate, or a milestone that does
+/// not exist. Each rejection leaves the quest untouched.
+#[test]
+fn test_create_milestones_batch_rejects_invalid_explicit_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let batch_with = |prerequisites: soroban_sdk::Vec<u32>, requires_previous: bool| {
+        let mut items = Vec::new(&env);
+        items.push_back(MilestoneInput {
+            title: String::from_str(&env, "M1"),
+            description: String::from_str(&env, "D1"),
+            reward_amount: 100,
+            requires_previous,
+            prerequisites,
+            difficulty: None,
+            estimated_duration: None,
+            prerequisites_knowledge: None,
+        });
+        items
+    };
+
+    // Forward/self reference: id 0 cannot depend on id 1.
+    let forward = batch_with(soroban_sdk::vec![&env, 1u32], false);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &forward),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Nonexistent prerequisite below the current id.
+    let missing = batch_with(soroban_sdk::vec![&env, 7u32], false);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &missing),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // The first milestone of a quest may never be gated.
+    let gated_first = batch_with(Vec::new(&env), true);
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &gated_first),
+        Err(Ok(Error::InvalidInput))
+    );
+
+    // Nothing landed.
+    assert_eq!(client.get_milestone_count(&q_id), 0);
+    assert!(client.get_milestones(&q_id).is_empty());
+}
+
+/// Issue #1800: a duplicated prerequisite id is rejected, and an earlier item
+/// in the same batch is accepted as a prerequisite.
+#[test]
+fn test_create_milestones_batch_rejects_duplicate_prerequisites() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+    let existing = create_ms(&env, &client, &owner, q_id, "Existing", 50);
+
+    let mut duplicated = Vec::new(&env);
+    duplicated.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, existing, existing],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    assert_eq!(
+        client.try_create_milestones_batch(&owner, &q_id, &duplicated),
+        Err(Ok(Error::InvalidInput))
+    );
+    assert_eq!(client.get_milestone_count(&q_id), 1);
+
+    // An earlier item in the same batch is a legal prerequisite.
+    let mut chained = Vec::new(&env);
+    chained.push_back(MilestoneInput {
+        title: String::from_str(&env, "M1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    chained.push_back(MilestoneInput {
+        title: String::from_str(&env, "M2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: soroban_sdk::vec![&env, existing],
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+
+    let ids = client.create_milestones_batch(&owner, &q_id, &chained);
+    let second = ids.get(1).unwrap();
+    assert_eq!(
+        client.get_milestone_prerequisites(&q_id, &second),
+        soroban_sdk::vec![&env, existing]
+    );
+}
+
+/// Issue #1801: `NextMilestoneId` and `MilestoneCount` must never diverge.
+/// Every creation path is exercised and both storage keys are read back
+/// directly to confirm they stay in lockstep.
+#[test]
+fn test_milestone_counters_stay_in_sync_across_all_create_paths() {
+    let (env, client, quest_client, owner) = setup();
+    let q_id = create_quest(&env, &quest_client, &owner);
+
+    let counters = |env: &Env, client: &MilestoneContractClient, quest_id: u32| -> (u32, u32) {
+        env.as_contract(&client.address, || {
+            (
+                env.storage()
+                    .persistent()
+                    .get::<_, u32>(&DataKey::NextMilestoneId(quest_id))
+                    .unwrap_or(0),
+                env.storage()
+                    .persistent()
+                    .get::<_, u32>(&DataKey::MilestoneCount(quest_id))
+                    .unwrap_or(0),
+            )
+        })
+    };
+
+    // Nothing created yet.
+    assert_eq!(counters(&env, &client, q_id), (0, 0));
+
+    // Path 1: create_milestone
+    create_ms(&env, &client, &owner, q_id, "Single", 50);
+    assert_eq!(counters(&env, &client, q_id), (1, 1));
+    assert_eq!(client.get_milestone_count(&q_id), 1);
+    assert_eq!(client.get_milestones(&q_id).len(), 1);
+
+    // Path 2: create_milestone_with_prereqs
+    let with_prereqs = client.create_milestone_with_prereqs(
+        &owner,
+        &q_id,
+        &String::from_str(&env, "Branching"),
+        &String::from_str(&env, "Description"),
+        &100,
+        &soroban_sdk::vec![&env, 0u32],
+        &None,
+        &None,
+        &None,
+    );
+    assert_eq!(with_prereqs, 1);
+    assert_eq!(counters(&env, &client, q_id), (2, 2));
+
+    // Path 3: create_milestones_batch
+    let mut batch = Vec::new(&env);
+    batch.push_back(MilestoneInput {
+        title: String::from_str(&env, "B1"),
+        description: String::from_str(&env, "D1"),
+        reward_amount: 100,
+        requires_previous: false,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    batch.push_back(MilestoneInput {
+        title: String::from_str(&env, "B2"),
+        description: String::from_str(&env, "D2"),
+        reward_amount: 100,
+        requires_previous: true,
+        prerequisites: Vec::new(&env),
+        difficulty: None,
+        estimated_duration: None,
+        prerequisites_knowledge: None,
+    });
+    client.create_milestones_batch(&owner, &q_id, &batch);
+
+    assert_eq!(counters(&env, &client, q_id), (4, 4));
+
+    // The two counters back different queries, so a divergence would show up
+    // as inconsistent answers.
+    let listed = client.get_milestones(&q_id);
+    let enrollee = Address::generate(&env);
+    quest_client.add_enrollee(&q_id, &enrollee);
+    let progress = client.get_enrollee_progress(&q_id, &enrollee, &0, &100);
+    let partial = client.get_partial_score(&q_id, &enrollee);
+    assert_eq!(listed.len() as u32, 4);
+    assert_eq!(client.get_milestone_count(&q_id), 4);
+    assert_eq!(progress.total_milestones, 4);
+    assert_eq!(partial.total, 4);
+}
+
 /// Topological validation (#1630): a cycle in the effective prerequisite
 /// graph is rejected before any milestone is written. The cycle is
 /// manufactured via direct storage injection because the public creation
@@ -1512,9 +1816,10 @@ fn test_create_milestones_batch_chain_is_acyclic() {
 fn test_create_milestones_batch_rejects_prerequisite_cycle() {
     let (env, client, quest_client, owner) = setup();
     let q_id = create_quest(&env, &quest_client, &owner);
+    create_ms(&env, &client, &owner, q_id, "Existing", 50);
 
-    // Store a forward prerequisite for milestone 0 pointing at 1, which the
-    // batch will then chain back to 0: 0 -> 1 -> 0.
+    // Store a forward prerequisite for the existing milestone 0 pointing at 1,
+    // which the batch is about to create with an edge back to 0: 0 -> 1 -> 0.
     let mut forward = Vec::new(&env);
     forward.push_back(1u32);
     env.as_contract(&client.address, || {
@@ -1525,19 +1830,11 @@ fn test_create_milestones_batch_rejects_prerequisite_cycle() {
 
     let mut milestones = Vec::new(&env);
     milestones.push_back(MilestoneInput {
-        title: String::from_str(&env, "M1"),
-        description: String::from_str(&env, "D1"),
-        reward_amount: 100,
-        requires_previous: false,
-        difficulty: None,
-        estimated_duration: None,
-        prerequisites_knowledge: None,
-    });
-    milestones.push_back(MilestoneInput {
         title: String::from_str(&env, "M2"),
         description: String::from_str(&env, "D2"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,
@@ -1546,8 +1843,8 @@ fn test_create_milestones_batch_rejects_prerequisite_cycle() {
     let result = client.try_create_milestones_batch(&owner, &q_id, &milestones);
     assert_eq!(result, Err(Ok(Error::CircularDependency)));
 
-    // Nothing was written: the quest still has no milestones.
-    assert_eq!(client.get_milestone_count(&q_id), 0);
+    // Nothing was written: the quest still has only the pre-existing milestone.
+    assert_eq!(client.get_milestone_count(&q_id), 1);
 }
 
 #[test]
@@ -1563,6 +1860,7 @@ fn test_create_milestones_batch_oversized_rejection() {
             description: String::from_str(&env, "D"),
             reward_amount: 100,
             requires_previous: false,
+            prerequisites: Vec::new(&env),
 
             difficulty: None,
             estimated_duration: None,
@@ -1585,6 +1883,7 @@ fn test_create_milestones_batch_atomic_validation() {
         description: String::from_str(&env, "Valid"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
 
         difficulty: None,
         estimated_duration: None,
@@ -1595,6 +1894,7 @@ fn test_create_milestones_batch_atomic_validation() {
         description: String::from_str(&env, "Valid"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
 
         difficulty: None,
         estimated_duration: None,
@@ -1843,6 +2143,7 @@ fn test_create_milestones_batch_0_cannot_require_previous() {
         description: String::from_str(&env, "Desc"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
 
         difficulty: None,
         estimated_duration: None,
@@ -2440,6 +2741,7 @@ fn test_batch_size_limit() {
             description: String::from_str(&env, "D"),
             reward_amount: 100,
             requires_previous: false,
+            prerequisites: Vec::new(&env),
 
             difficulty: None,
             estimated_duration: None,
@@ -2791,6 +3093,7 @@ fn test_batch_milestone_invalid_ordering_rejected() {
         description: String::from_str(&env, "Invalid ordering"),
         reward_amount: 100,
         requires_previous: true,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,
@@ -2800,6 +3103,7 @@ fn test_batch_milestone_invalid_ordering_rejected() {
         description: String::from_str(&env, "Valid"),
         reward_amount: 100,
         requires_previous: false,
+        prerequisites: Vec::new(&env),
         difficulty: None,
         estimated_duration: None,
         prerequisites_knowledge: None,

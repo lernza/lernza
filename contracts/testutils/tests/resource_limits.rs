@@ -75,6 +75,7 @@ fn test_milestone_batch_creation_resource_limits() {
             difficulty: None,
             estimated_duration: None,
             prerequisites_knowledge: None,
+            prerequisites: Vec::new(&env),
         });
     }
 

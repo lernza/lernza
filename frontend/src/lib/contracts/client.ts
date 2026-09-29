@@ -675,6 +675,12 @@ export async function signAndSubmitTracked(
 // treat it as expired/dropped rather than leaving it pending indefinitely.
 const PENDING_TRANSACTION_EXPIRY_MS = 10 * 60 * 1000
 
+// `normalizeRpcStatus` upper-cases every status, so this comparison has to be
+// against the normalized form — comparing against a lowercase literal never
+// matched, which meant transactions the network had never seen were never
+// cleaned out of the pending set (#1802).
+const RPC_STATUS_NOT_FOUND = "NOT_FOUND"
+
 /**
  * Reconciles persisted pending transactions against ledger status (issue
  * #1478). Intended to run once when the app loads: for each transaction
@@ -707,7 +713,7 @@ export async function reconcilePendingTransactions(): Promise<void> {
             duration: 6000,
           })
           removePendingTransaction(tx.txHash)
-        } else if (status === "not_found") {
+        } else if (status === RPC_STATUS_NOT_FOUND) {
           if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
             pushToast({
               message: `${tx.label}: transaction expired before confirmation. Please try again.`,
@@ -717,6 +723,15 @@ export async function reconcilePendingTransactions(): Promise<void> {
             removePendingTransaction(tx.txHash)
           }
           // Otherwise still genuinely in flight — leave it for the next reconciliation.
+        } else if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
+          // Any other unrecognised status (e.g. a new Soroban RPC code) must
+          // not pin the record in the pending set forever either.
+          pushToast({
+            message: `${tx.label}: transaction status could not be confirmed. Please refresh.`,
+            type: "warning",
+            duration: 6000,
+          })
+          removePendingTransaction(tx.txHash)
         }
       } catch (error) {
         // RPC unreachable while checking — leave the record for a future attempt.

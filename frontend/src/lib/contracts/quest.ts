@@ -4,11 +4,15 @@ import { Address, Contract, nativeToScVal } from "@stellar/stellar-sdk"
 import type { xdr } from "@stellar/stellar-sdk"
 import type { TransactionLifecycleHandlers, TransactionResult } from "./client"
 import { signAndSubmitTracked, simulateContractRead, prepareContractTransaction } from "./client"
-import { safeContractCall } from "../error-utils"
+import { scopedContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
 import { contractAddresses } from "./config"
 
 const CONTRACT_ID = contractAddresses.quest
+
+// Every write below targets the quest contract, so contract errors are decoded
+// against the quest code space rather than left ambiguous.
+const safeScopedCall = scopedContractCall("quest")
 
 // Re-export so consumers can import the canonical contract types from either
 // `@/lib/contracts/quest` or `@/lib/contract-types`. Keeping both import paths
@@ -168,7 +172,7 @@ export class QuestClient {
   }
 
   async verifyCreator(admin: string, creator: string) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(admin, "verify_creator", [
         new Address(admin).toScVal(),
         new Address(creator).toScVal(),
@@ -193,7 +197,7 @@ export class QuestClient {
     maxEnrollees?: number,
     deadline?: number
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "create_quest", [
         new Address(owner).toScVal(),
         nativeToScVal(name, { type: "string" }),
@@ -224,7 +228,7 @@ export class QuestClient {
     visibility?: Visibility,
     maxEnrollees?: number
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "update_quest", [
         nativeToScVal(questId, { type: "u32" }),
         new Address(owner).toScVal(),
@@ -250,7 +254,7 @@ export class QuestClient {
    * Archived quests remain readable but do not accept new enrollments.
    */
   async archiveQuest(owner: string, questId: number, handlers?: TransactionLifecycleHandlers) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "archive_quest", [
         nativeToScVal(questId, { type: "u32" }),
       ])
@@ -297,7 +301,7 @@ export class QuestClient {
       throw new Error("Missing enrollee address.")
     }
 
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "add_enrollee", [
         nativeToScVal(questId, { type: "u32" }),
         new Address(enrollee).toScVal(),
@@ -315,7 +319,7 @@ export class QuestClient {
     enrollee: string,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "remove_enrollee", [
         nativeToScVal(questId, { type: "u32" }),
         new Address(enrollee).toScVal(),
@@ -329,7 +333,7 @@ export class QuestClient {
    * Must be signed by the enrollee.
    */
   async leaveQuest(enrollee: string, questId: number, handlers?: TransactionLifecycleHandlers) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(enrollee, "leave_quest", [
         new Address(enrollee).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
@@ -342,7 +346,7 @@ export class QuestClient {
    * Allows a learner to enroll themselves in a public quest.
    */
   async joinQuest(enrollee: string, questId: number, handlers?: TransactionLifecycleHandlers) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(enrollee, "join_quest", [
         new Address(enrollee).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
@@ -355,7 +359,7 @@ export class QuestClient {
    * Sets visibility for a quest. Owner only.
    */
   async setVisibility(owner: string, questId: number, visibility: Visibility) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "set_visibility", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(visibility, { type: "u32" }),
@@ -369,7 +373,7 @@ export class QuestClient {
    * Pass 0 to remove the deadline.
    */
   async setDeadline(owner: string, questId: number, deadline: number) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "set_deadline", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(deadline, { type: "u64" }),
@@ -387,7 +391,7 @@ export class QuestClient {
   }
 
   async registerInvite(owner: string, questId: number, commitment: string) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "register_invite", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(commitment, { type: "string" }),
@@ -397,7 +401,7 @@ export class QuestClient {
   }
 
   async revokeInvite(owner: string, questId: number, commitment: string) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "revoke_invite", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(commitment, { type: "string" }),
@@ -407,7 +411,7 @@ export class QuestClient {
   }
 
   async joinQuestWithInvite(learner: string, questId: number, code: string) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(learner, "join_with_invite", [
         nativeToScVal(questId, { type: "u32" }),
         nativeToScVal(code, { type: "string" }),
@@ -440,7 +444,7 @@ export class QuestClient {
   }
 
   async setMetadataUri(owner: string, questId: number, metadataUri?: string) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "set_metadata_uri", [
         nativeToScVal(questId, { type: "u32" }),
         new Address(owner).toScVal(),
@@ -459,7 +463,7 @@ export class QuestClient {
     newOwner: string,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "transfer_quest_ownership", [
         nativeToScVal(questId, { type: "u32" }),
         new Address(newOwner).toScVal(),
@@ -473,7 +477,7 @@ export class QuestClient {
     questId: number,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(nominee, "accept_transfer", [
         nativeToScVal(questId, { type: "u32" }),
       ])
@@ -486,7 +490,7 @@ export class QuestClient {
     questId: number,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "cancel_transfer", [
         nativeToScVal(questId, { type: "u32" }),
       ])

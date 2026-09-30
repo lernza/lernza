@@ -318,14 +318,20 @@ interface ContractErrorProps {
   /** Raw error message from the contract call — will be mapped to friendly text. */
   message: string
   onRetry?: () => void
+  /**
+   * Contract the failing call targeted (scope name or contract address). Error
+   * codes are per-contract, so passing this is what lets `Error(Contract, #1)`
+   * read "Quest not found." rather than an unresolved code.
+   */
+  contract?: string
 }
 
 /**
  * Shown when a Soroban contract call fails. Maps `Error(Contract, #N)` codes
  * to human-readable messages.
  */
-export function ContractError({ message, onRetry }: ContractErrorProps) {
-  const friendlyMessage = mapContractError(message)
+export function ContractError({ message, onRetry, contract }: ContractErrorProps) {
+  const friendlyMessage = mapContractError(message, contract)
 
   return (
     <div className="animate-fade-in-up border-border bg-background border p-8 text-center shadow-md">
@@ -385,6 +391,8 @@ interface SmartErrorProps {
   onRetry?: () => void
   onBack?: () => void
   questId?: number | string
+  /** Forwarded to `ContractError` so contract codes resolve to the right message. */
+  contract?: string
 }
 
 /**
@@ -392,7 +400,7 @@ interface SmartErrorProps {
  * Use this as a drop-in replacement for the generic ErrorState when you want
  * per-error-type UI automatically.
  */
-export function SmartError({ message, onRetry, onBack, questId }: SmartErrorProps) {
+export function SmartError({ message, onRetry, onBack, questId, contract }: SmartErrorProps) {
   const kind = classifyError(message)
 
   switch (kind) {
@@ -403,8 +411,8 @@ export function SmartError({ message, onRetry, onBack, questId }: SmartErrorProp
     case "not_found":
       return <QuestNotFound questId={questId} onBack={onBack} />
     case "contract":
-      return <ContractError message={message} onRetry={onRetry} />
+      return <ContractError message={message} onRetry={onRetry} contract={contract} />
     default:
-      return <ContractError message={message} onRetry={onRetry} />
+      return <ContractError message={message} onRetry={onRetry} contract={contract} />
   }
 }

@@ -16,6 +16,7 @@ import { I18nProvider } from "@/i18n"
 import { useWallet } from "@/hooks/use-wallet"
 import { OnboardingTutorial } from "@/components/onboarding-tutorial"
 import { useOnboarding } from "@/hooks/use-onboarding"
+import { useRpcHealth } from "@/hooks/use-rpc-health"
 import { reconcilePendingTransactions } from "@/lib/contracts/client"
 
 // Code-split heavy pages — they load on first visit to that route.
@@ -139,6 +140,10 @@ function App() {
   const onboarding = useOnboarding()
   const { connected } = useWallet()
   useQuestEventStream(connected)
+  // Periodic Soroban RPC health checks, so the client can fail over to a
+  // fallback endpoint. Owned by this component: stopped on unmount instead of
+  // running forever from module load.
+  useRpcHealth()
   // 24-hour deadline reminders. These come from quest state rather than the
   // event stream, because a deadline entering its final day emits no contract
   // event to poll for.

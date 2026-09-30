@@ -17,16 +17,48 @@ export default defineConfig({
         name: "Lernza",
         short_name: "Lernza",
         description: "Learn-to-earn quests on Stellar",
-        theme_color: "#000000",
-        background_color: "#fafaf8",
+        // Must match the <meta name="theme-color"> in index.html; a mismatch
+        // makes the browser chrome flash between the two colours.
+        theme_color: "#FBFAF7",
+        background_color: "#FBFAF7",
         display: "standalone",
         start_url: "/",
         icons: [
+          // `purpose` values are per-entry and space-separated, so "any" and
+          // "maskable" must be separate entries rather than one "any maskable"
+          // entry: a maskable icon is cropped by the launcher to its safe zone,
+          // which the tight-cropped "any" artwork is not drawn to survive.
+          // Chrome's Lighthouse PWA audit fails on the combined form, and
+          // Android install prompts need the raster PNGs, not just SVG.
+          {
+            src: "/icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/icons/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/icons/icon-maskable-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "maskable",
+          },
+          {
+            src: "/icons/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
           {
             src: "/favicon.svg",
             sizes: "any",
             type: "image/svg+xml",
-            purpose: "any maskable",
+            purpose: "any",
           },
         ],
       },

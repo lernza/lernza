@@ -100,10 +100,57 @@ export const rpcHealthManager = new RpcHealthManager({
   timeoutMs: RPC_TIMEOUT_MS,
   maxConsecutiveFailures: 3,
   healthCheckIntervalMs: 30000,
+  // Vitest reports MODE as "test". Health checks poll the network on a timer, so
+  // they are skipped there: an un-stopped interval produces dangling-timer
+  // failures and keeps the process alive after the assertions finish.
+  allowTimers: import.meta.env.MODE !== "test",
 })
 
-// Start health checks on module load
-rpcHealthManager.startHealthChecks()
+/**
+ * Number of mounted consumers of the periodic health checks. The interval is
+ * started when this goes 0 → 1 and stopped when it returns to 0, so mounting
+ * `useRpcHealth` in more than one place still yields exactly one timer.
+ */
+let healthCheckConsumers = 0
+
+/**
+ * Registers a consumer of the periodic health checks, starting the interval
+ * for the first one. Repeated calls join the existing set instead of stacking
+ * timers, so a remount or a hot reload cannot leak one.
+ */
+export function startRpcHealthChecks(): void {
+  healthCheckConsumers += 1
+  if (healthCheckConsumers === 1) {
+    rpcHealthManager.startHealthChecks()
+  }
+}
+
+/**
+ * Releases one health-check consumer, stopping the interval once the last one
+ * is gone. Safe to call when nothing is running.
+ */
+export function stopRpcHealthChecks(): void {
+  if (healthCheckConsumers === 0) return
+  healthCheckConsumers -= 1
+  if (healthCheckConsumers === 0) {
+    rpcHealthManager.stopHealthChecks()
+  }
+}
+
+/** Whether any consumer currently wants the periodic health checks. */
+export function areRpcHealthChecksRunning(): boolean {
+  return healthCheckConsumers > 0
+}
+
+// Re-evaluating this module builds a fresh RpcHealthManager, orphaning the
+// previous one's interval. Release it on dispose so a hot reload does not stack
+// a new timer on every save.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    healthCheckConsumers = 0
+    rpcHealthManager.stopHealthChecks()
+  })
+}
 
 export let server = rpcHealthManager.getServer()
 

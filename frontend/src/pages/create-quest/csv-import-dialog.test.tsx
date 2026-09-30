@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { axe } from "vitest-axe"
+import { I18nProvider } from "@/i18n"
 import { CsvImportDialog } from "./csv-import-dialog"
 
 function renderDialog(overrides: Partial<Parameters<typeof CsvImportDialog>[0]> = {}) {
@@ -10,7 +11,14 @@ function renderDialog(overrides: Partial<Parameters<typeof CsvImportDialog>[0]> 
     onImport: vi.fn(),
     ...overrides,
   }
-  return { ...render(<CsvImportDialog {...props} />), props }
+  return {
+    ...render(
+      <I18nProvider>
+        <CsvImportDialog {...props} />
+      </I18nProvider>
+    ),
+    props,
+  }
 }
 
 const dialog = () => screen.getByRole("dialog")
@@ -56,7 +64,11 @@ describe("CsvImportDialog", () => {
       const { rerender, props } = renderDialog()
       expect(screen.getByLabelText(/browse files/i)).toHaveFocus()
 
-      rerender(<CsvImportDialog {...props} isOpen={false} />)
+      rerender(
+        <I18nProvider>
+          <CsvImportDialog {...props} isOpen={false} />
+        </I18nProvider>
+      )
 
       expect(document.activeElement).toBe(trigger)
       trigger.remove()
@@ -95,7 +107,11 @@ describe("CsvImportDialog", () => {
 
     it("stops listening once closed", () => {
       const { props, rerender } = renderDialog()
-      rerender(<CsvImportDialog {...props} isOpen={false} />)
+      rerender(
+        <I18nProvider>
+          <CsvImportDialog {...props} isOpen={false} />
+        </I18nProvider>
+      )
 
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
 
@@ -108,13 +124,13 @@ describe("CsvImportDialog", () => {
 
     await selectCsv(validCsv)
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /import 1 milestones/i })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: /import 1 milestones/i })).toBeEnabled()
     )
     fireEvent.click(screen.getByRole("button", { name: /import 1 milestones/i }))
 
     expect(props.onImport).toHaveBeenCalledWith(
       [{ title: "Milestone 1", description: "First description", rewardAmount: 50 }],
-      "append",
+      "append"
     )
     expect(props.onClose).toHaveBeenCalled()
   })

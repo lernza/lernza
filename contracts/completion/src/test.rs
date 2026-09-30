@@ -131,14 +131,14 @@ fn test_complete_quest_at_max_milestones_uses_bounded_batch_read() {
     // Measure only finalization: milestone setup and verification happen in
     // separate invocations. complete_quest performs one batch cross-contract
     // read for all 50 completion flags and must stay within the VM budget.
-    s.env.budget().reset_default();
+    s.env.cost_estimate().budget().reset_default();
     let token_id = CompletionContractClient::new(&s.env, &s.completion).complete_quest(
         &s.admin,
         &quest_id,
         &s.recipient,
     );
     assert!(token_id > 0);
-    assert!(s.env.budget().cpu_instruction_cost() > 0);
+    assert!(s.env.cost_estimate().budget().cpu_instruction_cost() > 0);
 }
 
 #[test]

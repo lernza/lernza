@@ -9,7 +9,6 @@ extern crate quest;
 use certificate::CertificateContract;
 use common::Visibility;
 use quest::{QuestContract, QuestContractClient};
-use testutils::setup_milestone;
 
 fn setup() -> (
     Env,
@@ -1802,7 +1801,7 @@ fn test_milestone_counters_stay_in_sync_across_all_create_paths() {
     quest_client.add_enrollee(&q_id, &enrollee);
     let progress = client.get_enrollee_progress(&q_id, &enrollee, &0, &100);
     let partial = client.get_partial_score(&q_id, &enrollee);
-    assert_eq!(listed.len() as u32, 4);
+    assert_eq!(listed.len(), 4);
     assert_eq!(client.get_milestone_count(&q_id), 4);
     assert_eq!(progress.total_milestones, 4);
     assert_eq!(partial.total, 4);
@@ -2364,7 +2363,7 @@ fn test_set_distribution_mode_emits_event() {
     create_ms(&env, &client, &owner, q_id, "M1", 100);
     let after = env.events().all();
     assert!(
-        after.len() > 0,
+        !after.is_empty(),
         "set_distribution_mode should publish a distribution_mode_set event"
     );
 }
@@ -2735,7 +2734,7 @@ fn test_batch_size_limit() {
     let q_id = create_quest(&env, &quest_client, &owner);
 
     let mut milestones = Vec::new(&env);
-    for i in 0..21 {
+    for _ in 0..21 {
         milestones.push_back(MilestoneInput {
             title: String::from_str(&env, "M"),
             description: String::from_str(&env, "D"),

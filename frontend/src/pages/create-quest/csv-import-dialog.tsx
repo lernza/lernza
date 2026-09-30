@@ -51,23 +51,7 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
           {
             row: 0,
             field: "file",
-            message: "File size must be 2 MB or smaller.",
-          },
-        ],
-      })
-      return
-    }
-
-
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setFile(null)
-      setParseResult({
-        milestones: [],
-        errors: [
-          {
-            row: 0,
-            field: "file",
-            message: "File size must be 2 MB or smaller.",
+            message: t("csv.error.tooLarge"),
           },
         ],
       })
@@ -82,41 +66,12 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
           {
             row: 0,
             field: "file",
-            message: "Only .csv files are supported.",
+            message: t("csv.error.notCsv"),
           },
         ],
       })
       return
     }
-  if (selectedFile.size > MAX_FILE_SIZE) {
-    setFile(null)
-    setParseResult({
-      milestones: [],
-      errors: [
-        {
-          row: 0,
-          field: "file",
-          message: t("csv.error.tooLarge"),
-        },
-      ],
-    })
-    return
-  }
-
-  if (!selectedFile.name.endsWith(".csv")) {
-    setFile(null)
-    setParseResult({
-      milestones: [],
-      errors: [
-        {
-          row: 0,
-          field: "file",
-          message: t("csv.error.notCsv"),
-        },
-      ],
-    })
-    return
-  }
 
     setFile(selectedFile)
 
@@ -169,7 +124,6 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="border-border bg-background animate-scale-in w-full max-w-xl border shadow-2xl">
       <div
         ref={dialogRef}
         role="dialog"
@@ -182,12 +136,7 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
         <div className="bg-accent border-border flex items-center justify-between border-b px-6 py-3">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4" />
-            <span
-              id="csv-import-title"
-              className="text-sm font-semibold tracking-wider uppercase"
-            >
-              Import Milestones from CSV
-            <span className="text-sm font-semibold tracking-wider uppercase">
+            <span id="csv-import-title" className="text-sm font-semibold tracking-wider uppercase">
               {t("csv.title")}
             </span>
           </div>
@@ -212,36 +161,24 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
             )}
           >
             <Upload className="text-muted-foreground mx-auto mb-2 h-8 w-8" />
-            <p className="mb-1 text-sm font-semibold">Drag and drop your milestone CSV file here</p>
+            <p className="mb-1 text-sm font-semibold">{t("csv.dropzone")}</p>
             <p className="text-muted-foreground mb-4 text-xs">
-              Columns required: <code>milestone_title</code>, <code>description</code>,{" "}
-              <code>reward_amount</code>
+              {t("csv.columnsRequired")} <code>title</code>, <code>description</code>,{" "}
+              <code>rewardAmount</code>
             </p>
             <div className="flex items-center justify-center gap-3">
-              <label className="border-border bg-background hover:bg-secondary cursor-pointer border px-4 py-2 text-xs font-semibold tracking-wider uppercase shadow-sm transition-colors">
-                Browse Files
-                <input type="file" accept=".csv" onChange={handleInputChange} className="hidden" />
               <label
                 className={cn(
                   "border-border bg-background hover:bg-secondary cursor-pointer border px-4 py-2 text-xs font-semibold tracking-wider uppercase shadow-sm transition-colors",
                   "has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-2"
                 )}
               >
-                Browse Files
+                {t("csv.browse")}
                 {/*
                   Visually hidden rather than `display: none` so it stays focusable —
                   `hidden` would make the file picker unreachable by keyboard and
                   silently defeat the dialog's initial focus target.
                 */}
-            <Upload className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-sm font-semibold mb-1">{t("csv.dropzone")}</p>
-            <p className="text-xs text-muted-foreground mb-4">
-              {t("csv.columnsRequired")} <code>title</code>, <code>description</code>,{" "}
-              <code>rewardAmount</code>
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <label className="border-border bg-background hover:bg-secondary cursor-pointer border px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors shadow-sm">
-                {t("csv.browse")}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -285,7 +222,6 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
 
           {/* Errors List */}
           {parseResult && parseResult.errors.length > 0 && (
-            <div className="border-destructive/40 bg-destructive/10 space-y-2 border p-4">
             <div
               className="border-destructive/40 bg-destructive/10 space-y-2 border p-4"
               role="alert"
@@ -310,15 +246,10 @@ export function CsvImportDialog({ isOpen, onClose, onImport }: CsvImportDialogPr
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-                  Valid Milestones Preview ({parseResult.milestones.length})
-                </span>
-                <span className="text-xs font-semibold">
-                  Total Reward: {formatUsdc(totalReward)} USDC
-                <span className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">
                   {t("csv.previewHeading", { count: parseResult.milestones.length })}
                 </span>
                 <span className="text-xs font-semibold">
-                  {t("csv.totalReward", { amount: formatTokens(totalReward) })}
+                  {t("csv.totalReward", { amount: formatUsdc(totalReward) })}
                 </span>
               </div>
 

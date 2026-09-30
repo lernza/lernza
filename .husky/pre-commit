@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Pre-commit hook: runs linting and formatting checks before each commit.
 # All checks must pass for the commit to proceed.
 

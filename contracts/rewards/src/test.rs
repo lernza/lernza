@@ -4,7 +4,6 @@ use certificate::{CertificateContract, CertificateContractClient};
 use common::Visibility;
 use milestone::{MilestoneContract, MilestoneContractClient};
 use quest::{QuestContract, QuestContractClient};
-use testutils::setup_rewards;
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -2136,7 +2135,7 @@ fn test_get_refund_window_archived_after_grace() {
 #[test]
 fn test_get_refund_window_invalid_quest() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -2178,7 +2177,7 @@ fn test_default_refund_grace_period() {
 #[test]
 fn test_set_refund_grace_period() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -2230,7 +2229,7 @@ fn test_refund_with_custom_grace_period() {
         token_addr,
         quest_client,
         _quest_id,
-        milestone_client,
+        _milestone_client,
         _milestone_id,
         _certificate_client,
         _certificate_id,
@@ -2279,7 +2278,7 @@ fn test_refund_with_custom_grace_period() {
 #[test]
 fn test_pause_blocks_grace_period_updates() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -3096,7 +3095,7 @@ fn test_distribute_rejects_zero_amount() {
         _milestone_id,
         _certificate_client,
         _certificate_id,
-        admin,
+        _admin,
     ) = setup();
     let owner = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -3132,7 +3131,7 @@ fn test_distribute_rejects_self_payment() {
         _milestone_id,
         _certificate_client,
         _certificate_id,
-        admin,
+        _admin,
     ) = setup();
     let owner = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);
@@ -3215,7 +3214,7 @@ fn test_claim_batch_rejects_over_limit() {
 #[test]
 fn test_set_grace_period_rejects_too_short() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -3235,7 +3234,7 @@ fn test_set_grace_period_rejects_too_short() {
 #[test]
 fn test_set_grace_period_rejects_too_long() {
     let (
-        env,
+        _env,
         client,
         _cid,
         _token_addr,
@@ -3285,7 +3284,7 @@ fn test_pool_cannot_go_negative() {
         _milestone_id,
         _certificate_client,
         _certificate_id,
-        admin,
+        _admin,
     ) = setup();
     let owner = Address::generate(&env);
     let sac = StellarAssetClient::new(&env, &token_addr);

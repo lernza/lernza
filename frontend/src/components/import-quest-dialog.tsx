@@ -1,5 +1,4 @@
 import { CheckCircle2, Coins, FileSpreadsheet, X } from "lucide-react"
-import { useEffect, useRef } from "react"
 import { useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -8,7 +7,6 @@ import { useScrollLock } from "@/hooks/use-scroll-lock"
 import { useFocusTrap } from "@/hooks/use-focus-trap"
 import { formatUsdc } from "@/lib/utils"
 import type { ParsedMilestone } from "@/pages/create-quest/csv-parser"
-import { useTokenSymbol } from "@/hooks/use-token-symbol"
 
 export interface ImportedQuest {
   name: string
@@ -40,23 +38,11 @@ export function ImportQuestDialog({
   existingCount,
   questName,
 }: ImportQuestDialogProps) {
-export function ImportQuestDialog({ isOpen, onClose, onConfirm, data }: ImportQuestDialogProps) {
-  const { symbol } = useTokenSymbol()
   const dialogRef = useRef<HTMLDivElement>(null)
   const confirmButtonRef = useRef<HTMLButtonElement>(null)
 
   useScrollLock(isOpen)
 
-  // Handle focus management
-  useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement
-
-      const focusTimer = setTimeout(() => {
-        if (confirmButtonRef.current) {
-          confirmButtonRef.current.focus()
-        }
-      }, 100)
   const isRendered = isOpen && milestones.length > 0
 
   // Trap focus, autofocus the confirm button, close on Escape, restore focus.
@@ -67,62 +53,6 @@ export function ImportQuestDialog({ isOpen, onClose, onConfirm, data }: ImportQu
   })
 
   if (!isRendered) return null
-
-  // Handle focus management
-  useEffect(() => {
-    if (isOpen) {
-      previousFocusRef.current = document.activeElement as HTMLElement
-
-      const focusTimer = setTimeout(() => {
-        if (confirmButtonRef.current) {
-          confirmButtonRef.current.focus()
-        }
-      }, 100)
-  const isRendered = isOpen && milestones.length > 0
-
-  // Trap focus, autofocus the confirm button, close on Escape, restore focus.
-  useFocusTrap(dialogRef, {
-    isActive: isRendered,
-    onEscape: onClose,
-    initialFocusRef: confirmButtonRef,
-  })
-
-  if (!isRendered) return null
-
-        if (e.key === "Tab" && dialogRef.current) {
-          const focusable = dialogRef.current.querySelectorAll(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-          )
-          const first = focusable[0] as HTMLElement
-          const last = focusable[focusable.length - 1] as HTMLElement
-
-          if (e.shiftKey) {
-            if (document.activeElement === first) {
-              last.focus()
-              e.preventDefault()
-            }
-          } else {
-            if (document.activeElement === last) {
-              first.focus()
-              e.preventDefault()
-            }
-          }
-        }
-      }
-
-      window.addEventListener("keydown", handleKeyDown)
-
-      return () => {
-        clearTimeout(focusTimer)
-        window.removeEventListener("keydown", handleKeyDown)
-        if (previousFocusRef.current) {
-          previousFocusRef.current.focus()
-        }
-      }
-    }
-  }, [isOpen, onClose])
-
-  if (!isOpen || milestones.length === 0) return null
 
   const totalReward = milestones.reduce((sum, m) => sum + m.rewardAmount, 0)
   const resultingCount = mode === "replace" ? milestones.length : existingCount + milestones.length
@@ -196,26 +126,6 @@ export function ImportQuestDialog({ isOpen, onClose, onConfirm, data }: ImportQu
                         {ms.title}
                       </p>
                       <p className="text-muted-foreground line-clamp-2 text-xs">{ms.description}</p>
-              <div className="mt-1 max-h-[30vh] space-y-2 overflow-y-auto pr-1">
-                {data.milestones.map((ms, i) => (
-                  <div key={i} className="bg-muted/50 border-border border p-2 shadow-sm">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{ms.title}</p>
-                        <p className="text-muted-foreground line-clamp-2 text-xs">
-                          {ms.description}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        {ms.requiresPrevious && i > 0 && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Sequential
-                          </Badge>
-                        )}
-                        <Badge variant="secondary" className="text-[10px] tabular-nums">
-                          {formatTokens(ms.rewardAmount, 7, symbol)}
-                        </Badge>
-                      </div>
                     </div>
                     <Badge variant="secondary" className="shrink-0 text-[10px] tabular-nums">
                       {formatUsdc(ms.rewardAmount)} USDC

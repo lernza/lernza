@@ -4,8 +4,13 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "vitest-axe"
 import { QuestCreationProvider, useQuestCreation } from "./context"
+import { I18nProvider } from "@/i18n"
 import { Step1Form } from "./step1"
 import { Step2Form } from "./step2"
+
+function renderWizard(ui: React.ReactNode) {
+  return render(<I18nProvider>{ui}</I18nProvider>)
+}
 
 function csvFile(contents: string, name = "milestones.csv") {
   return new File([contents], name, { type: "text/csv" })
@@ -60,7 +65,7 @@ async function runImport(
 
 async function importCsv(contents: string, mode: "append" | "replace" = "append") {
   const user = userEvent.setup()
-  render(
+  renderWizard(
     <QuestCreationProvider>
       <Harness />
     </QuestCreationProvider>
@@ -70,7 +75,7 @@ async function importCsv(contents: string, mode: "append" | "replace" = "append"
 
 describe("Step 1 CSV import pre-populates Step 2", () => {
   it("exposes an import entry point and a sample template download", () => {
-    render(
+    renderWizard(
       <QuestCreationProvider>
         <Step1Form />
       </QuestCreationProvider>
@@ -109,7 +114,7 @@ describe("Step 1 CSV import pre-populates Step 2", () => {
 
   it("surfaces a validation summary and blocks confirming an all-invalid file", async () => {
     const user = userEvent.setup()
-    render(
+    renderWizard(
       <QuestCreationProvider>
         <Step1Form />
       </QuestCreationProvider>
@@ -136,7 +141,7 @@ describe("Step 1 CSV import pre-populates Step 2", () => {
 
   it("confirms at most MAX_MILESTONES milestones and reports the overflow", async () => {
     const user = userEvent.setup()
-    render(
+    renderWizard(
       <QuestCreationProvider>
         <Harness />
       </QuestCreationProvider>
@@ -165,7 +170,7 @@ describe("Step 1 CSV import pre-populates Step 2", () => {
 
   it("caps an append that would exceed MAX_MILESTONES and says how many were dropped", async () => {
     const user = userEvent.setup()
-    render(
+    renderWizard(
       <QuestCreationProvider>
         <Harness />
       </QuestCreationProvider>
@@ -211,7 +216,7 @@ describe("Step 1 CSV import pre-populates Step 2", () => {
   })
 
   it("keeps step 1 free of accessibility violations with the import panel present", async () => {
-    const { container } = render(
+    const { container } = renderWizard(
       <QuestCreationProvider>
         <Step1Form />
       </QuestCreationProvider>

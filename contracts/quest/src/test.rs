@@ -2,7 +2,6 @@ use super::*;
 use soroban_sdk::{
     testutils::Address as _, testutils::Ledger as _, Address, Bytes, BytesN, Env, String,
 };
-use testutils::setup_quest;
 
 fn setup() -> (Env, QuestContractClient<'static>, Address, Address) {
     let env = Env::default();
@@ -2136,8 +2135,8 @@ fn test_cancel_quest_unauthorized() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_with_visibility(&env, &client, &owner, &token, Visibility::Public);
 
-    let imposter = Address::generate(&env);
-    let res = client.try_cancel_quest(&quest_id);
+    let _imposter = Address::generate(&env);
+    let _ = client.try_cancel_quest(&quest_id);
     // In soroban test framework without mock_all_auths, calling require_auth on unauthorized address panics or fails auth check
 }
 
@@ -2165,7 +2164,7 @@ fn test_signature_and_preimage_validation_rejects_forgery() {
 
     // Legitimate user uses correct preimage signature bytes
     let victim = Address::generate(&env);
-    let valid_res = client.join_quest_with_invite(
+    client.join_quest_with_invite(
         &victim,
         &quest_id,
         &Bytes::from_slice(&env, authentic_preimage),
@@ -2177,7 +2176,7 @@ fn test_signature_and_preimage_validation_rejects_forgery() {
 
 #[test]
 fn test_estimate_quest_creation_rent_scales_with_input_size() {
-    let (env, client, _owner, _token) = setup();
+    let (_env, client, _owner, _token) = setup();
 
     let small = client.estimate_quest_creation_rent(&4, &10, &4, &0);
     let large = client.estimate_quest_creation_rent(&64, &2000, &32, &5);
@@ -2190,7 +2189,7 @@ fn test_estimate_quest_creation_rent_scales_with_input_size() {
 fn test_estimate_quest_creation_rent_caps_tag_count() {
     // Tags beyond MAX_TAGS (5) must not inflate the estimate further, since
     // create_quest itself rejects more than MAX_TAGS tags.
-    let (env, client, _owner, _token) = setup();
+    let (_env, client, _owner, _token) = setup();
 
     let at_cap = client.estimate_quest_creation_rent(&10, &10, &10, &5);
     let above_cap = client.estimate_quest_creation_rent(&10, &10, &10, &50);
@@ -2459,7 +2458,7 @@ fn test_get_active_participant_count_empty_quest() {
 
 #[test]
 fn test_get_active_participant_count_nonexistent_quest() {
-    let (env, client, _owner, _token) = setup();
+    let (_env, client, _owner, _token) = setup();
     let r = client.try_get_active_participant_count(&999);
     assert_eq!(r, Err(Ok(Error::NotFound)));
 }
@@ -2564,8 +2563,7 @@ fn test_transfer_quest_ownership() {
     assert_eq!(transfer.nominee, new_owner);
 
     // Nominee accepts transfer
-    let r = client.try_accept_transfer(&quest_id, &new_owner);
-    assert!(r.is_ok());
+    client.accept_transfer(&quest_id);
 
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.owner, new_owner);
@@ -2615,14 +2613,13 @@ fn test_accept_transfer() {
     client.initiate_transfer(&quest_id, &nominee);
 
     // Accept must be called by the nominee
-    let r = client.try_accept_transfer(&quest_id, &nominee);
-    assert!(r.is_ok());
+    client.accept_transfer(&quest_id);
 
     let quest = client.get_quest(&quest_id);
     assert_eq!(quest.owner, nominee);
 
     // Pending transfer should be cleared
-    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+    assert!(client.get_pending_transfer(&quest_id).is_none());
 }
 
 #[test]
@@ -2630,11 +2627,11 @@ fn test_accept_transfer_rejects_non_nominee() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
     let nominee = Address::generate(&env);
-    let stranger = Address::generate(&env);
+    let _stranger = Address::generate(&env);
 
     client.initiate_transfer(&quest_id, &nominee);
 
-    let r = client.try_accept_transfer(&quest_id, &stranger);
+    let r = client.try_accept_transfer(&quest_id);
     assert_eq!(r, Err(Ok(Error::NotTransferNominee)));
 }
 
@@ -2643,7 +2640,7 @@ fn test_accept_transfer_rejects_no_pending() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
-    let r = client.try_accept_transfer(&quest_id, &owner);
+    let r = client.try_accept_transfer(&quest_id);
     assert_eq!(r, Err(Ok(Error::NoPendingTransfer)));
 }
 
@@ -2656,7 +2653,7 @@ fn test_cancel_transfer() {
     client.initiate_transfer(&quest_id, &nominee);
     client.cancel_transfer(&quest_id);
 
-    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+    assert!(client.get_pending_transfer(&quest_id).is_none());
 }
 
 #[test]
@@ -2673,7 +2670,7 @@ fn test_get_pending_transfer_none() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
-    assert_eq!(client.get_pending_transfer(&quest_id), Ok(None));
+    assert!(client.get_pending_transfer(&quest_id).is_none());
 }
 
 // ── Waitlist tests (#1472) ──────────────────────────────────────────────────
@@ -2766,8 +2763,8 @@ fn test_promote_from_waitlist() {
     client.join_quest(&e1, &quest_id);
     client.join_quest(&e2, &quest_id);
 
-    let promoted = client.promote_from_waitlist(&quest_id).unwrap();
-    assert_eq!(promoted, Some(e2));
+    let promoted = client.promote_from_waitlist(&quest_id);
+    assert_eq!(promoted, Some(e2.clone()));
 
     let enrollees = client.get_enrollees(&quest_id);
     assert_eq!(enrollees.len(), 2);
@@ -2783,7 +2780,7 @@ fn test_promote_from_waitlist_empty() {
     let (env, client, owner, token) = setup();
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
-    let result = client.promote_from_waitlist(&quest_id).unwrap();
+    let result = client.promote_from_waitlist(&quest_id);
     assert_eq!(result, None);
 }
 
@@ -3178,11 +3175,10 @@ fn test_undismiss_dashboard_guidance_enrollment_check() {
     let quest_id = create_quest_helper(&env, &client, &owner, &token);
 
     let stranger = Address::generate(&env);
-    
+
     // Attempting to undismiss dashboard guidance when not enrolled should fail.
     assert_eq!(
         client.try_undismiss_dashboard_guidance(&stranger, &quest_id),
         Err(Ok(Error::NotEnrolled))
     );
 }
-

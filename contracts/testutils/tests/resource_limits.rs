@@ -79,13 +79,13 @@ fn test_milestone_batch_creation_resource_limits() {
         });
     }
 
-    env.budget().reset_default();
+    env.cost_estimate().budget().reset_default();
     let ids = milestone_client.create_milestones_batch(&admin, &quest_id, &batch);
     assert_eq!(ids.len(), 10);
 
     // Profile budget bounds
-    let cpu = env.budget().cpu_instruction_cost();
-    let mem = env.budget().memory_bytes_cost();
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    let mem = env.cost_estimate().budget().memory_bytes_cost();
     assert!(cpu > 0, "CPU instructions should be recorded");
     assert!(mem > 0, "Memory bytes should be recorded");
 }

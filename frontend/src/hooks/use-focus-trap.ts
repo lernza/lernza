@@ -17,14 +17,9 @@ import { useEffect, useRef, type RefObject } from "react"
  * programmatically as a fallback when it contains no focusable children.
  */
 
-const FOCUSABLE_SELECTOR = [
-  "a[href]",
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "[tabindex]",
-].join(", ")
+const FOCUSABLE_SELECTOR = ["a[href]", "button", "input", "select", "textarea", "[tabindex]"].join(
+  ", "
+)
 
 function isDisabled(element: HTMLElement): boolean {
   return (
@@ -68,7 +63,7 @@ export interface UseFocusTrapOptions {
 
 export function useFocusTrap<TContainer extends HTMLElement>(
   containerRef: RefObject<TContainer | null>,
-  { isActive, onEscape, initialFocusRef, restoreFocus = true }: UseFocusTrapOptions,
+  { isActive, onEscape, initialFocusRef, restoreFocus = true }: UseFocusTrapOptions
 ): void {
   // Held in refs so that callers can pass inline callbacks without re-running
   // the effect (which would re-capture the trigger and steal focus back).
@@ -146,11 +141,6 @@ export function useFocusTrap<TContainer extends HTMLElement>(
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true)
-    // Capture phase so the dialog sees the key before the focused control does.
-    document.addEventListener("keydown", handleKeyDown, true)
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown, true)
 
       const previous = previousFocusRef.current
       if (restoreFocusRef.current && previous && previous.isConnected) {

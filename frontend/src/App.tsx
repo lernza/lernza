@@ -1,362 +1,49 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from "react"
-import type { ReactNode } from "react"
-import { Analytics } from "@vercel/analytics/react"
-import { SpeedInsights } from "@vercel/speed-insights/react"
-import { Navbar } from "@/components/navbar"
-import { ToastContainer } from "@/components/toast"
-import { Landing } from "@/pages/landing"
-import { Profile } from "@/pages/profile"
-import { NotFound } from "@/pages/not-found"
-import { ErrorBoundary, ErrorBoundaryProvider, SectionErrorBoundary } from "@/components/error-boundary"
-import { TermsOfService } from "@/pages/terms"
-import { PrivacyPolicy } from "@/pages/privacy"
-import { PageSkeleton } from "@/components/page-skeleton"
-import { NotificationProvider } from "@/contexts/notification-context"
-import { I18nProvider } from "@/i18n"
-import { useWallet } from "@/hooks/use-wallet"
-import { OnboardingTutorial } from "@/components/onboarding-tutorial"
-import { useOnboarding } from "@/hooks/use-onboarding"
-import { reconcilePendingTransactions } from "@/lib/contracts/client"
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, useNavigate, useParams } from "react-router-dom";
+import Dashboard from "./components/Dashboard";
+import QuestView from "./components/QuestView";
+import CertificateView from "./components/CertificateView";
 
-// Code-split heavy pages — they load on first visit to that route.
-const Dashboard = lazy(() => import("@/pages/dashboard").then((m) => ({ default: m.Dashboard })))
-const QuestView = lazy(() => import("@/pages/quest").then((m) => ({ default: m.QuestView })))
-const CreateQuest = lazy(() => import("@/pages/create-quest").then((m) => ({ default: m.CreateQuest })))
-const Leaderboard = lazy(() => import("@/pages/leaderboard").then((m) => ({ default: m.Leaderboard })))
-const History = lazy(() => import("@/pages/history").then((m) => ({ default: m.History })))
-const CreatorProfile = lazy(() => import("@/pages/creator").then((m) => ({ default: m.CreatorProfile })))
-const CreatorDashboard = lazy(() => import("@/pages/creator-dashboard").then((m) => ({ default: m.CreatorDashboard })))
-const AnalyticsPage = lazy(() => import("@/pages/analytics").then((m) => ({ default: m.Analytics })))
-const CertificateView = lazy(() => import("@/pages/certificate").then((m) => ({ default: m.CertificateView })))
-const NotificationsPage = lazy(() => import("@/pages/notifications").then((m) => ({ default: m.NotificationsPage })))
-import { useToast } from "@/hooks/use-toast"
-import { subscribeToasts } from "@/lib/notifications"
-import { useQuestEventStream } from "@/hooks/use-quest-events"
-import { useDeadlineReminders } from "@/hooks/use-deadline-reminders"
-import { OfflineBanner } from "@/components/offline-banner"
-
-// ─── Routing ───────────────────────────────────────────────────────────────────
-
-const VALID_PAGES = [
-  "landing",
-  "dashboard",
-  "profile",
-  "create-quest",
-  "creator-dashboard",
-  "leaderboard",
-  "history",
-  "analytics",
-  "notifications",
-  "terms",
-  "privacy",
-] as const
-type Page = (typeof VALID_PAGES)[number] | "quest" | "creator" | "certificate" | "404"
-const PROTECTED_PAGES: ReadonlySet<Page> = new Set(["profile", "create-quest", "creator-dashboard"])
-
-function SessionGuard({ children, onDenied }: { children: ReactNode; onDenied: () => void }) {
-  const { verifySession } = useWallet()
-  const [verified, setVerified] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    void verifySession().then(isValid => {
-      if (!active) return
-      if (isValid) setVerified(true)
-      else onDenied()
-    })
-    return () => {
-      active = false
-    }
-  }, [onDenied, verifySession])
-
-  return verified ? <>{children}</> : <PageSkeleton />
+export function pageToPath(page: string, params?: Record<string, string>): string {
+  switch (page) {
+    case "dashboard":
+      return "/dashboard";
+    case "quest":
+      return params?.id ? `/quest/${params.id}` : "/quest";
+    case "certificate":
+      return params?.id ? `/certificate/${params.id}` : "/certificate";
+    default:
+      return `/${page}`;
+  }
 }
 
-export function pathToPage(pathname: string): {
-  page: Page
-  questId: number | null
-  creatorAddress: string | null
-  certificateId: number | null
-} {
-  const clean = pathname.replace(/\/+$/, "") || "/"
+function MainApp() {
+  const navigate = useNavigate();
 
-  if (clean === "/") return { page: "landing", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/dashboard") return { page: "dashboard", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/profile") return { page: "profile", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/create-quest" || clean === "/quest/create") {
-    return { page: "create-quest", questId: null, creatorAddress: null, certificateId: null }
-  }
-  if (clean === "/creator-dashboard") {
-    return { page: "creator-dashboard", questId: null, creatorAddress: null, certificateId: null }
-  }
-  if (clean === "/leaderboard") return { page: "leaderboard", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/history") return { page: "history", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/analytics") return { page: "analytics", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/notifications") return { page: "notifications", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/terms") return { page: "terms", questId: null, creatorAddress: null, certificateId: null }
-  if (clean === "/privacy") return { page: "privacy", questId: null, creatorAddress: null, certificateId: null }
+  const handleSelectQuest = (questId: string) => {
+    navigate(pageToPath("quest", { id: questId }));
+  };
 
-  const questMatch = clean.match(/^\/quest\/(\d+)$/)
-  if (questMatch) {
-    return { page: "quest", questId: Number(questMatch[1]), creatorAddress: null, certificateId: null }
-  }
-
-  const certificateMatch = clean.match(/^\/certificate\/(\d+)$/)
-  if (certificateMatch) {
-    return {
-      page: "certificate",
-      questId: null,
-      creatorAddress: null,
-      certificateId: Number(certificateMatch[1]),
-    }
-  }
-
-  const creatorMatch = clean.match(/^\/creator\/([^/]+)$/)
-  if (creatorMatch) {
-    return {
-      page: "creator",
-      questId: null,
-      creatorAddress: decodeURIComponent(creatorMatch[1]),
-      certificateId: null,
-    }
-  }
-
-  return { page: "404", questId: null, creatorAddress: null, certificateId: null }
-}
-
-function pageToPath(page: Page, questId: number | null, creatorAddress: string | null): string {
-  if (page === "landing") return "/"
-  if (page === "quest" && questId !== null) return `/quest/${questId}`
-  if (page === "creator" && creatorAddress) return `/creator/${encodeURIComponent(creatorAddress)}`
-  return `/${page}`
-}
-
-// ─── App ───────────────────────────────────────────────────────────────────────
-
-function App() {
-  const [state, setState] = useState(() => pathToPage(window.location.pathname))
-  const { toasts, addToast, removeToast } = useToast()
-  const onboarding = useOnboarding()
-  const { connected } = useWallet()
-  useQuestEventStream(connected)
-  // 24-hour deadline reminders. These come from quest state rather than the
-  // event stream, because a deadline entering its final day emits no contract
-  // event to poll for.
-  useDeadlineReminders(connected)
-
-  // Auto-trigger the tutorial the first time a wallet connects (if not yet completed)
-  useEffect(() => {
-    if (connected && !onboarding.completed && !onboarding.isOpen) {
-      onboarding.open(0)
-    }
-    // We only want this to fire when `connected` transitions to true
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected])
-
-  useEffect(() => {
-    const onPopState = () => setState(pathToPage(window.location.pathname))
-    window.addEventListener("popstate", onPopState)
-    return () => window.removeEventListener("popstate", onPopState)
-  }, [])
-
-  // Issue #1478: resolve any wallet transactions that were still awaiting
-  // confirmation when the page was last closed or reloaded.
-  useEffect(() => {
-    void reconcilePendingTransactions()
-  }, [])
-
-  const handleNavigate = useCallback((p: string) => {
-    const page = (VALID_PAGES as readonly string[]).includes(p) ? (p as Page) : "404"
-    const path = pageToPath(page, null, null)
-    window.history.pushState(null, "", path)
-    setState({ page, questId: null, creatorAddress: null, certificateId: null })
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }, [])
-
-  const handleSelectQuest = useCallback((id: number) => {
-    const path = pageToPath("quest", id, null)
-    window.history.pushState(null, "", path)
-    setState({ page: "quest", questId: id, creatorAddress: null, certificateId: null })
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }, [])
-
-  const redirectToLanding = useCallback(() => {
-    window.history.replaceState(null, "", "/")
-    setState({ page: "landing", questId: null, creatorAddress: null, certificateId: null })
-  }, [])
-
-  useEffect(() => {
-    return subscribeToasts(({ message, type, duration }) => {
-      addToast(message, type ?? "info", duration)
-    })
-  }, [addToast])
-
-  const renderPage = () => {
-    const page = state.page
-    if (page === "quest" && state.questId !== null) {
-      return (
-        <SectionErrorBoundary label="Quest View">
-          <Suspense fallback={<PageSkeleton />}>
-            <QuestView questId={state.questId} onBack={() => handleNavigate("dashboard")} />
-          </Suspense>
-        </SectionErrorBoundary>
-      )
-    }
-
-    switch (page) {
-      case "landing":
-        return (
-          <SectionErrorBoundary label="Landing">
-            <Landing onNavigate={handleNavigate} />
-          </SectionErrorBoundary>
-        )
-      case "dashboard":
-        return (
-          <SectionErrorBoundary label="Dashboard">
-            <Suspense fallback={<PageSkeleton />}>
-              <Dashboard
-                onSelectQuest={handleSelectQuest}
-                onCreateQuest={() => handleNavigate("create-quest")}
-                onLaunchTutorial={() => onboarding.open(0)}
-              />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "create-quest":
-        return (
-          <SectionErrorBoundary label="Create Quest">
-            <Suspense fallback={<PageSkeleton />}>
-              <CreateQuest onBack={() => handleNavigate("dashboard")} />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "profile":
-        return (
-          <SectionErrorBoundary label="Profile">
-            <Profile />
-          </SectionErrorBoundary>
-        )
-      case "leaderboard":
-        return (
-          <SectionErrorBoundary label="Leaderboard">
-            <Suspense fallback={<PageSkeleton />}>
-              <Leaderboard />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "history":
-        return (
-          <SectionErrorBoundary label="History">
-            <Suspense fallback={<PageSkeleton />}>
-              <History />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "analytics":
-        return (
-          <SectionErrorBoundary label="Analytics">
-            <Suspense fallback={<PageSkeleton />}>
-              <AnalyticsPage />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "creator":
-        return (
-          <SectionErrorBoundary label="Creator Profile">
-            <Suspense fallback={<PageSkeleton />}>
-              <CreatorProfile address={state.creatorAddress} />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "creator-dashboard":
-        return (
-          <SectionErrorBoundary label="Creator Dashboard">
-            <Suspense fallback={<PageSkeleton />}>
-              <CreatorDashboard />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "certificate":
-        return (
-          <SectionErrorBoundary label="Certificate View">
-            <Suspense fallback={<PageSkeleton />}>
-              <CertificateView certificateId={state.certificateId ?? 0} />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "notifications":
-        return (
-          <SectionErrorBoundary label="Notifications">
-            <Suspense fallback={<PageSkeleton />}>
-              <NotificationsPage onBack={() => handleNavigate("dashboard")} />
-            </Suspense>
-          </SectionErrorBoundary>
-        )
-      case "terms":
-        return (
-          <SectionErrorBoundary label="Terms of Service">
-            <TermsOfService />
-          </SectionErrorBoundary>
-        )
-      case "privacy":
-        return (
-          <SectionErrorBoundary label="Privacy Policy">
-            <PrivacyPolicy />
-          </SectionErrorBoundary>
-        )
-      default:
-        return (
-          <SectionErrorBoundary label="Not Found">
-            <NotFound onNavigate={handleNavigate} />
-          </SectionErrorBoundary>
-        )
-    }
-  }
+  const handleSelectCertificate = (tokenId: string) => {
+    navigate(pageToPath("certificate", { id: tokenId }));
+  };
 
   return (
-    <I18nProvider>
-    <NotificationProvider>
-      <ErrorBoundaryProvider>
-        <ErrorBoundary githubRepo="https://github.com/lernza/lernza">
-          <div className="bg-background text-foreground min-h-screen">
-            {/* Skip-to-content link: sr-only until focused, z-index above sticky navbar */}
-            <a
-              href="#main-content"
-              className="focus:bg-background sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[9999] focus:rounded focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-current"
-            >
-              Skip to main content
-            </a>
-            <SectionErrorBoundary label="Navigation">
-              <Navbar activePage={state.page} onNavigate={handleNavigate} onLaunchTutorial={() => onboarding.open(0)} />
-            </SectionErrorBoundary>
-            {/* Offline connectivity status (#1626) */}
-            <OfflineBanner />
-            <ErrorBoundary key={`${state.page}-${state.questId ?? state.creatorAddress ?? ""}`}>
-              <main id="main-content">
-                {PROTECTED_PAGES.has(state.page) ? (
-                  <SessionGuard onDenied={redirectToLanding}>{renderPage()}</SessionGuard>
-                ) : (
-                  renderPage()
-                )}
-              </main>
-            </ErrorBoundary>
-            <Analytics />
-            <SpeedInsights />
-            <ToastContainer toasts={toasts} onRemove={removeToast} />
-            <OnboardingTutorial
-              isOpen={onboarding.isOpen}
-              currentStep={onboarding.currentStep}
-              onNext={onboarding.next}
-              onBack={onboarding.back}
-              onClose={onboarding.close}
-              onComplete={onboarding.complete}
-            />
-          </div>
-        </ErrorBoundary>
-      </ErrorBoundaryProvider>
-    </NotificationProvider>
-    </I18nProvider>
-  )
+    <div className="min-h-screen bg-gray-900 text-white">
+      <Routes>
+        <Route path="/dashboard" element={<Dashboard onSelectQuest={handleSelectQuest} onSelectCertificate={handleSelectCertificate} />} />
+        <Route path="/quest/:id" element={<QuestView />} />
+        <Route path="/certificate/:id" element={<CertificateView />} />
+        <Route path="/" element={<Dashboard onSelectQuest={handleSelectQuest} onSelectCertificate={handleSelectCertificate} />} />
+      </Routes>
+    </div>
+  );
 }
 
-export default App
+export default function App() {
+  return (
+    <BrowserRouter>
+      <MainApp />
+    </BrowserRouter>
+  );
+}

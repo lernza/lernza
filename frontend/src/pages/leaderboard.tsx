@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils"
 import { PrefetchLink } from "@/components/PrefetchLink"
 import { PageContainer } from "@/components/page-container"
 import { PageHeader } from "@/components/page-header"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 type ActiveTab = "earners" | "quests"
 
@@ -179,6 +181,15 @@ function RankBadge({ rank }: { rank: number }) {
 }
 
 export function Leaderboard() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.leaderboard} />
+      <LeaderboardContent />
+    </>
+  )
+}
+
+function LeaderboardContent() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("earners")
   const [earnersOffset, setEarnersOffset] = useState(0)
   const [questsOffset, setQuestsOffset] = useState(0)

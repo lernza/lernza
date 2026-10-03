@@ -9,10 +9,13 @@ export interface QuestPanelsProps {
   questDescription: string
   isComplete: boolean
   isArchived: boolean
+  isSuspended?: boolean
   onBack: () => void
   onAddEnrollee: () => void
   onAddMilestone: () => void
   onTransferOwnership: (() => void) | undefined
+  isEnrollDisabled?: boolean
+  enrollDisabledReason?: string
   onToast: (message: string, type: "success" | "error" | "info" | "warning") => void
   enrolleesCount: number
   milestonesCount: number
@@ -34,10 +37,13 @@ export function QuestPanels(props: QuestPanelsProps) {
           questDescription={props.questDescription}
           isComplete={props.isComplete}
           isArchived={props.isArchived}
+          isSuspended={props.isSuspended}
           onBack={props.onBack}
           onAddEnrollee={props.onAddEnrollee}
           onAddMilestone={props.onAddMilestone}
           onTransferOwnership={props.onTransferOwnership}
+          isEnrollDisabled={props.isEnrollDisabled}
+          enrollDisabledReason={props.enrollDisabledReason}
           onToast={props.onToast}
         />
       </SectionErrorBoundary>

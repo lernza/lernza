@@ -11,11 +11,25 @@ const requiredFiles = [
   { relativePath: "public/logo.svg", label: "logo" },
   { relativePath: "public/robots.txt", label: "robots.txt" },
   { relativePath: "public/sitemap.xml", label: "sitemap.xml" },
+  // PWA manifest icons. Lighthouse fails the installability audit without a
+  // 192px and a 512px raster icon, and Android crops the "maskable" variants,
+  // so both purposes are required rather than optional extras.
+  { relativePath: "public/icons/icon-192.png", label: "PWA icon (any, 192x192)" },
+  { relativePath: "public/icons/icon-512.png", label: "PWA icon (any, 512x512)" },
+  {
+    relativePath: "public/icons/icon-maskable-192.png",
+    label: "PWA icon (maskable, 192x192)",
+  },
+  {
+    relativePath: "public/icons/icon-maskable-512.png",
+    label: "PWA icon (maskable, 512x512)",
+  },
 ]
 
 const requiredIndexHtmlIncludes = [
   "%BASE_URL%favicon.svg",
   "%BASE_URL%og-image.png",
+  "%BASE_URL%icons/icon-192.png",
 ]
 
 function fileExistsAndNotEmpty(absolutePath) {

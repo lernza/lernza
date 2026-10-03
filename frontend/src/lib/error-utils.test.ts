@@ -20,22 +20,48 @@ describe("safeContractCall", () => {
   })
 
   it("maps a recognized Error(Contract, #N) code to its plain-language message (Issue #1480)", async () => {
-    // #4 is QUEST_CONTRACT_ERRORS' "Invalid reward amount." -- see contract-errors.ts.
+    // #4 is AlreadyEnrolled on the quest contract — the scope is what makes
+    // that true. See contract-errors.ts.
     const err = new Error("transaction simulation failed: Error(Contract, #4)")
-    await expect(safeContractCall(() => Promise.reject(err))).rejects.toThrow(
-      /invalid reward amount/i
+    await expect(safeContractCall(() => Promise.reject(err), "quest")).rejects.toThrow(
+      /already enrolled/i
     )
   })
 
   it("maps a different recognized code to its own distinct plain-language message", async () => {
     const err = new Error("Error(Contract, #7)")
+    await expect(safeContractCall(() => Promise.reject(err), "quest")).rejects.toThrow(
+      /quest is already full/i
+    )
+  })
+
+  it("scopes the lookup, so the same code reads differently per contract", async () => {
+    // Both contracts define code 1 as NotFound for a different entity. Before
+    // scoping, the merged table resolved this to "Reward pool not found."
+    const onQuest = new Error("Error(Contract, #1)")
+    await expect(safeContractCall(() => Promise.reject(onQuest), "quest")).rejects.toThrow(
+      /quest not found/i
+    )
+
+    const onMilestone = new Error("Error(Contract, #1)")
+    await expect(safeContractCall(() => Promise.reject(onMilestone), "milestone")).rejects.toThrow(
+      /milestone not found/i
+    )
+  })
+
+  it("does not guess when called without a scope and the code is ambiguous", async () => {
+    // Reporting a confidently wrong message sends users to the wrong place, so
+    // an unscoped ambiguous code is surfaced as an unresolved code instead.
+    const err = new Error("Error(Contract, #1)")
     const rejected = safeContractCall(() => Promise.reject(err))
-    await expect(rejected).rejects.toThrow(/quest is already full/i)
+    await expect(rejected).rejects.toThrow(/error code #1/i)
+    await expect(rejected).rejects.not.toThrow(/reward pool not found/i)
+    await expect(rejected).rejects.not.toThrow(/milestone not found/i)
   })
 
   it("falls back to a generic prefix for an unrecognized contract error code", async () => {
     const err = new Error("Error(Contract, #99999)")
-    await expect(safeContractCall(() => Promise.reject(err))).rejects.toThrow(
+    await expect(safeContractCall(() => Promise.reject(err), "quest")).rejects.toThrow(
       /contract call failed/i
     )
   })

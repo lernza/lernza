@@ -14,7 +14,11 @@ import {
   type TransactionResult,
 } from "./client"
 import { contractAddresses } from "./config"
-import { safeContractCall } from "../error-utils"
+import { scopedContractCall } from "../error-utils"
+
+// Every write below targets the certificate contract, so contract errors are
+// decoded against the certificate code space rather than left ambiguous.
+const safeScopedCall = scopedContractCall("certificate")
 
 export interface CertificateMetadata {
   questId: number
@@ -233,7 +237,7 @@ export class CertificateClient {
     label: string,
     handlers?: TransactionLifecycleHandlers
   ): Promise<TransactionResult & { tokenId?: number }> {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await prepareContractTransaction(this.getContract(), source, { method, args })
       const result = await signAndSubmitTracked(tx, label, handlers)
       return { ...result, tokenId: parseResultId(result.resultXdr) }

@@ -5,19 +5,20 @@ import {
   ArrowRight,
   CheckCircle2,
   Download,
-  FileText,
   FileSpreadsheet,
+  FileText,
   Plus,
+  Upload,
   X,
 } from "lucide-react"
-import { ArrowRight, FileText, Plus, X, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ImportQuestDialog } from "@/components/import-quest-dialog"
 import { MAX_MILESTONES } from "@/lib/contract-types"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "@/i18n"
-import { step1Schema, type Step1Values, FieldError, FormLabel } from "./types"
+import { step1Schema, type Step1Values, type Step2Values, FieldError, FormLabel } from "./types"
 import { useQuestCreation } from "./context"
+import { QUEST_TEMPLATES, type QuestTemplate } from "./templates"
 import { CsvImportDialog } from "./csv-import-dialog"
 import { downloadCsvTemplate, type ParsedMilestone } from "./csv-parser"
 
@@ -26,6 +27,8 @@ import { downloadCsvTemplate, type ParsedMilestone } from "./csv-parser"
  * list with one so the form is never empty. Placeholders must not survive an
  * append, or step 2 would fail validation on an empty row.
  */
+type Step2Milestone = Step2Values["milestones"][number]
+
 function isPlaceholder(m: ParsedMilestone): boolean {
   return m.title.trim() === "" && m.description.trim() === ""
 }
@@ -37,24 +40,15 @@ interface PendingImport {
 }
 
 export function Step1Form() {
-  const { step1Data, setStep1Data, step2Data, setStep2Data, goToNext } = useQuestCreation()
+  const { step1Data, setStep1Data, step2Data, setStep2Data, goToNext, applyTemplate } =
+    useQuestCreation()
+  const { t } = useTranslation()
   const [tagInput, setTagInput] = useState("")
   const [tagError, setTagError] = useState<string | null>(null)
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false)
   const [isReviewOpen, setIsReviewOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
   const [importNotice, setImportNotice] = useState<string | null>(null)
-import { QUEST_TEMPLATES, type QuestTemplate } from "./templates"
-import { CsvImportDialog } from "./csv-import-dialog"
-import type { ParsedMilestone } from "./csv-parser"
-
-export function Step1Form() {
-  const { step1Data, setStep1Data, step2Data, setStep2Data, goToNext, setCurrentStep, applyTemplate } =
-    useQuestCreation()
-  const { t } = useTranslation()
-  const [tagInput, setTagInput] = useState("")
-  const [tagError, setTagError] = useState<string | null>(null)
-  const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false)
 
   const {
     register,
@@ -157,7 +151,14 @@ export function Step1Form() {
         ? pendingImport.milestones
         : [...existing, ...pendingImport.milestones]
 
-    setStep2Data({ milestones: merged })
+    setStep2Data({
+      milestones: merged.map(m => ({
+        title: m.title,
+        description: m.description,
+        rewardAmount: m.rewardAmount,
+        prerequisiteIds: (m as Step2Milestone).prerequisiteIds ?? [],
+      })),
+    })
     setIsReviewOpen(false)
     setPendingImport(null)
     setImportNotice(
@@ -175,6 +176,8 @@ export function Step1Form() {
   const handleCancelImport = () => {
     setIsReviewOpen(false)
     setPendingImport(null)
+  }
+
   const handleTemplateSelect = (template: QuestTemplate) => {
     applyTemplate(template)
     reset(template.step1)
@@ -185,33 +188,6 @@ export function Step1Form() {
   const onSubmit = (data: Step1Values) => {
     setStep1Data(data)
     goToNext()
-  }
-
-  /**
-   * CSV import is reachable from the basics step so creators can bring an
-   * existing milestone list without first navigating to step 2. Imported rows
-   * land in the step-2 context and we jump straight to review them. #1617
-   */
-  const handleCsvImport = (imported: ParsedMilestone[], mode: "append" | "replace") => {
-    const converted = imported.map(m => ({
-      title: m.title,
-      description: m.description,
-      rewardAmount: m.rewardAmount,
-      prerequisiteIds: [] as number[]
-    }))
-
-    const hasExisting = step2Data.milestones.some(m => m.title.trim().length > 0)
-    const base =
-      mode === "replace" || !hasExisting
-        ? converted
-        : [
-            ...step2Data.milestones.filter(m => m.title.trim().length > 0),
-            ...converted
-          ]
-
-    setStep2Data({ ...step2Data, milestones: base })
-    setIsCsvDialogOpen(false)
-    setCurrentStep(2)
   }
 
   return (
@@ -509,13 +485,6 @@ export function Step1Form() {
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
-
-      {/* CSV import reachable from the basics step (#1617) */}
-      <CsvImportDialog
-        isOpen={isCsvDialogOpen}
-        onClose={() => setIsCsvDialogOpen(false)}
-        onImport={handleCsvImport}
-      />
     </form>
   )
 }

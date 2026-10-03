@@ -122,7 +122,6 @@ describe("CSV Milestone Parser Unit Tests", () => {
 
 describe("CsvImportDialog Component Tests", () => {
   it("renders drag and drop UI and download template button when open", () => {
-    render(<CsvImportDialog isOpen={true} onClose={vi.fn()} onImport={vi.fn()} />)
     render(
       <I18nProvider>
         <CsvImportDialog isOpen={true} onClose={vi.fn()} onImport={vi.fn()} />
@@ -136,7 +135,6 @@ describe("CsvImportDialog Component Tests", () => {
 
   it("does not render when isOpen is false", () => {
     const { container } = render(
-      <CsvImportDialog isOpen={false} onClose={vi.fn()} onImport={vi.fn()} />
       <I18nProvider>
         <CsvImportDialog isOpen={false} onClose={vi.fn()} onImport={vi.fn()} />
       </I18nProvider>

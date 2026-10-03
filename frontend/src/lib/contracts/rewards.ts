@@ -8,11 +8,15 @@ import {
   type TransactionLifecycleHandlers,
 } from "./client"
 import type { PoolBalance, UserEarnings, TotalDistributed } from "../contract-types"
-import { safeContractCall } from "../error-utils"
+import { scopedContractCall } from "../error-utils"
 import { withContractLogging } from "./logger"
 import { contractAddresses } from "./config"
 
 const CONTRACT_ID = contractAddresses.rewards
+
+// Every write below targets the rewards contract, so contract errors are decoded
+// against the rewards code space rather than left ambiguous.
+const safeScopedCall = scopedContractCall("rewards")
 
 export class RewardsClient {
   private contract: Contract | null
@@ -95,7 +99,7 @@ export class RewardsClient {
   // --- Write Operations ---
 
   async initialize(owner: string, tokenAddr: string, handlers?: TransactionLifecycleHandlers) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(owner, "initialize", [new Address(tokenAddr).toScVal()])
       return signAndSubmitTracked(tx, "Initialize Rewards Pool", handlers)
     })
@@ -107,7 +111,7 @@ export class RewardsClient {
     amount: bigint,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(funder, "fund_quest", [
         new Address(funder).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
@@ -125,7 +129,7 @@ export class RewardsClient {
     amount: bigint,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(authority, "distribute_reward", [
         new Address(authority).toScVal(),
         nativeToScVal(questId, { type: "u32" }),
@@ -143,7 +147,7 @@ export class RewardsClient {
     amount: bigint,
     handlers?: TransactionLifecycleHandlers
   ) {
-    return safeContractCall(async () => {
+    return safeScopedCall(async () => {
       const tx = await this.buildTx(authority, "refund_pool", [
         new Address(authority).toScVal(),
         nativeToScVal(questId, { type: "u32" }),

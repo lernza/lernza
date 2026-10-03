@@ -1,8 +1,7 @@
 use proptest::prelude::*;
-use rewards::{RewardsContract, RewardsContractClient};
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, Env,
+    Address,
 };
 use testutils::setup_rewards;
 
@@ -112,10 +111,12 @@ proptest! {
             match operation {
                 RewardOperation::Fund { amount } => {
                     // Only fund if amount is reasonable and we haven't exceeded limits
-                    if amount > 0 && amount <= 10_000 && total_funded + amount <= 100_000 {
-                        if client.try_fund_quest(&owner, &q_id, &amount).is_ok() {
-                            total_funded += amount;
-                        }
+                    if amount > 0
+                        && amount <= 10_000
+                        && total_funded + amount <= 100_000
+                        && client.try_fund_quest(&owner, &q_id, &amount).is_ok()
+                    {
+                        total_funded += amount;
                     }
                 }
                 RewardOperation::Distribute { milestone_id, enrollee_idx, amount } => {
@@ -144,10 +145,12 @@ proptest! {
                     env.ledger().set_timestamp(env.ledger().timestamp() + grace_period + 1);
 
                     let pool_balance = client.get_pool_balance(&q_id);
-                    if amount > 0 && amount <= pool_balance && amount <= 5_000 {
-                        if client.try_refund_pool(&owner, &q_id, &amount).is_ok() {
-                            total_refunded += amount;
-                        }
+                    if amount > 0
+                        && amount <= pool_balance
+                        && amount <= 5_000
+                        && client.try_refund_pool(&owner, &q_id, &amount).is_ok()
+                    {
+                        total_refunded += amount;
                     }
                 }
             }

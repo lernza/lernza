@@ -74,6 +74,9 @@ pub enum DataKey {
     Completed(u32, Address),
 }
 
+// IsDataKey implementation — restricts TTL extension to Completion DataKey only
+impl common::IsDataKey for DataKey {}
+
 #[contract]
 pub struct CompletionContract;
 

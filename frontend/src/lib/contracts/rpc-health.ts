@@ -10,6 +10,15 @@ export interface RpcHealthConfig {
   timeoutMs?: number
   maxConsecutiveFailures?: number
   healthCheckIntervalMs?: number
+  /**
+   * Whether `startHealthChecks()` may create a timer. Defaults to true.
+   *
+   * Set false under the test runner: an interval nothing awaits produces
+   * dangling-timer failures and keeps the process alive after the assertions
+   * finish. Passed in rather than sniffed from `import.meta.env` here so the
+   * real start/stop path stays constructible in tests.
+   */
+  allowTimers?: boolean
 }
 
 interface RpcEndpoint {
@@ -25,6 +34,7 @@ export class RpcHealthManager {
   private healthCheckIntervalMs: number
   private maxConsecutiveFailures: number
   private timeoutMs: number
+  private allowTimers: boolean
   private healthCheckInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(config: RpcHealthConfig) {
@@ -37,6 +47,7 @@ export class RpcHealthManager {
     this.timeoutMs = config.timeoutMs || 5000
     this.maxConsecutiveFailures = config.maxConsecutiveFailures || 3
     this.healthCheckIntervalMs = config.healthCheckIntervalMs || 30000
+    this.allowTimers = config.allowTimers ?? true
   }
 
   /**
@@ -91,12 +102,16 @@ export class RpcHealthManager {
   }
 
   /**
-   * Start periodic health checks
+   * Start periodic health checks.
+   *
+   * Clears any existing interval first, so repeated calls are idempotent rather
+   * than stacking timers. No-op when the manager was configured with
+   * `allowTimers: false`.
    */
   startHealthChecks(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval)
-    }
+    this.stopHealthChecks()
+
+    if (!this.allowTimers) return
 
     this.healthCheckInterval = setInterval(() => {
       this.performHealthChecks()
@@ -114,6 +129,11 @@ export class RpcHealthManager {
       clearInterval(this.healthCheckInterval)
       this.healthCheckInterval = null
     }
+  }
+
+  /** Whether a health-check interval is currently scheduled. */
+  isHealthChecking(): boolean {
+    return this.healthCheckInterval !== null
   }
 
   /**

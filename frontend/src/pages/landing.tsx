@@ -15,6 +15,15 @@ interface LandingProps {
  * marketing section lives in its own component under `./landing/`.
  */
 export function Landing({ onNavigate }: LandingProps) {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.landing} />
+      <LandingContent onNavigate={onNavigate} />
+    </>
+  )
+}
+
+function LandingContent({ onNavigate }: LandingProps) {
   const [howRef, howInView] = useInView()
   const [featRef, featInView] = useInView()
   const [ctaRef, ctaInView] = useInView()

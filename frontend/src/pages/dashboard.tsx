@@ -21,6 +21,8 @@ import { FilterPanel } from "./dashboard/filter-panel"
 import { QuestList } from "./dashboard/quest-list"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
+import { PageMetadata } from "@/components/PageMetadata"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 interface DashboardProps {
   onSelectQuest?: (id: number) => void

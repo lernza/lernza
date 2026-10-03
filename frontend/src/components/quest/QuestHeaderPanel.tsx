@@ -9,10 +9,13 @@ interface QuestHeaderPanelProps {
   questDescription: string
   isComplete: boolean
   isArchived?: boolean
+  isSuspended?: boolean
   onBack: () => void
   onAddEnrollee: () => void
   onAddMilestone: () => void
   onTransferOwnership?: () => void
+  isEnrollDisabled?: boolean
+  enrollDisabledReason?: string
   onToast: (message: string, type?: "success" | "error" | "info") => void
 }
 
@@ -22,10 +25,13 @@ export function QuestHeaderPanel({
   questDescription,
   isComplete,
   isArchived,
+  isSuspended,
   onBack,
   onAddEnrollee,
   onAddMilestone,
   onTransferOwnership,
+  isEnrollDisabled,
+  enrollDisabledReason,
   onToast,
 }: QuestHeaderPanelProps) {
   const handleShare = () => {
@@ -44,6 +50,7 @@ export function QuestHeaderPanel({
               Back
             </Button>
             {isArchived && <Badge variant="destructive">Archived</Badge>}
+            {isSuspended && <Badge variant="destructive">Suspended</Badge>}
             {isComplete && <Badge variant="success">Completed</Badge>}
           </div>
 
@@ -58,17 +65,24 @@ export function QuestHeaderPanel({
             <Share2 className="h-4 w-4" />
             Share
           </Button>
-          {onTransferOwnership && !isArchived && (
+          {onTransferOwnership && !isArchived && !isSuspended && (
             <Button variant="outline" size="sm" onClick={onTransferOwnership} className="gap-2">
               <ShieldCheck className="h-4 w-4" />
               Transfer Ownership
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onAddMilestone} disabled={isArchived} className="gap-2">
+          <Button variant="outline" size="sm" onClick={onAddMilestone} disabled={isArchived || isSuspended} className="gap-2">
             <Plus className="h-4 w-4" />
             Add Milestone
           </Button>
-          <Button size="sm" onClick={onAddEnrollee} disabled={isArchived} className="gap-2" data-onboarding="quest-enroll">
+          <Button 
+            size="sm" 
+            onClick={onAddEnrollee} 
+            disabled={isArchived || isSuspended || isEnrollDisabled} 
+            className="gap-2" 
+            data-onboarding="quest-enroll"
+            title={enrollDisabledReason}
+          >
             <Plus className="h-4 w-4" />
             Add Enrollee
           </Button>

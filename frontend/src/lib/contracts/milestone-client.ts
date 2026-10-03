@@ -10,26 +10,9 @@ import {
 } from "./client"
 import { withContractLogging } from "./logger"
 import { contractAddresses } from "./config"
+import { mapContractError } from "../contract-errors"
 
 const CONTRACT_ID = contractAddresses.milestone
-
-const MILESTONE_ERROR_MESSAGES: Record<number, string> = {
-  1: "Milestone not found.",
-  2: "You are not authorized to manage milestones for this quest.",
-  7: "Only the quest owner can manage milestones for this quest.",
-  8: "Milestone contract is not configured.",
-  12: "This learner is not enrolled in the quest.",
-  14: "Complete the previous milestone first.",
-  23: "No dispute has been opened for this submission.",
-  24: "This dispute has already been resolved and cannot be reopened.",
-  25: "This submission is not eligible for a dispute. It must have been rejected first.",
-  26: "A milestone deadline cannot be later than the quest's own deadline.",
-  27: "A dispute for this submission was opened recently. Try again after the cooldown.",
-  28: "A dispute is already open for this submission.",
-  29: "The dispute reason is too long.",
-  30: "That outcome is not valid for a dispute in its current state.",
-  31: "The dispute page size is out of range.",
-}
 
 export interface MilestoneInfo {
   id: number
@@ -126,16 +109,18 @@ function toBigInt(value: unknown): bigint {
   return 0n
 }
 
-function parseContractErrorCode(message?: string): number | null {
-  if (!message) return null
-  const match = message.match(/Error\(Contract, #(\d+)\)/)
-  return match ? Number(match[1]) : null
-}
-
+/**
+ * Normalizes a failed transaction into plain language.
+ *
+ * Delegates to `mapContractError` with the `"milestone"` scope so this path and
+ * every other consumer of `MILESTONE_ERRORS` render identical wording for the
+ * same code. The client previously kept a private, partial copy of the table
+ * (codes 1, 2, 7, 8, 12, 14, 23-31) that had to be updated by hand and
+ * disagreed with `contract-errors.ts` on 3, 4 and 5.
+ */
 function normalizeMilestoneError(message?: string): string | undefined {
   if (!message) return message
-  const code = parseContractErrorCode(message)
-  return code && MILESTONE_ERROR_MESSAGES[code] ? MILESTONE_ERROR_MESSAGES[code] : message
+  return mapContractError(message, "milestone")
 }
 
 export class MilestoneClient {
@@ -737,4 +722,4 @@ export class MilestoneClient {
 }
 
 export const milestoneClient = new MilestoneClient()
-export { normalizeMilestoneError, parseContractErrorCode }
+export { normalizeMilestoneError }

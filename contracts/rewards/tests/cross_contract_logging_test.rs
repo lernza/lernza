@@ -65,7 +65,7 @@ fn test_fund_quest_emits_cross_contract_log() {
     let mut found = false;
     let expected = Symbol::new(&env, "cross_contract_call");
     for (_, topics, _) in events.iter() {
-        if topics.len() > 0 {
+        if !topics.is_empty() {
             if let Some(val) = topics.get(0) {
                 if let Ok(sym) = Symbol::try_from_val(&env, &val) {
                     if sym == expected {

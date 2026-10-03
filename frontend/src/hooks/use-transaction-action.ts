@@ -19,7 +19,12 @@ function classifyTransactionError(message: string): ErrorKind {
   return classifyError(message)
 }
 
-function humanizeTransactionError(message: string): string {
+/**
+ * `scope` is the contract the action targeted (a scope name or contract
+ * address). Contract error codes are only unique within a contract, so it is
+ * what lets `Error(Contract, #1)` resolve to the right "not found" message.
+ */
+function humanizeTransactionError(message: string, scope?: string): string {
   const lower = message.toLowerCase()
 
   if (
@@ -39,10 +44,10 @@ function humanizeTransactionError(message: string): string {
     return "The request timed out. Check your connection and try again."
   }
   if (lower.includes("simulate") || lower.includes("simulation failed")) {
-    return mapContractError(message)
+    return mapContractError(message, scope)
   }
   if (lower.includes("error(contract")) {
-    return mapContractError(message)
+    return mapContractError(message, scope)
   }
   if (lower.includes("signing failed")) {
     return "Transaction signing failed. Make sure Freighter is unlocked."
@@ -63,8 +68,13 @@ function humanizeTransactionError(message: string): string {
   return message
 }
 
-export function useTransactionAction(options?: { showToast?: boolean }) {
+export function useTransactionAction(options?: {
+  showToast?: boolean
+  /** Contract this action targets, used to resolve `Error(Contract, #N)` codes. */
+  contract?: string
+}) {
   const showToast = options?.showToast ?? true
+  const contract = options?.contract
   const [status, setStatus] = useState<TransactionStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<unknown>(null)
@@ -121,7 +131,7 @@ export function useTransactionAction(options?: { showToast?: boolean }) {
         return result
       } catch (err: unknown) {
         const raw = err instanceof Error ? err.message : "Transaction failed"
-        const friendly = humanizeTransactionError(raw)
+        const friendly = humanizeTransactionError(raw, contract)
 
         if (mountedRef.current) {
           setStatus("failure")
@@ -139,7 +149,7 @@ export function useTransactionAction(options?: { showToast?: boolean }) {
         throw new Error(friendly)
       }
     },
-    [connected, expectedNetworkName, showToast, wrongNetwork]
+    [connected, contract, expectedNetworkName, showToast, wrongNetwork]
   )
 
   const reset = useCallback(() => {

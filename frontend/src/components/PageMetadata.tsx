@@ -1,4 +1,5 @@
 import { Helmet } from "react-helmet-async"
+import { PAGE_METADATA } from "@/lib/page-metadata"
 
 interface PageMetadataProps {
   title?: string
@@ -7,11 +8,12 @@ interface PageMetadataProps {
   ogImage?: string
 }
 
-const DEFAULT_TITLE = "Lernza — Learn. Earn. On-chain."
-const DEFAULT_DESCRIPTION =
-  "The first learn-to-earn platform on Stellar. Create quests, set milestones, reward learners with tokens."
-const DEFAULT_OG_IMAGE = "https://lernza.com/og-image.png"
-const DEFAULT_URL = "https://lernza.com"
+const {
+  title: DEFAULT_TITLE,
+  description: DEFAULT_DESCRIPTION,
+  canonicalUrl: DEFAULT_URL,
+  ogImage: DEFAULT_OG_IMAGE,
+} = PAGE_METADATA.landing
 
 export function PageMetadata({
   title = DEFAULT_TITLE,

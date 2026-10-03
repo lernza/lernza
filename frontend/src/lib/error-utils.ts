@@ -22,7 +22,9 @@ export function setupGlobalErrorHandlers() {
     // Sentry's browserTracingIntegration captures these automatically, but we
     // also capture explicitly so the hint carries the original reason value.
     if (env.VITE_SENTRY_DSN) {
-      Sentry.captureException(error, { mechanism: { type: "onunhandledrejection", handled: false } })
+      Sentry.captureException(error, {
+        mechanism: { type: "onunhandledrejection", handled: false },
+      })
     }
   })
 
@@ -45,8 +47,13 @@ export function setupGlobalErrorHandlers() {
  * awaited before signAndSubmit() is called, a thrown simulation error here
  * already means the wallet was never asked to sign -- this only improves
  * the message, not the skip-signing behavior (which was already correct).
+ *
+ * `scope` is the contract being called (a scope name or contract address).
+ * Pass it whenever the caller knows which contract it is talking to: error
+ * codes are only unique *within* a contract, so an unscoped lookup has to
+ * report an ambiguous code verbatim rather than risk the wrong message.
  */
-export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
+export async function safeContractCall<T>(fn: () => Promise<T>, scope?: string | null): Promise<T> {
   try {
     return await fn()
   } catch (err: unknown) {
@@ -61,7 +68,7 @@ export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
       // elsewhere (contract-errors.ts) so a failed simulation and a failed
       // submission report the exact same wording for the exact same
       // underlying contract error.
-      const mapped = mapContractError(raw.message)
+      const mapped = mapContractError(raw.message, scope)
       raw.message = mapped !== raw.message ? mapped : `Contract call failed: ${raw.message}`
     } else if (
       raw.message.includes("could not detect network") ||
@@ -72,4 +79,19 @@ export async function safeContractCall<T>(fn: () => Promise<T>): Promise<T> {
 
     throw raw
   }
+}
+
+/**
+ * Binds a contract scope to `safeContractCall`.
+ *
+ * Every write in a client module targets the same contract, so each module
+ * wraps this once instead of repeating the scope at every call site — and
+ * forgetting one is exactly how an unscoped lookup creeps back in.
+ *
+ * @example
+ * const safeQuestCall = scopedContractCall("quest")
+ * return safeQuestCall(async () => { ... })
+ */
+export function scopedContractCall(scope: string): <T>(fn: () => Promise<T>) => Promise<T> {
+  return fn => safeContractCall(fn, scope)
 }

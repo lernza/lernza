@@ -10,8 +10,7 @@
 import { rewardsClient } from "./rewards"
 import type { TransactionLifecycleHandlers } from "./client"
 import type { MilestoneClaimResult, BatchClaimSummary } from "../contract-types"
-import { parseContractErrorCode } from "../contract-errors"
-import { REWARDS_CONTRACT_ERRORS } from "../contract-errors"
+import { mapContractError } from "../contract-errors"
 
 export interface BatchClaimInput {
   milestoneId: number
@@ -106,12 +105,12 @@ export async function batchClaimRewards(
 /**
  * Map raw contract error messages to user-friendly strings,
  * falling back to the original message if no mapping exists.
+ *
+ * Scoped to the rewards contract: reward distribution failures share their
+ * code space with every other Lernza contract, so an unscoped lookup would
+ * report "Reward pool not found." for a milestone call and vice versa.
  */
 function normalizeBatchError(message?: string): string | undefined {
   if (!message) return message
-  const code = parseContractErrorCode(message)
-  if (code !== null && REWARDS_CONTRACT_ERRORS[code]) {
-    return REWARDS_CONTRACT_ERRORS[code]
-  }
-  return message
+  return mapContractError(message, "rewards")
 }

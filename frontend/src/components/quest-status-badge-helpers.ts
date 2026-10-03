@@ -10,7 +10,7 @@ export function getQuestStatusLabel(
   status: QuestStatus,
   deadline: number,
   poolBalance?: number
-): "Active" | "Ended" | "Archived" | "Cancelled" {
+): "Active" | "Ended" | "Archived" | "Cancelled" | "Suspended" {
   const lifecycle = getQuestLifecycleStatus({ status, deadline, poolBalance })
 
   switch (lifecycle) {
@@ -22,6 +22,8 @@ export function getQuestStatusLabel(
       return "Archived"
     case "cancelled":
       return "Cancelled"
+    case "suspended":
+      return "Suspended"
   }
 }
 
@@ -32,7 +34,7 @@ export function getQuestStatusVariant(
   status: QuestStatus,
   deadline: number,
   poolBalance?: number
-): "active" | "archived" | "ended" {
+): "active" | "archived" | "ended" | "suspended" {
   const label = getQuestStatusLabel(status, deadline, poolBalance)
 
   switch (label) {
@@ -43,5 +45,7 @@ export function getQuestStatusVariant(
       return "archived"
     case "Ended":
       return "ended"
+    case "Suspended":
+      return "suspended"
   }
 }

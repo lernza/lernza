@@ -32,6 +32,7 @@ export const QuestStatus = {
   Active: 0,
   Archived: 1,
   Cancelled: 2,
+  Suspended: 3,
 } as const
 export type QuestStatus = (typeof QuestStatus)[keyof typeof QuestStatus]
 
@@ -59,6 +60,7 @@ export interface QuestInfo {
   deadline: number // u64
   maxEnrollees?: number // Option<u32> (max_enrollees in Rust)
   verified: boolean // bool
+  prerequisiteQuestIds: number[]
   metadataUri?: string // Option<String> (metadata_uri in Rust)
 }
 

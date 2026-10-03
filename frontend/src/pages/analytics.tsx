@@ -333,6 +333,15 @@ function QuestRewardsTable({ quests }: { quests: QuestAnalytics[] }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function Analytics() {
+  return (
+    <>
+      <PageMetadata {...PAGE_METADATA.analytics} />
+      <AnalyticsContent />
+    </>
+  )
+}
+
+function AnalyticsContent() {
   const [stats, setStats] = useState<PlatformStats | null>(null)
   const [questAnalytics, setQuestAnalytics] = useState<QuestAnalytics[]>([])
   const [loading, setLoading] = useState(true)

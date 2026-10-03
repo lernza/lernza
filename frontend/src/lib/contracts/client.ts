@@ -100,10 +100,57 @@ export const rpcHealthManager = new RpcHealthManager({
   timeoutMs: RPC_TIMEOUT_MS,
   maxConsecutiveFailures: 3,
   healthCheckIntervalMs: 30000,
+  // Vitest reports MODE as "test". Health checks poll the network on a timer, so
+  // they are skipped there: an un-stopped interval produces dangling-timer
+  // failures and keeps the process alive after the assertions finish.
+  allowTimers: import.meta.env.MODE !== "test",
 })
 
-// Start health checks on module load
-rpcHealthManager.startHealthChecks()
+/**
+ * Number of mounted consumers of the periodic health checks. The interval is
+ * started when this goes 0 → 1 and stopped when it returns to 0, so mounting
+ * `useRpcHealth` in more than one place still yields exactly one timer.
+ */
+let healthCheckConsumers = 0
+
+/**
+ * Registers a consumer of the periodic health checks, starting the interval
+ * for the first one. Repeated calls join the existing set instead of stacking
+ * timers, so a remount or a hot reload cannot leak one.
+ */
+export function startRpcHealthChecks(): void {
+  healthCheckConsumers += 1
+  if (healthCheckConsumers === 1) {
+    rpcHealthManager.startHealthChecks()
+  }
+}
+
+/**
+ * Releases one health-check consumer, stopping the interval once the last one
+ * is gone. Safe to call when nothing is running.
+ */
+export function stopRpcHealthChecks(): void {
+  if (healthCheckConsumers === 0) return
+  healthCheckConsumers -= 1
+  if (healthCheckConsumers === 0) {
+    rpcHealthManager.stopHealthChecks()
+  }
+}
+
+/** Whether any consumer currently wants the periodic health checks. */
+export function areRpcHealthChecksRunning(): boolean {
+  return healthCheckConsumers > 0
+}
+
+// Re-evaluating this module builds a fresh RpcHealthManager, orphaning the
+// previous one's interval. Release it on dispose so a hot reload does not stack
+// a new timer on every save.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    healthCheckConsumers = 0
+    rpcHealthManager.stopHealthChecks()
+  })
+}
 
 export let server = rpcHealthManager.getServer()
 
@@ -675,6 +722,12 @@ export async function signAndSubmitTracked(
 // treat it as expired/dropped rather than leaving it pending indefinitely.
 const PENDING_TRANSACTION_EXPIRY_MS = 10 * 60 * 1000
 
+// `normalizeRpcStatus` upper-cases every status, so this comparison has to be
+// against the normalized form — comparing against a lowercase literal never
+// matched, which meant transactions the network had never seen were never
+// cleaned out of the pending set (#1802).
+const RPC_STATUS_NOT_FOUND = "NOT_FOUND"
+
 /**
  * Reconciles persisted pending transactions against ledger status (issue
  * #1478). Intended to run once when the app loads: for each transaction
@@ -707,7 +760,7 @@ export async function reconcilePendingTransactions(): Promise<void> {
             duration: 6000,
           })
           removePendingTransaction(tx.txHash)
-        } else if (status === "not_found") {
+        } else if (status === RPC_STATUS_NOT_FOUND) {
           if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
             pushToast({
               message: `${tx.label}: transaction expired before confirmation. Please try again.`,
@@ -717,6 +770,15 @@ export async function reconcilePendingTransactions(): Promise<void> {
             removePendingTransaction(tx.txHash)
           }
           // Otherwise still genuinely in flight — leave it for the next reconciliation.
+        } else if (Date.now() - tx.submittedAt > PENDING_TRANSACTION_EXPIRY_MS) {
+          // Any other unrecognised status (e.g. a new Soroban RPC code) must
+          // not pin the record in the pending set forever either.
+          pushToast({
+            message: `${tx.label}: transaction status could not be confirmed. Please refresh.`,
+            type: "warning",
+            duration: 6000,
+          })
+          removePendingTransaction(tx.txHash)
         }
       } catch (error) {
         // RPC unreachable while checking — leave the record for a future attempt.

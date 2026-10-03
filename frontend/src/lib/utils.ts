@@ -79,7 +79,7 @@ export function formatDeadlineLabel(deadline: number, nowMs = Date.now()): strin
   return `Expires in ${days} day${days === 1 ? "" : "s"}`
 }
 
-export type QuestLifecycleStatus = "active" | "ended" | "archived" | "cancelled"
+export type QuestLifecycleStatus = "active" | "ended" | "archived" | "cancelled" | "suspended"
 
 /**
  * Single source of truth for deriving a quest's lifecycle status. Previously
@@ -92,6 +92,7 @@ export function getQuestLifecycleStatus(
   quest: { status: QuestStatus; deadline: number; poolBalance?: number },
   nowMs = Date.now()
 ): QuestLifecycleStatus {
+  if (quest.status === QuestStatus.Suspended) return "suspended"
   if (quest.status === QuestStatus.Cancelled) return "cancelled"
   if (quest.status === QuestStatus.Archived) return "archived"
   if (isExpiredDeadline(quest.deadline, nowMs)) return "ended"

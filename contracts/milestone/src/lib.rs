@@ -280,6 +280,13 @@ pub struct MilestoneInput {
     pub difficulty: Option<String>,
     pub estimated_duration: Option<u32>,
     pub prerequisites_knowledge: Option<String>,
+    /// Explicit prerequisite milestone IDs, mirroring
+    /// `create_milestone_with_prereqs`. Each id must already exist or be an
+    /// earlier item in the same batch, must be strictly smaller than the
+    /// milestone being created, and must not repeat. An empty list combined
+    /// with `requires_previous` means "the milestone immediately before me",
+    /// matching the single-create path (issue #1800).
+    pub prerequisites: Vec<u32>,
 }
 
 /// Snapshot of the distribution parameters recorded at submission time.
@@ -583,14 +590,7 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .set(&prerequisite_key, &prerequisites);
-        env.storage().persistent().set(&next_key, &next_id);
-
-        // Increment explicit milestone count
-        let count_key = DataKey::MilestoneCount(quest_id);
-        let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
-        env.storage().persistent().set(&count_key, &next_count);
-        Self::bump_ms(&env, &count_key);
+        Self::set_milestone_count(&env, quest_id, next_id);
 
         // Emit milestone creation event
         // Event topics: (milestone_created,)
@@ -599,7 +599,6 @@ impl MilestoneContract {
 
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
-        Self::bump_ms(&env, &next_key);
         extend_instance_ttl(&env);
         Ok(id)
     }
@@ -706,15 +705,9 @@ impl MilestoneContract {
         env.storage()
             .persistent()
             .set(&prerequisite_key, &prerequisites);
-        env.storage().persistent().set(&next_key, &next_id);
-        let count_key = DataKey::MilestoneCount(quest_id);
-        let current_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-        let next_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
-        env.storage().persistent().set(&count_key, &next_count);
-        Self::bump_ms(&env, &count_key);
+        Self::set_milestone_count(&env, quest_id, next_id);
         Self::bump_ms(&env, &ms_key);
         Self::bump_ms(&env, &prerequisite_key);
-        Self::bump_ms(&env, &next_key);
         common::emit_milestone_created(&env, id, quest_id, milestone.reward_amount, &owner);
         extend_instance_ttl(&env);
         Ok(id)
@@ -758,17 +751,32 @@ impl MilestoneContract {
             Self::validate_ms_input(&ms.title, &ms.description, ms.reward_amount)?;
         }
 
-        // Batch lookup NextMilestoneId and MilestoneCount upfront to minimize ledger access costs (#1641).
-        let next_key = DataKey::NextMilestoneId(quest_id);
-        let count_key = DataKey::MilestoneCount(quest_id);
-        let (next_id_opt, count_opt): (Option<u32>, Option<u32>) =
-            common::get_persistent_pair(&env, &next_key, &count_key);
-        let base_id = next_id_opt.unwrap_or(0);
-        let mut current_count = count_opt.unwrap_or(0);
+        // Single source of truth for how many milestones exist (#1801):
+        // `NextMilestoneId` doubles as the ID allocator, so a single read
+        // replaces the old two-key lookup.
+        let base_id = Self::milestone_count(&env, quest_id);
+        if base_id.saturating_add(milestones.len()) > MAX_MILESTONES {
+            return Err(Error::InvalidInput);
+        }
 
         // Step 1b: Reject any cycle in the effective prerequisite graph
         // (see validate_prerequisite_acyclic, #1630).
         Self::validate_prerequisite_acyclic(&env, quest_id, base_id, &milestones)?;
+
+        // Step 1c: Reject explicit prerequisites that are malformed or point
+        // at a milestone that will not exist once the batch lands (#1800).
+        // Runs before any write so the batch stays all-or-nothing.
+        for (offset, ms) in milestones.iter().enumerate() {
+            let id = base_id.saturating_add(offset as u32);
+            Self::validate_batch_prerequisites(
+                &env,
+                quest_id,
+                id,
+                base_id,
+                ms.requires_previous,
+                &ms.prerequisites,
+            )?;
+        }
 
         // Step 2: Create milestones
         let mut ids = Vec::new(&env);
@@ -776,40 +784,57 @@ impl MilestoneContract {
         for ms in milestones {
             let id = next_id;
 
-            if id == 0 && ms.requires_previous {
-                return Err(Error::InvalidInput);
-            }
-
             let ms_info = MilestoneInfo {
                 id,
                 quest_id,
                 title: ms.title,
                 description: ms.description,
                 reward_amount: ms.reward_amount,
-                requires_previous: ms.requires_previous,
+                // An explicit prerequisite list implies gating even when the
+                // caller left `requires_previous` false, matching
+                // `create_milestone_with_prereqs`.
+                requires_previous: ms.requires_previous || !ms.prerequisites.is_empty(),
                 difficulty: ms.difficulty,
                 estimated_duration: ms.estimated_duration,
                 prerequisites_knowledge: ms.prerequisites_knowledge,
                 deadline: None,
             };
 
+            // Effective prerequisite list, identical in shape to the
+            // single-create paths: the explicit ids when supplied, otherwise
+            // the implicit `id - 1` edge implied by `requires_previous`.
+            let mut prerequisites = Vec::new(&env);
+            if ms.prerequisites.is_empty() {
+                if ms.requires_previous && id > 0 {
+                    prerequisites.push_back(id - 1);
+                }
+            } else {
+                for prerequisite_id in ms.prerequisites.iter() {
+                    prerequisites.push_back(prerequisite_id);
+                }
+            }
+
             let ms_key = DataKey::Milestone(quest_id, id);
             env.storage().persistent().set(&ms_key, &ms_info);
+            // Issue #1800: the batch path used to skip this write entirely,
+            // leaving `get_milestone_prerequisites` with nothing stored to
+            // return for batch-created milestones.
+            let prerequisite_key = DataKey::Prerequisites(quest_id, id);
+            env.storage()
+                .persistent()
+                .set(&prerequisite_key, &prerequisites);
             next_id = id.checked_add(1).ok_or(Error::Overflow)?;
-            current_count = current_count.checked_add(1).ok_or(Error::Overflow)?;
 
             // Emit milestone creation event
             common::emit_milestone_created(&env, id, quest_id, ms_info.reward_amount, &owner);
 
             Self::bump_ms(&env, &ms_key);
+            Self::bump_ms(&env, &prerequisite_key);
             ids.push_back(id);
         }
 
         // Persist updated counters once after batch finishes
-        env.storage().persistent().set(&next_key, &next_id);
-        Self::bump_ms(&env, &next_key);
-        env.storage().persistent().set(&count_key, &current_count);
-        Self::bump_ms(&env, &count_key);
+        Self::set_milestone_count(&env, quest_id, next_id);
 
         extend_instance_ttl(&env);
         Ok(ids)
@@ -860,15 +885,73 @@ impl MilestoneContract {
         Ok(())
     }
 
+    /// Validate the explicit prerequisite list supplied for one batch item
+    /// (`MilestoneInput::prerequisites`, issue #1800) before any state is
+    /// written, so a malformed list reverts the whole batch rather than
+    /// leaving behind a milestone that can never be unlocked.
+    ///
+    /// Rules mirror `create_milestone_with_prereqs`:
+    /// * the first milestone of a quest can never be gated,
+    /// * every id must be strictly smaller than the milestone being created,
+    ///   which rules out self-references, forward references and cycles,
+    /// * no id may repeat,
+    /// * every id must already exist, or be an earlier item in the same batch
+    ///   (those are written before this one, so they will exist afterwards).
+    fn validate_batch_prerequisites(
+        env: &Env,
+        quest_id: u32,
+        id: u32,
+        base_id: u32,
+        requires_previous: bool,
+        prerequisites: &Vec<u32>,
+    ) -> Result<(), Error> {
+        if id == 0 {
+            if requires_previous || !prerequisites.is_empty() {
+                return Err(Error::InvalidInput);
+            }
+            return Ok(());
+        }
+
+        if prerequisites.len() > id {
+            return Err(Error::InvalidInput);
+        }
+
+        for prerequisite_id in prerequisites.iter() {
+            if prerequisite_id >= id
+                || prerequisites
+                    .iter()
+                    .filter(|candidate| *candidate == prerequisite_id)
+                    .count()
+                    > 1
+            {
+                return Err(Error::InvalidInput);
+            }
+
+            // Ids at or above `base_id` are earlier items of this very batch.
+            if prerequisite_id < base_id
+                && env
+                    .storage()
+                    .persistent()
+                    .get::<_, MilestoneInfo>(&DataKey::Milestone(quest_id, prerequisite_id))
+                    .is_none()
+            {
+                return Err(Error::NotFound);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Reject any cycle in the quest's effective prerequisite graph using
     /// Kahn's topological sort (#1630). The graph covers every milestone the
     /// quest will hold after the batch lands (`0..base_id + batch_len`):
     /// - each existing milestone contributes its stored prerequisite list,
     ///   or the legacy single `id - 1` edge when it has none stored but
     ///   `requires_previous` is set;
-    /// - each new batch item with `requires_previous` depends on the
-    ///   milestone created just before it (the previous batch item, or the
-    ///   last existing milestone for the first item).
+    /// - each new batch item contributes its explicit `prerequisites` list
+    ///   (#1800), or — when that list is empty — the single `id - 1` edge
+    ///   implied by `requires_previous` (the previous batch item, or the last
+    ///   existing milestone for the first item).
     /// `create_milestone_with_prereqs` alone cannot produce a cycle since
     /// prerequisite ids must be strictly smaller, but the batch path is
     /// validated defensively here; any cycle is rejected with
@@ -907,8 +990,14 @@ impl MilestoneContract {
                 }
             } else {
                 let item = batch.get(id - base_id).unwrap();
-                if item.requires_previous && id > 0 {
-                    deps.push_back(id - 1);
+                if item.prerequisites.is_empty() {
+                    if item.requires_previous && id > 0 {
+                        deps.push_back(id - 1);
+                    }
+                } else {
+                    for p in item.prerequisites.iter() {
+                        deps.push_back(p);
+                    }
                 }
             }
             prerequisites.push_back(deps);
@@ -1051,13 +1140,12 @@ impl MilestoneContract {
 
         // Prevent reward-type changes once milestones exist. Reapplying the
         // same mode is treated as a no-op and remains allowed.
-        let count_key = DataKey::MilestoneCount(quest_id);
         let current_mode: DistributionMode = env
             .storage()
             .persistent()
             .get(&DataKey::Mode(quest_id))
             .unwrap_or(DistributionMode::Custom);
-        if env.storage().persistent().get(&count_key).unwrap_or(0u32) > 0 && current_mode != mode {
+        if Self::milestone_count(&env, quest_id) > 0 && current_mode != mode {
             return Err(Error::InvalidInput);
         }
 
@@ -1904,11 +1992,7 @@ impl MilestoneContract {
             return Err(Error::InvalidInput);
         }
 
-        let next_id: u32 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
-            .unwrap_or(0);
+        let next_id: u32 = Self::milestone_count(&env, quest_id);
         let mut released: i128 = 0;
 
         for milestone_id in 0..next_id {
@@ -2059,11 +2143,7 @@ impl MilestoneContract {
 
     /// Get all milestones for a quest.
     pub fn get_milestones(env: Env, quest_id: u32) -> Vec<MilestoneInfo> {
-        let count: u32 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
-            .unwrap_or(0);
+        let count: u32 = Self::milestone_count(&env, quest_id);
 
         let mut result = Vec::new(&env);
         for i in 0..count {
@@ -2079,11 +2159,11 @@ impl MilestoneContract {
     }
 
     /// Get milestone count for a quest.
+    ///
+    /// Reads the canonical counter (see `milestone_count`), so it can never
+    /// disagree with `get_milestones` / `get_enrollee_progress` (#1801).
     pub fn get_milestone_count(env: Env, quest_id: u32) -> u32 {
-        env.storage()
-            .persistent()
-            .get(&DataKey::MilestoneCount(quest_id))
-            .unwrap_or(0)
+        Self::milestone_count(&env, quest_id)
     }
 
     /// Check if an enrollee has completed a milestone.
@@ -2170,11 +2250,7 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::EnrolleeCompletions(quest_id, enrollee.clone()))
             .unwrap_or(0);
-        let total_milestones: u32 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextMilestoneId(quest_id))
-            .unwrap_or(0);
+        let total_milestones: u32 = Self::milestone_count(&env, quest_id);
         let total_earned: i128 = env
             .storage()
             .persistent()
@@ -2301,11 +2377,7 @@ impl MilestoneContract {
             .persistent()
             .get(&DataKey::EnrolleeCompletions(quest_id, enrollee))
             .unwrap_or(0);
-        let total = env
-            .storage()
-            .persistent()
-            .get(&DataKey::MilestoneCount(quest_id))
-            .unwrap_or(0);
+        let total = Self::milestone_count(&env, quest_id);
         PartialScore { completed, total }
     }
 
@@ -2313,6 +2385,44 @@ impl MilestoneContract {
 
     fn bump_ms(env: &Env, key: &DataKey) {
         common::extend_persistent_ttl(env, key);
+    }
+
+    /// Canonical number of milestones a quest has (issue #1801).
+    ///
+    /// `NextMilestoneId` and `MilestoneCount` are two keys that are only ever
+    /// written together and must always hold the same value: milestone ids are
+    /// dense (`0..count`) and are never removed, so the next id to hand out *is*
+    /// the number of milestones that exist. Every read goes through this
+    /// helper and every write through `set_milestone_count`, so the two keys
+    /// cannot drift apart and produce inconsistent results between
+    /// `get_milestones` / `get_enrollee_progress` and `get_milestone_count` /
+    /// `get_partial_score`.
+    fn milestone_count(env: &Env, quest_id: u32) -> u32 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::NextMilestoneId(quest_id))
+            .unwrap_or(0)
+    }
+
+    /// Persist the canonical milestone count, keeping the ID allocator
+    /// (`NextMilestoneId`) and the queryable total (`MilestoneCount`) in
+    /// lockstep. The debug assertion turns any pre-existing divergence into a
+    /// loud test failure instead of a silent cross-query inconsistency; it
+    /// compiles out of release builds so it costs nothing in production.
+    fn set_milestone_count(env: &Env, quest_id: u32, count: u32) {
+        let next_key = DataKey::NextMilestoneId(quest_id);
+        let count_key = DataKey::MilestoneCount(quest_id);
+        let previous_next: u32 = env.storage().persistent().get(&next_key).unwrap_or(0);
+        let previous_count: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
+        debug_assert_eq!(
+            previous_next, previous_count,
+            "milestone counters diverged before write for quest {quest_id}"
+        );
+
+        env.storage().persistent().set(&next_key, &count);
+        env.storage().persistent().set(&count_key, &count);
+        Self::bump_ms(env, &next_key);
+        Self::bump_ms(env, &count_key);
     }
 
     /// Shared paging logic behind `get_disputes` / `get_open_disputes`.
@@ -2487,7 +2597,13 @@ impl MilestoneContract {
         milestone: &MilestoneInfo,
     ) -> Result<(), Error> {
         let prerequisites = Self::get_milestone_prerequisites(env.clone(), quest_id, milestone_id);
-        if prerequisites.is_empty() && (!milestone.requires_previous || milestone_id == 0) {
+        if prerequisites.is_empty() {
+            // A milestone that claims to be gated but has no prerequisites is
+            // unreachable rather than silently unlocked (#1800) — the batch
+            // path used to store no prerequisite list at all.
+            if milestone.requires_previous && milestone_id > 0 {
+                return Err(Error::MilestoneNotUnlocked);
+            }
             return Ok(());
         }
 
@@ -3306,12 +3422,7 @@ impl MilestoneContract {
 
     /// Get total number of milestones for a quest
     fn get_quest_milestone_count(env: Env, quest_id: u32) -> Result<u32, Error> {
-        let count = env
-            .storage()
-            .persistent()
-            .get(&DataKey::MilestoneCount(quest_id))
-            .unwrap_or(0);
-        Ok(count)
+        Ok(Self::milestone_count(&env, quest_id))
     }
 }
 

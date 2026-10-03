@@ -56,12 +56,12 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     queryFn: async () => {
       if (!address || !quest?.prerequisiteQuestIds?.length) return true
       for (const reqId of quest.prerequisiteQuestIds) {
-        const reqMilestones = await milestoneClient.listMilestones(reqId)
+        const reqMilestones = await milestoneClient.getMilestones(reqId)
         if (reqMilestones.length === 0) return false
         const allCompleted = await Promise.all(
-          reqMilestones.map(m => milestoneClient.isCompleted(reqId, m.id, address))
+          reqMilestones.map((m: { id: number }) => milestoneClient.isCompleted(reqId, m.id, address))
         )
-        if (!allCompleted.every(c => c)) return false
+        if (!allCompleted.every((c: boolean) => c)) return false
       }
       return true
     },
@@ -98,9 +98,9 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
     handleVerifyCompletion,
     handleRemoveEnrollee,
     confirmRemoveEnrollee,
-  } = useEnrolleeActions({ questId, address, quest, addToast })
+  } = useEnrolleeActions({ questId, address: address || undefined, quest, addToast })
 
-  const disputes = useQuestDisputes({ questId, address, quest, milestones, addToast })
+  const disputes = useQuestDisputes({ questId, address: address || undefined, quest, milestones, addToast })
   const claims = useQuestClaims({ questId, addToast })
 
   const enrollees = useMemo(

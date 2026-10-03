@@ -16,7 +16,7 @@ export interface QuestPanelsProps {
   onTransferOwnership: (() => void) | undefined
   isEnrollDisabled?: boolean
   enrollDisabledReason?: string
-  onToast: (message: string, type: "success" | "error" | "info" | "warning") => void
+  onToast: (message: string, type?: "success" | "error" | "info") => void
   enrolleesCount: number
   milestonesCount: number
   poolBalance: number
@@ -59,7 +59,7 @@ export function QuestPanels(props: QuestPanelsProps) {
 
         <ProgressPanel
           completedMilestones={props.completedMilestones}
-          totalMilestones={milestones.length}
+          totalMilestones={props.milestonesCount}
           earnedReward={props.earnedReward}
         />
       </SectionErrorBoundary>

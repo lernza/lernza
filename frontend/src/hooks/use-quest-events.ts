@@ -430,7 +430,7 @@ export async function fetchQuestHistory(questId: number): Promise<ParsedEvent[]>
     contractAddresses.quest,
     contractAddresses.milestone,
     contractAddresses.rewards,
-  ].filter(Boolean)
+  ].filter((id): id is string => Boolean(id))
 
   if (contractIds.length === 0) return []
 
@@ -744,7 +744,7 @@ export function useQuestEventStream(enabled: boolean) {
       contractAddresses.quest,
       contractAddresses.milestone,
       contractAddresses.rewards,
-    ].filter(Boolean)
+    ].filter((id): id is string => Boolean(id))
 
     const topicFilters: rpc.Api.EventFilter[] = [
       { topics: [[topicHex("milestone_completed")]], contractIds },

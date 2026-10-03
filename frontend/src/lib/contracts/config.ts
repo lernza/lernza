@@ -3,11 +3,11 @@ import { env } from "@/lib/env"
 export type ContractName = "quest" | "milestone" | "rewards" | "certificate" | "token"
 
 export interface ContractAddresses {
-  quest: string
-  milestone: string
-  rewards: string
-  certificate: string
-  token: string
+  quest: string | undefined
+  milestone: string | undefined
+  rewards: string | undefined
+  certificate: string | undefined
+  token: string | undefined
 }
 
 export const contractAddresses: ContractAddresses = Object.freeze({

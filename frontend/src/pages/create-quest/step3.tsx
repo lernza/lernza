@@ -426,7 +426,7 @@ export function Step3Review({ onComplete }: Step3ReviewProps) {
                   <Sparkles className="h-4 w-4" />
                   {`Retry remaining ${step2Data.milestones.length - createdMilestoneCount} milestone${step2Data.milestones.length - createdMilestoneCount !== 1 ? "s" : ""}`}
                 </>
-              ) : txPhase === "created" || txPhase === "funded" || txPhase === "done" ? (
+              ) : txPhase === "funding" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Creating quest on-chain...

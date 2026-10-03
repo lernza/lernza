@@ -16,6 +16,7 @@ export const badgeVariants = cva(
         active: "bg-success/12 text-success border-success/25",
         archived: "bg-muted text-muted-foreground border-border",
         ended: "bg-destructive/12 text-destructive border-destructive/25",
+        suspended: "bg-warning/12 text-warning border-warning/25",
       },
       size: {
         sm: "px-2 py-0.5 text-[10px] leading-none",

@@ -21,8 +21,6 @@ import { FilterPanel } from "./dashboard/filter-panel"
 import { QuestList } from "./dashboard/quest-list"
 import { TrendingQuests } from "./dashboard/trending-quests"
 import { RecentActivity } from "./dashboard/recent-activity"
-import { PageMetadata } from "@/components/PageMetadata"
-import { PAGE_METADATA } from "@/lib/page-metadata"
 
 interface DashboardProps {
   onSelectQuest?: (id: number) => void
@@ -63,7 +61,7 @@ export function Dashboard(
     isLoading,
     loadError,
     refetch,
-  } = useDashboardData({ connected, address })
+  } = useDashboardData({ connected, address: address || undefined })
 
   // When the first page of public quests arrives at full size, there are likely
   // more pages available on the contract to be loaded on demand.
@@ -201,8 +199,8 @@ export function Dashboard(
 
       <WelcomeBanner
         connected={connected}
-        address={address}
-        shortAddress={shortAddress}
+        address={address || undefined}
+        shortAddress={shortAddress || undefined}
         questsEnrolled={personalStats.questsEnrolled}
         onCreateQuest={goToCreateQuest}
         onLaunchTutorial={onLaunchTutorial}
@@ -228,7 +226,7 @@ export function Dashboard(
                 creatorFilter={filters.creatorFilter}
                 onCreatorFilterChange={filters.setCreatorFilter}
                 availableCreators={filters.availableCreators}
-                address={address}
+                address={address || undefined}
                 rewardTokenFilter={filters.rewardTokenFilter}
                 onRewardTokenFilterChange={filters.setRewardTokenFilter}
                 availableRewardTokens={filters.availableRewardTokens}
@@ -263,7 +261,7 @@ export function Dashboard(
                 totalCount={filters.sortedQuests.length}
                 questStats={questStats}
                 questCompletions={questCompletions}
-                address={address}
+                address={address || undefined}
                 isLoading={isLoading}
                 statsLoading={questStatsLoading}
                 loadError={loadError}

@@ -677,6 +677,9 @@ export class MilestoneClient {
       description: String(record.description),
       rewardAmount: toBigInt(record.reward_amount),
       requiresPrevious: Boolean(record.requires_previous),
+      prerequisiteIds: Array.isArray(record.prerequisite_ids)
+        ? (record.prerequisite_ids as unknown[]).map((id: unknown) => Number(id))
+        : [],
       difficulty: record.difficulty ? String(record.difficulty) : undefined,
       estimatedDuration: record.estimated_duration ? Number(record.estimated_duration) : undefined,
       prerequisitesKnowledge: record.prerequisites_knowledge

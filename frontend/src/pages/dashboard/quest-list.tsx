@@ -75,7 +75,7 @@ export function QuestList({
     <>
       {loadError && (
         <div className="mb-5">
-          <SmartError message={loadError} onRetry={onRetry} />
+          <SmartError message={String(loadError)} onRetry={onRetry} />
         </div>
       )}
 

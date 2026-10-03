@@ -165,4 +165,36 @@ describe("useToast – removeToast", () => {
     expect(result.current.toasts).toHaveLength(1)
     expect(result.current.toasts[0].message).toBe("Keep A")
   })
+
+  it("clears the active timer when removed manually", () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout")
+    const { result } = renderHook(() => useToast())
+
+    act(() => {
+      result.current.addToast("Manual dismiss test", "info", 5000)
+    })
+
+    const id = result.current.toasts[0].id
+    act(() => {
+      result.current.removeToast(id)
+    })
+
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    clearTimeoutSpy.mockRestore()
+  })
+
+  it("cleans up active timers when hook unmounts", () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout")
+    const { result, unmount } = renderHook(() => useToast())
+
+    act(() => {
+      result.current.addToast("Unmount 1", "info", 5000)
+      result.current.addToast("Unmount 2", "warning", 5000)
+    })
+
+    unmount()
+
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2)
+    clearTimeoutSpy.mockRestore()
+  })
 })

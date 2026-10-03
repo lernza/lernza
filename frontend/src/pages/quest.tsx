@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
 import { useWallet } from "@/hooks/use-wallet"
+import { milestoneClient } from "@/lib/contracts/milestone"
 import {
   useQuest,
   useMilestones,
@@ -49,16 +51,17 @@ export function QuestView({ questId, onBack }: QuestViewProps) {
 
   const { data: quest, isLoading: questLoading, error: questError } = useQuest(questId)
   
-  const { data: prerequisitesMet = true, isLoading: prerequisitesLoading } = useQuery({
+  const { data: prerequisitesMet = true } = useQuery({
     queryKey: ["prerequisitesMet", quest?.id, address],
     queryFn: async () => {
       if (!address || !quest?.prerequisiteQuestIds?.length) return true
       for (const reqId of quest.prerequisiteQuestIds) {
         const reqMilestones = await milestoneClient.listMilestones(reqId)
         if (reqMilestones.length === 0) return false
-        const reqCompletions = await milestoneClient.getEnrolleeCompletions(reqId, address)
-        const allCompleted = reqMilestones.every((_, i) => reqCompletions[i])
-        if (!allCompleted) return false
+        const allCompleted = await Promise.all(
+          reqMilestones.map(m => milestoneClient.isCompleted(reqId, m.id, address))
+        )
+        if (!allCompleted.every(c => c)) return false
       }
       return true
     },

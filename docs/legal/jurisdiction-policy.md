@@ -26,7 +26,6 @@ Users connecting from these jurisdictions are **blocked** from reward-eligible a
 | Cuba | OFAC sanctions |
 | Iran | OFAC sanctions |
 | North Korea | OFAC sanctions |
-| Syria | OFAC sanctions |
 | Crimea region | OFAC sanctions |
 | Russia (reward claims) | Sanctions + regulatory uncertainty |
 | Belarus (reward claims) | Sanctions + regulatory uncertainty |
